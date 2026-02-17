@@ -1,6 +1,6 @@
 import { McapWriter } from "@mcap/core";
 import { FileHandleWritable } from "@mcap/nodejs";
-import { open } from "fs/promises";
+import { open } from "node:fs/promises";
 
 async function main() {
   const mcapFilePath = "output.mcap";
@@ -32,7 +32,7 @@ async function main() {
   const schemaId = await mcapFile.registerSchema({
     name: schema.title,
     encoding: "jsonschema",
-    data: Buffer.from(JSON.stringify(schema)),
+    data: new Uint8Array(Buffer.from(JSON.stringify(schema))),
   });
 
   const channelId = await mcapFile.registerChannel({
@@ -53,7 +53,7 @@ async function main() {
     sequence: 0,
     publishTime: 0n,
     logTime: BigInt(Date.now()) * 1_000_000n,
-    data: msgData,
+    data: new Uint8Array(msgData),
   });
 
   await mcapFile.end();

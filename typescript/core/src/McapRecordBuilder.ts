@@ -1,8 +1,8 @@
 import { crc32 } from "@foxglove/crc";
 
-import { BufferBuilder } from "./BufferBuilder";
-import { MCAP_MAGIC, Opcode } from "./constants";
-import {
+import { BufferBuilder } from "./BufferBuilder.ts";
+import { MCAP_MAGIC, Opcode } from "./constants.ts";
+import type {
   Attachment,
   AttachmentIndex,
   Channel,
@@ -18,7 +18,7 @@ import {
   Schema,
   Statistics,
   SummaryOffset,
-} from "./types";
+} from "./types.ts";
 
 type Options = {
   /** Add an unspecified number of extra padding bytes at the end of each record */

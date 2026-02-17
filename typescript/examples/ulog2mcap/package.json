@@ -1,34 +1,24 @@
 {
   "name": "@foxglove/mcap-example-ulog2mcap",
-  "version": "0.0.0",
-  "private": true,
   "description": "MCAP ulog2mcap example",
+  "private": true,
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/foxglove/mcap.git"
-  },
-  "author": {
-    "name": "Foxglove Technologies",
-    "email": "support@foxglove.dev"
-  },
-  "homepage": "https://foxglove.dev/",
+  "type": "module",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint:ci": "eslint --report-unused-disable-directives .",
-    "lint": "eslint --report-unused-disable-directives --fix .",
+    "typecheck": "tsc -b",
+    "lint:ci": "tsc -b && eslint --report-unused-disable-directives .",
+    "lint": "tsc -b && eslint --report-unused-disable-directives --fix .",
     "typescript:test": "yarn jest --config jest.config.json",
-    "ulog2mcap": "yarn typescript:build && ts-node --files --project tsconfig.cjs.json scripts/ulog2mcap.ts"
+    "ulog2mcap": "tsc -b && tsx scripts/ulog2mcap.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",
-    "@foxglove/tsconfig": "1.1.0",
+    "@foxglove/tsconfig": "3.2.0",
     "@foxglove/ulog": "2.3.1",
     "@mcap/core": "workspace:*",
     "@mcap/nodejs": "workspace:*",
     "@mcap/support": "workspace:*",
-    "@types/lodash": "4.14.191",
-    "@types/node": "18.13.0",
+    "@types/node": "20.19.33",
     "@typescript-eslint/eslint-plugin": "6.11.0",
     "@typescript-eslint/parser": "6.11.0",
     "commander": "11.1.0",
@@ -39,14 +29,12 @@
     "eslint-plugin-import": "2.29.0",
     "eslint-plugin-prettier": "5.0.1",
     "jest": "30.2.0",
-    "lodash": "4.17.21",
     "long": "5.3.2",
     "prettier": "3.1.0",
     "protobufjs": "^7.2.5",
     "ts-jest": "29.4.6",
-    "ts-node": "10.9.1",
-    "tsconfig-paths": "4.1.2",
-    "typescript": "5.2.2"
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
   },
   "dependencies": {
     "@foxglove/schemas": "1.8.0"

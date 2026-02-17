@@ -1,25 +1,8 @@
 {
-  "extends": "@foxglove/tsconfig/base",
+  "extends": "@foxglove/tsconfig/node.json",
   "include": ["./**/*"],
   "compilerOptions": {
-    "rootDir": "../..",
-    "noEmit": true,
-    "lib": ["es2020", "dom"],
-    "paths": {
-      "@mcap/core": ["../../typescript/core/src"],
-      "@mcap/nodejs": ["../../typescript/nodejs/src"],
-      "@mcap/support": ["../../typescript/support/src"]
-    },
-
-    // required for tsconfig-paths https://github.com/dividab/tsconfig-paths/issues/143
-    "baseUrl": "."
+    "noEmit": true
   },
-  "references": [
-    { "path": "../../typescript/core" },
-    { "path": "../../typescript/nodejs" },
-    { "path": "../../typescript/support" }
-  ],
-  "ts-node": {
-    "require": ["tsconfig-paths/register"]
-  }
+  "references": [{ "path": "../../typescript/core" }, { "path": "../../typescript/nodejs" }]
 }

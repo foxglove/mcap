@@ -1,12 +1,12 @@
 import { ULog } from "@foxglove/ulog";
-import { FileReader } from "@foxglove/ulog/node";
+import { FileReader } from "@foxglove/ulog/node.js";
 import { McapWriter } from "@mcap/core";
-import { Metadata } from "@mcap/core/src/types";
+import type { Metadata } from "@mcap/core";
 import { FileHandleWritable } from "@mcap/nodejs";
 import { program } from "commander";
-import { open } from "fs/promises";
+import { open } from "node:fs/promises";
 
-import { convertULogFileToMCAP } from "./convertULogFileToMCAP";
+import { convertULogFileToMCAP } from "./convertULogFileToMCAP.ts";
 
 type ConvertOptions = {
   metadata?: string[];
@@ -35,7 +35,7 @@ async function main(inputFilePath: string, outputFilePath: string, options: Conv
         metadataFields.set(key, value);
       }
     }
-    metadata = { name: options.metadataName, metadata: metadataFields } as Metadata;
+    metadata = { name: options.metadataName, metadata: metadataFields };
   }
 
   await convertULogFileToMCAP(ulogReader, mcapFile, {

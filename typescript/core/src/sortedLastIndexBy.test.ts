@@ -1,4 +1,4 @@
-import { sortedLastIndexBy } from "./sortedLastIndex";
+import { sortedLastIndexBy } from "./sortedLastIndex.ts";
 
 describe("sortedLastIndexBy", () => {
   it("handles an empty array", () => {

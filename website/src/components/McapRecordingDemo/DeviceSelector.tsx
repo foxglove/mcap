@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 
 import styles from "./McapRecordingDemo.module.css";
-import { useStore } from "./state";
+import { useStore } from "./state.ts";
 
 interface MediaDeviceInfo {
   deviceId: string;

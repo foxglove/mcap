@@ -1,11 +1,12 @@
-import { Grid, NumericType } from "@foxglove/schemas";
+import { NumericType } from "@foxglove/schemas";
+import type { Grid } from "@foxglove/schemas";
 import { McapWriter } from "@mcap/core";
 import { FileHandleWritable } from "@mcap/nodejs";
 import { Builder } from "flatbuffers";
-import fs from "fs";
-import { open } from "fs/promises";
+import fs from "node:fs";
+import { open } from "node:fs/promises";
 
-import { buildGridMessage, buildTfMessage } from "./flatbufferUtils";
+import { buildGridMessage, buildTfMessage } from "./flatbufferUtils.ts";
 
 const QUAT_IDENTITY = { x: 0, y: 0, z: 0, w: 1 };
 
@@ -144,12 +145,12 @@ async function main() {
     library: "mcap example",
   });
   const FrameTransformSchemaBuffer = fs.readFileSync(
-    `${__dirname}/../../flatbuffer/bin/FrameTransform.bfbs`,
+    `${import.meta.dirname}/../../flatbuffer/bin/FrameTransform.bfbs`,
   );
   const tfSchemaId = await mcapFile.registerSchema({
     name: "foxglove.FrameTransform",
     encoding: "flatbuffer",
-    data: FrameTransformSchemaBuffer,
+    data: new Uint8Array(FrameTransformSchemaBuffer),
   });
 
   const tfChannelId = await mcapFile.registerChannel({
@@ -178,12 +179,12 @@ async function main() {
     data: tfBuilder.asUint8Array(),
   });
 
-  const binaryGridSchema = fs.readFileSync(`${__dirname}/../../flatbuffer/bin/Grid.bfbs`);
+  const binaryGridSchema = fs.readFileSync(`${import.meta.dirname}/../../flatbuffer/bin/Grid.bfbs`);
 
   const gridSchemaId = await mcapFile.registerSchema({
     name: "foxglove.Grid",
     encoding: "flatbuffer",
-    data: binaryGridSchema,
+    data: new Uint8Array(binaryGridSchema),
   });
 
   const gridChannelId = await mcapFile.registerChannel({

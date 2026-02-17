@@ -1,4 +1,4 @@
-import { IWritable } from "./IWritable";
+import type { IWritable } from "./IWritable.ts";
 
 /**
  * ISeekableWriter describes a writer interface with seek abilities.

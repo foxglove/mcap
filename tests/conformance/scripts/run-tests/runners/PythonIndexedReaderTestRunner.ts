@@ -1,9 +1,10 @@
-import { exec } from "child_process";
-import { promisify } from "util";
-import { TestVariant, TestFeatures } from "variants/types";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 
-import { IndexedReadTestRunner } from "./TestRunner";
-import { IndexedReadTestResult } from "../types";
+import { IndexedReadTestRunner } from "./TestRunner.ts";
+import { TestFeatures } from "../../../variants/types.ts";
+import type { TestVariant } from "../../../variants/types.ts";
+import type { IndexedReadTestResult } from "../types.ts";
 
 export default class PythonIndexedReaderTestRunner extends IndexedReadTestRunner {
   readonly name = "py-indexed-reader";

@@ -1,23 +1,24 @@
 {
   "name": "@foxglove/mcap-conformance",
-  "version": "0.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
-    "build": "tsc -b tsconfig.json tsconfig.cjs.json",
-    "lint:ci": "eslint --report-unused-disable-directives .",
-    "lint": "eslint --report-unused-disable-directives --fix .",
-    "generate-inputs": "ts-node --files --project tsconfig.cjs.json scripts/generate-inputs",
-    "run-tests": "tsc -b tsconfig.json tsconfig.cjs.json && ts-node --files --project tsconfig.cjs.json scripts/run-tests"
+    "build": "tsc -b",
+    "lint:ci": "tsc -b && eslint --report-unused-disable-directives .",
+    "lint": "tsc -b && eslint --report-unused-disable-directives --fix .",
+    "generate-inputs": "tsc -b && tsx scripts/generate-inputs.ts",
+    "run-tests": "tsc -b && tsx scripts/run-tests/index.ts"
   },
   "devDependencies": {
     "@foxglove/crc": "^0.0.3",
     "@foxglove/eslint-plugin": "1.0.1",
-    "@foxglove/tsconfig": "1.1.0",
+    "@foxglove/tsconfig": "3.2.0",
     "@mcap/core": "workspace:*",
-    "@mcap/support": "workspace:*",
+    "@mcap/nodejs": "workspace:*",
     "@types/diff": "^5.0.2",
     "@types/js-yaml": "^4.0.5",
-    "@types/node": "18.13.0",
+    "@types/lodash-es": "4.17.12",
+    "@types/node": "20.19.33",
     "@typescript-eslint/eslint-plugin": "6.11.0",
     "@typescript-eslint/parser": "6.11.0",
     "colors": "1.4.0",
@@ -35,10 +36,9 @@
     "json-stringify-pretty-compact": "4.0.0",
     "kaitai-struct": "0.10.0",
     "kaitai-struct-compiler": "0.10.0",
-    "lodash": "4.17.21",
+    "lodash-es": "4.17.23",
     "prettier": "3.1.0",
-    "ts-node": "10.9.1",
-    "tsconfig-paths": "^4.1.2",
-    "typescript": "5.2.2"
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
   }
 }

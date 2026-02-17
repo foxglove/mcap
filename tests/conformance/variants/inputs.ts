@@ -1,4 +1,4 @@
-import { TestInput, TestDataRecord } from "./types";
+import type { TestDataRecord, TestInput } from "./types.ts";
 
 const tenMessages: TestDataRecord[] = [0n, 2n, 1n, 3n, 3n, 5n, 4n, 7n, 8n, 9n].map(
   (logTime, sequence) => {

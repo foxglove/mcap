@@ -1,4 +1,4 @@
-import { MCAP_MAGIC } from "./constants";
+import { MCAP_MAGIC } from "./constants.ts";
 
 /** Check if the given buffer starts with the MCAP magic prefix. */
 export function hasMcapPrefix(prefix: DataView): boolean {

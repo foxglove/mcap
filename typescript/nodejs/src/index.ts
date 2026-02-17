@@ -1,2 +1,2 @@
-export * from "./FileHandleReadable";
-export * from "./FileHandleWritable";
+export * from "./FileHandleReadable.ts";
+export * from "./FileHandleWritable.ts";

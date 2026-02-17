@@ -1,7 +1,7 @@
-import { McapTypes } from "@mcap/core";
-import { chain, snakeCase } from "lodash";
+import type { TypedMcapRecord } from "@mcap/core";
+import { chain, snakeCase } from "lodash-es";
 
-import { SerializableMcapRecord } from "./types";
+import type { SerializableMcapRecord } from "./types.ts";
 
 function replacer(_key: string, value: unknown): unknown {
   if (value instanceof Uint8Array) {
@@ -19,7 +19,7 @@ function replacer(_key: string, value: unknown): unknown {
   return value;
 }
 
-function normalizeRecord(record: McapTypes.TypedMcapRecord) {
+function normalizeRecord(record: TypedMcapRecord) {
   return chain(record)
     .toPairs()
     .filter(([k]) => k !== "type")
@@ -29,8 +29,6 @@ function normalizeRecord(record: McapTypes.TypedMcapRecord) {
     .value();
 }
 
-export function toSerializableMcapRecord(
-  record: McapTypes.TypedMcapRecord,
-): SerializableMcapRecord {
+export function toSerializableMcapRecord(record: TypedMcapRecord): SerializableMcapRecord {
   return JSON.parse(JSON.stringify(normalizeRecord(record), replacer)) as SerializableMcapRecord;
 }

@@ -1,7 +1,7 @@
 import { McapWriter, McapIndexedReader, TempBuffer } from "@mcap/core";
-import { Blob } from "buffer";
+import { Blob } from "node:buffer";
 
-import { BlobReadable } from "./BlobReadable";
+import { BlobReadable } from "./BlobReadable.ts";
 
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const result: T[] = [];

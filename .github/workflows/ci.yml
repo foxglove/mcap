@@ -233,7 +233,7 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: yarn install --immutable
       - run: yarn dedupe --check
-      - run: yarn prettier:check
+      - run: yarn fmt:check
       - run: yarn workspace @mcap/core lint:ci
       - run: yarn workspace @mcap/core build
       - run: yarn workspace @mcap/support lint:ci

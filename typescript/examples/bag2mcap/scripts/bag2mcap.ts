@@ -1,20 +1,22 @@
 // convert a ROS1 .bag file to an mcap file with protobuf schema and message encoding
 
 import { Bag } from "@foxglove/rosbag";
-import { FileReader } from "@foxglove/rosbag/node";
+import { FileReader } from "@foxglove/rosbag/node.js";
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
-import { Time } from "@foxglove/rosmsg-serialization";
+import type { Time } from "@foxglove/rosmsg-serialization";
 import { toNanoSec } from "@foxglove/rostime";
 import Bzip2 from "@foxglove/wasm-bz2";
 import decompressLZ4 from "@foxglove/wasm-lz4";
 import zstd from "@foxglove/wasm-zstd";
-import { McapWriter, McapTypes } from "@mcap/core";
+import { McapWriter } from "@mcap/core";
+import type { Channel } from "@mcap/core";
 import { FileHandleWritable } from "@mcap/nodejs";
-import { ProtobufDescriptor, protobufToDescriptor } from "@mcap/support";
+import { protobufToDescriptor } from "@mcap/support";
+import type { ProtobufDescriptor } from "@mcap/support";
 import { program } from "commander";
-import { open } from "fs/promises";
-import protobufjs from "protobufjs";
-import descriptor from "protobufjs/ext/descriptor";
+import { open } from "node:fs/promises";
+import * as protobufjs from "protobufjs";
+import { FileDescriptorSet } from "protobufjs/ext/descriptor/index.js";
 
 const builtinSrc = `
 syntax = "proto3";
@@ -212,7 +214,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
     useChunkIndex: options.indexed,
     compressChunk: (data) => ({
       compression: "zstd",
-      compressedData: zstd.compress(data, 19),
+      compressedData: new Uint8Array(zstd.compress(data, 19)),
     }),
   });
 
@@ -232,7 +234,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
       connection.type,
       connection.messageDefinition,
     );
-    const descriptorMsgEncoded = descriptor.FileDescriptorSet.encode(descriptorSet).finish();
+    const descriptorMsgEncoded = FileDescriptorSet.encode(descriptorSet).finish();
 
     const schemaId = await mcapFile.registerSchema({
       name: schemaName,
@@ -240,7 +242,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
       data: descriptorMsgEncoded,
     });
 
-    const channelInfo: Omit<McapTypes.Channel, "id"> = {
+    const channelInfo: Omit<Channel, "id"> = {
       schemaId,
       topic: connection.topic,
       messageEncoding: "protobuf",
@@ -259,7 +261,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
   await bag.readMessages(
     {
       decompress: {
-        lz4: (buffer: Uint8Array, size: number) => decompressLZ4(buffer, size),
+        lz4: (buffer: Uint8Array, size: number) => new Uint8Array(decompressLZ4(buffer, size)),
         bz2: (buffer: Uint8Array, size: number) => bzip2.decompress(buffer, size, { small: false }),
       },
     },

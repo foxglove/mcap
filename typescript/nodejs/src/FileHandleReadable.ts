@@ -1,10 +1,10 @@
-import type { McapTypes } from "@mcap/core";
-import { FileHandle } from "fs/promises";
+import type { IReadable } from "@mcap/core";
+import type { FileHandle } from "node:fs/promises";
 
 /**
  * IReadable implementation for FileHandle.
  */
-export class FileHandleReadable implements McapTypes.IReadable {
+export class FileHandleReadable implements IReadable {
   #handle: FileHandle;
   #buffer = new ArrayBuffer(4096);
 

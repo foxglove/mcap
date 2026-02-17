@@ -1,5 +1,5 @@
-import { hrtime, memoryUsage } from "process";
-import { getHeapStatistics } from "v8";
+import { hrtime, memoryUsage } from "node:process";
+import { getHeapStatistics } from "node:v8";
 
 const COUNT = 5;
 

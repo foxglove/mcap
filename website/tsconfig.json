@@ -1,28 +1,19 @@
 // cspell:ignore webcodecs, mediacapture
 {
-  "extends": "@tsconfig/docusaurus/tsconfig.json",
+  "extends": "@foxglove/tsconfig/node.json",
   "include": ["./**/*"],
   "compilerOptions": {
-    "module": "es2022",
+    "noEmit": true,
     "target": "es2022",
     "lib": ["es2022", "dom"],
-    "baseUrl": ".",
-    "paths": {
-      "@mcap/core": ["../typescript/core/src"]
-    },
-    "moduleResolution": "node",
-    "types": ["dom-webcodecs", "dom-mediacapture-transform"],
-
-    // Settings from @foxglove/tsconfig/base
-    "newLine": "lf",
-    "strict": true,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitAny": true,
-    "noImplicitReturns": true,
-    "noUncheckedIndexedAccess": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitOverride": true,
-    "forceConsistentCasingInFileNames": true
-  }
+    "jsx": "react",
+    "types": [
+      "@docusaurus/module-type-aliases",
+      "@docusaurus/theme-classic",
+      "dom-mediacapture-transform",
+      "dom-webcodecs"
+    ],
+    "verbatimModuleSyntax": false
+  },
+  "references": [{ "path": "../typescript/core" }]
 }

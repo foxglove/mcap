@@ -1,8 +1,8 @@
 import { RawAudio } from "@foxglove/schemas";
 import { useEffect } from "react";
 
-import { startAudioCapture, startAudioStream } from "../audioCapture";
-import { useStore } from "../state";
+import { startAudioCapture, startAudioStream } from "../audioCapture.ts";
+import { useStore } from "../state.ts";
 
 /**
  * Hook to handle audio recording functionality including stream setup and waveform visualization

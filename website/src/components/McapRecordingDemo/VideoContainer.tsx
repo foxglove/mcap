@@ -3,12 +3,12 @@ import React from "react";
 import { useAsync } from "react-async";
 
 import styles from "./McapRecordingDemo.module.css";
-import { useStore } from "./state";
+import { useStore } from "./state.ts";
 import {
   supportsAV1Encoding,
   supportsH264Encoding,
   supportsH265Encoding,
-} from "./videoCapture";
+} from "./videoCapture.ts";
 
 export function VideoContainer(): JSX.Element {
   const state = useStore();

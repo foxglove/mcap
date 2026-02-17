@@ -2,7 +2,7 @@
 /* eslint-env node */
 /* eslint-disable filenames/match-exported */
 
-const path = require("path");
+const path = require("node:path");
 const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 const lightCodeTheme = require("prism-react-renderer/themes/github");
 const webpack = require("webpack");

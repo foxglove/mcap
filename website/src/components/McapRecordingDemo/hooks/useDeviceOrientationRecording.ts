@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { useStore } from "../state";
+import { useStore } from "../state.ts";
 
 /**
  * Hook to record device orientation events during recording

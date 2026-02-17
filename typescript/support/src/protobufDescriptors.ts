@@ -1,5 +1,15 @@
-import protobufjs from "protobufjs";
-import { FileDescriptorSet, IFileDescriptorSet } from "protobufjs/ext/descriptor";
+import * as protobufjs from "protobufjs";
+import * as descriptorModule from "protobufjs/ext/descriptor/index.js";
+import type { IFileDescriptorSet } from "protobufjs/ext/descriptor/index.js";
+
+import { unwrapDefaultExport } from "./esmInterop.ts";
+
+type ProtobufJsModule = typeof import("protobufjs");
+type ProtobufDescriptorModule = typeof import("protobufjs/ext/descriptor/index.js");
+
+const protobufjsRuntime = unwrapDefaultExport<ProtobufJsModule>(protobufjs);
+const descriptor = unwrapDefaultExport<ProtobufDescriptorModule>(descriptorModule);
+const FileDescriptorSet = descriptor.FileDescriptorSet;
 
 // https://github.com/protobufjs/protobuf.js/issues/1499
 declare module "protobufjs" {
@@ -19,7 +29,7 @@ export function protobufToDescriptor(root: protobufjs.Root): ProtobufDescriptor 
 }
 
 export function protobufFromDescriptor(descriptorSet: protobufjs.Message): protobufjs.Root {
-  return protobufjs.Root.fromDescriptor(descriptorSet);
+  return protobufjsRuntime.Root.fromDescriptor(descriptorSet);
 }
 
 export function protobufFromBinaryDescriptor(schemaData: Uint8Array): protobufjs.Root {

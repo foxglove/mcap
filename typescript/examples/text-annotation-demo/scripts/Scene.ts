@@ -1,11 +1,13 @@
-import {
+import { PointsAnnotationType } from "@foxglove/schemas";
+import type {
   CameraCalibration,
   ImageAnnotations,
   PointsAnnotation,
-  PointsAnnotationType,
   RawImage,
+  Time,
 } from "@foxglove/schemas";
-import { Time } from "@foxglove/schemas/schemas/typescript/Time";
+
+type RawImageJson = Omit<RawImage, "data"> & { data: string };
 
 type SceneParams = {
   width: number;
@@ -65,16 +67,14 @@ export default class Scene {
     return calibrationMessage;
   }
 
-  getRawImage(time: Time): RawImage {
+  getRawImage(time: Time): RawImageJson {
     return {
       timestamp: time,
       frame_id: this.frameId,
       width: this.width,
       height: this.height,
       encoding: "rgb8",
-      // required for encoding Uint8Array in `json` encoding
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-expect-error
+      step: this.width * 3,
       data: Buffer.from(this.image.getData()).toString("base64"),
     };
   }

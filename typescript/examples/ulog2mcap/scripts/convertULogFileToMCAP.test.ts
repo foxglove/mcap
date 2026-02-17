@@ -1,20 +1,14 @@
 import { LogLevel as FoxLevel } from "@foxglove/schemas";
-import {
-  MessageDefinition,
-  Subscription,
-  Field,
-  ULog,
-  ParsedMessage,
-  MessageType,
-  LogLevel,
-} from "@foxglove/ulog";
-import { FileReader } from "@foxglove/ulog/node";
+import { ULog, MessageType, LogLevel } from "@foxglove/ulog";
+import type { Field, MessageDefinition, ParsedMessage, Subscription } from "@foxglove/ulog";
+import { FileReader } from "@foxglove/ulog/node.js";
 import { McapIndexedReader, TempBuffer, McapWriter } from "@mcap/core";
-import { Metadata } from "@mcap/core/src/types";
+import type { Metadata } from "@mcap/core";
 import { protobufFromBinaryDescriptor } from "@mcap/support";
 import Long from "long";
+import path from "node:path";
 
-import { convertULogFileToMCAP } from "./convertULogFileToMCAP";
+import { convertULogFileToMCAP } from "./convertULogFileToMCAP.ts";
 
 type MockMessage = ParsedMessage & { topic: string; multiId?: number };
 
@@ -406,7 +400,7 @@ describe("Create MCAP files from ULog", () => {
 
       const metadataFields = new Map<string, string>();
       metadataFields.set("foo", "bar");
-      const metadata = { name: "foxglove", metadata: metadataFields } as Metadata;
+      const metadata: Metadata = { name: "foxglove", metadata: metadataFields };
 
       const mockOutputFile = new TempBuffer();
       await convertULogFileToMCAP(mockULog, new McapWriter({ writable: mockOutputFile }), {
@@ -466,7 +460,7 @@ describe("Create MCAP files from ULog", () => {
   });
 
   it("should perform full ULog to MCAP conversion with sample files", async () => {
-    const inputFileHandle = new FileReader(__dirname + "/../fixtures/test_ulog.ulg");
+    const inputFileHandle = new FileReader(path.join(__dirname, "../fixtures/test_ulog.ulg"));
 
     const mockOutputFile = new TempBuffer();
     await convertULogFileToMCAP(

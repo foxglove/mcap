@@ -4,12 +4,12 @@ import Link from "@docusaurus/Link";
 import cx from "classnames";
 import React, { useRef } from "react";
 
-import { AudioContainer } from "./AudioContainer";
-import { DeviceSelector } from "./DeviceSelector";
+import { AudioContainer } from "./AudioContainer.tsx";
+import { DeviceSelector } from "./DeviceSelector.tsx";
 import styles from "./McapRecordingDemo.module.css";
-import { RecordingControls } from "./RecordingControls";
-import { RecordingStats } from "./RecordingStats";
-import { VideoContainer } from "./VideoContainer";
+import { RecordingControls } from "./RecordingControls.tsx";
+import { RecordingStats } from "./RecordingStats.tsx";
+import { VideoContainer } from "./VideoContainer.tsx";
 import {
   useRecordClick,
   useDownloadClick,
@@ -17,8 +17,8 @@ import {
   useDeviceOrientationRecording,
   useVideoRecording,
   useAudioRecording,
-} from "./hooks";
-import { useStore, formatBytes } from "./state";
+} from "./hooks/index.ts";
+import { useStore, formatBytes } from "./state.ts";
 
 const hasMouse = window.matchMedia("(hover: hover)").matches;
 

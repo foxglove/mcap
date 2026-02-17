@@ -1,17 +1,17 @@
-import { exec } from "child_process";
-import { join } from "path";
-import { promisify } from "util";
-import { TestVariant } from "variants/types";
+import { exec } from "node:child_process";
+import { join } from "node:path";
+import { promisify } from "node:util";
 
-import { StreamedReadTestRunner } from "./TestRunner";
-import { StreamedReadTestResult } from "../types";
+import { StreamedReadTestRunner } from "./TestRunner.ts";
+import type { TestVariant } from "../../../variants/types.ts";
+import type { StreamedReadTestResult } from "../types.ts";
 
 export default class GoStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "go-streamed-reader";
 
   async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const { stdout } = await promisify(exec)(`./bin/test-read-conformance ${filePath} streamed`, {
-      cwd: join(__dirname, "../../../../../go/conformance"),
+      cwd: join(import.meta.dirname, "../../../../../go/conformance"),
     });
     return JSON.parse(stdout) as StreamedReadTestResult;
   }

@@ -1,30 +1,46 @@
-import type { McapTypes } from "@mcap/core";
+import type { DecompressHandlers } from "@mcap/core";
 
-let handlersPromise: Promise<McapTypes.DecompressHandlers> | undefined;
-export async function loadDecompressHandlers(): Promise<McapTypes.DecompressHandlers> {
+import { unwrapDefaultExport } from "./esmInterop.ts";
+
+type Bzip2Module = typeof import("@foxglove/wasm-bz2");
+type Lz4Module = (typeof import("@foxglove/wasm-lz4"))["default"];
+type ZstdModule = typeof import("@foxglove/wasm-zstd");
+
+let handlersPromise: Promise<DecompressHandlers> | undefined;
+export async function loadDecompressHandlers(): Promise<DecompressHandlers> {
   return await (handlersPromise ??= _loadDecompressHandlers());
 }
 
 // eslint-disable-next-line no-underscore-dangle
-async function _loadDecompressHandlers(): Promise<McapTypes.DecompressHandlers> {
-  const [decompressZstd, decompressLZ4, bzip2] = await Promise.all([
-    import("@foxglove/wasm-zstd").then(async (mod) => {
-      await mod.isLoaded;
-      return mod.decompress;
+async function _loadDecompressHandlers(): Promise<DecompressHandlers> {
+  const [decompressBzip2, decompressLZ4, decompressZstd] = await Promise.all([
+    import("@foxglove/wasm-bz2").then(async (mod) => {
+      const bzip2 = unwrapDefaultExport<Bzip2Module>(mod);
+      const instance = await bzip2.init();
+      return instance.decompress.bind(instance);
     }),
+
     import("@foxglove/wasm-lz4").then(async (mod) => {
-      await mod.default.isLoaded;
-      return mod.default;
+      const lz4 = unwrapDefaultExport<Lz4Module>(mod);
+      await lz4.isLoaded;
+      return lz4;
     }),
-    import("@foxglove/wasm-bz2").then(async (mod) => await mod.default.init()),
+
+    import("@foxglove/wasm-zstd").then(async (mod) => {
+      const zstd = unwrapDefaultExport<ZstdModule>(mod);
+      await zstd.isLoaded;
+      return zstd.decompress;
+    }),
   ]);
 
   return {
-    lz4: (buffer, decompressedSize) => decompressLZ4(buffer, Number(decompressedSize)),
-
     bz2: (buffer, decompressedSize) =>
-      bzip2.decompress(buffer, Number(decompressedSize), { small: false }),
+      decompressBzip2(buffer, Number(decompressedSize), { small: false }),
 
-    zstd: (buffer, decompressedSize) => decompressZstd(buffer, Number(decompressedSize)),
+    lz4: (buffer, decompressedSize) =>
+      new Uint8Array(decompressLZ4(buffer, Number(decompressedSize))),
+
+    zstd: (buffer, decompressedSize) =>
+      new Uint8Array(decompressZstd(buffer, Number(decompressedSize))),
   };
 }

@@ -1,27 +1,28 @@
-import { McapStreamReader, McapTypes } from "@mcap/core";
+import { McapStreamReader } from "@mcap/core";
+import type { TypedMcapRecord } from "@mcap/core";
 import colors from "colors";
 import { program } from "commander";
 import * as Diff from "diff";
-import fs from "fs/promises";
 import stableStringify from "json-stable-stringify";
-import { chunk } from "lodash";
-import path from "path";
+import { chunk } from "lodash-es";
+import fs from "node:fs/promises";
+import path from "node:path";
 
-import runners from "./runners";
 import {
   IndexedReadTestRunner,
   StreamedReadTestRunner,
   WriteTestRunner,
-} from "./runners/TestRunner";
-import { toSerializableMcapRecord } from "./toSerializableMcapRecord";
-import {
+} from "./runners/TestRunner.ts";
+import runners from "./runners/index.ts";
+import { toSerializableMcapRecord } from "./toSerializableMcapRecord.ts";
+import type {
   IndexedReadTestResult,
   SerializableMcapRecord,
   StreamedReadTestResult,
   TestCase,
-} from "./types";
-import { splitMcapRecords } from "../../util/splitMcapRecords";
-import generateTestVariants from "../../variants/generateTestVariants";
+} from "./types.ts";
+import { splitMcapRecords } from "../../util/splitMcapRecords.ts";
+import generateTestVariants from "../../variants/generateTestVariants.ts";
 
 type TestOptions = {
   dataDir: string;
@@ -142,7 +143,9 @@ async function runWriterTest(
       hadError = true;
       continue;
     }
-    const expectedParts = splitMcapRecords(expectedOutput).map(spaceHexString).join("\n");
+    const expectedParts = splitMcapRecords(new Uint8Array(expectedOutput))
+      .map(spaceHexString)
+      .join("\n");
     const outputParts = splitMcapRecords(output).map(spaceHexString).join("\n");
     if (!expectedOutput.equals(output)) {
       console.error(colors.red("fail       "), path.basename(testCasePath));
@@ -152,7 +155,7 @@ async function runWriterTest(
         ) as TestCase;
         const reader = new McapStreamReader({ validateCrcs: true });
         reader.append(output);
-        const records: McapTypes.TypedMcapRecord[] = [];
+        const records: TypedMcapRecord[] = [];
         for (let record; (record = reader.nextRecord()); ) {
           records.push(record);
         }

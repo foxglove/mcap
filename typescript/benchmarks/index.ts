@@ -1,8 +1,8 @@
 import { McapIndexedReader, McapStreamReader, McapWriter, TempBuffer } from "@mcap/core";
-import assert from "assert";
 import { program } from "commander";
+import assert from "node:assert";
 
-import { runBenchmark } from "./bench";
+import { runBenchmark } from "./bench.ts";
 
 /**
  * An IWritable that copies data to memory, but overwrites previous data. This allows benchmarking

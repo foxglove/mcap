@@ -1,12 +1,12 @@
 import { crc32Init, crc32Update, crc32Final, crc32 } from "@foxglove/crc";
 
-import { ChunkBuilder } from "./ChunkBuilder";
-import { ISeekableWriter } from "./ISeekableWriter";
-import { IWritable } from "./IWritable";
-import { McapIndexedReader } from "./McapIndexedReader";
-import { McapRecordBuilder } from "./McapRecordBuilder";
-import { Opcode } from "./constants";
-import {
+import { ChunkBuilder } from "./ChunkBuilder.ts";
+import type { ISeekableWriter } from "./ISeekableWriter.ts";
+import type { IWritable } from "./IWritable.ts";
+import { McapIndexedReader } from "./McapIndexedReader.ts";
+import { McapRecordBuilder } from "./McapRecordBuilder.ts";
+import { Opcode } from "./constants.ts";
+import type {
   Schema,
   Channel,
   Message,
@@ -21,7 +21,7 @@ import {
   Metadata,
   Statistics,
   IReadable,
-} from "./types";
+} from "./types.ts";
 
 export type McapWriterOptions = {
   writable: IWritable;

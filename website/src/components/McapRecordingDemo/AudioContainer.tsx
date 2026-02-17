@@ -2,7 +2,7 @@ import cx from "classnames";
 import React from "react";
 
 import styles from "./McapRecordingDemo.module.css";
-import { useStore } from "./state";
+import { useStore } from "./state.ts";
 
 interface AudioContainerProps {
   audioWaveformRef: React.RefObject<HTMLCanvasElement>;

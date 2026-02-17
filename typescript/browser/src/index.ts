@@ -1,1 +1,1 @@
-export * from "./BlobReadable";
+export * from "./BlobReadable.ts";

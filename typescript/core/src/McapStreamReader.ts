@@ -1,9 +1,15 @@
 import { crc32 } from "@foxglove/crc";
 
-import Reader from "./Reader";
-import { MCAP_MAGIC } from "./constants";
-import { parseMagic, parseRecord } from "./parse";
-import { Channel, DecompressHandlers, McapMagic, TypedMcapRecord, TypedMcapRecords } from "./types";
+import Reader from "./Reader.ts";
+import { MCAP_MAGIC } from "./constants.ts";
+import { parseMagic, parseRecord } from "./parse.ts";
+import type {
+  Channel,
+  DecompressHandlers,
+  McapMagic,
+  TypedMcapRecord,
+  TypedMcapRecords,
+} from "./types.ts";
 
 type McapReaderOptions = {
   /**

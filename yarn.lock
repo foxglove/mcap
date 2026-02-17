@@ -2131,15 +2131,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cspotcode/source-map-support@npm:^0.8.0":
-  version: 0.8.1
-  resolution: "@cspotcode/source-map-support@npm:0.8.1"
-  dependencies:
-    "@jridgewell/trace-mapping": "npm:0.3.9"
-  checksum: 10c0/05c5368c13b662ee4c122c7bfbe5dc0b613416672a829f3e78bc49a357a197e0218d6e74e7c66cfcd04e15a179acab080bd3c69658c9fbefd0e1ccd950a07fc6
-  languageName: node
-  linkType: hard
-
 "@discoveryjs/json-ext@npm:0.5.7":
   version: 0.5.7
   resolution: "@discoveryjs/json-ext@npm:0.5.7"
@@ -2724,6 +2715,188 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@esbuild/aix-ppc64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/aix-ppc64@npm:0.27.3"
+  conditions: os=aix & cpu=ppc64
+  languageName: node
+  linkType: hard
+
+"@esbuild/android-arm64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/android-arm64@npm:0.27.3"
+  conditions: os=android & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@esbuild/android-arm@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/android-arm@npm:0.27.3"
+  conditions: os=android & cpu=arm
+  languageName: node
+  linkType: hard
+
+"@esbuild/android-x64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/android-x64@npm:0.27.3"
+  conditions: os=android & cpu=x64
+  languageName: node
+  linkType: hard
+
+"@esbuild/darwin-arm64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/darwin-arm64@npm:0.27.3"
+  conditions: os=darwin & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@esbuild/darwin-x64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/darwin-x64@npm:0.27.3"
+  conditions: os=darwin & cpu=x64
+  languageName: node
+  linkType: hard
+
+"@esbuild/freebsd-arm64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/freebsd-arm64@npm:0.27.3"
+  conditions: os=freebsd & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@esbuild/freebsd-x64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/freebsd-x64@npm:0.27.3"
+  conditions: os=freebsd & cpu=x64
+  languageName: node
+  linkType: hard
+
+"@esbuild/linux-arm64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/linux-arm64@npm:0.27.3"
+  conditions: os=linux & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@esbuild/linux-arm@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/linux-arm@npm:0.27.3"
+  conditions: os=linux & cpu=arm
+  languageName: node
+  linkType: hard
+
+"@esbuild/linux-ia32@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/linux-ia32@npm:0.27.3"
+  conditions: os=linux & cpu=ia32
+  languageName: node
+  linkType: hard
+
+"@esbuild/linux-loong64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/linux-loong64@npm:0.27.3"
+  conditions: os=linux & cpu=loong64
+  languageName: node
+  linkType: hard
+
+"@esbuild/linux-mips64el@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/linux-mips64el@npm:0.27.3"
+  conditions: os=linux & cpu=mips64el
+  languageName: node
+  linkType: hard
+
+"@esbuild/linux-ppc64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/linux-ppc64@npm:0.27.3"
+  conditions: os=linux & cpu=ppc64
+  languageName: node
+  linkType: hard
+
+"@esbuild/linux-riscv64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/linux-riscv64@npm:0.27.3"
+  conditions: os=linux & cpu=riscv64
+  languageName: node
+  linkType: hard
+
+"@esbuild/linux-s390x@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/linux-s390x@npm:0.27.3"
+  conditions: os=linux & cpu=s390x
+  languageName: node
+  linkType: hard
+
+"@esbuild/linux-x64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/linux-x64@npm:0.27.3"
+  conditions: os=linux & cpu=x64
+  languageName: node
+  linkType: hard
+
+"@esbuild/netbsd-arm64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/netbsd-arm64@npm:0.27.3"
+  conditions: os=netbsd & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@esbuild/netbsd-x64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/netbsd-x64@npm:0.27.3"
+  conditions: os=netbsd & cpu=x64
+  languageName: node
+  linkType: hard
+
+"@esbuild/openbsd-arm64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/openbsd-arm64@npm:0.27.3"
+  conditions: os=openbsd & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@esbuild/openbsd-x64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/openbsd-x64@npm:0.27.3"
+  conditions: os=openbsd & cpu=x64
+  languageName: node
+  linkType: hard
+
+"@esbuild/openharmony-arm64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/openharmony-arm64@npm:0.27.3"
+  conditions: os=openharmony & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@esbuild/sunos-x64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/sunos-x64@npm:0.27.3"
+  conditions: os=sunos & cpu=x64
+  languageName: node
+  linkType: hard
+
+"@esbuild/win32-arm64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/win32-arm64@npm:0.27.3"
+  conditions: os=win32 & cpu=arm64
+  languageName: node
+  linkType: hard
+
+"@esbuild/win32-ia32@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/win32-ia32@npm:0.27.3"
+  conditions: os=win32 & cpu=ia32
+  languageName: node
+  linkType: hard
+
+"@esbuild/win32-x64@npm:0.27.3":
+  version: 0.27.3
+  resolution: "@esbuild/win32-x64@npm:0.27.3"
+  conditions: os=win32 & cpu=x64
+  languageName: node
+  linkType: hard
+
 "@eslint-community/eslint-utils@npm:^4.2.0, @eslint-community/eslint-utils@npm:^4.4.0":
   version: 4.4.0
   resolution: "@eslint-community/eslint-utils@npm:4.4.0"
@@ -2804,9 +2977,9 @@ __metadata:
   resolution: "@foxglove/mcap-benchmarks@workspace:typescript/benchmarks"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "npm:*"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     commander: "npm:12.1.0"
@@ -2817,9 +2990,8 @@ __metadata:
     eslint-plugin-import: "npm:2.29.0"
     eslint-plugin-prettier: "npm:5.0.1"
     prettier: "npm:3.1.0"
-    ts-node: "npm:10.9.1"
-    tsconfig-paths: "npm:4.1.2"
-    typescript: "npm:5.2.2"
+    tsx: "npm:4.21.0"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2829,12 +3001,13 @@ __metadata:
   dependencies:
     "@foxglove/crc": "npm:^0.0.3"
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "workspace:*"
-    "@mcap/support": "workspace:*"
+    "@mcap/nodejs": "workspace:*"
     "@types/diff": "npm:^5.0.2"
     "@types/js-yaml": "npm:^4.0.5"
-    "@types/node": "npm:18.13.0"
+    "@types/lodash-es": "npm:4.17.12"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     colors: "npm:1.4.0"
@@ -2852,11 +3025,10 @@ __metadata:
     json-stringify-pretty-compact: "npm:4.0.0"
     kaitai-struct: "npm:0.10.0"
     kaitai-struct-compiler: "npm:0.10.0"
-    lodash: "npm:4.17.21"
+    lodash-es: "npm:4.17.23"
     prettier: "npm:3.1.0"
-    ts-node: "npm:10.9.1"
-    tsconfig-paths: "npm:^4.1.2"
-    typescript: "npm:5.2.2"
+    tsx: "npm:4.21.0"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2869,15 +3041,14 @@ __metadata:
     "@foxglove/rosmsg": "npm:3.1.0"
     "@foxglove/rosmsg-serialization": "npm:1.5.3"
     "@foxglove/rosmsg2-serialization": "npm:1.1.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
-    "@foxglove/wasm-bz2": "npm:0.1.1"
+    "@foxglove/tsconfig": "npm:3.2.0"
+    "@foxglove/wasm-bz2": "npm:0.3.0"
     "@foxglove/wasm-lz4": "npm:1.0.2"
     "@foxglove/wasm-zstd": "npm:1.0.1"
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
     "@mcap/support": "workspace:*"
-    "@types/lodash": "npm:4.14.191"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     commander: "npm:11.1.0"
@@ -2887,12 +3058,10 @@ __metadata:
     eslint-plugin-filenames: "npm:1.3.2"
     eslint-plugin-import: "npm:2.29.0"
     eslint-plugin-prettier: "npm:5.0.1"
-    lodash: "npm:4.17.21"
     prettier: "npm:3.1.0"
     protobufjs: "npm:7.2.5"
-    ts-node: "npm:10.9.1"
-    tsconfig-paths: "npm:4.1.2"
-    typescript: "npm:5.2.2"
+    tsx: "npm:4.21.0"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2903,8 +3072,7 @@ __metadata:
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
-    "@mcap/support": "workspace:*"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     eslint: "npm:8.54.0"
     eslint-config-prettier: "npm:9.0.0"
     eslint-plugin-es: "npm:4.1.0"
@@ -2912,8 +3080,8 @@ __metadata:
     eslint-plugin-import: "npm:2.29.0"
     eslint-plugin-prettier: "npm:5.0.1"
     prettier: "npm:3.1.0"
-    ts-node: "npm:10.9.1"
-    typescript: "npm:5.2.2"
+    tsx: "npm:4.21.0"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2922,10 +3090,10 @@ __metadata:
   resolution: "@foxglove/mcap-example-flatbufferswriter@workspace:typescript/examples/flatbufferswriter"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/schemas": "npm:^1.0.0"
+    "@foxglove/schemas": "npm:1.8.0"
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     eslint: "npm:8.54.0"
     eslint-config-prettier: "npm:9.0.0"
     eslint-plugin-es: "npm:4.1.0"
@@ -2934,8 +3102,8 @@ __metadata:
     eslint-plugin-prettier: "npm:5.0.1"
     flatbuffers: "npm:^23.1.21"
     prettier: "npm:3.1.0"
-    ts-node: "npm:10.9.1"
-    typescript: "npm:5.2.2"
+    tsx: "npm:4.21.0"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2944,10 +3112,10 @@ __metadata:
   resolution: "@foxglove/mcap-example-text-annotation-demo@workspace:typescript/examples/text-annotation-demo"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/schemas": "npm:1.3.0"
+    "@foxglove/schemas": "npm:1.8.0"
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     eslint: "npm:8.54.0"
     eslint-config-prettier: "npm:9.0.0"
     eslint-plugin-es: "npm:4.1.0"
@@ -2955,8 +3123,8 @@ __metadata:
     eslint-plugin-import: "npm:2.29.0"
     eslint-plugin-prettier: "npm:5.0.1"
     prettier: "npm:3.1.0"
-    ts-node: "npm:10.9.1"
-    typescript: "npm:5.2.2"
+    tsx: "npm:4.21.0"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -2966,13 +3134,12 @@ __metadata:
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@foxglove/schemas": "npm:1.8.0"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@foxglove/ulog": "npm:2.3.1"
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
     "@mcap/support": "workspace:*"
-    "@types/lodash": "npm:4.14.191"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     commander: "npm:11.1.0"
@@ -2983,14 +3150,12 @@ __metadata:
     eslint-plugin-import: "npm:2.29.0"
     eslint-plugin-prettier: "npm:5.0.1"
     jest: "npm:30.2.0"
-    lodash: "npm:4.17.21"
     long: "npm:5.3.2"
     prettier: "npm:3.1.0"
     protobufjs: "npm:^7.2.5"
     ts-jest: "npm:29.4.6"
-    ts-node: "npm:10.9.1"
-    tsconfig-paths: "npm:4.1.2"
-    typescript: "npm:5.2.2"
+    tsx: "npm:4.21.0"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -3003,16 +3168,16 @@ __metadata:
     "@foxglove/rosmsg": "npm:3.1.0"
     "@foxglove/rosmsg-serialization": "npm:1.5.3"
     "@foxglove/rosmsg2-serialization": "npm:1.1.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
-    "@foxglove/wasm-bz2": "npm:0.1.1"
+    "@foxglove/tsconfig": "npm:3.2.0"
+    "@foxglove/wasm-bz2": "npm:0.3.0"
     "@foxglove/wasm-lz4": "npm:1.0.2"
     "@foxglove/wasm-zstd": "npm:1.0.1"
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
     "@mcap/support": "workspace:*"
     "@types/jest": "npm:29.5.8"
-    "@types/lodash": "npm:4.14.191"
-    "@types/node": "npm:18.13.0"
+    "@types/lodash-es": "npm:4.17.12"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     commander: "npm:11.1.0"
@@ -3024,13 +3189,12 @@ __metadata:
     eslint-plugin-jest: "npm:27.6.0"
     eslint-plugin-prettier: "npm:5.0.1"
     jest: "npm:29.7.0"
-    lodash: "npm:4.17.21"
+    lodash-es: "npm:4.17.23"
     prettier: "npm:3.1.0"
     protobufjs: "npm:7.2.5"
     ts-jest: "npm:29.1.1"
-    ts-node: "npm:10.9.1"
-    tsconfig-paths: "npm:4.1.2"
-    typescript: "npm:5.2.2"
+    tsx: "npm:4.21.0"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -3053,7 +3217,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/rosmsg-msgs-common@npm:^3.0.0, @foxglove/rosmsg-msgs-common@npm:^3.2.2":
+"@foxglove/rosmsg-msgs-common@npm:^3.2.2":
   version: 3.2.3
   resolution: "@foxglove/rosmsg-msgs-common@npm:3.2.3"
   dependencies:
@@ -3109,26 +3273,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/schemas@npm:1.3.0":
-  version: 1.3.0
-  resolution: "@foxglove/schemas@npm:1.3.0"
-  dependencies:
-    "@foxglove/rosmsg-msgs-common": "npm:^3.0.0"
-    tslib: "npm:^2.5.0"
-  checksum: 10c0/06c00bd04da6ec104cd807ccf574046fa5b432c1915164c173e9f6b86633d3d25892116ef6e61ddb91db9b0ee206ef1baf83eb6a5683089a2b6134de087b7358
-  languageName: node
-  linkType: hard
-
-"@foxglove/schemas@npm:1.7.0":
-  version: 1.7.0
-  resolution: "@foxglove/schemas@npm:1.7.0"
-  dependencies:
-    tslib: "npm:^2"
-  checksum: 10c0/40754a7acc581f89d225e4d499739204e985d6c73e804e5ffb02732c328d4fd8c2afb1f01d8d7669949d115f23277ec1f147bee44db6426d82cef41607cfc07a
-  languageName: node
-  linkType: hard
-
-"@foxglove/schemas@npm:1.8.0, @foxglove/schemas@npm:^1.0.0":
+"@foxglove/schemas@npm:1.8.0":
   version: 1.8.0
   resolution: "@foxglove/schemas@npm:1.8.0"
   dependencies:
@@ -3138,17 +3283,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/tsconfig@npm:1.1.0":
-  version: 1.1.0
-  resolution: "@foxglove/tsconfig@npm:1.1.0"
-  checksum: 10c0/e4386d68520fa9dcc191f499f1beedcedbafd7a77dfaa3a9294694e3e557dd2863dcf656d97d3425edca2921d977be7aefcbdfcb86d5885b9c9e55cf716d4159
-  languageName: node
-  linkType: hard
-
-"@foxglove/tsconfig@npm:2.0.0":
-  version: 2.0.0
-  resolution: "@foxglove/tsconfig@npm:2.0.0"
-  checksum: 10c0/fccd3d2a67b85cc4532653930f6e0c311628458b489ee2e1e0aa0aa60d11b57bc2567b65344ff4007e238f42037eff22ec83f41d948e3be1a1d856ef207ac3d8
+"@foxglove/tsconfig@npm:3.2.0":
+  version: 3.2.0
+  resolution: "@foxglove/tsconfig@npm:3.2.0"
+  checksum: 10c0/7df6e49fe8c2e0b891554370dbbfc1d4bf394939e7414cee35f5a68282239240878c4f6fbaaf7b65cc86834bc5420879505b631585f6737214e1a14109ed562e
   languageName: node
   linkType: hard
 
@@ -3159,12 +3297,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/wasm-bz2@npm:0.1.1, @foxglove/wasm-bz2@npm:^0.1.1":
-  version: 0.1.1
-  resolution: "@foxglove/wasm-bz2@npm:0.1.1"
+"@foxglove/wasm-bz2@npm:0.3.0, @foxglove/wasm-bz2@npm:^0.3.0":
+  version: 0.3.0
+  resolution: "@foxglove/wasm-bz2@npm:0.3.0"
   dependencies:
     tslib: "npm:^2"
-  checksum: 10c0/6a684aaf33324782b8a2eb14b9078e9da1188c5c89eadca79d2afb94fcc22518f28b08d8860b56088d081e35d9007d0e357c69f04105292abf00aa889742ff0d
+  checksum: 10c0/cd47184aeec8da1fb613a30f162f2d26a0650d4f73a25ce739227094d25da3518400d9a4b6ee0ce474be622abfa4fe85403985c44f059db72a422ea0baa38f0a
   languageName: node
   linkType: hard
 
@@ -3780,7 +3918,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@jridgewell/resolve-uri@npm:^3.0.3, @jridgewell/resolve-uri@npm:^3.1.0":
+"@jridgewell/resolve-uri@npm:^3.1.0":
   version: 3.1.1
   resolution: "@jridgewell/resolve-uri@npm:3.1.1"
   checksum: 10c0/0dbc9e29bc640bbbdc5b9876d2859c69042bfcf1423c1e6421bcca53e826660bff4e41c7d4bcb8dbea696404231a6f902f76ba41835d049e20f2dd6cffb713bf
@@ -3797,20 +3935,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@jridgewell/sourcemap-codec@npm:^1.4.10, @jridgewell/sourcemap-codec@npm:^1.4.14, @jridgewell/sourcemap-codec@npm:^1.5.0":
+"@jridgewell/sourcemap-codec@npm:^1.4.14, @jridgewell/sourcemap-codec@npm:^1.5.0":
   version: 1.5.5
   resolution: "@jridgewell/sourcemap-codec@npm:1.5.5"
   checksum: 10c0/f9e538f302b63c0ebc06eecb1dd9918dd4289ed36147a0ddce35d6ea4d7ebbda243cda7b2213b6a5e1d8087a298d5cf630fb2bd39329cdecb82017023f6081a0
-  languageName: node
-  linkType: hard
-
-"@jridgewell/trace-mapping@npm:0.3.9":
-  version: 0.3.9
-  resolution: "@jridgewell/trace-mapping@npm:0.3.9"
-  dependencies:
-    "@jridgewell/resolve-uri": "npm:^3.0.3"
-    "@jridgewell/sourcemap-codec": "npm:^1.4.10"
-  checksum: 10c0/fa425b606d7c7ee5bfa6a31a7b050dd5814b4082f318e0e4190f991902181b4330f43f4805db1dd4f2433fd0ed9cc7a7b9c2683f1deeab1df1b0a98b1e24055b
   languageName: node
   linkType: hard
 
@@ -3836,7 +3964,7 @@ __metadata:
   resolution: "@mcap/browser@workspace:typescript/browser"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "workspace:*"
     "@types/jest": "npm:29.5.8"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
@@ -3853,7 +3981,7 @@ __metadata:
     prettier: "npm:3.1.0"
     ts-jest: "npm:29.1.1"
     tslib: "npm:^2.5.0"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -3863,10 +3991,9 @@ __metadata:
   dependencies:
     "@foxglove/crc": "npm:^0.0.3"
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@types/jest": "npm:29.5.8"
-    "@types/lodash": "npm:4.14.191"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     eslint: "npm:8.54.0"
@@ -3878,12 +4005,10 @@ __metadata:
     eslint-plugin-prettier: "npm:5.0.1"
     heap-js: "npm:^2.2.0"
     jest: "npm:29.7.0"
-    lodash: "npm:4.17.21"
     prettier: "npm:3.1.0"
     ts-jest: "npm:29.1.1"
-    ts-node: "npm:10.9.1"
     tslib: "npm:^2.5.0"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -3892,10 +4017,10 @@ __metadata:
   resolution: "@mcap/nodejs@workspace:typescript/nodejs"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "workspace:*"
     "@types/jest": "npm:29.5.8"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     eslint: "npm:8.54.0"
@@ -3910,7 +4035,7 @@ __metadata:
     prettier: "npm:3.1.0"
     ts-jest: "npm:29.1.1"
     tslib: "npm:^2.5.0"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -3919,13 +4044,12 @@ __metadata:
   resolution: "@mcap/support@workspace:typescript/support"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/tsconfig": "npm:1.1.0"
-    "@foxglove/wasm-bz2": "npm:^0.1.1"
+    "@foxglove/tsconfig": "npm:3.2.0"
+    "@foxglove/wasm-bz2": "npm:^0.3.0"
     "@foxglove/wasm-lz4": "npm:^1.0.2"
     "@foxglove/wasm-zstd": "npm:^1.0.1"
     "@mcap/core": "workspace:*"
-    "@types/jest": "npm:29.5.8"
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
     eslint: "npm:8.54.0"
@@ -3935,12 +4059,10 @@ __metadata:
     eslint-plugin-import: "npm:2.29.0"
     eslint-plugin-jest: "npm:27.6.0"
     eslint-plugin-prettier: "npm:5.0.1"
-    jest: "npm:29.7.0"
     prettier: "npm:3.1.0"
     protobufjs: "npm:^7.2.5"
-    ts-jest: "npm:29.1.1"
     tslib: "npm:^2.5.0"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -4430,34 +4552,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@tsconfig/node10@npm:^1.0.7":
-  version: 1.0.8
-  resolution: "@tsconfig/node10@npm:1.0.8"
-  checksum: 10c0/d400f7b5c02acd74620f892c0f41cea39e7c1b5f7f272ad6f127f4b1fba23346b2d8e30d272731a733675494145f6aa74f9faf050390c034c7c553123ab979b3
-  languageName: node
-  linkType: hard
-
-"@tsconfig/node12@npm:^1.0.7":
-  version: 1.0.9
-  resolution: "@tsconfig/node12@npm:1.0.9"
-  checksum: 10c0/fc1fb68a89d8a641953036d23d95fe68f69f74d37a499db20791b09543ad23afe7ae9ee0840eea92dd470bdcba69eef6f1ed3fe90ba64d763bcd3f738e364597
-  languageName: node
-  linkType: hard
-
-"@tsconfig/node14@npm:^1.0.0":
-  version: 1.0.1
-  resolution: "@tsconfig/node14@npm:1.0.1"
-  checksum: 10c0/abd4e27d9ad712e1e229716a3dbf35d5cbb580d624a82d67414e7606cefd85d502e58800a2ab930d46a428fcfcb199436283b1a88e47d738ca1a5f7fd022ee74
-  languageName: node
-  linkType: hard
-
-"@tsconfig/node16@npm:^1.0.2":
-  version: 1.0.2
-  resolution: "@tsconfig/node16@npm:1.0.2"
-  checksum: 10c0/d402706562444a173d48810d13fdf866c78f1b876ed8962eeac6c7cddf4e29e8aaa06dc28093219e3e9eb6316799cf4d9a7acba62c6a4e215ee0c94d83f9081f
-  languageName: node
-  linkType: hard
-
 "@tybys/wasm-util@npm:^0.10.0":
   version: 0.10.1
   resolution: "@tybys/wasm-util@npm:0.10.1"
@@ -4725,10 +4819,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/lodash@npm:4.14.191":
-  version: 4.14.191
-  resolution: "@types/lodash@npm:4.14.191"
-  checksum: 10c0/cca0bc3b5f1193a50a39a9c6e14892e7cf57ab81ca05985e1ccee0d732dd3b22a8d669fa87560757051c6d73f4f63a2e2248ce9a7d9c159d0d5e3f331baf6a62
+"@types/lodash-es@npm:4.17.12":
+  version: 4.17.12
+  resolution: "@types/lodash-es@npm:4.17.12"
+  dependencies:
+    "@types/lodash": "npm:*"
+  checksum: 10c0/5d12d2cede07f07ab067541371ed1b838a33edb3c35cb81b73284e93c6fd0c4bbeaefee984e69294bffb53f62d7272c5d679fdba8e595ff71e11d00f2601dde0
+  languageName: node
+  linkType: hard
+
+"@types/lodash@npm:*":
+  version: 4.17.23
+  resolution: "@types/lodash@npm:4.17.23"
+  checksum: 10c0/9d9cbfb684e064a2b78aab9e220d398c9c2a7d36bc51a07b184ff382fa043a99b3d00c16c7f109b4eb8614118f4869678dbae7d5c6700ed16fb9340e26cc0bf6
   languageName: node
   linkType: hard
 
@@ -4748,10 +4851,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:*, @types/node@npm:18.13.0, @types/node@npm:>=13.7.0":
-  version: 18.13.0
-  resolution: "@types/node@npm:18.13.0"
-  checksum: 10c0/985ca4e6e19fb0ee8bf5618f96f0b6d96a434c28a9123c93f25a3dcc202c3fa903cf234fcee649e10977b057ccb3b796e81b094d9c84eadbaa2b7c4b97a8866e
+"@types/node@npm:*, @types/node@npm:20.19.33, @types/node@npm:>=13.7.0":
+  version: 20.19.33
+  resolution: "@types/node@npm:20.19.33"
+  dependencies:
+    undici-types: "npm:~6.21.0"
+  checksum: 10c0/a1a6234a2b6fa577fbb1ccc471e5e54a79c6e1a51be10a67b034461b752a50017854810e943494f20b3c3c6d14df84c93757e0a2ec57aa81c830d6faeab72cf2
   languageName: node
   linkType: hard
 
@@ -5480,14 +5585,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"acorn-walk@npm:^8.0.0, acorn-walk@npm:^8.1.1":
+"acorn-walk@npm:^8.0.0":
   version: 8.2.0
   resolution: "acorn-walk@npm:8.2.0"
   checksum: 10c0/dbe92f5b2452c93e960c5594e666dd1fae141b965ff2cb4a1e1d0381e3e4db4274c5ce4ffa3d681a86ca2a8d4e29d5efc0670a08e23fd2800051ea387df56ca2
   languageName: node
   linkType: hard
 
-"acorn@npm:^8.0.4, acorn@npm:^8.4.1, acorn@npm:^8.5.0, acorn@npm:^8.7.1, acorn@npm:^8.9.0":
+"acorn@npm:^8.0.4, acorn@npm:^8.5.0, acorn@npm:^8.7.1, acorn@npm:^8.9.0":
   version: 8.11.2
   resolution: "acorn@npm:8.11.2"
   bin:
@@ -5719,13 +5824,6 @@ __metadata:
     delegates: "npm:^1.0.0"
     readable-stream: "npm:^3.6.0"
   checksum: 10c0/8373f289ba42e4b5ec713bb585acdac14b5702c75f2a458dc985b9e4fa5762bc5b46b40a21b72418a3ed0cfb5e35bdc317ef1ae132f3035f633d581dd03168c3
-  languageName: node
-  linkType: hard
-
-"arg@npm:^4.1.0":
-  version: 4.1.3
-  resolution: "arg@npm:4.1.3"
-  checksum: 10c0/070ff801a9d236a6caa647507bdcc7034530604844d64408149a26b9e87c2f97650055c0f049abd1efc024b334635c01f29e0b632b371ac3f26130f4cf65997a
   languageName: node
   linkType: hard
 
@@ -7128,13 +7226,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"create-require@npm:^1.1.0":
-  version: 1.1.1
-  resolution: "create-require@npm:1.1.1"
-  checksum: 10c0/157cbc59b2430ae9a90034a5f3a1b398b6738bf510f713edc4d4e45e169bc514d3d99dd34d8d01ca7ae7830b5b8b537e46ae8f3c8f932371b0875c0151d7ec91
-  languageName: node
-  linkType: hard
-
 "cross-fetch@npm:^3.1.5":
   version: 3.1.5
   resolution: "cross-fetch@npm:3.1.5"
@@ -7743,13 +7834,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"diff@npm:^4.0.1":
-  version: 4.0.2
-  resolution: "diff@npm:4.0.2"
-  checksum: 10c0/81b91f9d39c4eaca068eb0c1eb0e4afbdc5bb2941d197f513dd596b820b956fef43485876226d65d497bebc15666aa2aa82c679e84f65d5f2bfbf14ee46e32c1
-  languageName: node
-  linkType: hard
-
 "diff@npm:^5.1.0":
   version: 5.1.0
   resolution: "diff@npm:5.1.0"
@@ -8152,6 +8236,95 @@ __metadata:
     is-date-object: "npm:^1.0.1"
     is-symbol: "npm:^1.0.2"
   checksum: 10c0/0886572b8dc075cb10e50c0af62a03d03a68e1e69c388bd4f10c0649ee41b1fbb24840a1b7e590b393011b5cdbe0144b776da316762653685432df37d6de60f1
+  languageName: node
+  linkType: hard
+
+"esbuild@npm:~0.27.0":
+  version: 0.27.3
+  resolution: "esbuild@npm:0.27.3"
+  dependencies:
+    "@esbuild/aix-ppc64": "npm:0.27.3"
+    "@esbuild/android-arm": "npm:0.27.3"
+    "@esbuild/android-arm64": "npm:0.27.3"
+    "@esbuild/android-x64": "npm:0.27.3"
+    "@esbuild/darwin-arm64": "npm:0.27.3"
+    "@esbuild/darwin-x64": "npm:0.27.3"
+    "@esbuild/freebsd-arm64": "npm:0.27.3"
+    "@esbuild/freebsd-x64": "npm:0.27.3"
+    "@esbuild/linux-arm": "npm:0.27.3"
+    "@esbuild/linux-arm64": "npm:0.27.3"
+    "@esbuild/linux-ia32": "npm:0.27.3"
+    "@esbuild/linux-loong64": "npm:0.27.3"
+    "@esbuild/linux-mips64el": "npm:0.27.3"
+    "@esbuild/linux-ppc64": "npm:0.27.3"
+    "@esbuild/linux-riscv64": "npm:0.27.3"
+    "@esbuild/linux-s390x": "npm:0.27.3"
+    "@esbuild/linux-x64": "npm:0.27.3"
+    "@esbuild/netbsd-arm64": "npm:0.27.3"
+    "@esbuild/netbsd-x64": "npm:0.27.3"
+    "@esbuild/openbsd-arm64": "npm:0.27.3"
+    "@esbuild/openbsd-x64": "npm:0.27.3"
+    "@esbuild/openharmony-arm64": "npm:0.27.3"
+    "@esbuild/sunos-x64": "npm:0.27.3"
+    "@esbuild/win32-arm64": "npm:0.27.3"
+    "@esbuild/win32-ia32": "npm:0.27.3"
+    "@esbuild/win32-x64": "npm:0.27.3"
+  dependenciesMeta:
+    "@esbuild/aix-ppc64":
+      optional: true
+    "@esbuild/android-arm":
+      optional: true
+    "@esbuild/android-arm64":
+      optional: true
+    "@esbuild/android-x64":
+      optional: true
+    "@esbuild/darwin-arm64":
+      optional: true
+    "@esbuild/darwin-x64":
+      optional: true
+    "@esbuild/freebsd-arm64":
+      optional: true
+    "@esbuild/freebsd-x64":
+      optional: true
+    "@esbuild/linux-arm":
+      optional: true
+    "@esbuild/linux-arm64":
+      optional: true
+    "@esbuild/linux-ia32":
+      optional: true
+    "@esbuild/linux-loong64":
+      optional: true
+    "@esbuild/linux-mips64el":
+      optional: true
+    "@esbuild/linux-ppc64":
+      optional: true
+    "@esbuild/linux-riscv64":
+      optional: true
+    "@esbuild/linux-s390x":
+      optional: true
+    "@esbuild/linux-x64":
+      optional: true
+    "@esbuild/netbsd-arm64":
+      optional: true
+    "@esbuild/netbsd-x64":
+      optional: true
+    "@esbuild/openbsd-arm64":
+      optional: true
+    "@esbuild/openbsd-x64":
+      optional: true
+    "@esbuild/openharmony-arm64":
+      optional: true
+    "@esbuild/sunos-x64":
+      optional: true
+    "@esbuild/win32-arm64":
+      optional: true
+    "@esbuild/win32-ia32":
+      optional: true
+    "@esbuild/win32-x64":
+      optional: true
+  bin:
+    esbuild: bin/esbuild
+  checksum: 10c0/fdc3f87a3f08b3ef98362f37377136c389a0d180fda4b8d073b26ba930cf245521db0a368f119cc7624bc619248fff1439f5811f062d853576f8ffa3df8ee5f1
   languageName: node
   linkType: hard
 
@@ -9099,7 +9272,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fsevents@npm:^2.3.2, fsevents@npm:^2.3.3, fsevents@npm:~2.3.2":
+"fsevents@npm:^2.3.2, fsevents@npm:^2.3.3, fsevents@npm:~2.3.2, fsevents@npm:~2.3.3":
   version: 2.3.3
   resolution: "fsevents@npm:2.3.3"
   dependencies:
@@ -9109,7 +9282,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"fsevents@patch:fsevents@npm%3A^2.3.2#optional!builtin<compat/fsevents>, fsevents@patch:fsevents@npm%3A^2.3.3#optional!builtin<compat/fsevents>, fsevents@patch:fsevents@npm%3A~2.3.2#optional!builtin<compat/fsevents>":
+"fsevents@patch:fsevents@npm%3A^2.3.2#optional!builtin<compat/fsevents>, fsevents@patch:fsevents@npm%3A^2.3.3#optional!builtin<compat/fsevents>, fsevents@patch:fsevents@npm%3A~2.3.2#optional!builtin<compat/fsevents>, fsevents@patch:fsevents@npm%3A~2.3.3#optional!builtin<compat/fsevents>":
   version: 2.3.3
   resolution: "fsevents@patch:fsevents@npm%3A2.3.3#optional!builtin<compat/fsevents>::version=2.3.3&hash=df0bf1"
   dependencies:
@@ -9249,12 +9422,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"get-tsconfig@npm:^4.5.0":
-  version: 4.7.2
-  resolution: "get-tsconfig@npm:4.7.2"
+"get-tsconfig@npm:^4.5.0, get-tsconfig@npm:^4.7.5":
+  version: 4.13.6
+  resolution: "get-tsconfig@npm:4.13.6"
   dependencies:
     resolve-pkg-maps: "npm:^1.0.0"
-  checksum: 10c0/169b2beababfbb16e8a0ae813ee59d3e14d4960231c816615161ab5be68ec07a394dce59695742ac84295e2efab8d9e89bcf3abaf5e253dfbec3496e01bb9a65
+  checksum: 10c0/bab6937302f542f97217cbe7cbbdfa7e85a56a377bc7a73e69224c1f0b7c9ae8365918e55752ae8648265903f506c1705f63c0de1d4bab1ec2830fef3e539a1a
   languageName: node
   linkType: hard
 
@@ -11749,7 +11922,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"json5@npm:^2.1.2, json5@npm:^2.2.2, json5@npm:^2.2.3":
+"json5@npm:^2.1.2, json5@npm:^2.2.3":
   version: 2.2.3
   resolution: "json5@npm:2.2.3"
   bin:
@@ -11960,6 +12133,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"lodash-es@npm:4.17.23":
+  version: 4.17.23
+  resolution: "lodash-es@npm:4.17.23"
+  checksum: 10c0/3150fb6660c14c7a6b5f23bd11597d884b140c0e862a17fdb415aaa5ef7741523182904a6b7929f04e5f60a11edb5a79499eb448734381c99ffb3c4734beeddd
+  languageName: node
+  linkType: hard
+
 "lodash.camelcase@npm:4.3.0":
   version: 4.3.0
   resolution: "lodash.camelcase@npm:4.3.0"
@@ -12030,7 +12210,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lodash@npm:4.17.21, lodash@npm:^4.17.19, lodash@npm:^4.17.20, lodash@npm:^4.17.21":
+"lodash@npm:^4.17.19, lodash@npm:^4.17.20, lodash@npm:^4.17.21":
   version: 4.17.21
   resolution: "lodash@npm:4.17.21"
   checksum: 10c0/d8cbea072bb08655bb4c989da418994b073a608dffa608b09ac04b43a791b12aeae7cd7ad919aa4c925f33b48490b5cfe6c1f71d827956071dae2e7bb3a6b74c
@@ -12117,7 +12297,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"make-error@npm:1.x, make-error@npm:^1.1.1, make-error@npm:^1.3.6":
+"make-error@npm:1.x, make-error@npm:^1.3.6":
   version: 1.3.6
   resolution: "make-error@npm:1.3.6"
   checksum: 10c0/171e458d86854c6b3fc46610cfacf0b45149ba043782558c6875d9f42f222124384ad0b468c92e996d815a8a2003817a710c0a160e49c1c394626f76fa45396f
@@ -14691,14 +14871,13 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "root-workspace-0b6124@workspace:."
   dependencies:
-    "@types/node": "npm:18.13.0"
+    "@types/node": "npm:20.19.33"
     cspell: "npm:8.0.0"
     jest: "npm:29.7.0"
     prettier: "npm:3.1.0"
     ts-jest: "npm:29.1.1"
-    ts-node: "npm:10.9.1"
     typedoc: "npm:0.25.3"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
   languageName: unknown
   linkType: soft
 
@@ -15881,55 +16060,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"ts-node@npm:10.9.1":
-  version: 10.9.1
-  resolution: "ts-node@npm:10.9.1"
-  dependencies:
-    "@cspotcode/source-map-support": "npm:^0.8.0"
-    "@tsconfig/node10": "npm:^1.0.7"
-    "@tsconfig/node12": "npm:^1.0.7"
-    "@tsconfig/node14": "npm:^1.0.0"
-    "@tsconfig/node16": "npm:^1.0.2"
-    acorn: "npm:^8.4.1"
-    acorn-walk: "npm:^8.1.1"
-    arg: "npm:^4.1.0"
-    create-require: "npm:^1.1.0"
-    diff: "npm:^4.0.1"
-    make-error: "npm:^1.1.1"
-    v8-compile-cache-lib: "npm:^3.0.1"
-    yn: "npm:3.1.1"
-  peerDependencies:
-    "@swc/core": ">=1.2.50"
-    "@swc/wasm": ">=1.2.50"
-    "@types/node": "*"
-    typescript: ">=2.7"
-  peerDependenciesMeta:
-    "@swc/core":
-      optional: true
-    "@swc/wasm":
-      optional: true
-  bin:
-    ts-node: dist/bin.js
-    ts-node-cwd: dist/bin-cwd.js
-    ts-node-esm: dist/bin-esm.js
-    ts-node-script: dist/bin-script.js
-    ts-node-transpile-only: dist/bin-transpile.js
-    ts-script: dist/bin-script-deprecated.js
-  checksum: 10c0/95187932fb83f3901e22546bd2feeac7d2feb4f412f42ac3a595f049a23e8dcf70516dffb51866391228ea2dbcfaea039e250fb2bb334d48a86ab2b6aea0ae2d
-  languageName: node
-  linkType: hard
-
-"tsconfig-paths@npm:4.1.2, tsconfig-paths@npm:^4.1.2":
-  version: 4.1.2
-  resolution: "tsconfig-paths@npm:4.1.2"
-  dependencies:
-    json5: "npm:^2.2.2"
-    minimist: "npm:^1.2.6"
-    strip-bom: "npm:^3.0.0"
-  checksum: 10c0/8993f3e160aaca196a5e1e65c26167a6d026cb48c8b80bfe41c1a37a280a471a23611a9ee85ae913714968a75f75314d580726b6b8f08486fe08a0f0161f1930
-  languageName: node
-  linkType: hard
-
 "tsconfig-paths@npm:^3.14.2":
   version: 3.14.2
   resolution: "tsconfig-paths@npm:3.14.2"
@@ -15964,6 +16094,22 @@ __metadata:
   peerDependencies:
     typescript: ">=2.8.0 || >= 3.2.0-dev || >= 3.3.0-dev || >= 3.4.0-dev || >= 3.5.0-dev || >= 3.6.0-dev || >= 3.6.0-beta || >= 3.7.0-dev || >= 3.7.0-beta"
   checksum: 10c0/02f19e458ec78ead8fffbf711f834ad8ecd2cc6ade4ec0320790713dccc0a412b99e7fd907c4cda2a1dc602c75db6f12e0108e87a5afad4b2f9e90a24cabd5a2
+  languageName: node
+  linkType: hard
+
+"tsx@npm:4.21.0":
+  version: 4.21.0
+  resolution: "tsx@npm:4.21.0"
+  dependencies:
+    esbuild: "npm:~0.27.0"
+    fsevents: "npm:~2.3.3"
+    get-tsconfig: "npm:^4.7.5"
+  dependenciesMeta:
+    fsevents:
+      optional: true
+  bin:
+    tsx: dist/cli.mjs
+  checksum: 10c0/f5072923cd8459a1f9a26df87823a2ab5754641739d69df2a20b415f61814322b751fa6be85db7c6ec73cf68ba8fac2fd1cfc76bdb0aa86ded984d84d5d2126b
   languageName: node
   linkType: hard
 
@@ -16100,23 +16246,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@npm:5.2.2, typescript@npm:^4 || ^5":
-  version: 5.2.2
-  resolution: "typescript@npm:5.2.2"
+"typescript@npm:5.9.3, typescript@npm:^4 || ^5":
+  version: 5.9.3
+  resolution: "typescript@npm:5.9.3"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/91ae3e6193d0ddb8656d4c418a033f0f75dec5e077ebbc2bd6d76439b93f35683936ee1bdc0e9cf94ec76863aa49f27159b5788219b50e1cd0cd6d110aa34b07
+  checksum: 10c0/6bd7552ce39f97e711db5aa048f6f9995b53f1c52f7d8667c1abdc1700c68a76a308f579cd309ce6b53646deb4e9a1be7c813a93baaf0a28ccd536a30270e1c5
   languageName: node
   linkType: hard
 
-"typescript@patch:typescript@npm%3A5.2.2#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^4 || ^5#optional!builtin<compat/typescript>":
-  version: 5.2.2
-  resolution: "typescript@patch:typescript@npm%3A5.2.2#optional!builtin<compat/typescript>::version=5.2.2&hash=f3b441"
+"typescript@patch:typescript@npm%3A5.9.3#optional!builtin<compat/typescript>, typescript@patch:typescript@npm%3A^4 || ^5#optional!builtin<compat/typescript>":
+  version: 5.9.3
+  resolution: "typescript@patch:typescript@npm%3A5.9.3#optional!builtin<compat/typescript>::version=5.9.3&hash=5786d5"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/062c1cee1990e6b9419ce8a55162b8dc917eb87f807e4de0327dbc1c2fa4e5f61bc0dd4e034d38ff541d1ed0479b53bcee8e4de3a4075c51a1724eb6216cb6f5
+  checksum: 10c0/ad09fdf7a756814dce65bc60c1657b40d44451346858eea230e10f2e95a289d9183b6e32e5c11e95acc0ccc214b4f36289dcad4bf1886b0adb84d711d336a430
   languageName: node
   linkType: hard
 
@@ -16145,6 +16291,13 @@ __metadata:
     has-symbols: "npm:^1.0.3"
     which-boxed-primitive: "npm:^1.0.2"
   checksum: 10c0/81ca2e81134167cc8f75fa79fbcc8a94379d6c61de67090986a2273850989dd3bae8440c163121b77434b68263e34787a675cbdcb34bb2f764c6b9c843a11b66
+  languageName: node
+  linkType: hard
+
+"undici-types@npm:~6.21.0":
+  version: 6.21.0
+  resolution: "undici-types@npm:6.21.0"
+  checksum: 10c0/c01ed51829b10aa72fc3ce64b747f8e74ae9b60eafa19a7b46ef624403508a54c526ffab06a14a26b3120d055e1104d7abe7c9017e83ced038ea5cf52f8d5e04
   languageName: node
   linkType: hard
 
@@ -16569,13 +16722,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"v8-compile-cache-lib@npm:^3.0.1":
-  version: 3.0.1
-  resolution: "v8-compile-cache-lib@npm:3.0.1"
-  checksum: 10c0/bdc36fb8095d3b41df197f5fb6f11e3a26adf4059df3213e3baa93810d8f0cc76f9a74aaefc18b73e91fe7e19154ed6f134eda6fded2e0f1c8d2272ed2d2d391
-  languageName: node
-  linkType: hard
-
 "v8-to-istanbul@npm:^9.0.1":
   version: 9.1.0
   resolution: "v8-to-istanbul@npm:9.1.0"
@@ -16874,8 +17020,8 @@ __metadata:
     "@docusaurus/preset-classic": "npm:2.4.1"
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@foxglove/rostime": "npm:1.1.2"
-    "@foxglove/schemas": "npm:1.7.0"
-    "@foxglove/tsconfig": "npm:2.0.0"
+    "@foxglove/schemas": "npm:1.8.0"
+    "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "workspace:*"
     "@mdx-js/react": "npm:1.6.22"
     "@tsconfig/docusaurus": "npm:1.0.7"
@@ -16902,7 +17048,7 @@ __metadata:
     react: "npm:17.0.2"
     react-async: "npm:10.0.1"
     react-dom: "npm:17.0.2"
-    typescript: "npm:5.2.2"
+    typescript: "npm:5.9.3"
     zustand: "npm:4.3.8"
   languageName: unknown
   linkType: soft
@@ -17226,13 +17372,6 @@ __metadata:
     y18n: "npm:^5.0.5"
     yargs-parser: "npm:^21.1.1"
   checksum: 10c0/ccd7e723e61ad5965fffbb791366db689572b80cca80e0f96aad968dfff4156cd7cd1ad18607afe1046d8241e6fb2d6c08bf7fa7bfb5eaec818735d8feac8f05
-  languageName: node
-  linkType: hard
-
-"yn@npm:3.1.1":
-  version: 3.1.1
-  resolution: "yn@npm:3.1.1"
-  checksum: 10c0/0732468dd7622ed8a274f640f191f3eaf1f39d5349a1b72836df484998d7d9807fbea094e2f5486d6b0cd2414aad5775972df0e68f8604db89a239f0f4bf7443
   languageName: node
   linkType: hard
 

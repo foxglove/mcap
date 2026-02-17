@@ -1,20 +1,20 @@
-import { Log, LogLevel as FoxLogLevel } from "@foxglove/schemas";
-import {
-  ULog,
-  MessageDefinition,
-  MessageType,
-  LogLevel,
-  FieldStruct,
-  FieldPrimitive,
-  FieldArray,
-} from "@foxglove/ulog";
+import { LogLevel as FoxLogLevel } from "@foxglove/schemas";
+import type { Log } from "@foxglove/schemas";
+import { ULog, MessageType, LogLevel } from "@foxglove/ulog";
+import type { MessageDefinition, FieldArray, FieldPrimitive, FieldStruct } from "@foxglove/ulog";
 import { McapWriter } from "@mcap/core";
-import { Metadata } from "@mcap/core/src/types";
-import { protobufToDescriptor } from "@mcap/support";
-import protobufjs from "protobufjs";
-import descriptor from "protobufjs/ext/descriptor";
+import type { Metadata } from "@mcap/core";
+import { protobufToDescriptor, unwrapDefaultExport } from "@mcap/support";
+import path from "node:path";
+import * as protobufjs from "protobufjs";
+import * as descriptorModule from "protobufjs/ext/descriptor/index.js";
 
-import { version } from "../package.json";
+type ProtobufJsModule = typeof import("protobufjs");
+type ProtobufDescriptorModule = typeof import("protobufjs/ext/descriptor/index.js");
+
+const protobufjsRuntime = unwrapDefaultExport<ProtobufJsModule>(protobufjs);
+const descriptor = unwrapDefaultExport<ProtobufDescriptorModule>(descriptorModule);
+const FileDescriptorSet = descriptor.FileDescriptorSet;
 
 function ulogLevelToFoxLogLevel(level: LogLevel): FoxLogLevel {
   switch (level) {
@@ -96,7 +96,7 @@ function ulogDefinitionToProtobufType(
   schemaName: string,
   definition: MessageDefinition,
 ): protobufjs.Type {
-  const fieldTypeProto = new protobufjs.Type(schemaName);
+  const fieldTypeProto = new protobufjsRuntime.Type(schemaName);
   let id = 1;
   for (const field of definition.fields) {
     // Omit special fields
@@ -111,7 +111,7 @@ function ulogDefinitionToProtobufType(
     const rule =
       field.arrayLength != undefined && primitiveType !== "string" ? "repeated" : "required";
 
-    fieldTypeProto.add(new protobufjs.Field(field.name, id, fieldType, rule));
+    fieldTypeProto.add(new protobufjsRuntime.Field(field.name, id, fieldType, rule));
     id += 1;
   }
 
@@ -124,7 +124,7 @@ function getMinimalProtobufRoot(
   definitions: Map<string, MessageDefinition>,
   dependencies: Map<string, Array<string>>,
 ): protobufjs.Root {
-  const minimalRoot = new protobufjs.Root();
+  const minimalRoot = new protobufjsRuntime.Root();
   const typesToProcess = new Set<string>();
   typesToProcess.add(rootName);
   const processed = new Set<string>();
@@ -199,7 +199,7 @@ export async function convertULogFileToMCAP(
 
   await outputFile.start({
     profile: "",
-    library: `ulog2mcap ${version}`,
+    library: "ulog2mcap",
   });
   if (options?.metadata != undefined) {
     for (const metadataItem of options.metadata) {
@@ -247,7 +247,7 @@ export async function convertULogFileToMCAP(
       schemaId = await outputFile.registerSchema({
         name: subscription.name,
         encoding: "protobuf",
-        data: descriptor.FileDescriptorSet.encode(descriptorSet).finish(),
+        data: FileDescriptorSet.encode(descriptorSet).finish(),
       });
       const msgType = minimalRoot.lookupType(subscription.name);
       schemaNameToSchemaId.set(subscription.name, schemaId);
@@ -265,12 +265,12 @@ export async function convertULogFileToMCAP(
   }
 
   // Add an additional channel for log messages
-  const root = await protobufjs.load(__dirname + "/Log.proto");
+  const root = await protobufjsRuntime.load(path.join(process.cwd(), "scripts/Log.proto"));
   const logType = root.lookupType("foxglove.Log");
   const logSchema = await outputFile.registerSchema({
     name: "foxglove.Log",
     encoding: "protobuf",
-    data: descriptor.FileDescriptorSet.encode(protobufToDescriptor(root)).finish(),
+    data: FileDescriptorSet.encode(protobufToDescriptor(root)).finish(),
   });
   const logChannel = await outputFile.registerChannel({
     schemaId: logSchema,

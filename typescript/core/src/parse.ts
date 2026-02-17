@@ -1,8 +1,8 @@
 import { crc32 } from "@foxglove/crc";
 
-import Reader from "./Reader";
-import { MCAP_MAGIC, Opcode } from "./constants";
-import { McapMagic, TypedMcapRecord } from "./types";
+import Reader from "./Reader.ts";
+import { MCAP_MAGIC, Opcode } from "./constants.ts";
+import type { McapMagic, TypedMcapRecord } from "./types.ts";
 
 /**
  * Parse a MCAP magic string at `startOffset` in `view`.

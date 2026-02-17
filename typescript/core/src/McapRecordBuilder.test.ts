@@ -1,5 +1,5 @@
-import { BufferBuilder } from "./BufferBuilder";
-import { McapRecordBuilder } from "./McapRecordBuilder";
+import { BufferBuilder } from "./BufferBuilder.ts";
+import { McapRecordBuilder } from "./McapRecordBuilder.ts";
 
 describe("McapRecordBuilder", () => {
   it("writes magic", () => {

@@ -1,25 +1,17 @@
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
 import { LazyMessageReader as ROS1LazyMessageReader } from "@foxglove/rosmsg-serialization";
 import { MessageReader as ROS2MessageReader } from "@foxglove/rosmsg2-serialization";
-import {
-  hasMcapPrefix,
-  McapConstants,
-  McapIndexedReader,
-  McapStreamReader,
-  McapTypes,
-} from "@mcap/core";
+import { hasMcapPrefix, MCAP_MAGIC, McapIndexedReader, McapStreamReader } from "@mcap/core";
+import type { Channel, TypedMcapRecord, TypedMcapRecords } from "@mcap/core";
 import { FileHandleReadable } from "@mcap/nodejs";
 import { loadDecompressHandlers } from "@mcap/support";
 import { program } from "commander";
-import { createReadStream } from "fs";
-import fs from "fs/promises";
-import { isEqual } from "lodash";
-import { performance } from "perf_hooks";
-import protobufjs from "protobufjs";
-import { FileDescriptorSet } from "protobufjs/ext/descriptor";
-
-type Channel = McapTypes.Channel;
-type TypedMcapRecord = McapTypes.TypedMcapRecord;
+import { isEqual } from "lodash-es";
+import { createReadStream } from "node:fs";
+import fs from "node:fs/promises";
+import { performance } from "node:perf_hooks";
+import * as protobufjs from "protobufjs";
+import { FileDescriptorSet } from "protobufjs/ext/descriptor/index.js";
 
 function log(...data: unknown[]) {
   console.log(...data);
@@ -53,7 +45,7 @@ async function readStream(
           throw new Error("expected buffer");
         }
         readBytes += BigInt(data.byteLength);
-        reader.append(data);
+        reader.append(new Uint8Array(data));
         for (let record; (record = reader.nextRecord()); ) {
           lastRecordType = record.type;
           processRecord(record);
@@ -93,7 +85,7 @@ async function validate(
   const decompressHandlers = await loadDecompressHandlers();
 
   const recordCounts = new Map<TypedMcapRecord["type"], number>();
-  const schemasById = new Map<number, McapTypes.TypedMcapRecords["Schema"]>();
+  const schemasById = new Map<number, TypedMcapRecords["Schema"]>();
   const channelInfoById = new Map<
     number,
     {
@@ -201,11 +193,11 @@ async function validate(
   {
     const handle = await fs.open(filePath, "r");
     try {
-      const buffer = new Uint8Array(McapConstants.MCAP_MAGIC.length);
+      const buffer = new Uint8Array(MCAP_MAGIC.length);
       const readResult = await handle.read({
         buffer,
         offset: 0,
-        length: McapConstants.MCAP_MAGIC.length,
+        length: MCAP_MAGIC.length,
       });
       const isValidMcap = hasMcapPrefix(new DataView(buffer.buffer, 0, readResult.bytesRead));
       if (!isValidMcap) {

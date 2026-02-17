@@ -2,7 +2,7 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { NumericType } from '../foxglove/numeric-type';
+import { NumericType } from '../foxglove/numeric-type.ts';
 
 
 /**

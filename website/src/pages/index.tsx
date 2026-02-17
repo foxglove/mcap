@@ -6,12 +6,13 @@ import Layout from "@theme/Layout";
 import React, { Suspense } from "react";
 
 import styles from "./index.module.css";
-import * as icons from "../icons";
+import * as icons from "../icons/index.ts";
 
 // Async import is needed to avoid errors from WASM loading during Docusaurus build.
 const McapRecordingDemo = React.lazy(async () => ({
-  default: (await import("../components/McapRecordingDemo/McapRecordingDemo"))
-    .McapRecordingDemo,
+  default: (
+    await import("../components/McapRecordingDemo/McapRecordingDemo.tsx")
+  ).McapRecordingDemo,
 }));
 
 type FeatureItem = {

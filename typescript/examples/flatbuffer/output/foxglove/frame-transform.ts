@@ -2,9 +2,9 @@
 
 import * as flatbuffers from 'flatbuffers';
 
-import { Quaternion } from '../foxglove/quaternion';
-import { Time } from '../foxglove/time';
-import { Vector3 } from '../foxglove/vector3';
+import { Quaternion } from '../foxglove/quaternion.ts';
+import { Time } from '../foxglove/time.ts';
+import { Vector3 } from '../foxglove/vector3.ts';
 
 
 /**

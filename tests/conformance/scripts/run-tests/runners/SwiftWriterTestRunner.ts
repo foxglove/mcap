@@ -1,9 +1,10 @@
-import { exec } from "child_process";
-import path from "path";
-import { promisify } from "util";
-import { TestFeatures, TestVariant } from "variants/types";
+import { exec } from "node:child_process";
+import path from "node:path";
+import { promisify } from "node:util";
 
-import { WriteTestRunner } from "./TestRunner";
+import { WriteTestRunner } from "./TestRunner.ts";
+import { TestFeatures } from "../../../variants/types.ts";
+import type { TestVariant } from "../../../variants/types.ts";
 
 export default class SwiftWriterTestRunner extends WriteTestRunner {
   readonly name = "swift-writer";
@@ -12,12 +13,12 @@ export default class SwiftWriterTestRunner extends WriteTestRunner {
     const { stdout, stderr } = await promisify(exec)(
       `./.build/debug/conformance write ${filePath}`,
       {
-        cwd: path.join(__dirname, "../../../../.."),
+        cwd: path.join(import.meta.dirname, "../../../../.."),
         encoding: undefined,
       },
     );
 
-    if (stderr instanceof Buffer) {
+    if (Buffer.isBuffer(stderr)) {
       const errText = new TextDecoder().decode(stderr);
       if (errText.length > 0) {
         console.error(errText);

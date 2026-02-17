@@ -1,4 +1,4 @@
-import { bytesToHex } from "./bytesToHex";
+import { bytesToHex } from "./bytesToHex.ts";
 
 export function splitMcapRecords(data: Uint8Array): string[] {
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);

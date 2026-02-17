@@ -1,6 +1,6 @@
 import { crc32 } from "@foxglove/crc";
 
-import { Opcode } from "./constants";
+import { Opcode } from "./constants.ts";
 
 export function uint16LE(n: number): Uint8Array {
   const result = new Uint8Array(2);

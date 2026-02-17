@@ -1,10 +1,10 @@
 import { McapWriter, McapIndexedReader } from "@mcap/core";
-import { mkdtemp, open, rm } from "fs/promises";
-import { tmpdir } from "os";
-import path from "path";
+import { mkdtemp, open, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import * as path from "node:path";
 
-import { FileHandleReadable } from "./FileHandleReadable";
-import { FileHandleWritable } from "./FileHandleWritable";
+import { FileHandleReadable } from "./FileHandleReadable.ts";
+import { FileHandleWritable } from "./FileHandleWritable.ts";
 
 async function collect<T>(iterable: AsyncIterable<T>): Promise<T[]> {
   const result: T[] = [];
