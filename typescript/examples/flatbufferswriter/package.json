@@ -1,18 +1,8 @@
 {
   "name": "@foxglove/mcap-example-flatbufferswriter",
-  "version": "0.0.0",
-  "private": true,
   "description": "Flatbuffer Encoding Example",
+  "private": true,
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/foxglove/mcap.git"
-  },
-  "author": {
-    "name": "Foxglove Technologies",
-    "email": "support@foxglove.dev"
-  },
-  "homepage": "https://foxglove.dev/",
   "type": "module",
   "scripts": {
     "typecheck": "tsc -b",
