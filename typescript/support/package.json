@@ -33,8 +33,8 @@
   "scripts": {
     "build": "tsc -b tsconfig.json tsconfig.cjs.json && echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "prepack": "yarn build",
-    "lint:ci": "eslint --report-unused-disable-directives .",
-    "lint": "eslint --report-unused-disable-directives --fix .",
+    "lint:ci": "tsc -b && eslint --report-unused-disable-directives .",
+    "lint": "tsc -b && eslint --report-unused-disable-directives --fix .",
     "test": "jest"
   },
   "devDependencies": {

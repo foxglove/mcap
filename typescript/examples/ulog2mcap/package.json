@@ -6,10 +6,10 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -b",
-    "lint:ci": "eslint --report-unused-disable-directives .",
-    "lint": "eslint --report-unused-disable-directives --fix .",
+    "lint:ci": "tsc -b && eslint --report-unused-disable-directives .",
+    "lint": "tsc -b && eslint --report-unused-disable-directives --fix .",
     "typescript:test": "yarn jest --config jest.config.json",
-    "ulog2mcap": "yarn typescript:build && tsx scripts/ulog2mcap.ts"
+    "ulog2mcap": "tsc -b && tsx scripts/ulog2mcap.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",

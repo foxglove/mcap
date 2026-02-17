@@ -6,9 +6,9 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -b",
-    "lint:ci": "eslint --report-unused-disable-directives .",
-    "lint": "eslint --report-unused-disable-directives --fix .",
-    "validate": "yarn typescript:build && tsx scripts/validate.ts"
+    "lint:ci": "tsc -b && eslint --report-unused-disable-directives .",
+    "lint": "tsc -b && eslint --report-unused-disable-directives --fix .",
+    "validate": "tsc -b && tsx scripts/validate.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",

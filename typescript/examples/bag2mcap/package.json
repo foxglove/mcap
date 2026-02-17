@@ -6,9 +6,9 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -b",
-    "lint:ci": "eslint --report-unused-disable-directives .",
-    "lint": "eslint --report-unused-disable-directives --fix .",
-    "bag2mcap": "yarn typescript:build && tsx scripts/bag2mcap.ts"
+    "lint:ci": "tsc -b && eslint --report-unused-disable-directives .",
+    "lint": "tsc -b && eslint --report-unused-disable-directives --fix .",
+    "bag2mcap": "tsc -b && tsx scripts/bag2mcap.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",

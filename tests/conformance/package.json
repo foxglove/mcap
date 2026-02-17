@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "tsc -b",
-    "lint:ci": "eslint --report-unused-disable-directives .",
-    "lint": "eslint --report-unused-disable-directives --fix .",
+    "lint:ci": "tsc -b && eslint --report-unused-disable-directives .",
+    "lint": "tsc -b && eslint --report-unused-disable-directives --fix .",
     "generate-inputs": "tsc -b && tsx scripts/generate-inputs.ts",
     "run-tests": "tsc -b && tsx scripts/run-tests/index.ts"
   },
