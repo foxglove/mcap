@@ -2918,7 +2918,7 @@ __metadata:
   resolution: "@foxglove/mcap-example-flatbufferswriter@workspace:typescript/examples/flatbufferswriter"
   dependencies:
     "@foxglove/eslint-plugin": "npm:1.0.1"
-    "@foxglove/schemas": "npm:^1.0.0"
+    "@foxglove/schemas": "npm:1.8.0"
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
     "@types/node": "npm:18.13.0"
@@ -3103,16 +3103,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@foxglove/schemas@npm:1.7.0":
-  version: 1.7.0
-  resolution: "@foxglove/schemas@npm:1.7.0"
-  dependencies:
-    tslib: "npm:^2"
-  checksum: 10c0/40754a7acc581f89d225e4d499739204e985d6c73e804e5ffb02732c328d4fd8c2afb1f01d8d7669949d115f23277ec1f147bee44db6426d82cef41607cfc07a
-  languageName: node
-  linkType: hard
-
-"@foxglove/schemas@npm:1.8.0, @foxglove/schemas@npm:^1.0.0":
+"@foxglove/schemas@npm:1.8.0":
   version: 1.8.0
   resolution: "@foxglove/schemas@npm:1.8.0"
   dependencies:
@@ -16840,7 +16831,7 @@ __metadata:
     "@docusaurus/preset-classic": "npm:2.4.1"
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@foxglove/rostime": "npm:1.1.2"
-    "@foxglove/schemas": "npm:1.7.0"
+    "@foxglove/schemas": "npm:1.8.0"
     "@foxglove/tsconfig": "npm:3.2.0"
     "@mcap/core": "workspace:*"
     "@mdx-js/react": "npm:1.6.22"

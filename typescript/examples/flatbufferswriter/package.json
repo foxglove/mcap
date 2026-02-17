@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",
-    "@foxglove/schemas": "^1.0.0",
+    "@foxglove/schemas": "1.8.0",
     "@mcap/core": "workspace:*",
     "@mcap/nodejs": "workspace:*",
     "@types/node": "18.13.0",
