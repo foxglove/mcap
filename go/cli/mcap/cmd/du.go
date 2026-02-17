@@ -21,13 +21,16 @@ import (
 )
 
 const (
-	// MCAP file structure constants.
-	mcapMagicSize       = 8  // len(mcap.Magic), appears at start and end of file
-	recordEnvelopeSize  = 9  // opcode (1 byte) + record length (8 bytes)
-	messageHeaderSize   = 22 // channelID (2) + sequence (4) + logTime (8) + publishTime (8)
-	messageOverhead     = recordEnvelopeSize + messageHeaderSize // 31 bytes before message data
-	footerContentSize   = 20 // SummaryStart (8) + SummaryOffsetStart (8) + SummaryCRC (4)
-	footerRecordSize    = recordEnvelopeSize + footerContentSize // 29 bytes on disk
+	mcapMagicSize      = 8 // len(mcap.Magic), appears at start and end of file
+	recordEnvelopeSize = 9 // opcode (1 byte) + record length (8 bytes)
+	// messageHeaderSize: channelID (2) + sequence (4) + logTime (8) + publishTime (8).
+	messageHeaderSize = 22
+	// messageOverhead: recordEnvelopeSize + messageHeaderSize (31 bytes before message data).
+	messageOverhead = recordEnvelopeSize + messageHeaderSize
+	// footerContentSize: SummaryStart (8) + SummaryOffsetStart (8) + SummaryCRC (4).
+	footerContentSize = 20
+	// footerRecordSize: recordEnvelopeSize + footerContentSize (29 bytes on disk).
+	footerRecordSize      = recordEnvelopeSize + footerContentSize
 	messageIndexEntrySize = 16 // timestamp (8) + offset (8)
 )
 
@@ -521,7 +524,8 @@ func processChunkMessageIndexesAt(
 //
 // Each message record within a chunk is:
 //
-//	recordEnvelopeSize (opcode + length) + messageHeaderSize (channelID + sequence + logTime + publishTime) + data (variable)
+//	recordEnvelopeSize (opcode + length) + messageHeaderSize
+//	(channelID + sequence + logTime + publishTime) + data (variable)
 //
 // So message.Data size = (next_offset - this_offset) - messageOverhead.
 //
