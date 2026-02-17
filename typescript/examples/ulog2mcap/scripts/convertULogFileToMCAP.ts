@@ -12,10 +12,12 @@ import {
 import { McapWriter } from "@mcap/core";
 import type { Metadata } from "@mcap/core";
 import { protobufToDescriptor } from "@mcap/support";
+import { createRequire } from "node:module";
 import * as protobufjs from "protobufjs";
 import { FileDescriptorSet } from "protobufjs/ext/descriptor/index.js";
 
-import packageJson from "../package.json" with { type: "json" };
+const require = createRequire(import.meta.url);
+const packageJson = require("../package.json") as { version: string };
 
 function ulogLevelToFoxLogLevel(level: LogLevel): FoxLogLevel {
   switch (level) {
