@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"io"
 	"testing"
 
 	"github.com/foxglove/mcap/go/mcap"
@@ -50,6 +51,19 @@ func writeDuTestFile(t *testing.T, opts *mcap.WriterOptions, messages []struct {
 
 	require.NoError(t, writer.Close())
 	return buf.Bytes()
+}
+
+func readChunkMessageIndexBytes(t *testing.T, data []byte, ci *mcap.ChunkIndex) []byte {
+	t.Helper()
+	r := bytes.NewReader(data)
+	miOffset := int64(ci.ChunkStartOffset + ci.ChunkLength)
+	_, err := r.Seek(miOffset, io.SeekStart)
+	require.NoError(t, err)
+
+	buf := make([]byte, ci.MessageIndexLength)
+	_, err = io.ReadFull(r, buf)
+	require.NoError(t, err)
+	return buf
 }
 
 func TestDuFromIndexMatchesScan(t *testing.T) {
@@ -391,4 +405,78 @@ func TestDuFromIndexUnknownChannelID(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown channel")
+}
+
+func TestParseChunkMessageIndexesOffsetBeyondUncompressedSize(t *testing.T) {
+	channels := []struct {
+		id    uint16
+		topic string
+	}{
+		{1, "/data"},
+	}
+	messages := []struct {
+		channelID uint16
+		logTime   uint64
+		data      []byte
+	}{
+		{1, 0, make([]byte, 10)},
+		{1, 1, make([]byte, 10)},
+	}
+
+	data := writeDuTestFile(t, &mcap.WriterOptions{
+		Chunked:   true,
+		ChunkSize: 1024 * 1024,
+	}, messages, channels)
+
+	reader, err := mcap.NewReader(bytes.NewReader(data))
+	require.NoError(t, err)
+	defer reader.Close()
+	info, err := reader.Info()
+	require.NoError(t, err)
+	require.NotEmpty(t, info.ChunkIndexes)
+
+	ci := info.ChunkIndexes[0]
+	buf := readChunkMessageIndexBytes(t, data, ci)
+
+	channelTopics := map[uint16]string{1: "/data"}
+	_, _, err = parseChunkMessageIndexes(buf, 0, channelTopics)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "exceeds chunk uncompressed size")
+}
+
+func TestParseChunkMessageIndexesTrailingBytes(t *testing.T) {
+	channels := []struct {
+		id    uint16
+		topic string
+	}{
+		{1, "/data"},
+	}
+	messages := []struct {
+		channelID uint16
+		logTime   uint64
+		data      []byte
+	}{
+		{1, 0, make([]byte, 10)},
+	}
+
+	data := writeDuTestFile(t, &mcap.WriterOptions{
+		Chunked:   true,
+		ChunkSize: 1024 * 1024,
+	}, messages, channels)
+
+	reader, err := mcap.NewReader(bytes.NewReader(data))
+	require.NoError(t, err)
+	defer reader.Close()
+	info, err := reader.Info()
+	require.NoError(t, err)
+	require.NotEmpty(t, info.ChunkIndexes)
+
+	ci := info.ChunkIndexes[0]
+	buf := readChunkMessageIndexBytes(t, data, ci)
+	buf = append(buf, 0x00)
+
+	channelTopics := map[uint16]string{1: "/data"}
+	_, _, err = parseChunkMessageIndexes(buf, ci.UncompressedSize, channelTopics)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "trailing bytes")
 }

@@ -20,6 +20,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	// MCAP file structure constants.
+	mcapMagicSize       = 8  // len(mcap.Magic), appears at start and end of file
+	recordEnvelopeSize  = 9  // opcode (1 byte) + record length (8 bytes)
+	messageHeaderSize   = 22 // channelID (2) + sequence (4) + logTime (8) + publishTime (8)
+	messageOverhead     = recordEnvelopeSize + messageHeaderSize // 31 bytes before message data
+	footerContentSize   = 20 // SummaryStart (8) + SummaryOffsetStart (8) + SummaryCRC (4)
+	footerRecordSize    = recordEnvelopeSize + footerContentSize // 29 bytes on disk
+	messageIndexEntrySize = 16 // timestamp (8) + offset (8)
+)
+
 type usage struct {
 	reader io.ReadSeeker
 
@@ -43,7 +54,7 @@ func newUsage(reader io.ReadSeeker) *usage {
 		channels:         make(map[uint16]*mcap.Channel),
 		topicMessageSize: make(map[string]uint64),
 		recordKindSize:   make(map[string]uint64),
-		totalSize:        16, /* 8 bytes for leading magic and 8 bytes for trailing magic */
+		totalSize:        2 * mcapMagicSize, // leading + trailing magic
 	}
 }
 
@@ -332,19 +343,20 @@ func runDuFromIndex(rs io.ReadSeeker) error {
 	recordKindSize["chunk"] = totalChunkOnDisk
 	recordKindSize["message index"] = totalMIOnDisk
 
-	// Footer record = 9 (envelope) + 20 (content) = 29 bytes. Trailing magic = 8 bytes.
-	const footerRecordSize = 29
-	footerStart := totalFileSize - 8 - footerRecordSize
-	if footerStart > info.Footer.SummaryStart {
-		recordKindSize["summary section"] = footerStart - info.Footer.SummaryStart
+	const minFileSize = mcapMagicSize + footerRecordSize + mcapMagicSize
+	if totalFileSize >= minFileSize {
+		footerStart := totalFileSize - mcapMagicSize - footerRecordSize
+		if footerStart > info.Footer.SummaryStart {
+			recordKindSize["summary section"] = footerStart - info.Footer.SummaryStart
+		}
 	}
 	recordKindSize["footer"] = footerRecordSize
 
 	// "other" = header record + DataEnd record + any unchunked records in
 	// the data section. Computed as the remainder of the data section.
 	dataSectionEnd := info.Footer.SummaryStart
-	if dataSectionEnd > 8+totalChunkOnDisk+totalMIOnDisk {
-		recordKindSize["other"] = dataSectionEnd - 8 - totalChunkOnDisk - totalMIOnDisk
+	if dataSectionEnd > mcapMagicSize+totalChunkOnDisk+totalMIOnDisk {
+		recordKindSize["other"] = dataSectionEnd - mcapMagicSize - totalChunkOnDisk - totalMIOnDisk
 	}
 
 	printRecordTable(recordKindSize, totalFileSize)
@@ -398,6 +410,9 @@ func computeTopicSizesParallel(
 		err        error
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	work := make(chan *mcap.ChunkIndex, len(chunkIndexes))
 	results := make(chan result, len(chunkIndexes))
 
@@ -408,7 +423,11 @@ func computeTopicSizesParallel(
 			defer wg.Done()
 			for ci := range work {
 				ts, total, err := processChunkMessageIndexesAt(ra, ci, channelTopics)
-				results <- result{ts, total, err}
+				select {
+				case results <- result{ts, total, err}:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}()
 	}
@@ -427,6 +446,7 @@ func computeTopicSizesParallel(
 
 	for r := range results {
 		if r.err != nil {
+			cancel()
 			return nil, 0, r.err
 		}
 		for topic, size := range r.topicSizes {
@@ -501,9 +521,9 @@ func processChunkMessageIndexesAt(
 //
 // Each message record within a chunk is:
 //
-//	opcode (1 byte) + length (8 bytes) + channelID (2) + sequence (4) + logTime (8) + publishTime (8) + data (variable)
+//	recordEnvelopeSize (opcode + length) + messageHeaderSize (channelID + sequence + logTime + publishTime) + data (variable)
 //
-// So message.Data size = (next_offset - this_offset) - 31, where 31 = 9 (envelope) + 22 (header fields).
+// So message.Data size = (next_offset - this_offset) - messageOverhead.
 //
 // NOTE: This approach assumes that no non-message records (Schema, Channel)
 // are interleaved between messages within a chunk. The MCAP spec permits
@@ -523,19 +543,21 @@ func parseChunkMessageIndexes(
 		channelID uint16
 	}
 
-	// Each MessageIndex entry is 16 bytes (timestamp + offset); estimate capacity.
-	entries := make([]offsetEntry, 0, len(buf)/16)
+	entries := make([]offsetEntry, 0, len(buf)/messageIndexEntrySize)
 	pos := 0
 
-	for pos+9 <= len(buf) {
-		// Each record: opcode (1 byte) + length (8 bytes) + content.
-		recordLen := binary.LittleEndian.Uint64(buf[pos+1 : pos+9])
-		recordEnd := pos + 9 + int(recordLen)
+	for pos+recordEnvelopeSize <= len(buf) {
+		if buf[pos] != byte(mcap.OpMessageIndex) {
+			return nil, 0, fmt.Errorf("unexpected opcode 0x%02x at offset %d, expected MessageIndex (0x%02x)",
+				buf[pos], pos, byte(mcap.OpMessageIndex))
+		}
+		recordLen := binary.LittleEndian.Uint64(buf[pos+1 : pos+recordEnvelopeSize])
+		recordEnd := pos + recordEnvelopeSize + int(recordLen)
 		if recordEnd > len(buf) {
 			return nil, 0, fmt.Errorf("message index record extends beyond buffer at offset %d", pos)
 		}
 
-		mi, err := mcap.ParseMessageIndex(buf[pos+9 : recordEnd])
+		mi, err := mcap.ParseMessageIndex(buf[pos+recordEnvelopeSize : recordEnd])
 		if err != nil {
 			return nil, 0, fmt.Errorf("failed to parse message index: %w", err)
 		}
@@ -550,6 +572,10 @@ func parseChunkMessageIndexes(
 		pos = recordEnd
 	}
 
+	if pos != len(buf) {
+		return nil, 0, fmt.Errorf("message index buffer has %d trailing bytes", len(buf)-pos)
+	}
+
 	if len(entries) == 0 {
 		return nil, 0, nil
 	}
@@ -558,13 +584,14 @@ func parseChunkMessageIndexes(
 		return entries[i].offset < entries[j].offset
 	})
 
-	// 9 bytes record envelope (opcode + length) + 22 bytes message header
-	// (channelID 2 + sequence 4 + logTime 8 + publishTime 8).
-	const messageOverhead = 31
-
 	topicSizes = make(map[string]uint64)
 
 	for i, entry := range entries {
+		if entry.offset > uncompressedSize {
+			return nil, 0, fmt.Errorf("message offset %d exceeds chunk uncompressed size %d",
+				entry.offset, uncompressedSize)
+		}
+
 		var recordSize uint64
 		if i+1 < len(entries) {
 			recordSize = entries[i+1].offset - entry.offset
