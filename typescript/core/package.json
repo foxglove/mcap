@@ -1,6 +1,6 @@
 {
   "name": "@mcap/core",
-  "version": "2.1.7",
+  "version": "2.2.0",
   "description": "MCAP file support in TypeScript",
   "license": "MIT",
   "repository": {
