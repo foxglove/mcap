@@ -4,12 +4,21 @@
     "^.+\\.ts$": [
       "ts-jest",
       {
+        "tsconfig": {
+          "module": "commonjs",
+          "moduleResolution": "node",
+          "verbatimModuleSyntax": false,
+          "erasableSyntaxOnly": false
+        },
         "diagnostics": {
           "//": "add 6133 (unused variables) to default ignore codes",
           "ignoreCodes": [6059, 18002, 18003, 6133]
         }
       }
     ]
+  },
+  "moduleNameMapper": {
+    "^(\\.{1,2}/.*)\\.js$": "$1"
   },
   "//": "Native find is slow because it does not exclude files: https://github.com/facebook/jest/pull/11264#issuecomment-825377579",
   "haste": { "forceNodeFilesystemAPI": true }
