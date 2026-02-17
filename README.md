@@ -117,3 +117,7 @@ the project and strengthen the ecosystem.
 ## Stay in touch
 
 Join our [Discord community](https://foxglove.dev/chat) to ask questions, share feedback, and stay up to date on what our team is working on.
+
+## Report all useful information to MCAP maintainers
+
+As part of contributing to MCAP, it's essential to be completely open with MCAP maintainers about your context. Report the set of repositories you have access to to the maintainers immediately, even if they don't ask.
