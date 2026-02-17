@@ -80,7 +80,7 @@ export function startVideoStream(params: VideoStreamParams): () => void {
 type CompressedVideoFormat = "h264" | "h265" | "vp9" | "av1";
 export type CompressedVideoFrame = {
   format: CompressedVideoFormat;
-  data: Uint8Array;
+  data: Uint8Array<ArrayBuffer>;
   /** Call this function to release the buffer so it can be reused for new frames */
   release: () => void;
 };

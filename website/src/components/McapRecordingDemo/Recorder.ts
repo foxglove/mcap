@@ -66,7 +66,7 @@ export class Recorder extends EventEmitter<RecorderEvents> {
   #vp9Channel?: ProtobufChannelInfo;
   #vp9ChannelSeq = 0;
 
-  #blobParts: Uint8Array[] = [];
+  #blobParts: Uint8Array<ArrayBuffer>[] = [];
   bytesWritten = 0n;
   messageCount = 0n;
   chunkCount = 0;
@@ -86,12 +86,12 @@ export class Recorder extends EventEmitter<RecorderEvents> {
       this.#writer = new McapWriter({
         chunkSize: 5 * 1024,
         compressChunk(data) {
-          return { compression: "zstd", compressedData: zstd.compress(data) };
+          return { compression: "zstd", compressedData: new Uint8Array(zstd.compress(data)) };
         },
         writable: {
           position: () => this.bytesWritten,
           write: async (buffer: Uint8Array) => {
-            this.#blobParts.push(buffer);
+            this.#blobParts.push(new Uint8Array(buffer));
             this.bytesWritten += BigInt(buffer.byteLength);
             this.#emit();
           },
