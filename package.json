@@ -14,8 +14,8 @@
   },
   "type": "module",
   "scripts": {
-    "prettier": "prettier --write .",
-    "prettier:check": "prettier --check .",
+    "fmt": "prettier --write .",
+    "fmt:check": "prettier --check .",
     "docs:swift:start": "swift package --disable-sandbox preview-documentation --target MCAP",
     "typedoc": "yarn typescript:build && typedoc --out __docs__/typescript --options typescript/typedoc.json",
     "start": "yarn workspace website start",
