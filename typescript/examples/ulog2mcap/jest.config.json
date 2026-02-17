@@ -1,12 +1,21 @@
 {
   "testMatch": ["<rootDir>/scripts/**/*.test.ts"],
   "moduleNameMapper": {
+    "^(\\.{1,2}/.*)\\.js$": "$1",
     "^@mcap/(.*)$": "<rootDir>/../../$1/src"
   },
   "transform": {
     "^.+\\.ts$": [
       "ts-jest",
       {
+        "tsconfig": {
+          "module": "commonjs",
+          "moduleResolution": "node",
+          "verbatimModuleSyntax": false,
+          "erasableSyntaxOnly": false,
+          "esModuleInterop": true,
+          "allowSyntheticDefaultImports": true
+        },
         "diagnostics": {
           "//": "add 6133 (unused variables) to default ignore codes",
           "ignoreCodes": [6059, 18002, 18003, 6133]

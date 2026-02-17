@@ -5,12 +5,9 @@ import type { MessageDefinition, FieldArray, FieldPrimitive, FieldStruct } from 
 import { McapWriter } from "@mcap/core";
 import type { Metadata } from "@mcap/core";
 import { protobufToDescriptor } from "@mcap/support";
-import { createRequire } from "node:module";
+import path from "node:path";
 import * as protobufjs from "protobufjs";
 import { FileDescriptorSet } from "protobufjs/ext/descriptor/index.js";
-
-const require = createRequire(import.meta.url);
-const packageJson = require("../package.json") as { version: string };
 
 function ulogLevelToFoxLogLevel(level: LogLevel): FoxLogLevel {
   switch (level) {
@@ -195,7 +192,7 @@ export async function convertULogFileToMCAP(
 
   await outputFile.start({
     profile: "",
-    library: `ulog2mcap ${packageJson.version}`,
+    library: "ulog2mcap",
   });
   if (options?.metadata != undefined) {
     for (const metadataItem of options.metadata) {
@@ -261,7 +258,7 @@ export async function convertULogFileToMCAP(
   }
 
   // Add an additional channel for log messages
-  const root = await protobufjs.load(`${import.meta.dirname}/Log.proto`);
+  const root = await protobufjs.load(path.join(__dirname, "Log.proto"));
   const logType = root.lookupType("foxglove.Log");
   const logSchema = await outputFile.registerSchema({
     name: "foxglove.Log",
