@@ -1,4 +1,4 @@
-import { TestFeatures } from "../../variants/types";
+import type { TestFeature } from "../../variants/types.ts";
 
 export type SerializableMcapRecord = {
   type: string;
@@ -18,5 +18,5 @@ export type StreamedReadTestResult = {
 
 export type TestCase = {
   records: SerializableMcapRecord[];
-  meta?: { variant: { features: TestFeatures[] } };
+  meta?: { variant: { features: TestFeature[] } };
 };

@@ -1,14 +1,15 @@
-import { McapConstants, McapTypes } from "@mcap/core";
-import fs from "fs/promises";
+import { McapConstants } from "@mcap/core";
+import type { McapTypes } from "@mcap/core";
+import fs from "node:fs/promises";
 import YAML from "js-yaml";
 import { KaitaiStream } from "kaitai-struct";
 import KaitaiStructCompiler from "kaitai-struct-compiler";
-import path from "path";
-import { TestVariant } from "variants/types";
+import path from "node:path";
+import type { TestVariant } from "../../../variants/types.ts";
 
-import { StreamedReadTestRunner } from "./TestRunner";
-import { toSerializableMcapRecord } from "../toSerializableMcapRecord";
-import { StreamedReadTestResult } from "../types";
+import { StreamedReadTestRunner } from "./TestRunner.ts";
+import { toSerializableMcapRecord } from "../toSerializableMcapRecord.ts";
+import type { StreamedReadTestResult } from "../types.ts";
 
 type ParsedRecord =
   | {
@@ -170,7 +171,8 @@ export default class KaitaiStructReaderTestRunner extends StreamedReadTestRunner
 
   async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const Mcap = await compileMcapClass();
-    const mcap = new Mcap(new KaitaiStream((await fs.readFile(filePath)).buffer));
+    const fileData = new Uint8Array(await fs.readFile(filePath));
+    const mcap = new Mcap(new KaitaiStream(fileData.buffer));
 
     const result: McapTypes.TypedMcapRecord[] = [];
 

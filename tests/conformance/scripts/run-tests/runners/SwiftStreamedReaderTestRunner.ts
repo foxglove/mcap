@@ -1,10 +1,10 @@
-import { exec } from "child_process";
-import path from "path";
-import { promisify } from "util";
-import { TestVariant } from "variants/types";
+import { exec } from "node:child_process";
+import path from "node:path";
+import { promisify } from "node:util";
+import type { TestVariant } from "../../../variants/types.ts";
 
-import { StreamedReadTestRunner } from "./TestRunner";
-import { StreamedReadTestResult } from "../types";
+import { StreamedReadTestRunner } from "./TestRunner.ts";
+import type { StreamedReadTestResult } from "../types.ts";
 
 export default class SwiftStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "swift-streamed-reader";

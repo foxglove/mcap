@@ -1,8 +1,9 @@
-import { exec } from "child_process";
-import { promisify } from "util";
-import { TestFeatures, TestVariant } from "variants/types";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
+import { TestFeatures } from "../../../variants/types.ts";
+import type { TestVariant } from "../../../variants/types.ts";
 
-import { WriteTestRunner } from "./TestRunner";
+import { WriteTestRunner } from "./TestRunner.ts";
 
 export default class PythonWriterTestRunner extends WriteTestRunner {
   readonly name = "py-writer";

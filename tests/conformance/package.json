@@ -4,18 +4,18 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -b tsconfig.json tsconfig.cjs.json",
+    "build": "tsc -b",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
-    "generate-inputs": "ts-node --files --project tsconfig.cjs.json scripts/generate-inputs",
-    "run-tests": "tsc -b tsconfig.json tsconfig.cjs.json && ts-node --files --project tsconfig.cjs.json scripts/run-tests"
+    "generate-inputs": "ts-node --files --project tsconfig.json scripts/generate-inputs",
+    "run-tests": "tsc -b && ts-node --files --project tsconfig.json scripts/run-tests"
   },
   "devDependencies": {
     "@foxglove/crc": "^0.0.3",
     "@foxglove/eslint-plugin": "1.0.1",
     "@foxglove/tsconfig": "3.2.0",
     "@mcap/core": "workspace:*",
-    "@mcap/support": "workspace:*",
+    "@mcap/nodejs": "workspace:*",
     "@types/diff": "^5.0.2",
     "@types/js-yaml": "^4.0.5",
     "@types/node": "18.13.0",

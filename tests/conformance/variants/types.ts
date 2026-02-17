@@ -1,4 +1,4 @@
-import { McapTypes } from "@mcap/core";
+import type { McapTypes } from "@mcap/core";
 
 export type TestDataRecord = McapTypes.TypedMcapRecords[
   | "Message"
@@ -7,18 +7,20 @@ export type TestDataRecord = McapTypes.TypedMcapRecords[
   | "Attachment"
   | "Metadata"];
 
-export enum TestFeatures {
-  UseChunks = "ch",
-  UseMessageIndex = "mx",
-  UseStatistics = "st",
-  UseRepeatedSchemas = "rsh",
-  UseRepeatedChannelInfos = "rch",
-  UseAttachmentIndex = "ax",
-  UseMetadataIndex = "mdx",
-  UseChunkIndex = "chx",
-  UseSummaryOffset = "sum",
-  AddExtraDataToRecords = "pad",
-}
+export const TestFeatures = {
+  UseChunks: "ch",
+  UseMessageIndex: "mx",
+  UseStatistics: "st",
+  UseRepeatedSchemas: "rsh",
+  UseRepeatedChannelInfos: "rch",
+  UseAttachmentIndex: "ax",
+  UseMetadataIndex: "mdx",
+  UseChunkIndex: "chx",
+  UseSummaryOffset: "sum",
+  AddExtraDataToRecords: "pad",
+} as const;
+
+export type TestFeature = (typeof TestFeatures)[keyof typeof TestFeatures];
 
 export type TestInput = {
   baseName: string;
@@ -27,5 +29,5 @@ export type TestInput = {
 
 export type TestVariant = TestInput & {
   name: string;
-  features: Set<TestFeatures>;
+  features: Set<TestFeature>;
 };

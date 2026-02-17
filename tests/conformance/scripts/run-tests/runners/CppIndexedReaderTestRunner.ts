@@ -1,10 +1,11 @@
-import { exec } from "child_process";
-import { join } from "path";
-import { promisify } from "util";
-import { TestFeatures, TestVariant } from "variants/types";
+import { exec } from "node:child_process";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import { TestFeatures } from "../../../variants/types.ts";
+import type { TestVariant } from "../../../variants/types.ts";
 
-import { IndexedReadTestRunner } from "./TestRunner";
-import { IndexedReadTestResult } from "../types";
+import { IndexedReadTestRunner } from "./TestRunner.ts";
+import type { IndexedReadTestResult } from "../types.ts";
 
 export default class CppIndexedReaderTestRunner extends IndexedReadTestRunner {
   readonly name = "cpp-indexed-reader";

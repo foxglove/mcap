@@ -1,10 +1,10 @@
-import { TestVariant } from "../../../variants/types";
+import type { TestVariant } from "../../../variants/types.ts";
 import {
-  SerializableMcapRecord,
-  TestCase,
-  IndexedReadTestResult,
-  StreamedReadTestResult,
-} from "../types";
+  type IndexedReadTestResult,
+  type SerializableMcapRecord,
+  type StreamedReadTestResult,
+  type TestCase,
+} from "../types.ts";
 
 export abstract class StreamedReadTestRunner {
   abstract readonly name: string;

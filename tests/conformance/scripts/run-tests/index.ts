@@ -1,27 +1,28 @@
-import { McapStreamReader, McapTypes } from "@mcap/core";
+import { McapStreamReader } from "@mcap/core";
+import type { McapTypes } from "@mcap/core";
 import colors from "colors";
 import { program } from "commander";
 import * as Diff from "diff";
-import fs from "fs/promises";
+import fs from "node:fs/promises";
 import stableStringify from "json-stable-stringify";
 import { chunk } from "lodash";
-import path from "path";
+import path from "node:path";
 
-import runners from "./runners";
+import runners from "./runners/index.ts";
 import {
   IndexedReadTestRunner,
   StreamedReadTestRunner,
   WriteTestRunner,
-} from "./runners/TestRunner";
-import { toSerializableMcapRecord } from "./toSerializableMcapRecord";
+} from "./runners/TestRunner.ts";
+import { toSerializableMcapRecord } from "./toSerializableMcapRecord.ts";
 import {
-  IndexedReadTestResult,
-  SerializableMcapRecord,
-  StreamedReadTestResult,
-  TestCase,
-} from "./types";
-import { splitMcapRecords } from "../../util/splitMcapRecords";
-import generateTestVariants from "../../variants/generateTestVariants";
+  type IndexedReadTestResult,
+  type SerializableMcapRecord,
+  type StreamedReadTestResult,
+  type TestCase,
+} from "./types.ts";
+import { splitMcapRecords } from "../../util/splitMcapRecords.ts";
+import generateTestVariants from "../../variants/generateTestVariants.ts";
 
 type TestOptions = {
   dataDir: string;
@@ -142,7 +143,7 @@ async function runWriterTest(
       hadError = true;
       continue;
     }
-    const expectedParts = splitMcapRecords(expectedOutput).map(spaceHexString).join("\n");
+    const expectedParts = splitMcapRecords(new Uint8Array(expectedOutput)).map(spaceHexString).join("\n");
     const outputParts = splitMcapRecords(output).map(spaceHexString).join("\n");
     if (!expectedOutput.equals(output)) {
       console.error(colors.red("fail       "), path.basename(testCasePath));

@@ -1,19 +1,21 @@
 import { crc32, crc32Init, crc32Update, crc32Final } from "@foxglove/crc";
-import { McapTypes, McapConstants, McapRecordBuilder, McapChunkBuilder } from "@mcap/core";
+import { McapConstants, McapRecordBuilder, McapChunkBuilder } from "@mcap/core";
+import type { McapTypes } from "@mcap/core";
 import { program } from "commander";
-import fs from "fs/promises";
-import path from "path";
-import generateTestVariants from "variants/generateTestVariants";
+import fs from "node:fs/promises";
+import path from "node:path";
+import generateTestVariants from "../variants/generateTestVariants.ts";
 
-import { collect } from "../util/collect";
-import listDirRecursive from "../util/listDirRecursive";
-import { TestDataRecord, TestFeatures } from "../variants/types";
+import { collect } from "../util/collect.ts";
+import listDirRecursive from "../util/listDirRecursive.ts";
+import { TestFeatures } from "../variants/types.ts";
+import type { TestDataRecord, TestFeature } from "../variants/types.ts";
 
 type MetadataIndex = McapTypes.MetadataIndex;
 type ChunkIndex = McapTypes.ChunkIndex;
 type AttachmentIndex = McapTypes.AttachmentIndex;
 
-function generateFile(features: Set<TestFeatures>, records: TestDataRecord[]) {
+function generateFile(features: Set<TestFeature>, records: TestDataRecord[]) {
   const builder = new McapRecordBuilder({
     padRecords: features.has(TestFeatures.AddExtraDataToRecords),
   });

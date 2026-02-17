@@ -1,9 +1,10 @@
-import inputs from "./inputs";
-import { TestFeatures, TestVariant } from "./types";
+import inputs from "./inputs.ts";
+import { TestFeatures } from "./types.ts";
+import type { TestFeature, TestVariant } from "./types.ts";
 
 function* generateFeatureCombinations(
-  ...features: TestFeatures[]
-): Generator<Set<TestFeatures>, void, void> {
+  ...features: TestFeature[]
+): Generator<Set<TestFeature>, void, void> {
   if (features.length === 0) {
     yield new Set();
     return;

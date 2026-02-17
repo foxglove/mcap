@@ -1,10 +1,10 @@
 import { McapStreamReader } from "@mcap/core";
-import fs from "fs/promises";
-import { TestVariant } from "variants/types";
+import fs from "node:fs/promises";
+import type { TestVariant } from "../../../variants/types.ts";
 
-import { StreamedReadTestRunner } from "./TestRunner";
-import { toSerializableMcapRecord } from "../toSerializableMcapRecord";
-import { StreamedReadTestResult } from "../types";
+import { StreamedReadTestRunner } from "./TestRunner.ts";
+import { toSerializableMcapRecord } from "../toSerializableMcapRecord.ts";
+import type { StreamedReadTestResult } from "../types.ts";
 
 export default class TypescriptStreamedReaderTestRunner extends StreamedReadTestRunner {
   readonly name = "ts-streamed-reader";
@@ -17,7 +17,7 @@ export default class TypescriptStreamedReaderTestRunner extends StreamedReadTest
   async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const result = [];
     const reader = new McapStreamReader({ validateCrcs: true });
-    reader.append(await fs.readFile(filePath));
+    reader.append(new Uint8Array(await fs.readFile(filePath)));
     let record;
     while ((record = reader.nextRecord())) {
       if (record.type === "MessageIndex") {
