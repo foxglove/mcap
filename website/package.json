@@ -2,7 +2,6 @@
   "name": "website",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start --host 0.0.0.0",
@@ -13,7 +12,7 @@
     "write-heading-ids": "docusaurus write-heading-ids",
     "lint:ci": "eslint --report-unused-disable-directives .",
     "lint": "eslint --report-unused-disable-directives --fix .",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -b"
   },
   "devDependencies": {
     "@docusaurus/core": "2.4.1",

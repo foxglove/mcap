@@ -13,8 +13,8 @@ import { McapWriter } from "@mcap/core";
 import { EventEmitter } from "eventemitter3";
 import Queue from "promise-queue";
 
-import { ProtobufChannelInfo, addProtobufChannel } from "./addProtobufChannel";
-import { CompressedVideoFrame } from "./videoCapture";
+import { ProtobufChannelInfo, addProtobufChannel } from "./addProtobufChannel.ts";
+import { CompressedVideoFrame } from "./videoCapture.ts";
 
 export type ProtobufObject<Message> = {
   [K in keyof Message]: Message[K] extends { sec: number; nsec: number }

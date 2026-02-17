@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { useStore } from "../state";
+import { useStore } from "../state.ts";
 
 /**
  * Hook to record mouse events (pointer down and move) during recording

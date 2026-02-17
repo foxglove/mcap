@@ -1,11 +1,11 @@
 import { useEffect } from "react";
 
-import { useStore } from "../state";
+import { useStore } from "../state.ts";
 import {
   startVideoCapture,
   startVideoStream,
   CompressedVideoFrame,
-} from "../videoCapture";
+} from "../videoCapture.ts";
 
 /**
  * Hook to handle video recording functionality including stream setup and frame capture

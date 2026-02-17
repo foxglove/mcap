@@ -2,14 +2,14 @@ import React from "react";
 import { useAsync } from "react-async";
 
 import styles from "./McapRecordingDemo.module.css";
-import { supportsPCMEncoding } from "./audioCapture";
-import { useStore } from "./state";
+import { supportsPCMEncoding } from "./audioCapture.ts";
+import { useStore } from "./state.ts";
 import {
   supportsAV1Encoding,
   supportsH264Encoding,
   supportsH265Encoding,
   supportsVP9Encoding,
-} from "./videoCapture";
+} from "./videoCapture.ts";
 
 const hasMouse = window.matchMedia("(hover: hover)").matches;
 

@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import { useStore } from "../state";
+import { useStore } from "../state.ts";
 
 /**
  * Hook to handle downloading recorded data as an MCAP file

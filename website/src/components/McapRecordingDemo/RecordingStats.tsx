@@ -1,7 +1,7 @@
 import React from "react";
 
 import styles from "./McapRecordingDemo.module.css";
-import { useStore } from "./state";
+import { useStore } from "./state.ts";
 
 export function RecordingStats(): JSX.Element | null {
   const { recordMouse, latestMouse, recordOrientation, latestOrientation } =

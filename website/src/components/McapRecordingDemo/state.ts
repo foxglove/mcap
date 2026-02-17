@@ -9,8 +9,8 @@ import {
   ProtobufObject,
   Recorder,
   toProtobufTime,
-} from "./Recorder";
-import type { CompressedVideoFrame } from "./videoCapture";
+} from "./Recorder.ts";
+import type { CompressedVideoFrame } from "./videoCapture.ts";
 
 export type VideoFormat = "jpeg" | "h264" | "h265" | "vp9" | "av1";
 
