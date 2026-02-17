@@ -1,6 +1,6 @@
 import { crc32, crc32Init, crc32Update, crc32Final } from "@foxglove/crc";
-import { McapConstants, McapRecordBuilder, McapChunkBuilder } from "@mcap/core";
-import type { McapTypes } from "@mcap/core";
+import { McapRecordBuilder, McapChunkBuilder, Opcode } from "@mcap/core";
+import type { AttachmentIndex, ChunkIndex, MetadataIndex } from "@mcap/core";
 import { program } from "commander";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -10,10 +10,6 @@ import { collect } from "../util/collect.ts";
 import listDirRecursive from "../util/listDirRecursive.ts";
 import { TestFeatures } from "../variants/types.ts";
 import type { TestDataRecord, TestFeature } from "../variants/types.ts";
-
-type MetadataIndex = McapTypes.MetadataIndex;
-type ChunkIndex = McapTypes.ChunkIndex;
-type AttachmentIndex = McapTypes.AttachmentIndex;
 
 function generateFile(features: Set<TestFeature>, records: TestDataRecord[]) {
   const builder = new McapRecordBuilder({
@@ -206,42 +202,42 @@ function generateFile(features: Set<TestFeature>, records: TestDataRecord[]) {
     summaryOffsetStart = BigInt(builder.length);
     if (repeatedSchemasLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: McapConstants.Opcode.SCHEMA,
+        groupOpcode: Opcode.SCHEMA,
         groupStart: repeatedSchemasStart,
         groupLength: repeatedSchemasLength,
       });
     }
     if (repeatedChannelInfosLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: McapConstants.Opcode.CHANNEL,
+        groupOpcode: Opcode.CHANNEL,
         groupStart: repeatedChannelInfosStart,
         groupLength: repeatedChannelInfosLength,
       });
     }
     if (statisticsLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: McapConstants.Opcode.STATISTICS,
+        groupOpcode: Opcode.STATISTICS,
         groupStart: statisticsStart,
         groupLength: statisticsLength,
       });
     }
     if (metadataIndexLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: McapConstants.Opcode.METADATA_INDEX,
+        groupOpcode: Opcode.METADATA_INDEX,
         groupStart: metadataIndexStart,
         groupLength: metadataIndexLength,
       });
     }
     if (attachmentIndexLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: McapConstants.Opcode.ATTACHMENT_INDEX,
+        groupOpcode: Opcode.ATTACHMENT_INDEX,
         groupStart: attachmentIndexStart,
         groupLength: attachmentIndexLength,
       });
     }
     if (chunkIndexLength !== 0n) {
       builder.writeSummaryOffset({
-        groupOpcode: McapConstants.Opcode.CHUNK_INDEX,
+        groupOpcode: Opcode.CHUNK_INDEX,
         groupStart: chunkIndexStart,
         groupLength: chunkIndexLength,
       });
@@ -257,7 +253,7 @@ function generateFile(features: Set<TestFeature>, records: TestDataRecord[]) {
   );
   summaryCrc = crc32Update(summaryCrc, summaryData);
   const tempBuffer = new DataView(new ArrayBuffer(1 + 8 + 8 + 8));
-  tempBuffer.setUint8(0, McapConstants.Opcode.FOOTER);
+  tempBuffer.setUint8(0, Opcode.FOOTER);
   tempBuffer.setBigUint64(1, 8n + 8n + 4n, true);
   tempBuffer.setBigUint64(1 + 8, hasSummary ? summaryStart : 0n, true);
   tempBuffer.setBigUint64(1 + 8 + 8, summaryOffsetStart, true);

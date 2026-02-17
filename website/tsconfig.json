@@ -8,7 +8,8 @@
     "jsx": "react",
     "target": "es2022",
     "lib": ["es2022", "dom"],
-    "types": ["dom-webcodecs", "dom-mediacapture-transform"]
+    "types": ["dom-webcodecs", "dom-mediacapture-transform"],
+    "verbatimModuleSyntax": false
   },
   "references": [{ "path": "../typescript/core" }]
 }

@@ -1,9 +1,9 @@
-import type { McapTypes } from "@mcap/core";
+import type { IReadable } from "@mcap/core";
 
 /**
  * IReadable implementation for Blob (and File, which is a Blob).
  */
-export class BlobReadable implements McapTypes.IReadable {
+export class BlobReadable implements IReadable {
   #blob: Blob;
 
   public constructor(blob: Blob) {

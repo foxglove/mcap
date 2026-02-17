@@ -1,5 +1,5 @@
 import { McapWriter } from "@mcap/core";
-import type { McapTypes } from "@mcap/core";
+import type { McapRecords, TypedMcapRecord } from "@mcap/core";
 import fs from "node:fs/promises";
 import { camelCase } from "lodash";
 import { TestFeatures } from "../../../variants/types.ts";
@@ -17,20 +17,20 @@ type JsonValue<T> = T extends number | bigint | string
         : never
       : never;
 
-type JsonRecord<R extends keyof McapTypes.McapRecords> = {
+type JsonRecord<R extends keyof McapRecords> = {
   type: R;
   fields: {
-    [K in keyof McapTypes.McapRecords[R]]: JsonValue<McapTypes.McapRecords[R][K]>;
+    [K in keyof McapRecords[R]]: JsonValue<McapRecords[R][K]>;
   };
 };
 
 type JsonRecords = {
-  [R in keyof McapTypes.McapRecords]: JsonRecord<R>;
+  [R in keyof McapRecords]: JsonRecord<R>;
 };
 
 function parseJsonRecord(record: {
   fields: Array<[string, unknown]>;
-}): McapTypes.TypedMcapRecord | undefined {
+}): TypedMcapRecord | undefined {
   const jsonRecord = {
     ...record,
     fields: Object.fromEntries(record.fields.map(([k, v]) => [camelCase(k), v])),

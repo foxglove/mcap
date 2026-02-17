@@ -1,5 +1,5 @@
 import { McapStreamReader } from "@mcap/core";
-import type { McapTypes } from "@mcap/core";
+import type { TypedMcapRecord } from "@mcap/core";
 import colors from "colors";
 import { program } from "commander";
 import * as Diff from "diff";
@@ -153,7 +153,7 @@ async function runWriterTest(
         ) as TestCase;
         const reader = new McapStreamReader({ validateCrcs: true });
         reader.append(output);
-        const records: McapTypes.TypedMcapRecord[] = [];
+        const records: TypedMcapRecord[] = [];
         for (let record; (record = reader.nextRecord()); ) {
           records.push(record);
         }
