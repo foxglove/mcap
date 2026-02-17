@@ -6,10 +6,10 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc -b",
-    "lint:ci": "eslint --report-unused-disable-directives .",
-    "lint": "eslint --report-unused-disable-directives --fix .",
-    "bench": "node --huge-max-old-generation-size --expose-gc --import tsx index.ts",
-    "bench:debug": "node --huge-max-old-generation-size --inspect-brk --expose-gc --import tsx index.ts"
+    "lint:ci": "tsc -b && eslint --report-unused-disable-directives .",
+    "lint": "tsc -b && eslint --report-unused-disable-directives --fix .",
+    "bench": "tsc -b && node --huge-max-old-generation-size --expose-gc --import tsx index.ts",
+    "bench:debug": "tsc -b && node --huge-max-old-generation-size --inspect-brk --expose-gc --import tsx index.ts"
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",
