@@ -1,4 +1,5 @@
-import { Grid, NumericType } from "@foxglove/schemas";
+import { NumericType } from "@foxglove/schemas";
+import type { Grid } from "@foxglove/schemas";
 import { McapWriter } from "@mcap/core";
 import { FileHandleWritable } from "@mcap/nodejs";
 import { Builder } from "flatbuffers";
@@ -149,7 +150,7 @@ async function main() {
   const tfSchemaId = await mcapFile.registerSchema({
     name: "foxglove.FrameTransform",
     encoding: "flatbuffer",
-    data: FrameTransformSchemaBuffer,
+    data: new Uint8Array(FrameTransformSchemaBuffer),
   });
 
   const tfChannelId = await mcapFile.registerChannel({
@@ -183,7 +184,7 @@ async function main() {
   const gridSchemaId = await mcapFile.registerSchema({
     name: "foxglove.Grid",
     encoding: "flatbuffer",
-    data: binaryGridSchema,
+    data: new Uint8Array(binaryGridSchema),
   });
 
   const gridChannelId = await mcapFile.registerChannel({

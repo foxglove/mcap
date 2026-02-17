@@ -2,8 +2,8 @@ import {
   CameraCalibration as CameraCalibrationSchema,
   RawImage as RawImageSchema,
   ImageAnnotations as ImageAnnotationsSchema,
-} from "@foxglove/schemas/jsonschema";
-import { Time } from "@foxglove/schemas/schemas/typescript/Time";
+} from "@foxglove/schemas/jsonschema.js";
+import type { Time } from "@foxglove/schemas";
 import { McapWriter } from "@mcap/core";
 import { FileHandleWritable } from "@mcap/nodejs";
 import { open } from "node:fs/promises";
@@ -33,7 +33,7 @@ async function main() {
   const calibrationSchemaId = await mcapFile.registerSchema({
     name: CameraCalibrationSchema.title,
     encoding: "jsonschema",
-    data: Buffer.from(JSON.stringify(CameraCalibrationSchema)),
+    data: new Uint8Array(Buffer.from(JSON.stringify(CameraCalibrationSchema))),
   });
 
   const calibrationChannelId = await mcapFile.registerChannel({
@@ -46,7 +46,7 @@ async function main() {
   const imageSchemaId = await mcapFile.registerSchema({
     name: RawImageSchema.title,
     encoding: "jsonschema",
-    data: Buffer.from(JSON.stringify(RawImageSchema)),
+    data: new Uint8Array(Buffer.from(JSON.stringify(RawImageSchema))),
   });
 
   const imageChannelId = await mcapFile.registerChannel({
@@ -59,7 +59,7 @@ async function main() {
   const annotationSchemaId = await mcapFile.registerSchema({
     name: ImageAnnotationsSchema.title,
     encoding: "jsonschema",
-    data: Buffer.from(JSON.stringify(ImageAnnotationsSchema)),
+    data: new Uint8Array(Buffer.from(JSON.stringify(ImageAnnotationsSchema))),
   });
 
   const annotationsChannelId = await mcapFile.registerChannel({
@@ -94,21 +94,21 @@ async function main() {
       sequence: 0,
       publishTime: 0n,
       logTime: bigTime,
-      data: Buffer.from(JSON.stringify(scene.getCameraCalibration(rosTime))),
+      data: new Uint8Array(Buffer.from(JSON.stringify(scene.getCameraCalibration(rosTime)))),
     });
     await mcapFile.addMessage({
       channelId: imageChannelId,
       sequence: 0,
       publishTime: 0n,
       logTime: bigTime,
-      data: Buffer.from(JSON.stringify(scene.getRawImage(rosTime))),
+      data: new Uint8Array(Buffer.from(JSON.stringify(scene.getRawImage(rosTime)))),
     });
     await mcapFile.addMessage({
       channelId: annotationsChannelId,
       sequence: 0,
       publishTime: 0n,
       logTime: bigTime,
-      data: Buffer.from(JSON.stringify(scene.getImageAnnotations(rosTime))),
+      data: new Uint8Array(Buffer.from(JSON.stringify(scene.getImageAnnotations(rosTime)))),
     });
   }
 
