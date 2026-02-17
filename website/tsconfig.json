@@ -3,11 +3,10 @@
   "extends": "@foxglove/tsconfig/node.json",
   "include": ["./**/*"],
   "compilerOptions": {
-    "baseUrl": ".",
     "noEmit": true,
-    "jsx": "react",
     "target": "es2022",
     "lib": ["es2022", "dom"],
+    "jsx": "react",
     "types": [
       "@docusaurus/module-type-aliases",
       "@docusaurus/theme-classic",

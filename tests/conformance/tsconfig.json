@@ -2,9 +2,7 @@
   "extends": "@foxglove/tsconfig/node.json",
   "include": ["./**/*"],
   "compilerOptions": {
-    "rootDir": "../..",
-    "noEmit": true,
-    "lib": ["es2020", "dom"]
+    "noEmit": true
   },
   "references": [{ "path": "../../typescript/core" }, { "path": "../../typescript/nodejs" }]
 }
