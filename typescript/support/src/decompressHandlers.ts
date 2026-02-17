@@ -1,5 +1,8 @@
 import type { DecompressHandlers } from "@mcap/core";
 
+type Bzip2Module = (typeof import("@foxglove/wasm-bz2"))["default"];
+type Lz4Module = (typeof import("@foxglove/wasm-lz4"))["default"];
+
 let handlersPromise: Promise<DecompressHandlers> | undefined;
 export async function loadDecompressHandlers(): Promise<DecompressHandlers> {
   return await (handlersPromise ??= _loadDecompressHandlers());
@@ -8,17 +11,20 @@ export async function loadDecompressHandlers(): Promise<DecompressHandlers> {
 // eslint-disable-next-line no-underscore-dangle
 async function _loadDecompressHandlers(): Promise<DecompressHandlers> {
   const [decompressZstd, decompressLZ4, bzip2] = await Promise.all([
+    // Conditional default imports are required to support both ESM and CJS
     import("@foxglove/wasm-zstd").then(async (mod) => {
       await mod.isLoaded;
       return mod.decompress;
     }),
     import("@foxglove/wasm-lz4").then(async (mod) => {
-      await mod.default.isLoaded;
-      return mod.default;
+      const lz4 = ((mod as { default?: unknown }).default ?? mod) as Lz4Module;
+      await lz4.isLoaded;
+      return lz4;
     }),
-    // CJS module consumed from NodeNext ESM: class is nested under default.default
+
     import("@foxglove/wasm-bz2").then(async (mod) => {
-      return await mod.default.default.init();
+      const bzip2 = ((mod.default as { default?: unknown }).default ?? mod.default) as Bzip2Module;
+      return await bzip2.init();
     }),
   ]);
 
