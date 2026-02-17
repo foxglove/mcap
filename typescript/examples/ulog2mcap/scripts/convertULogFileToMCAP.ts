@@ -1,14 +1,7 @@
 import { LogLevel as FoxLogLevel } from "@foxglove/schemas";
 import type { Log } from "@foxglove/schemas";
-import {
-  ULog,
-  type MessageDefinition,
-  MessageType,
-  LogLevel,
-  type FieldArray,
-  type FieldPrimitive,
-  type FieldStruct,
-} from "@foxglove/ulog";
+import { ULog, MessageType, LogLevel } from "@foxglove/ulog";
+import type { MessageDefinition, FieldArray, FieldPrimitive, FieldStruct } from "@foxglove/ulog";
 import { McapWriter } from "@mcap/core";
 import type { Metadata } from "@mcap/core";
 import { protobufToDescriptor } from "@mcap/support";

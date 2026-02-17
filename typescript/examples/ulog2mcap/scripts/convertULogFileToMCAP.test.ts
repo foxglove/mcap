@@ -1,13 +1,6 @@
 import { LogLevel as FoxLevel } from "@foxglove/schemas";
-import {
-  type Field,
-  type MessageDefinition,
-  type ParsedMessage,
-  type Subscription,
-  ULog,
-  MessageType,
-  LogLevel,
-} from "@foxglove/ulog";
+import { ULog, MessageType, LogLevel } from "@foxglove/ulog";
+import type { Field, MessageDefinition, ParsedMessage, Subscription } from "@foxglove/ulog";
 import { FileReader } from "@foxglove/ulog/node.js";
 import { McapIndexedReader, TempBuffer, McapWriter } from "@mcap/core";
 import type { Metadata } from "@mcap/core";

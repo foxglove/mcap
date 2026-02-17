@@ -1,9 +1,9 @@
 import type { TestVariant } from "../../../variants/types.ts";
-import {
-  type IndexedReadTestResult,
-  type SerializableMcapRecord,
-  type StreamedReadTestResult,
-  type TestCase,
+import type {
+  IndexedReadTestResult,
+  SerializableMcapRecord,
+  StreamedReadTestResult,
+  TestCase,
 } from "../types.ts";
 
 export abstract class StreamedReadTestRunner {
