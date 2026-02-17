@@ -34,14 +34,12 @@
     "build": "tsc -b tsconfig.json tsconfig.cjs.json && echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
     "prepack": "yarn build",
     "lint:ci": "tsc -b && eslint --report-unused-disable-directives .",
-    "lint": "tsc -b && eslint --report-unused-disable-directives --fix .",
-    "test": "jest"
+    "lint": "tsc -b && eslint --report-unused-disable-directives --fix ."
   },
   "devDependencies": {
     "@foxglove/eslint-plugin": "1.0.1",
     "@foxglove/tsconfig": "3.2.0",
     "@mcap/core": "workspace:*",
-    "@types/jest": "29.5.8",
     "@types/node": "20.19.33",
     "@typescript-eslint/eslint-plugin": "6.11.0",
     "@typescript-eslint/parser": "6.11.0",
@@ -52,9 +50,7 @@
     "eslint-plugin-import": "2.29.0",
     "eslint-plugin-jest": "27.6.0",
     "eslint-plugin-prettier": "5.0.1",
-    "jest": "29.7.0",
     "prettier": "3.1.0",
-    "ts-jest": "29.1.1",
     "typescript": "5.9.3"
   },
   "dependencies": {
