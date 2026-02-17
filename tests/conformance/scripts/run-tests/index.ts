@@ -15,11 +15,11 @@ import {
 } from "./runners/TestRunner.ts";
 import runners from "./runners/index.ts";
 import { toSerializableMcapRecord } from "./toSerializableMcapRecord.ts";
-import {
-  type IndexedReadTestResult,
-  type SerializableMcapRecord,
-  type StreamedReadTestResult,
-  type TestCase,
+import type {
+  IndexedReadTestResult,
+  SerializableMcapRecord,
+  StreamedReadTestResult,
+  TestCase,
 } from "./types.ts";
 import { splitMcapRecords } from "../../util/splitMcapRecords.ts";
 import generateTestVariants from "../../variants/generateTestVariants.ts";
