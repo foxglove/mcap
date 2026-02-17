@@ -1,7 +1,7 @@
 import { McapWriter } from "@mcap/core";
 import type { McapRecords, TypedMcapRecord } from "@mcap/core";
 import fs from "node:fs/promises";
-import { camelCase } from "lodash";
+import { camelCase } from "lodash-es";
 import { TestFeatures } from "../../../variants/types.ts";
 import type { TestVariant } from "../../../variants/types.ts";
 

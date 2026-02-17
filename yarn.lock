@@ -3006,6 +3006,7 @@ __metadata:
     "@mcap/nodejs": "workspace:*"
     "@types/diff": "npm:^5.0.2"
     "@types/js-yaml": "npm:^4.0.5"
+    "@types/lodash-es": "npm:4.17.12"
     "@types/node": "npm:18.13.0"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
@@ -3024,7 +3025,7 @@ __metadata:
     json-stringify-pretty-compact: "npm:4.0.0"
     kaitai-struct: "npm:0.10.0"
     kaitai-struct-compiler: "npm:0.10.0"
-    lodash: "npm:4.17.21"
+    lodash-es: "npm:4.17.23"
     prettier: "npm:3.1.0"
     tsx: "npm:4.21.0"
     typescript: "npm:5.9.3"
@@ -3047,7 +3048,6 @@ __metadata:
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
     "@mcap/support": "workspace:*"
-    "@types/lodash": "npm:4.14.191"
     "@types/node": "npm:18.13.0"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
@@ -3058,7 +3058,6 @@ __metadata:
     eslint-plugin-filenames: "npm:1.3.2"
     eslint-plugin-import: "npm:2.29.0"
     eslint-plugin-prettier: "npm:5.0.1"
-    lodash: "npm:4.17.21"
     prettier: "npm:3.1.0"
     protobufjs: "npm:7.2.5"
     tsx: "npm:4.21.0"
@@ -3140,7 +3139,6 @@ __metadata:
     "@mcap/core": "workspace:*"
     "@mcap/nodejs": "workspace:*"
     "@mcap/support": "workspace:*"
-    "@types/lodash": "npm:4.14.191"
     "@types/node": "npm:18.13.0"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
@@ -3152,7 +3150,6 @@ __metadata:
     eslint-plugin-import: "npm:2.29.0"
     eslint-plugin-prettier: "npm:5.0.1"
     jest: "npm:30.2.0"
-    lodash: "npm:4.17.21"
     long: "npm:5.3.2"
     prettier: "npm:3.1.0"
     protobufjs: "npm:^7.2.5"
@@ -3179,7 +3176,7 @@ __metadata:
     "@mcap/nodejs": "workspace:*"
     "@mcap/support": "workspace:*"
     "@types/jest": "npm:29.5.8"
-    "@types/lodash": "npm:4.14.191"
+    "@types/lodash-es": "npm:4.17.12"
     "@types/node": "npm:18.13.0"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
@@ -3192,7 +3189,7 @@ __metadata:
     eslint-plugin-jest: "npm:27.6.0"
     eslint-plugin-prettier: "npm:5.0.1"
     jest: "npm:29.7.0"
-    lodash: "npm:4.17.21"
+    lodash-es: "npm:4.17.23"
     prettier: "npm:3.1.0"
     protobufjs: "npm:7.2.5"
     ts-jest: "npm:29.1.1"
@@ -3996,7 +3993,6 @@ __metadata:
     "@foxglove/eslint-plugin": "npm:1.0.1"
     "@foxglove/tsconfig": "npm:3.2.0"
     "@types/jest": "npm:29.5.8"
-    "@types/lodash": "npm:4.14.191"
     "@types/node": "npm:18.13.0"
     "@typescript-eslint/eslint-plugin": "npm:6.11.0"
     "@typescript-eslint/parser": "npm:6.11.0"
@@ -4009,7 +4005,6 @@ __metadata:
     eslint-plugin-prettier: "npm:5.0.1"
     heap-js: "npm:^2.2.0"
     jest: "npm:29.7.0"
-    lodash: "npm:4.17.21"
     prettier: "npm:3.1.0"
     ts-jest: "npm:29.1.1"
     tslib: "npm:^2.5.0"
@@ -4827,10 +4822,19 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/lodash@npm:4.14.191":
-  version: 4.14.191
-  resolution: "@types/lodash@npm:4.14.191"
-  checksum: 10c0/cca0bc3b5f1193a50a39a9c6e14892e7cf57ab81ca05985e1ccee0d732dd3b22a8d669fa87560757051c6d73f4f63a2e2248ce9a7d9c159d0d5e3f331baf6a62
+"@types/lodash-es@npm:4.17.12":
+  version: 4.17.12
+  resolution: "@types/lodash-es@npm:4.17.12"
+  dependencies:
+    "@types/lodash": "npm:*"
+  checksum: 10c0/5d12d2cede07f07ab067541371ed1b838a33edb3c35cb81b73284e93c6fd0c4bbeaefee984e69294bffb53f62d7272c5d679fdba8e595ff71e11d00f2601dde0
+  languageName: node
+  linkType: hard
+
+"@types/lodash@npm:*":
+  version: 4.17.23
+  resolution: "@types/lodash@npm:4.17.23"
+  checksum: 10c0/9d9cbfb684e064a2b78aab9e220d398c9c2a7d36bc51a07b184ff382fa043a99b3d00c16c7f109b4eb8614118f4869678dbae7d5c6700ed16fb9340e26cc0bf6
   languageName: node
   linkType: hard
 
@@ -9419,16 +9423,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"get-tsconfig@npm:^4.5.0":
-  version: 4.7.2
-  resolution: "get-tsconfig@npm:4.7.2"
-  dependencies:
-    resolve-pkg-maps: "npm:^1.0.0"
-  checksum: 10c0/169b2beababfbb16e8a0ae813ee59d3e14d4960231c816615161ab5be68ec07a394dce59695742ac84295e2efab8d9e89bcf3abaf5e253dfbec3496e01bb9a65
-  languageName: node
-  linkType: hard
-
-"get-tsconfig@npm:^4.7.5":
+"get-tsconfig@npm:^4.5.0, get-tsconfig@npm:^4.7.5":
   version: 4.13.6
   resolution: "get-tsconfig@npm:4.13.6"
   dependencies:
@@ -12139,6 +12134,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"lodash-es@npm:4.17.23":
+  version: 4.17.23
+  resolution: "lodash-es@npm:4.17.23"
+  checksum: 10c0/3150fb6660c14c7a6b5f23bd11597d884b140c0e862a17fdb415aaa5ef7741523182904a6b7929f04e5f60a11edb5a79499eb448734381c99ffb3c4734beeddd
+  languageName: node
+  linkType: hard
+
 "lodash.camelcase@npm:4.3.0":
   version: 4.3.0
   resolution: "lodash.camelcase@npm:4.3.0"
@@ -12209,7 +12211,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"lodash@npm:4.17.21, lodash@npm:^4.17.19, lodash@npm:^4.17.20, lodash@npm:^4.17.21":
+"lodash@npm:^4.17.19, lodash@npm:^4.17.20, lodash@npm:^4.17.21":
   version: 4.17.21
   resolution: "lodash@npm:4.17.21"
   checksum: 10c0/d8cbea072bb08655bb4c989da418994b073a608dffa608b09ac04b43a791b12aeae7cd7ad919aa4c925f33b48490b5cfe6c1f71d827956071dae2e7bb3a6b74c

@@ -5,7 +5,7 @@ import { program } from "commander";
 import * as Diff from "diff";
 import fs from "node:fs/promises";
 import stableStringify from "json-stable-stringify";
-import { chunk } from "lodash";
+import { chunk } from "lodash-es";
 import path from "node:path";
 
 import runners from "./runners/index.ts";

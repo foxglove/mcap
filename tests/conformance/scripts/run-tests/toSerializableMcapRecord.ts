@@ -1,5 +1,5 @@
 import type { TypedMcapRecord } from "@mcap/core";
-import { chain, snakeCase } from "lodash";
+import { chain, snakeCase } from "lodash-es";
 
 import type { SerializableMcapRecord } from "./types.ts";
 

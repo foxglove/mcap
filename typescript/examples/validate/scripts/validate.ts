@@ -8,7 +8,7 @@ import { loadDecompressHandlers } from "@mcap/support";
 import { program } from "commander";
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
-import { isEqual } from "lodash";
+import { isEqual } from "lodash-es";
 import { performance } from "node:perf_hooks";
 import * as protobufjs from "protobufjs";
 import { FileDescriptorSet } from "protobufjs/ext/descriptor/index.js";
