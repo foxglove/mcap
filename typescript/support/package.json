@@ -13,9 +13,14 @@
   },
   "homepage": "https://foxglove.dev/",
   "type": "module",
-  "module": "dist/esm/src/index.js",
-  "main": "dist/cjs/src/index.js",
-  "typings": "dist/esm/src/index.d.ts",
+  "main": "dist/cjs/index.js",
+  "exports": {
+    ".": {
+      "types": "./dist/esm/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
   "typedocOptions": {
     "entryPoints": [
       "src/index.ts"
@@ -23,9 +28,7 @@
   },
   "files": [
     "dist",
-    "src",
-    "nodejs.d.ts",
-    "nodejs.js"
+    "src"
   ],
   "scripts": {
     "build": "tsc -b tsconfig.json tsconfig.cjs.json && echo '{\"type\":\"commonjs\"}' > dist/cjs/package.json",
@@ -55,7 +58,7 @@
     "typescript": "5.9.3"
   },
   "dependencies": {
-    "@foxglove/wasm-bz2": "^0.1.1",
+    "@foxglove/wasm-bz2": "^0.2.0",
     "@foxglove/wasm-lz4": "^1.0.2",
     "@foxglove/wasm-zstd": "^1.0.1",
     "protobufjs": "^7.2.5",

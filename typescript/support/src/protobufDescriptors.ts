@@ -1,5 +1,5 @@
-import protobufjs from "protobufjs";
-import { FileDescriptorSet, IFileDescriptorSet } from "protobufjs/ext/descriptor";
+import * as protobufjs from "protobufjs";
+import { FileDescriptorSet, type IFileDescriptorSet } from "protobufjs/ext/descriptor/index.js";
 
 // https://github.com/protobufjs/protobuf.js/issues/1499
 declare module "protobufjs" {

@@ -1,11 +1,10 @@
 {
-  "extends": "@foxglove/tsconfig/base",
+  "extends": "@foxglove/tsconfig/node.json",
   "include": ["./src/**/*"],
   "compilerOptions": {
+    "rootDir": "./src",
     "outDir": "./dist/esm",
-    "lib": ["es2020", "dom"],
-    "composite": true,
-    "incremental": true
+    "composite": true
   },
   "references": [{ "path": "../core" }]
 }
