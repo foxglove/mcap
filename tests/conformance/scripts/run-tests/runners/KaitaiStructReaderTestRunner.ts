@@ -1,13 +1,13 @@
 import { Opcode } from "@mcap/core";
 import type { TypedMcapRecord } from "@mcap/core";
-import fs from "node:fs/promises";
 import YAML from "js-yaml";
 import { KaitaiStream } from "kaitai-struct";
 import KaitaiStructCompiler from "kaitai-struct-compiler";
+import fs from "node:fs/promises";
 import path from "node:path";
-import type { TestVariant } from "../../../variants/types.ts";
 
 import { StreamedReadTestRunner } from "./TestRunner.ts";
+import type { TestVariant } from "../../../variants/types.ts";
 import { toSerializableMcapRecord } from "../toSerializableMcapRecord.ts";
 import type { StreamedReadTestResult } from "../types.ts";
 

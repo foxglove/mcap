@@ -23,8 +23,8 @@ async function _loadDecompressHandlers(): Promise<DecompressHandlers> {
     }),
 
     import("@foxglove/wasm-bz2").then(async (mod) => {
-      const bzip2 = ((mod.default as { default?: unknown }).default ?? mod.default) as Bzip2Module;
-      return await bzip2.init();
+      const bz2 = ((mod.default as { default?: unknown }).default ?? mod.default) as Bzip2Module;
+      return await bz2.init();
     }),
   ]);
 

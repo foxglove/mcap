@@ -1,8 +1,8 @@
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import type { TestVariant } from "../../../variants/types.ts";
 
 import { StreamedReadTestRunner } from "./TestRunner.ts";
+import type { TestVariant } from "../../../variants/types.ts";
 import type { StreamedReadTestResult } from "../types.ts";
 
 export default class PythonStreamedReaderTestRunner extends StreamedReadTestRunner {

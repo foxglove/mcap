@@ -1,10 +1,10 @@
 import { McapIndexedReader } from "@mcap/core";
 import { FileHandleReadable } from "@mcap/nodejs";
 import fs from "node:fs/promises";
-import { TestFeatures } from "../../../variants/types.ts";
-import type { TestVariant } from "../../../variants/types.ts";
 
 import { IndexedReadTestRunner } from "./TestRunner.ts";
+import { TestFeatures } from "../../../variants/types.ts";
+import type { TestVariant } from "../../../variants/types.ts";
 import { toSerializableMcapRecord } from "../toSerializableMcapRecord.ts";
 import type { IndexedReadTestResult } from "../types.ts";
 

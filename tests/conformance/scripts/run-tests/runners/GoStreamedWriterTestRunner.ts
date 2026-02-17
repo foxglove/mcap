@@ -1,10 +1,10 @@
 import { exec } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { TestFeatures } from "../../../variants/types.ts";
-import type { TestVariant } from "../../../variants/types.ts";
 
 import { WriteTestRunner } from "./TestRunner.ts";
+import { TestFeatures } from "../../../variants/types.ts";
+import type { TestVariant } from "../../../variants/types.ts";
 
 export default class GoStreamedWriterTestRunner extends WriteTestRunner {
   name = "go-streamed-writer";

@@ -1,9 +1,9 @@
+import type { Time } from "@foxglove/schemas";
 import {
   CameraCalibration as CameraCalibrationSchema,
   RawImage as RawImageSchema,
   ImageAnnotations as ImageAnnotationsSchema,
 } from "@foxglove/schemas/jsonschema.js";
-import type { Time } from "@foxglove/schemas";
 import { McapWriter } from "@mcap/core";
 import { FileHandleWritable } from "@mcap/nodejs";
 import { open } from "node:fs/promises";

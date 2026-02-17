@@ -1,8 +1,8 @@
 import { McapStreamReader } from "@mcap/core";
 import fs from "node:fs/promises";
-import type { TestVariant } from "../../../variants/types.ts";
 
 import { StreamedReadTestRunner } from "./TestRunner.ts";
+import type { TestVariant } from "../../../variants/types.ts";
 import { toSerializableMcapRecord } from "../toSerializableMcapRecord.ts";
 import type { StreamedReadTestResult } from "../types.ts";
 

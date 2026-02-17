@@ -1,11 +1,11 @@
 import { McapWriter } from "@mcap/core";
 import type { McapRecords, TypedMcapRecord } from "@mcap/core";
-import fs from "node:fs/promises";
 import { camelCase } from "lodash-es";
-import { TestFeatures } from "../../../variants/types.ts";
-import type { TestVariant } from "../../../variants/types.ts";
+import fs from "node:fs/promises";
 
 import { WriteTestRunner } from "./TestRunner.ts";
+import { TestFeatures } from "../../../variants/types.ts";
+import type { TestVariant } from "../../../variants/types.ts";
 
 type JsonValue<T> = T extends number | bigint | string
   ? string

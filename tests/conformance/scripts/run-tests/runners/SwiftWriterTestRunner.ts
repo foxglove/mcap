@@ -1,10 +1,10 @@
 import { exec } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import { TestFeatures } from "../../../variants/types.ts";
-import type { TestVariant } from "../../../variants/types.ts";
 
 import { WriteTestRunner } from "./TestRunner.ts";
+import { TestFeatures } from "../../../variants/types.ts";
+import type { TestVariant } from "../../../variants/types.ts";
 
 export default class SwiftWriterTestRunner extends WriteTestRunner {
   readonly name = "swift-writer";

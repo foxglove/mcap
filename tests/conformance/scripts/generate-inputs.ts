@@ -4,10 +4,10 @@ import type { AttachmentIndex, ChunkIndex, MetadataIndex } from "@mcap/core";
 import { program } from "commander";
 import fs from "node:fs/promises";
 import path from "node:path";
-import generateTestVariants from "../variants/generateTestVariants.ts";
 
 import { collect } from "../util/collect.ts";
 import listDirRecursive from "../util/listDirRecursive.ts";
+import generateTestVariants from "../variants/generateTestVariants.ts";
 import { TestFeatures } from "../variants/types.ts";
 import type { TestDataRecord, TestFeature } from "../variants/types.ts";
 

@@ -1,6 +1,6 @@
 import { McapIndexedReader, McapStreamReader, McapWriter, TempBuffer } from "@mcap/core";
-import assert from "node:assert";
 import { program } from "commander";
+import assert from "node:assert";
 
 import { runBenchmark } from "./bench.ts";
 
