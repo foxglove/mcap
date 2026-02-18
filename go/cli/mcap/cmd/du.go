@@ -242,13 +242,23 @@ func printRecordTable(recordKindSize map[string]uint64, totalSize uint64, approx
 		"---------------------",
 	})
 
-	for recordKind, size := range recordKindSize {
-		row := []string{
-			recordKind, fmt.Sprintf("%d", size),
-			fmt.Sprintf("%f", float32(size)/float32(totalSize)*100.0),
-		}
+	type recordInfo struct {
+		name string
+		size uint64
+	}
+	records := make([]recordInfo, 0, len(recordKindSize))
+	for name, size := range recordKindSize {
+		records = append(records, recordInfo{name, size})
+	}
+	sort.Slice(records, func(i, j int) bool {
+		return records[i].size > records[j].size
+	})
 
-		rows = append(rows, row)
+	for _, r := range records {
+		rows = append(rows, []string{
+			r.name, fmt.Sprintf("%d", r.size),
+			fmt.Sprintf("%f", float32(r.size)/float32(totalSize)*100.0),
+		})
 	}
 
 	utils.FormatTable(os.Stdout, rows)
@@ -364,10 +374,16 @@ func runDuFromIndex(rs io.ReadSeeker) error {
 	// "other" = magic + header + DataEnd + footer + any unchunked records in
 	// the data section. Computed as the remainder after chunks, message
 	// indexes, and summary section.
-	other := totalFileSize - totalChunkOnDisk - totalMIOnDisk
+	// Guard against uint64 underflow: if metadata is inconsistent with the
+	// file size (e.g. corrupted file), the subtraction would wrap silently.
+	accounted := totalChunkOnDisk + totalMIOnDisk
 	if summary, ok := recordKindSize["summary section"]; ok {
-		other -= summary
+		accounted += summary
 	}
+	if accounted > totalFileSize {
+		return fmt.Errorf("chunk index metadata exceeds file size (%d > %d)", accounted, totalFileSize)
+	}
+	other := totalFileSize - accounted
 	if other > 0 {
 		recordKindSize["other"] = other
 	}
