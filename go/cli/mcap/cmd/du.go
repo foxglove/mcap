@@ -217,14 +217,18 @@ func (instance *usage) RunDu() error {
 		}
 	}
 
-	printRecordTable(instance.recordKindSize, instance.totalSize)
+	printRecordTable(instance.recordKindSize, instance.totalSize, false)
 	printTopicTable(instance.topicMessageSize, instance.totalMessageSize)
 
 	return nil
 }
 
-func printRecordTable(recordKindSize map[string]uint64, totalSize uint64) {
-	fmt.Println("Top level record stats:")
+func printRecordTable(recordKindSize map[string]uint64, totalSize uint64, approximate bool) {
+	if approximate {
+		fmt.Println("Top level record stats (approximate):")
+	} else {
+		fmt.Println("Top level record stats:")
+	}
 	fmt.Println()
 
 	rows := [][]string{}
@@ -314,6 +318,9 @@ func runDuFromIndex(rs io.ReadSeeker) error {
 	info, err := reader.Info()
 	if err != nil {
 		// If we can't read the summary section, fall back to full scan.
+		// Safe to reuse rs: mcap.NewReader does not take exclusive ownership
+		// of the underlying stream, so seeking back to the start is valid
+		// even with reader.Close() deferred.
 		if _, seekErr := rs.Seek(0, io.SeekStart); seekErr != nil {
 			return seekErr
 		}
@@ -322,6 +329,7 @@ func runDuFromIndex(rs io.ReadSeeker) error {
 	}
 
 	// If no summary section or no chunk indexes, fall back to full scan.
+	// See above comment re: safety of reusing rs.
 	if info.Footer == nil || info.Footer.SummaryStart == 0 || len(info.ChunkIndexes) == 0 {
 		if _, seekErr := rs.Seek(0, io.SeekStart); seekErr != nil {
 			return seekErr
@@ -353,16 +361,18 @@ func runDuFromIndex(rs io.ReadSeeker) error {
 			recordKindSize["summary section"] = footerStart - info.Footer.SummaryStart
 		}
 	}
-	recordKindSize["footer"] = footerRecordSize
-
-	// "other" = header record + DataEnd record + any unchunked records in
-	// the data section. Computed as the remainder of the data section.
-	dataSectionEnd := info.Footer.SummaryStart
-	if dataSectionEnd > mcapMagicSize+totalChunkOnDisk+totalMIOnDisk {
-		recordKindSize["other"] = dataSectionEnd - mcapMagicSize - totalChunkOnDisk - totalMIOnDisk
+	// "other" = magic + header + DataEnd + footer + any unchunked records in
+	// the data section. Computed as the remainder after chunks, message
+	// indexes, and summary section.
+	other := totalFileSize - totalChunkOnDisk - totalMIOnDisk
+	if summary, ok := recordKindSize["summary section"]; ok {
+		other -= summary
+	}
+	if other > 0 {
+		recordKindSize["other"] = other
 	}
 
-	printRecordTable(recordKindSize, totalFileSize)
+	printRecordTable(recordKindSize, totalFileSize, true)
 
 	// Compute Table 2: per-topic message sizes from MessageIndex records.
 	channelTopics := make(map[uint16]string)
@@ -556,6 +566,9 @@ func parseChunkMessageIndexes(
 				buf[pos], pos, byte(mcap.OpMessageIndex))
 		}
 		recordLen := binary.LittleEndian.Uint64(buf[pos+1 : pos+recordEnvelopeSize])
+		if recordLen > uint64(len(buf)) {
+			return nil, 0, fmt.Errorf("message index record length %d exceeds buffer size at offset %d", recordLen, pos)
+		}
 		recordEnd := pos + recordEnvelopeSize + int(recordLen)
 		if recordEnd > len(buf) {
 			return nil, 0, fmt.Errorf("message index record extends beyond buffer at offset %d", pos)
