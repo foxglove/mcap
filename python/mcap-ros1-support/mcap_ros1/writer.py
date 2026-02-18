@@ -93,6 +93,28 @@ class Writer:
             data=buffer.getvalue(),
         )
 
+    def add_metadata(self, name: str, metadata: Dict[str, str]):
+        """Writes metadata to an MCAP file.
+
+        :param name: the name of the metadata.
+        :param metadata: a dictionary of metadata key-value pairs.
+        """
+        self.__writer.add_metadata(name, metadata)
+
+    def add_attachment(
+        self, create_time: int, log_time: int, name: str, media_type: str, data: bytes
+    ):
+        """Writes an attachment to an MCAP file.
+
+        :param log_time: Time at which the attachment was recorded.
+        :param create_time: Time at which the attachment was created. If not available,
+            must be set to zero.
+        :param name: Name of the attachment, e.g "scene1.jpg".
+        :param media_type: Media Type (e.g "text/plain").
+        :param data: Attachment data.
+        """
+        self.__writer.add_attachment(create_time, log_time, name, media_type, data)
+
     def __enter__(self):
         return self
 
