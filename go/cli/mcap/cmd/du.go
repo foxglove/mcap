@@ -255,9 +255,13 @@ func printRecordTable(recordKindSize map[string]uint64, totalSize uint64, approx
 	})
 
 	for _, r := range records {
+		var pct float32
+		if totalSize > 0 {
+			pct = float32(r.size) / float32(totalSize) * 100.0
+		}
 		rows = append(rows, []string{
 			r.name, fmt.Sprintf("%d", r.size),
-			fmt.Sprintf("%f", float32(r.size)/float32(totalSize)*100.0),
+			fmt.Sprintf("%f", pct),
 		})
 	}
 
@@ -295,10 +299,14 @@ func printTopicTable(topicMessageSize map[string]uint64, totalMessageSize uint64
 	})
 
 	for _, info := range topicInfos {
+		var pct float32
+		if totalMessageSize > 0 {
+			pct = float32(info.size) / float32(totalMessageSize) * 100.0
+		}
 		row := []string{
 			info.name,
 			humanBytes(info.size),
-			fmt.Sprintf("%f", float32(info.size)/float32(totalMessageSize)*100.0),
+			fmt.Sprintf("%f", pct),
 		}
 
 		rows = append(rows, row)
