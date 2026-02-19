@@ -308,7 +308,7 @@ func printTopicTable(topicMessageSize map[string]uint64, totalMessageSize uint64
 }
 
 // runDuFromIndex reads only the summary section and message indexes to compute
-// space usage without decompressing any chunk data. Used by --approx.
+// space usage without decompressing any chunk data. Used by --approximate.
 func runDuFromIndex(rs io.ReadSeeker) error {
 	// Get file size.
 	fileSize, err := rs.Seek(0, io.SeekEnd)
@@ -561,7 +561,7 @@ func processChunkMessageIndexesAt(
 // between two messages, the offset difference will include those extra bytes,
 // inflating the computed data size for the preceding message. In practice,
 // standard MCAP writers emit all Schema/Channel records before messages in
-// each chunk, so this does not affect typical files. Omit --approx for exact
+// each chunk, so this does not affect typical files. Omit --approximate for exact
 // results on files with non-standard record ordering.
 func parseChunkMessageIndexes(
 	buf []byte,
@@ -648,7 +648,7 @@ func parseChunkMessageIndexes(
 	return topicSizes, totalSize, nil
 }
 
-var duApprox bool
+var duApproximate bool
 
 var duCmd = &cobra.Command{
 	Use:   "du <file>",
@@ -656,7 +656,7 @@ var duCmd = &cobra.Command{
 	Long: `This command reports space usage within an mcap file. Space usage for messages is
 calculated using the uncompressed size.
 
-Use --approx for a faster approximation that skips chunk decompression. It may
+Use --approximate for a faster approximation that skips chunk decompression. It may
 over-count per-topic message sizes when non-message records (Schema, Channel)
 are interleaved between messages within a chunk.`,
 	Run: func(_ *cobra.Command, args []string) {
@@ -666,7 +666,7 @@ are interleaved between messages within a chunk.`,
 		}
 		filename := args[0]
 		err := utils.WithReader(ctx, filename, func(_ bool, rs io.ReadSeeker) error {
-			if duApprox {
+			if duApproximate {
 				return runDuFromIndex(rs)
 			}
 			u := newUsage(rs)
@@ -679,7 +679,7 @@ are interleaved between messages within a chunk.`,
 }
 
 func init() {
-	duCmd.PersistentFlags().BoolVar(&duApprox, "approx", false,
+	duCmd.PersistentFlags().BoolVar(&duApproximate, "approximate", false,
 		"Fast approximation using message indexes "+
 			"(skips decompression, may over-count if non-message records are interleaved in chunks)")
 	rootCmd.AddCommand(duCmd)
