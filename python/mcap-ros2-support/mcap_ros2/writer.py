@@ -117,13 +117,13 @@ class Writer:
             data=data,
         )
 
-    def add_metadata(self, name: str, metadata: Dict[str, str]):
+    def add_metadata(self, name: str, data: Dict[str, str]):
         """Writes metadata to an MCAP file.
 
         :param name: the name of the metadata.
-        :param metadata: a dictionary of metadata key-value pairs.
+        :param data: a dictionary of metadata key-value pairs.
         """
-        self._writer.add_metadata(name, metadata)
+        self._writer.add_metadata(name, data)
 
     def add_attachment(
         self, create_time: int, log_time: int, name: str, media_type: str, data: bytes

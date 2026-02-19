@@ -98,9 +98,10 @@ def test_write_metadata():
 
     output.seek(0)
     reader = make_reader(output, decoder_factories=[DecoderFactory()])
-    for metadata in reader.iter_metadata():
-        assert metadata.name == "test_metadata"
-        assert metadata.metadata == {"key": "value"}
+    metadata = list(reader.iter_metadata())
+    assert len(metadata) == 1
+    assert metadata[0].name == "test_metadata"
+    assert metadata[0].metadata == {"key": "value"}
 
 
 def test_write_attachment():
@@ -111,7 +112,8 @@ def test_write_attachment():
 
     output.seek(0)
     reader = make_reader(output, decoder_factories=[DecoderFactory()])
-    for attachment in reader.iter_attachments():
-        assert attachment.name == "test_attachment"
-        assert attachment.media_type == "text/plain"
-        assert attachment.data == b"test_data"
+    attachments = list(reader.iter_attachments())
+    assert len(attachments) == 1
+    assert attachments[0].name == "test_attachment"
+    assert attachments[0].media_type == "text/plain"
+    assert attachments[0].data == b"test_data"
