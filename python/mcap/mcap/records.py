@@ -32,7 +32,7 @@ class Attachment(McapRecord):
         builder.write4(0)  # crc
         builder.finish_record()
         data = memoryview(builder.end())
-        stream.write(data[:-4])
+        stream.write(bytes(data[:-4]))
         stream.write4(zlib.crc32(data[9:-4]))
 
     @staticmethod

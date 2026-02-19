@@ -575,33 +575,25 @@ def _coerce_value(
         return (
             str(value)
             if value is not None
-            else default_value
-            if default_value is not None
-            else ""
+            else default_value if default_value is not None else ""
         )
     elif type_name in FLOAT_TYPES:
         return (
             float(value)
             if value is not None
-            else default_value
-            if default_value is not None
-            else 0.0
+            else default_value if default_value is not None else 0.0
         )
     elif type_name in INT_TYPES:
         return (
             int(value)
             if value is not None
-            else default_value
-            if default_value is not None
-            else 0
+            else default_value if default_value is not None else 0
         )
     elif type_name == "bool":
         return (
             bool(value)
             if value is not None
-            else default_value
-            if default_value is not None
-            else False
+            else default_value if default_value is not None else False
         )
     else:
         raise NotImplementedError(f'coercion for type "{type_name}" is not implemented')

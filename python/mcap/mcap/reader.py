@@ -1,5 +1,5 @@
-""" High-level classes for reading content out of MCAP data sources.
-"""
+"""High-level classes for reading content out of MCAP data sources."""
+
 import io
 from abc import ABC, abstractmethod
 from typing import (

@@ -1,7 +1,7 @@
 import time
-from typing import List
+from typing import List, Union
 
-from mcap._message_queue import QueueItem, _MessageQueue, make_message_queue
+from mcap._message_queue import MessageTuple, _MessageQueue, make_message_queue
 from mcap.records import Channel, ChunkIndex, Message, Schema
 
 
@@ -21,7 +21,7 @@ def dummy_chunk_index(start_time: int, end_time: int, chunk_offset: int) -> Chun
 
 def dummy_message_tuple(
     log_time: int, chunk_offset: int, message_offset: int
-) -> QueueItem:
+) -> MessageTuple:
     return (
         (
             Schema(
@@ -65,10 +65,10 @@ def push_messages_reverse_order(mq: _MessageQueue, n: int = 10_000):
 
 
 def test_chunk_message_ordering():
-    mq = make_message_queue(log_time_order=True)
+    mq: _MessageQueue = make_message_queue(log_time_order=True)
     push_elements(mq)
 
-    results: List[QueueItem] = []
+    results: List[Union[ChunkIndex, MessageTuple]] = []
     while mq:
         results.append(mq.pop())
 
@@ -87,10 +87,10 @@ def test_chunk_message_ordering():
 
 
 def test_reverse_ordering():
-    mq = make_message_queue(log_time_order=True, reverse=True)
+    mq: _MessageQueue = make_message_queue(log_time_order=True, reverse=True)
     push_elements(mq)
 
-    results: List[QueueItem] = []
+    results: List[Union[ChunkIndex, MessageTuple]] = []
     while mq:
         results.append(mq.pop())
 
@@ -109,10 +109,10 @@ def test_reverse_ordering():
 
 
 def test_insert_ordering():
-    mq = make_message_queue(log_time_order=False)
+    mq: _MessageQueue = make_message_queue(log_time_order=False)
     push_elements(mq)
 
-    results: List[QueueItem] = []
+    results: List[Union[ChunkIndex, MessageTuple]] = []
     while mq:
         results.append(mq.pop())
 
@@ -131,14 +131,14 @@ def test_insert_ordering():
 
 
 def test_insert_order_is_faster():
-    log_time_order_mq = make_message_queue(log_time_order=True)
+    log_time_order_mq: _MessageQueue = make_message_queue(log_time_order=True)
     push_messages_reverse_order(log_time_order_mq)
     log_time_start = time.time()
     while log_time_order_mq:
         log_time_order_mq.pop()
     log_time_end = time.time()
 
-    insert_order_mq = make_message_queue(log_time_order=False)
+    insert_order_mq: _MessageQueue = make_message_queue(log_time_order=False)
     push_messages_reverse_order(insert_order_mq)
     insert_start = time.time()
     while insert_order_mq:

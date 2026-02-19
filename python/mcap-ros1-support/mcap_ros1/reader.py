@@ -10,6 +10,7 @@
 String(data="hello")
 String(data="goodbye")
 """
+
 import warnings
 from datetime import datetime
 from os import PathLike

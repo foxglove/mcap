@@ -10,6 +10,7 @@ instantiate the :py:class:`mcap.reader.McapReader` with a
 MyProtoClass(data="hello")
 MyProtoClass(data="goodbye")
 """
+
 from __future__ import annotations
 
 import warnings
