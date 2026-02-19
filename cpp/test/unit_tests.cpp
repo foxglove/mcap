@@ -1085,7 +1085,7 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
     writer.close();
   }
 
-  // Verify first file only has Schema1 and Channel1
+  // Verify first file has all schemas and all channels, but only one message
   {
     mcap::McapReader reader;
     auto status = reader.open(buffer1);
@@ -1094,13 +1094,33 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
     status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
     requireOk(status);
 
+    const auto maybeStats = reader.statistics();
+    REQUIRE(maybeStats.has_value());
+    const auto& stats = *maybeStats;
+    REQUIRE(stats.messageCount == 1);
+    REQUIRE(stats.schemaCount == 2);
+    REQUIRE(stats.channelCount == 2);
+    REQUIRE(stats.attachmentCount == 0);
+    REQUIRE(stats.metadataCount == 0);
+    REQUIRE(stats.channelMessageCounts.size() == 1);
+
     const auto& schemas = reader.schemas();
-    REQUIRE(schemas.size() == 1);
-    REQUIRE(schemas.begin()->second->name == "Schema1");
+    REQUIRE(schemas.size() == 2);
+    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+              return x.second->name == "Schema1";
+            }) != schemas.end());
+    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+              return x.second->name == "Schema2";
+            }) != schemas.end());
 
     const auto& channels = reader.channels();
-    REQUIRE(channels.size() == 1);
-    REQUIRE(channels.begin()->second->topic == "topic1");
+    REQUIRE(channels.size() == 2);
+    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+              return x.second->topic == "topic1";
+            }) != channels.end());
+    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+              return x.second->topic == "topic2";
+            }) != channels.end());
 
     reader.close();
   }
@@ -1116,7 +1136,7 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
     writer.close();
   }
 
-  // Verify second file only has Schema2 and Channel2
+  // Verify second file has all schemas and all channels, but only one message
   {
     mcap::McapReader reader;
     auto status = reader.open(buffer2);
@@ -1125,13 +1145,33 @@ TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[write
     status = reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan);
     requireOk(status);
 
+    const auto maybeStats = reader.statistics();
+    REQUIRE(maybeStats.has_value());
+    const auto& stats = *maybeStats;
+    REQUIRE(stats.messageCount == 1);
+    REQUIRE(stats.schemaCount == 2);
+    REQUIRE(stats.channelCount == 2);
+    REQUIRE(stats.attachmentCount == 0);
+    REQUIRE(stats.metadataCount == 0);
+    REQUIRE(stats.channelMessageCounts.size() == 1);
+
     const auto& schemas = reader.schemas();
-    REQUIRE(schemas.size() == 1);
-    REQUIRE(schemas.begin()->second->name == "Schema2");
+    REQUIRE(schemas.size() == 2);
+    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+              return x.second->name == "Schema1";
+            }) != schemas.end());
+    REQUIRE(std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+              return x.second->name == "Schema2";
+            }) != schemas.end());
 
     const auto& channels = reader.channels();
-    REQUIRE(channels.size() == 1);
-    REQUIRE(channels.begin()->second->topic == "topic2");
+    REQUIRE(channels.size() == 2);
+    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+              return x.second->topic == "topic1";
+            }) != channels.end());
+    REQUIRE(std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+              return x.second->topic == "topic2";
+            }) != channels.end());
 
     reader.close();
   }
@@ -1162,4 +1202,79 @@ TEST_CASE("FileReader works on files larger than 2GiB") {
   REQUIRE((char)*output == 'X');
   REQUIRE(std::ferror(file) == 0);
   std::fclose(file);
+}
+
+TEST_CASE("Multiple empty channels and schemas are preserved", "[reader][writer]") {
+  Buffer buffer;
+
+  // Write
+  {
+    mcap::McapWriter writer;
+    writer.open(buffer, mcap::McapWriterOptions("custom_profile"));
+
+    mcap::Schema schema1("sensor_msgs/Imu", "ros2msg", "# IMU message definition");
+    writer.addSchema(schema1);
+
+    mcap::Schema schema2("geometry_msgs/Twist", "ros2msg", "# Twist message definition");
+    writer.addSchema(schema2);
+
+    mcap::Channel ch1("/imu/data", "cdr", schema1.id);
+    writer.addChannel(ch1);
+
+    mcap::Channel ch2("/cmd_vel", "cdr", schema2.id);
+    writer.addChannel(ch2);
+
+    // No messages written.
+    writer.close();
+  }
+
+  // Read
+  {
+    mcap::McapReader reader;
+    auto status = reader.open(buffer);
+    REQUIRE(status.ok());
+
+    status = reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan);
+    REQUIRE(status.ok());
+
+    const auto maybeStats = reader.statistics();
+    REQUIRE(maybeStats.has_value());
+    const auto& stats = *maybeStats;
+    REQUIRE(stats.messageCount == 0);
+    REQUIRE(stats.schemaCount == 2);
+    REQUIRE(stats.channelCount == 2);
+    REQUIRE(stats.attachmentCount == 0);
+    REQUIRE(stats.metadataCount == 0);
+    REQUIRE(stats.channelMessageCounts.size() == 0);
+
+    // Verify schemas
+    const auto& schemas = reader.schemas();
+    REQUIRE(schemas.size() == 2);
+
+    const auto& imu_schema = std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+      return x.second->name == "sensor_msgs/Imu";
+    });
+    REQUIRE(imu_schema != schemas.end());
+
+    const auto& twist_schema = std::find_if(schemas.begin(), schemas.end(), [](const auto& x) {
+      return x.second->name == "geometry_msgs/Twist";
+    });
+    REQUIRE(twist_schema != schemas.end());
+
+    // Verify channels
+    const auto& channels = reader.channels();
+    REQUIRE(channels.size() == 2);
+
+    const auto& imu_channel = std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+      return x.second->topic == "/imu/data";
+    });
+    REQUIRE(imu_channel != channels.end());
+
+    const auto& cmd_vel_channel = std::find_if(channels.begin(), channels.end(), [](const auto& x) {
+      return x.second->topic == "/cmd_vel";
+    });
+    REQUIRE(cmd_vel_channel != channels.end());
+
+    reader.close();
+  }
 }

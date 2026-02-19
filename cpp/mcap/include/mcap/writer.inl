@@ -395,19 +395,16 @@ void McapWriter::close() {
     ByteOffset schemaStart = fileOutput.size();
     if (!options_.noRepeatedSchemas) {
       // Write all schema records
-      for (const auto& schemaId : writtenSchemas_) {
-        write(fileOutput, schemas_[schemaId - 1]);
+      for (const auto& schema : schemas_) {
+        write(fileOutput, schema);
       }
     }
 
     ByteOffset channelStart = fileOutput.size();
     if (!options_.noRepeatedChannels) {
-      // Write all channel records, but only if they appeared in this file
-      auto& channelMessageCounts = statistics_.channelMessageCounts;
+      // Write all channel records
       for (const auto& channel : channels_) {
-        if (channelMessageCounts.find(channel.id) != channelMessageCounts.end()) {
-          write(fileOutput, channel);
-        }
+        write(fileOutput, channel);
       }
     }
 
@@ -444,7 +441,7 @@ void McapWriter::close() {
     if (!options_.noSummaryOffsets) {
       // Write summary offset records
       summaryOffsetStart = fileOutput.size();
-      if (!options_.noRepeatedSchemas && !writtenSchemas_.empty()) {
+      if (!options_.noRepeatedSchemas && !schemas_.empty()) {
         write(fileOutput, SummaryOffset{OpCode::Schema, schemaStart, channelStart - schemaStart});
       }
       if (!options_.noRepeatedChannels && !channels_.empty()) {
@@ -498,7 +495,13 @@ void McapWriter::terminate() {
   attachmentIndex_.clear();
   metadataIndex_.clear();
   chunkIndex_.clear();
-  statistics_ = {};
+  statistics_.messageCount = 0;
+  statistics_.chunkCount = 0;
+  statistics_.channelMessageCounts.clear();
+  statistics_.metadataCount = 0;
+  statistics_.attachmentCount = 0;
+  statistics_.messageStartTime = 0;
+  statistics_.messageEndTime = 0;
   writtenSchemas_.clear();
   currentMessageIndex_.clear();
   currentChunkStart_ = MaxTime;
@@ -515,11 +518,13 @@ void McapWriter::terminate() {
 void McapWriter::addSchema(Schema& schema) {
   schema.id = uint16_t(schemas_.size() + 1);
   schemas_.push_back(schema);
+  ++statistics_.schemaCount;
 }
 
 void McapWriter::addChannel(Channel& channel) {
   channel.id = uint16_t(channels_.size() + 1);
   channels_.push_back(channel);
+  ++statistics_.channelCount;
 }
 
 Status McapWriter::write(const Message& message) {
@@ -551,9 +556,6 @@ Status McapWriter::write(const Message& message) {
       // Write the Schema record
       uncompressedSize_ += write(output, schemas_[schemaIndex]);
       writtenSchemas_.insert(channel.schemaId);
-
-      // Update schema statistics
-      ++statistics_.schemaCount;
     }
 
     // Write the Channel record
@@ -561,7 +563,6 @@ Status McapWriter::write(const Message& message) {
 
     // Update channel statistics
     channelMessageCounts.emplace(message.channelId, 0);
-    ++statistics_.channelCount;
   }
 
   // Before writing a message that would overflow the current chunk, close it.
