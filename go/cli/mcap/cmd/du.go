@@ -315,7 +315,7 @@ func printTopicTable(topicMessageSize map[string]uint64, totalMessageSize uint64
 	utils.FormatTable(os.Stdout, rows)
 }
 
-// runDuFromIndex reads only the summary section and message indexes to compute
+// Reads only the summary section and message indexes to compute
 // space usage without decompressing any chunk data. Used by --approximate.
 func runDuFromIndex(rs io.ReadSeeker) error {
 	// Get file size.
@@ -436,10 +436,7 @@ func computeTopicSizesParallel(
 	chunkIndexes []*mcap.ChunkIndex,
 	channelTopics map[uint16]string,
 ) (topicSizes map[string]uint64, totalSize uint64, err error) {
-	numWorkers := runtime.NumCPU()
-	if numWorkers > len(chunkIndexes) {
-		numWorkers = len(chunkIndexes)
-	}
+	numWorkers := min(16, runtime.NumCPU(), len(chunkIndexes))
 
 	type result struct {
 		topicSizes map[string]uint64
@@ -450,8 +447,8 @@ func computeTopicSizesParallel(
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	work := make(chan *mcap.ChunkIndex, len(chunkIndexes))
-	results := make(chan result, len(chunkIndexes))
+	work := make(chan *mcap.ChunkIndex, numWorkers)
+	results := make(chan result, numWorkers)
 
 	var wg sync.WaitGroup
 	for range numWorkers {
@@ -469,10 +466,16 @@ func computeTopicSizesParallel(
 		}()
 	}
 
-	for _, ci := range chunkIndexes {
-		work <- ci
-	}
-	close(work)
+	go func() {
+		defer close(work)
+		for _, ci := range chunkIndexes {
+			select {
+			case work <- ci:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	go func() {
 		wg.Wait()
@@ -481,15 +484,25 @@ func computeTopicSizesParallel(
 
 	topicSizes = make(map[string]uint64)
 
+	var resultErr error
 	for r := range results {
 		if r.err != nil {
-			cancel()
-			return nil, 0, r.err
+			if resultErr == nil {
+				resultErr = r.err
+				cancel()
+			}
+			continue
 		}
-		for topic, size := range r.topicSizes {
-			topicSizes[topic] += size
+		if resultErr == nil {
+			for topic, size := range r.topicSizes {
+				topicSizes[topic] += size
+			}
+			totalSize += r.totalSize
 		}
-		totalSize += r.totalSize
+	}
+
+	if resultErr != nil {
+		return nil, 0, resultErr
 	}
 
 	return topicSizes, totalSize, nil
