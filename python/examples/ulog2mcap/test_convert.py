@@ -2,8 +2,9 @@
 
 import contextlib
 import io
+from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from operator import attrgetter
 from pathlib import Path
 from types import SimpleNamespace
@@ -44,7 +45,7 @@ def _make_message_format(
 def _make_data(
     name: str,
     multi_id: int,
-    data: dict[str, np.ndarray],
+    data: dict[str, np.ndarray[Any, Any]],
 ) -> SimpleNamespace:
     return SimpleNamespace(name=name, multi_id=multi_id, data=data)
 
@@ -76,7 +77,7 @@ def _make_log_message_tagged(
     )
 
 
-def _complex_data_message() -> dict[str, np.ndarray]:
+def _complex_data_message() -> dict[str, np.ndarray[Any, Any]]:
     return {
         "timestamp": np.array([2000], dtype=np.uint64),
         "items[0].enabled": np.array([1], dtype=np.int8),
@@ -105,11 +106,14 @@ def create_ulog_mock(
         name: _make_message_format(name, fields)
         for name, fields in message_formats.items()
     }
+    messages_by_tag : defaultdict[int, list[SimpleNamespace]] = defaultdict(list)
+    for msg in logged_messages_tagged or []:
+        messages_by_tag[msg.tag].append(msg)
     return SimpleNamespace(
         message_formats=formats,
         data_list=data_list,
         logged_messages=logged_messages or [],
-        logged_messages_tagged={"tag": msg for msg in logged_messages_tagged or []},
+        logged_messages_tagged=messages_by_tag,
         start_timestamp=start_timestamp,
     )
 
@@ -223,7 +227,7 @@ class TestMockedMcapWrites:
         message_fixture: list[SimpleNamespace],
     ) -> None:
         """Should add messages with timestamps offset by start_time"""
-        start_time = datetime(2024, 1, 1, 0, 0, 0)
+        start_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
         mock_ulog = create_ulog_mock(
             message_formats=topic_fixture,
             data_list=message_fixture,
@@ -345,6 +349,8 @@ class TestMockedMcapWrites:
         ]
         logged_messages_tagged = [
             _make_log_message_tagged(2000, "WARNING", "tagged", 42),
+            _make_log_message_tagged(3000, "INFO", "other tagged", 43),
+            _make_log_message_tagged(4000, "WARNING", "first tag again", 42)
         ]
         mock_ulog = create_ulog_mock(
             message_formats={},
@@ -359,8 +365,12 @@ class TestMockedMcapWrites:
         assert list(map(attrgetter("proto_msg.message"), messages)) == [
             "untagged",
             "tagged",
+            "other tagged",
+            "first tag again"
         ]
         assert list(map(attrgetter("proto_msg.level"), messages)) == [
+            2,
+            3,
             2,
             3,
         ]  # INFO, WARNING
