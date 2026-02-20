@@ -108,9 +108,9 @@ def _get_ulog_message_classes(
 ) -> typing.Dict[str, type]:
     """Add fd to a new pool and return a dictionary of message classes by full name."""
     pool = DescriptorPool()
-    pool.Add(fd)
+    pool.Add(fd)  # type: ignore
     messages = GetMessageClassesForFiles([fd.name], pool)
-    nested = {}
+    nested : typing.Dict[str, type]= {}
     for message_class in messages.values():
         for nested_desc in message_class.DESCRIPTOR.nested_types_by_name.values():
             nested[nested_desc.full_name] = GetMessageClass(nested_desc)
@@ -219,12 +219,12 @@ def convert_ulog(
                 )
 
     for log_msg in itertools.chain(
-        ulog.logged_messages, ulog.logged_messages_tagged.values()
+        ulog.logged_messages, *ulog.logged_messages_tagged.values()
     ):
         timestamp = (log_msg.timestamp + time_offset_us) * 1000
         proto_msg = log_pb2.Log()  # type: ignore
-        proto_msg.timestamp.sec = int(timestamp / 1_000_000_000)
-        proto_msg.timestamp.nsec = int(timestamp % 1_000_000_000)
+        proto_msg.timestamp.sec = int(timestamp / 1_000_000_000)  # type: ignore
+        proto_msg.timestamp.nsec = int(timestamp % 1_000_000_000)  # type: ignore
         proto_msg.level = ulog_level_to_fox_log_level(log_msg.log_level_str())
         proto_msg.message = log_msg.message
         mcap.write_message(
