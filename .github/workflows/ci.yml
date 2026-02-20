@@ -82,7 +82,7 @@ jobs:
       - run: yarn test:conformance --runner go-
 
   conformance-python:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
         with:
@@ -289,7 +289,7 @@ jobs:
       - run: yarn workspace @foxglove/mcap-example-ulog2mcap typescript:test
 
   python:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: python
