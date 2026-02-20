@@ -5,7 +5,7 @@ from enum import Enum, Flag, auto
 from io import BufferedWriter, RawIOBase
 from typing import IO, Any, Dict, List, OrderedDict, Union
 
-from . import __version__
+from .__init__ import __version__
 
 from .exceptions import UnsupportedCompressionError
 
