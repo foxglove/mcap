@@ -1,7 +1,7 @@
 import heapq
 from abc import ABC, abstractmethod
 from collections import deque
-from typing import Deque, List, Optional, Tuple, Union
+from typing import Deque, List, Optional, Tuple, Union, cast
 
 from .records import Channel, ChunkIndex, Message, Schema
 
@@ -47,24 +47,30 @@ class _Orderable:
 
 class _ChunkIndexWrapper(_Orderable):
     def log_time(self) -> int:
-        self.item: ChunkIndex
+        item = cast(ChunkIndex, self.item)
         if self.reverse:
-            return self.item.message_end_time
-        return self.item.message_start_time
+            return item.message_end_time
+        return item.message_start_time
 
     def position(self) -> Tuple[int, Optional[int]]:
+        item = cast(ChunkIndex, self.item)
         if self.reverse:
-            return (self.item.chunk_start_offset + self.item.chunk_length, None)
-        return (self.item.chunk_start_offset, None)
+            return (item.chunk_start_offset + item.chunk_length, None)
+        return (item.chunk_start_offset, None)
 
 
 class _MessageTupleWrapper(_Orderable):
     def log_time(self) -> int:
-        self.item: Tuple[Tuple[Schema, Channel, Message], int, int]
-        return self.item[0][2].log_time
+        item = cast(
+            Tuple[Tuple[Optional[Schema], Channel, Message], int, int], self.item
+        )
+        return item[0][2].log_time
 
     def position(self) -> Tuple[int, Optional[int]]:
-        return (self.item[1], self.item[2])
+        item = cast(
+            Tuple[Tuple[Optional[Schema], Channel, Message], int, int], self.item
+        )
+        return (item[1], item[2])
 
 
 def _make_orderable(item: QueueItem, reverse: bool) -> _Orderable:
