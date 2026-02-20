@@ -57,6 +57,7 @@ func (instance *usage) processChunk(chunk *mcap.Chunk) error {
 		if err != nil {
 			return fmt.Errorf("could not make zstd decoder: %w", err)
 		}
+		defer chunkDataReader.Close()
 		uncompressedBytes, err = io.ReadAll(chunkDataReader)
 		if err != nil {
 			return fmt.Errorf("could not decompress: %w", err)
