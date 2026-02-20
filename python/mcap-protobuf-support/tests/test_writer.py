@@ -36,3 +36,32 @@ def test_write_wrong_schema():
         writer.write_message("timestamps", Timestamp(seconds=5, nanos=10))
         with pytest.raises(ValueError):
             writer.write_message("timestamps", Duration(seconds=5, nanos=10))
+
+
+def test_write_metadata():
+    output = BytesIO()
+    writer = Writer(output=output)
+    writer.add_metadata("test_metadata", {"key": "value"})
+    writer.finish()
+
+    output.seek(0)
+    reader = make_reader(output, decoder_factories=[DecoderFactory()])
+    metadata = list(reader.iter_metadata())
+    assert len(metadata) == 1
+    assert metadata[0].name == "test_metadata"
+    assert metadata[0].metadata == {"key": "value"}
+
+
+def test_write_attachment():
+    output = BytesIO()
+    writer = Writer(output=output)
+    writer.add_attachment(10, 10, "test_attachment", "text/plain", b"test_data")
+    writer.finish()
+
+    output.seek(0)
+    reader = make_reader(output, decoder_factories=[DecoderFactory()])
+    attachments = list(reader.iter_attachments())
+    assert len(attachments) == 1
+    assert attachments[0].name == "test_attachment"
+    assert attachments[0].media_type == "text/plain"
+    assert attachments[0].data == b"test_data"

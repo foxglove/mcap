@@ -88,3 +88,32 @@ def test_write_uint8_array_with_py_array():
         assert msg.message.log_time == i
         assert msg.message.publish_time == i
         assert msg.message.sequence == i
+
+
+def test_write_metadata():
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    ros_writer.add_metadata("test_metadata", {"key": "value"})
+    ros_writer.finish()
+
+    output.seek(0)
+    reader = make_reader(output, decoder_factories=[DecoderFactory()])
+    metadata = list(reader.iter_metadata())
+    assert len(metadata) == 1
+    assert metadata[0].name == "test_metadata"
+    assert metadata[0].metadata == {"key": "value"}
+
+
+def test_write_attachment():
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    ros_writer.add_attachment(10, 10, "test_attachment", "text/plain", b"test_data")
+    ros_writer.finish()
+
+    output.seek(0)
+    reader = make_reader(output, decoder_factories=[DecoderFactory()])
+    attachments = list(reader.iter_attachments())
+    assert len(attachments) == 1
+    assert attachments[0].name == "test_attachment"
+    assert attachments[0].media_type == "text/plain"
+    assert attachments[0].data == b"test_data"
