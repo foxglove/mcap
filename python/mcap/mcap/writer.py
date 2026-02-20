@@ -1,4 +1,6 @@
+import functools
 import struct
+import weakref
 import zlib
 from collections import defaultdict
 from enum import Enum, Flag, auto
@@ -58,6 +60,25 @@ class IndexType(Flag):
     MESSAGE = auto()
     METADATA = auto()
     ALL = ATTACHMENT | CHUNK | MESSAGE | METADATA
+
+
+def _cache_method(func):
+    """
+    Helper decorator for caching the output of a function (sometimes called memoization) based on
+    the arguments passed to the function, but ignoring self
+
+    :param func: The function to decorate
+    """
+
+    @functools.lru_cache(maxsize=None, typed=False)
+    def _func(_self, *args, **kwargs):
+        return func(_self(), *args, **kwargs)
+
+    @functools.wraps(func)
+    def inner(self, *args, **kwargs):
+        return _func(weakref.ref(self), *args, **kwargs)
+
+    return inner
 
 
 class Writer:
@@ -357,6 +378,7 @@ class Writer:
         if self.__should_close:
             self.__stream.close()
 
+    @_cache_method
     def register_channel(
         self,
         topic: str,
@@ -391,6 +413,7 @@ class Writer:
             channel.write(self.__record_builder)
         return channel_id
 
+    @_cache_method
     def register_schema(self, name: str, encoding: str, data: bytes):
         """
         Registers a new message schema. Returns the new integer schema id.
