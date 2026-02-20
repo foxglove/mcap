@@ -2,9 +2,10 @@ import struct
 import zlib
 from collections import defaultdict
 from enum import Enum, Flag, auto
-from importlib.metadata import PackageNotFoundError, version
 from io import BufferedWriter, RawIOBase
 from typing import IO, Any, Dict, List, OrderedDict, Union
+
+from mcap.__init__ import __version__
 
 from .exceptions import UnsupportedCompressionError
 
@@ -39,11 +40,7 @@ from .records import (
 )
 
 MCAP0_MAGIC = struct.pack("<8B", 137, 77, 67, 65, 80, 48, 13, 10)
-try:
-    _VERSION = version("mcap")
-except PackageNotFoundError:
-    _VERSION = "unknown"
-LIBRARY_IDENTIFIER = f"python mcap {_VERSION}"
+LIBRARY_IDENTIFIER = f"python mcap {__version__}"
 
 
 class CompressionType(Enum):

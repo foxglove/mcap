@@ -1,7 +1,7 @@
 import struct
 import zlib
 from io import BytesIO
-from typing import IO, Optional
+from typing import IO, Optional, Union
 
 from .exceptions import EndOfFile
 from .opcode import Opcode
@@ -83,7 +83,7 @@ class RecordBuilder:
         self._buffer = BytesIO()
         return buf
 
-    def write(self, data: bytes):
+    def write(self, data: Union[bytes, bytearray, memoryview]):
         self._buffer.write(data)
 
     def write_prefixed_string(self, value: str):

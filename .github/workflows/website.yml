@@ -50,7 +50,7 @@ jobs:
           retention-days: 1
 
   docs-python:
-    runs-on: ubuntu-22.04 # required for python 3.10
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v6
 
