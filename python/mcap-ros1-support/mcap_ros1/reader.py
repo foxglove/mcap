@@ -10,6 +10,7 @@
 String(data="hello")
 String(data="goodbye")
 """
+
 import warnings
 from datetime import datetime
 from os import PathLike
@@ -20,7 +21,8 @@ from mcap.records import Channel, Message, Schema
 
 from .decoder import DecoderFactory
 
-warnings.warn(__doc__, DeprecationWarning)
+if __doc__ is not None:
+    warnings.warn(__doc__, DeprecationWarning)
 
 
 def read_ros1_messages(

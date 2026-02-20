@@ -10,6 +10,7 @@ instantiate the :py:class:`mcap.reader.McapReader` with a
 MyProtoClass(data="hello")
 MyProtoClass(data="goodbye")
 """
+
 from __future__ import annotations
 
 import warnings
@@ -22,7 +23,8 @@ from mcap.records import Channel, Message
 
 from .decoder import DecoderFactory
 
-warnings.warn(__doc__, DeprecationWarning)
+if __doc__ is not None:
+    warnings.warn(__doc__, DeprecationWarning)
 
 
 def read_protobuf_messages(

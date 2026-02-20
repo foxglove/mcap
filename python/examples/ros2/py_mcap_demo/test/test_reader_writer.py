@@ -26,7 +26,7 @@ def test_write_then_read(tmp_path):
     rosbag_reader_count = 0
     for topic, msg, timestamp in read_messages(str(mcap_path)):
         assert topic == "/chatter"
-        assert type(msg) == String
+        assert isinstance(msg, String)
         assert msg.data.startswith("Chatter")
         rosbag_reader_count += 1
 

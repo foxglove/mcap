@@ -1,21 +1,21 @@
 import heapq
 from abc import ABC, abstractmethod
 from collections import deque
-from typing import Deque, List, Optional, Tuple, Union
+from typing import Deque, Generic, List, Optional, Tuple, TypeVar, Union
 
 from .records import Channel, ChunkIndex, Message, Schema
 
-QueueItem = Union[
-    ChunkIndex, Tuple[Tuple[Optional[Schema], Channel, Message], int, int]
-]
+MessageTuple = Tuple[Tuple[Optional[Schema], Channel, Message], int, int]
+QueueItem = Union[ChunkIndex, MessageTuple]
+QueueItemType = TypeVar("QueueItemType", bound=QueueItem)
 
 
-class _Orderable:
-    def __init__(self, item: QueueItem, reverse: bool):
-        self.item: QueueItem = item
+class _Orderable(Generic[QueueItemType]):
+    def __init__(self, item: QueueItemType, reverse: bool):
+        self.item = item
         self.reverse = reverse
 
-    def __lt__(self, other: "_Orderable") -> bool:
+    def __lt__(self, other: "_Orderable[QueueItemType]") -> bool:
         if self.log_time() == other.log_time():
             return self._position_less_than(other)
         return self._compare(self.log_time(), other.log_time())
@@ -25,7 +25,7 @@ class _Orderable:
             return a > b
         return a < b
 
-    def _position_less_than(self, other: "_Orderable") -> bool:
+    def _position_less_than(self, other: "_Orderable[QueueItemType]") -> bool:
         this_chunk_offset, this_message_offset = self.position()
         other_chunk_offset, other_message_offset = other.position()
         if this_message_offset is None or other_message_offset is None:
@@ -45,9 +45,8 @@ class _Orderable:
         )
 
 
-class _ChunkIndexWrapper(_Orderable):
+class _ChunkIndexWrapper(_Orderable[ChunkIndex]):
     def log_time(self) -> int:
-        self.item: ChunkIndex
         if self.reverse:
             return self.item.message_end_time
         return self.item.message_start_time
@@ -58,16 +57,17 @@ class _ChunkIndexWrapper(_Orderable):
         return (self.item.chunk_start_offset, None)
 
 
-class _MessageTupleWrapper(_Orderable):
+class _MessageTupleWrapper(_Orderable[MessageTuple]):
     def log_time(self) -> int:
-        self.item: Tuple[Tuple[Schema, Channel, Message], int, int]
         return self.item[0][2].log_time
 
     def position(self) -> Tuple[int, Optional[int]]:
         return (self.item[1], self.item[2])
 
 
-def _make_orderable(item: QueueItem, reverse: bool) -> _Orderable:
+def _make_orderable(
+    item: QueueItem, reverse: bool
+) -> Union[_ChunkIndexWrapper, _MessageTupleWrapper]:
     if isinstance(item, ChunkIndex):
         return _ChunkIndexWrapper(item, reverse)
     return _MessageTupleWrapper(item, reverse)
@@ -75,7 +75,7 @@ def _make_orderable(item: QueueItem, reverse: bool) -> _Orderable:
 
 class _MessageQueue(ABC):
     @abstractmethod
-    def push(self, item: QueueItem):
+    def push(self, item: QueueItem) -> None:
         raise NotImplementedError()
 
     @abstractmethod
@@ -89,7 +89,7 @@ class _MessageQueue(ABC):
 
 class LogTimeOrderQueue(_MessageQueue):
     def __init__(self, reverse: bool = False):
-        self._q: List[_Orderable] = []
+        self._q: List[Union[_ChunkIndexWrapper, _MessageTupleWrapper]] = []
         self._reverse = reverse
 
     def push(self, item: QueueItem):

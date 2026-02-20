@@ -5,6 +5,7 @@ from enum import Enum, Flag, auto
 from io import BufferedWriter, RawIOBase
 from typing import IO, Any, Dict, List, OrderedDict, Union
 
+from .__init__ import __version__
 from .exceptions import UnsupportedCompressionError
 
 try:
@@ -16,8 +17,6 @@ try:
     import zstandard
 except ImportError:
     zstandard = None
-
-from mcap import __version__
 
 from ._chunk_builder import ChunkBuilder
 from .data_stream import RecordBuilder

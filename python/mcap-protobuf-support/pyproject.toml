@@ -8,6 +8,9 @@ build-backend = "setuptools.build_meta"
 [tool.black]
 exclude = "(tests|examples)/.*_pb2.py"
 
+[tool.pyright]
+extraPaths = ["../mcap"]
+
 [tool.pytest.ini_options]
 addopts = "-vv --color=yes"
 log_cli = true

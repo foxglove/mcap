@@ -57,7 +57,7 @@ def produce_corrupted_mcap(filename: Path, to_corrupt: str) -> bytes:
 
 @pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
 def test_validation_passes(
-    reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader]]
+    reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader]],
 ):
     with open(DEMO_MCAP, "rb") as f:
         reader = reader_cls(f, validate_crcs=True)
@@ -71,7 +71,7 @@ def test_validation_passes(
 
 @pytest.mark.parametrize("reader_cls", [SeekingReader, NonSeekingReader])
 def test_crc_chunk_validation(
-    reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader]]
+    reader_cls: Union[Type[SeekingReader], Type[NonSeekingReader]],
 ):
     content = produce_corrupted_mcap(DEMO_MCAP, "chunk")
     reader = reader_cls(BytesIO(content), validate_crcs=True)
