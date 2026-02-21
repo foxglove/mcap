@@ -110,7 +110,7 @@ def _get_ulog_message_classes(
     pool = DescriptorPool()
     pool.Add(fd)  # type: ignore
     messages = GetMessageClassesForFiles([fd.name], pool)
-    nested : typing.Dict[str, type]= {}
+    nested : typing.Dict[str, type] = {}
     for message_class in messages.values():
         for nested_desc in message_class.DESCRIPTOR.nested_types_by_name.values():
             nested[nested_desc.full_name] = GetMessageClass(nested_desc)
