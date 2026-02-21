@@ -237,9 +237,9 @@ class TestMockedMcapWrites:
             messages = list(read_protobuf_messages(reader))
         assert len(messages) == len(message_fixture)
         assert list(map(attrgetter("log_time_ns"), messages)) == [
-            1704096000001000000,
-            1704096000002000000,
-            1704096000003000000,
+            1704067200001000000,
+            1704067200002000000,
+            1704067200003000000,
         ]
 
     def test_handle_string_fields(self) -> None:
@@ -360,8 +360,8 @@ class TestMockedMcapWrites:
         )
         with _write_mcap_yield_reader(mock_ulog) as reader:
             messages = list(read_protobuf_messages(reader))
-        assert len(messages) == 2
-        assert list(map(attrgetter("topic"), messages)) == ["/log_message"] * 2
+        assert len(messages) == 4
+        assert list(map(attrgetter("topic"), messages)) == ["/log_message"] * 4
         assert list(map(attrgetter("proto_msg.message"), messages)) == [
             "untagged",
             "tagged",
