@@ -10,7 +10,7 @@ require (
 	github.com/fatih/color v1.13.0
 	github.com/foxglove/go-rosbag v0.0.7
 	github.com/foxglove/mcap/go/mcap v1.7.4
-	github.com/foxglove/mcap/go/ros v0.0.0-20230114025807-456e6a6ca1be
+	github.com/foxglove/mcap/go/ros v0.0.0-20251222190015-2625e1e9b1e9
 	github.com/klauspost/compress v1.16.7
 	github.com/mattn/go-sqlite3 v1.14.14
 	github.com/olekukonko/tablewriter v0.0.5
@@ -19,6 +19,7 @@ require (
 	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.12.0
 	github.com/stretchr/testify v1.9.0
+	github.com/volcengine/ve-tos-golang-sdk/v2 v2.8.0
 	google.golang.org/protobuf v1.28.0
 )
 
@@ -70,6 +71,7 @@ require (
 	go.opencensus.io v0.23.0 // indirect
 	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e // indirect
 	golang.org/x/oauth2 v0.0.0-20220630143837-2104d58473e0 // indirect
+	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
 	golang.org/x/sys v0.6.0 // indirect
 	golang.org/x/term v0.6.0 // indirect
 	golang.org/x/text v0.3.7 // indirect
