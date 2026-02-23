@@ -106,7 +106,7 @@ def create_ulog_mock(
         name: _make_message_format(name, fields)
         for name, fields in message_formats.items()
     }
-    messages_by_tag : defaultdict[int, list[SimpleNamespace]] = defaultdict(list)
+    messages_by_tag: defaultdict[int, list[SimpleNamespace]] = defaultdict(list)
     for msg in logged_messages_tagged or []:
         messages_by_tag[msg.tag].append(msg)
     return SimpleNamespace(

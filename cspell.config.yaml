@@ -72,7 +72,6 @@ words:
   - jsonschema
   - kaitai
   - libmcap
-  - ndarray
   - magick
   - matplotlib
   - mcap
@@ -80,6 +79,7 @@ words:
   - msgpack
   - nanos
   - nanosec
+  - ndarray
   - noenv
   - Norlab
   - nsec

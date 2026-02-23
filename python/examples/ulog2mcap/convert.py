@@ -110,7 +110,7 @@ def _get_ulog_message_classes(
     pool = DescriptorPool()
     pool.Add(fd)  # type: ignore
     messages = GetMessageClassesForFiles([fd.name], pool)
-    nested : typing.Dict[str, type] = {}
+    nested: typing.Dict[str, type] = {}
     for message_class in messages.values():
         for nested_desc in message_class.DESCRIPTOR.nested_types_by_name.values():
             nested[nested_desc.full_name] = GetMessageClass(nested_desc)
@@ -239,7 +239,7 @@ def parse_microseconds_date(date: str) -> datetime:
     if date.isdigit():
         return datetime.fromtimestamp(int(date) / 1_000000, tz=timezone.utc)
     else:
-        return datetime.fromisoformat(date)
+        return datetime.fromisoformat(date).astimezone(timezone.utc)
 
 
 if __name__ == "__main__":
@@ -286,4 +286,3 @@ if __name__ == "__main__":
         convert_ulog(
             ulog, mcap, start_time=start_time, metadata=[(args.metadata_name, metadata)]
         )
-        mcap.finish()
