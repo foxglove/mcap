@@ -62,8 +62,8 @@ The version number is set at build time based on the tag.
    - cpp/build.sh
    - cpp/docs/conanfile.py
    - cpp/examples/conanfile.py
+   - cpp/mcap/conanfile.py
    - cpp/mcap/include/mcap/types.hpp (`MCAP_LIBRARY_VERSION`)
-   - cpp/mcap/include/conanfile.py
    - cpp/test/conanfile.py
 2. Tag a release matching the version number `releases/cpp/vX.Y.Z`
 
