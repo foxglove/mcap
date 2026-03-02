@@ -284,7 +284,7 @@ def convert_ulog(
             elif np.issubdtype(type(param_value), np.integer):
                 field_type = FieldDescriptorProto.TYPE_INT32
             else:
-                raise ValueError(f"Unsupported parameter type: {type(value)}")
+                raise ValueError(f"Unsupported parameter type: {type(param_value)}")
 
             fields.append((param_name, field_type, False))
         desc = _build_descriptor_proto("Parameters", fields)

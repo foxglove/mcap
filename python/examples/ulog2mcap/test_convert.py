@@ -131,7 +131,6 @@ def _write_mcap_yield_reader(
     buffer = io.BytesIO()
     with Writer(buffer) as mcap:
         convert_ulog(cast(ULog, ulog), mcap, start_time=start_time, metadata=metadata)
-        mcap.finish()
     buffer.seek(0)
     yield make_reader(buffer, decoder_factories=[DecoderFactory()])
 
@@ -623,13 +622,11 @@ class TestFullConversion:
             raise FileNotFoundError(f"Fixture not found: {ulog_path}")
 
         output_path = tmp_path / "output.mcap"
-        with open(output_path, "wb") as stream:
-            mcap = Writer(stream)
+        with open(output_path, "wb") as stream, Writer(stream) as mcap:
             convert_ulog(ULog(ulog_path.as_posix()), mcap)
-            mcap.finish()
         with open(output_path, "rb") as f:
             reader = make_reader(f, decoder_factories=[DecoderFactory()])
             summary = reader.get_summary()
             assert summary is not None
             channel_count = len(summary.channels)
-            assert channel_count == 97, f"expected 96 channels, got {channel_count}"
+            assert channel_count == 97, f"expected 97 channels, got {channel_count}"
