@@ -69,6 +69,7 @@ words:
   - infima
   - inputfile
   - intrinsics
+  - issubdtype
   - jsonschema
   - kaitai
   - libmcap

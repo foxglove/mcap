@@ -214,7 +214,8 @@ def convert_ulog(
 
     if start_time is not None:
         # ULog timestamps are stored in terms of microseconds from device startup
-        # This offset, when added to the message timestamp, produces an absolute timestamp in microseconds
+        # This offset, when added to the message timestamp,
+        # produces an absolute timestamp in microseconds
         time_offset_us = int(start_time.timestamp() * 1_000000) - ulog.start_timestamp
     else:
         time_offset_us = 0

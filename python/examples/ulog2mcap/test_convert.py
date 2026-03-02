@@ -547,23 +547,23 @@ class TestMockedMcapWrites:
             start_timestamp=0,
             initial_parameters={
                 "SYS_AUTOSTART": np.int32(4001),
-                "MC_ROLLRATE_P": np.float32(0.15),
+                "CHANGED_PARAM": np.float32(0.15),
             },
             changed_parameters=[
-                (10000, "MC_ROLLRATE_P", np.float32(0.20)),
-                (20000, "MC_ROLLRATE_P", np.float32(0.25)),
+                (10000, "CHANGED_PARAM", np.float32(0.20)),
+                (20000, "CHANGED_PARAM", np.float32(0.25)),
             ],
         )
         with _write_mcap_yield_reader(mock_ulog) as reader:
             messages = list(read_protobuf_messages(reader))
 
-        # 1 bulk /parameters + 1 initial /parameter/MC_ROLLRATE_P + 2 changed
+        # 1 bulk /parameters + 1 initial /parameter/CHANGED_PARAM + 2 changed
         params_msgs = [m for m in messages if m.topic == "/parameters"]
         assert len(params_msgs) == 1
         assert params_msgs[0].proto_msg.SYS_AUTOSTART == 4001
-        assert params_msgs[0].proto_msg.MC_ROLLRATE_P == pytest.approx(0.15)  # type: ignore
+        assert params_msgs[0].proto_msg.CHANGED_PARAM == pytest.approx(0.15)  # type: ignore
 
-        individual_msgs = [m for m in messages if m.topic == "/parameter/MC_ROLLRATE_P"]
+        individual_msgs = [m for m in messages if m.topic == "/parameter/CHANGED_PARAM"]
         assert len(individual_msgs) == 3  # initial + 2 changes
         assert individual_msgs[0].log_time_ns == 0  # initial timestamp
         assert individual_msgs[0].proto_msg.value == pytest.approx(0.15)  # type: ignore
