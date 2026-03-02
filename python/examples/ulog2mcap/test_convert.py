@@ -100,6 +100,8 @@ def create_ulog_mock(
     start_timestamp: int = 0,
     logged_messages: Optional[list[SimpleNamespace]] = None,
     logged_messages_tagged: Optional[list[SimpleNamespace]] = None,
+    initial_parameters: Optional[dict[str, Any]] = None,
+    changed_parameters: Optional[list[tuple[int, str, Any]]] = None,
 ) -> SimpleNamespace:
     """Build a mock ULog with the given message formats and data lists."""
     formats = {
@@ -115,6 +117,8 @@ def create_ulog_mock(
         logged_messages=logged_messages or [],
         logged_messages_tagged=messages_by_tag,
         start_timestamp=start_timestamp,
+        initial_parameters=initial_parameters or {},
+        changed_parameters=changed_parameters or [],
     )
 
 
@@ -350,7 +354,7 @@ class TestMockedMcapWrites:
         logged_messages_tagged = [
             _make_log_message_tagged(2000, "WARNING", "tagged", 42),
             _make_log_message_tagged(3000, "INFO", "other tagged", 43),
-            _make_log_message_tagged(4000, "WARNING", "first tag again", 42)
+            _make_log_message_tagged(4000, "WARNING", "first tag again", 42),
         ]
         mock_ulog = create_ulog_mock(
             message_formats={},
@@ -366,7 +370,7 @@ class TestMockedMcapWrites:
             "untagged",
             "tagged",
             "other tagged",
-            "first tag again"
+            "first tag again",
         ]
         assert list(map(attrgetter("proto_msg.level"), messages)) == [
             2,
@@ -514,6 +518,99 @@ class TestMockedMcapWrites:
         assert len(messages) == 1
         assert messages[0].proto_msg.value == 18446744073709551615
 
+    def test_initial_parameters_written_as_single_message(self) -> None:
+        """Should write all initial parameters as a single message on /parameters."""
+        mock_ulog = create_ulog_mock(
+            message_formats={},
+            data_list=[],
+            start_timestamp=5000,
+            initial_parameters={
+                "PARAM_FLOAT": np.float32(1.5),
+                "PARAM_INT": np.int32(42),
+                "PARAM_STR": "hello",
+            },
+        )
+        with _write_mcap_yield_reader(mock_ulog) as reader:
+            messages = list(read_protobuf_messages(reader))
+        assert len(messages) == 1
+        assert messages[0].topic == "/parameters"
+        assert messages[0].log_time_ns == 5_000_000
+        assert messages[0].proto_msg.PARAM_FLOAT == pytest.approx(1.5)  # type: ignore
+        assert messages[0].proto_msg.PARAM_INT == 42
+        assert messages[0].proto_msg.PARAM_STR == "hello"
+
+    def test_changed_parameters_written_to_individual_topics(self) -> None:
+        """Should write changed parameters to individual /parameter/<name> topics."""
+        mock_ulog = create_ulog_mock(
+            message_formats={},
+            data_list=[],
+            start_timestamp=0,
+            initial_parameters={
+                "SYS_AUTOSTART": np.int32(4001),
+                "MC_ROLLRATE_P": np.float32(0.15),
+            },
+            changed_parameters=[
+                (10000, "MC_ROLLRATE_P", np.float32(0.20)),
+                (20000, "MC_ROLLRATE_P", np.float32(0.25)),
+            ],
+        )
+        with _write_mcap_yield_reader(mock_ulog) as reader:
+            messages = list(read_protobuf_messages(reader))
+
+        # 1 bulk /parameters + 1 initial /parameter/MC_ROLLRATE_P + 2 changed
+        params_msgs = [m for m in messages if m.topic == "/parameters"]
+        assert len(params_msgs) == 1
+        assert params_msgs[0].proto_msg.SYS_AUTOSTART == 4001
+        assert params_msgs[0].proto_msg.MC_ROLLRATE_P == pytest.approx(0.15)  # type: ignore
+
+        individual_msgs = [m for m in messages if m.topic == "/parameter/MC_ROLLRATE_P"]
+        assert len(individual_msgs) == 3  # initial + 2 changes
+        assert individual_msgs[0].log_time_ns == 0  # initial timestamp
+        assert individual_msgs[0].proto_msg.value == pytest.approx(0.15)  # type: ignore
+        assert individual_msgs[1].log_time_ns == 10_000_000
+        assert individual_msgs[1].proto_msg.value == pytest.approx(0.20)  # type: ignore
+        assert individual_msgs[2].log_time_ns == 20_000_000
+        assert individual_msgs[2].proto_msg.value == pytest.approx(0.25)  # type: ignore
+
+        # SYS_AUTOSTART doesn't change, so no individual topic for it
+        autostart_msgs = [m for m in messages if m.topic == "/parameter/SYS_AUTOSTART"]
+        assert len(autostart_msgs) == 0
+
+    def test_no_parameter_messages_when_no_parameters(self) -> None:
+        """Should not write any parameter messages when there are no parameters."""
+        mock_ulog = create_ulog_mock(
+            message_formats={},
+            data_list=[],
+        )
+        with _write_mcap_yield_reader(mock_ulog) as reader:
+            messages = list(read_protobuf_messages(reader))
+        assert len(messages) == 0
+
+    def test_parameters_with_start_time_offset(self) -> None:
+        """Parameter timestamps should respect the start_time offset."""
+        start_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        mock_ulog = create_ulog_mock(
+            message_formats={},
+            data_list=[],
+            start_timestamp=0,
+            initial_parameters={"GAIN": np.float32(1.0)},
+            changed_parameters=[
+                (5000, "GAIN", np.float32(2.0)),
+            ],
+        )
+        with _write_mcap_yield_reader(mock_ulog, start_time=start_time) as reader:
+            messages = list(read_protobuf_messages(reader))
+
+        params_msg = [m for m in messages if m.topic == "/parameters"][0]
+        assert params_msg.log_time_ns == 1704067200000000000
+
+        changed_msg = [
+            m
+            for m in messages
+            if m.topic == "/parameter/GAIN" and m.log_time_ns > 1704067200000000000
+        ][0]
+        assert changed_msg.log_time_ns == 1704067200005000000
+
 
 class TestFullConversion:
     """Integration test with real ULog fixture file."""
@@ -535,4 +632,4 @@ class TestFullConversion:
             summary = reader.get_summary()
             assert summary is not None
             channel_count = len(summary.channels)
-            assert channel_count == 96, f"expected 96 channels, got {channel_count}"
+            assert channel_count == 97, f"expected 96 channels, got {channel_count}"

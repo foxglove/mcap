@@ -2,6 +2,8 @@
 
 from typing import Any, Dict, List, Optional, Union
 
+import numpy as np
+
 class ULog:
     """Parser for ULog (PX4) log files."""
 
@@ -32,9 +34,9 @@ class ULog:
     @property
     def msg_info_multiple_dict(self) -> Dict[str, Any]: ...
     @property
-    def initial_parameters(self) -> Dict[str, Any]: ...
+    def initial_parameters(self) -> Dict[str, Union[np.floating, np.integer, str]]: ...
     @property
-    def changed_parameters(self) -> List[tuple[int, str, Any]]: ...
+    def changed_parameters(self) -> List[tuple[int, str, Union[np.floating, np.integer, str]]]: ...
     @property
     def message_formats(self) -> Dict[str, MessageFormat]: ...
     @property

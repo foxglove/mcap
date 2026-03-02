@@ -2,18 +2,22 @@ import argparse
 import itertools
 import typing
 from datetime import datetime, timezone
+from operator import itemgetter
 
+import numpy as np
 import protos.Log_pb2 as log_pb2
 from google.protobuf.descriptor_pb2 import (
     DescriptorProto,
     FieldDescriptorProto,
     FileDescriptorProto,
 )
+from google.protobuf.wrappers_pb2 import FloatValue, Int32Value, StringValue
 from google.protobuf.descriptor_pool import DescriptorPool
 from google.protobuf.message_factory import GetMessageClass, GetMessageClassesForFiles
 from mcap_protobuf.writer import Writer
 from pyulog import ULog
 
+ULOG_FD_NAME = "ulog_messages.proto"
 ULOG_PACKAGE = "ulog"
 
 
@@ -52,64 +56,71 @@ def _ulog_primitive_to_protobuf(ulog_type: str) -> typing.Optional[int]:
     return mapping.get(ulog_type)
 
 
-def _build_message_descriptor_proto(
-    message_format: ULog.MessageFormat,
+def _build_descriptor_proto(
+    name: str,
+    fields: typing.List[
+        typing.Tuple[str, int | str, bool]
+    ],  # field name, field type, is_repeated
 ) -> DescriptorProto:
     desc = DescriptorProto()
-    desc.name = message_format.name
+    desc.name = name
     field_number = 1
-    for type_str, array_length, name in message_format.fields:
-        if name == "timestamp" or name.startswith("_padding"):
-            continue
+    for field_name, field_type, is_repeated in fields:
         field = FieldDescriptorProto()
-        field.name = name
+        field.name = field_name
         field.number = field_number
-        field_number += 1
-        prim = _ulog_primitive_to_protobuf(type_str)
-        if prim is not None:
-            setattr(field, "type", prim)
-            # char[N] is a single string; other primitives with length are repeated
-            if type_str == "char" and array_length > 0:
-                field.label = FieldDescriptorProto.LABEL_OPTIONAL
-            else:
-                field.label = (
-                    FieldDescriptorProto.LABEL_REPEATED
-                    if array_length > 0
-                    else FieldDescriptorProto.LABEL_OPTIONAL
-                )
+        if isinstance(field_type, int):
+            setattr(field, "type", field_type)
         else:
             setattr(field, "type", FieldDescriptorProto.TYPE_MESSAGE)
-            field.type_name = f".{ULOG_PACKAGE}.{type_str}"
-            field.label = (
-                FieldDescriptorProto.LABEL_REPEATED
-                if array_length > 0
-                else FieldDescriptorProto.LABEL_OPTIONAL
-            )
+            field.type_name = field_type
+        field.label = (
+            FieldDescriptorProto.LABEL_REPEATED
+            if is_repeated
+            else FieldDescriptorProto.LABEL_OPTIONAL
+        )
+        field_number += 1
         desc.field.append(field)
     return desc
 
 
-def _build_ulog_file_descriptor(ulog: ULog) -> FileDescriptorProto:
-    """Build a FileDescriptorProto containing all ulog message types."""
-    fd = FileDescriptorProto()
-    fd.name = "ulog_messages.proto"
-    fd.package = ULOG_PACKAGE
-    fd.syntax = "proto3"
+def _build_message_descriptor_proto(
+    message_format: ULog.MessageFormat,
+) -> DescriptorProto:
+    fields: typing.List[typing.Tuple[str, int | str, bool]] = []
+    for type_str, array_length, name in message_format.fields:
+        if name == "timestamp" or name.startswith("_padding"):
+            continue
+        primitive = _ulog_primitive_to_protobuf(type_str)
+        field_type = primitive if primitive is not None else type_str
+        is_repeated = array_length > 0 and type_str != "char"
+        fields.append((name, field_type, is_repeated))
+    return _build_descriptor_proto(message_format.name, fields)
 
-    message_formats = ulog.message_formats
-    for message_name in message_formats:
-        desc = _build_message_descriptor_proto(message_formats[message_name])
+
+def _build_descriptor_pool(
+    name: str,
+    descriptors: typing.List[DescriptorProto],
+    package: typing.Optional[str] = None,
+) -> DescriptorPool:
+    fd = FileDescriptorProto()
+    fd.name = name
+    if package:
+        fd.package = package
+    fd.syntax = "proto3"
+    for desc in descriptors:
         fd.message_type.append(desc)
-    return fd
+
+    pool = DescriptorPool()
+    pool.Add(fd)  # type: ignore
+    return pool
 
 
 def _get_ulog_message_classes(
-    fd: FileDescriptorProto,
+    pool: DescriptorPool,
 ) -> typing.Dict[str, type]:
     """Add fd to a new pool and return a dictionary of message classes by full name."""
-    pool = DescriptorPool()
-    pool.Add(fd)  # type: ignore
-    messages = GetMessageClassesForFiles([fd.name], pool)
+    messages = GetMessageClassesForFiles([ULOG_FD_NAME], pool)
     nested: typing.Dict[str, type] = {}
     for message_class in messages.values():
         for nested_desc in message_class.DESCRIPTOR.nested_types_by_name.values():
@@ -168,6 +179,19 @@ def _set_proto_field_from_ulog(
                 )
 
 
+def _get_single_value_protobuf(
+    value: typing.Union[np.floating, np.integer, str, float, int],
+):
+    if np.issubdtype(type(value), np.floating) or isinstance(value, float):
+        return FloatValue(value=float(value))
+    elif np.issubdtype(type(value), np.integer) or isinstance(value, int):
+        return Int32Value(value=int(value))
+    elif isinstance(value, str):
+        return StringValue(value=value)
+    else:
+        raise ValueError(f"Unsupported parameter type: {type(value)}")
+
+
 def convert_ulog(
     ulog: ULog,
     mcap: Writer,
@@ -189,13 +213,24 @@ def convert_ulog(
         mcap.add_metadata(name, metadata_dict)
 
     if start_time is not None:
+        # ULog timestamps are stored in terms of microseconds from device startup
+        # This offset, when added to the message timestamp, produces an absolute timestamp in microseconds
         time_offset_us = int(start_time.timestamp() * 1_000000) - ulog.start_timestamp
     else:
         time_offset_us = 0
+    convert_timestamp: typing.Callable[[int], int] = (
+        lambda ts: (ts + time_offset_us) * 1000
+    )  # microseconds to nanoseconds
 
+    # Write Data Messages
     if ulog.data_list:
-        ulog_fd = _build_ulog_file_descriptor(ulog)
-        ulog_message_classes = _get_ulog_message_classes(ulog_fd)
+        descriptors = list(
+            map(_build_message_descriptor_proto, ulog.message_formats.values())
+        )
+        ulog_pool = _build_descriptor_pool(
+            name=ULOG_FD_NAME, package=ULOG_PACKAGE, descriptors=descriptors
+        )
+        ulog_message_classes = _get_ulog_message_classes(ulog_pool)
 
         for data in ulog.data_list:
             topic_name = (
@@ -204,9 +239,7 @@ def convert_ulog(
             message_class = ulog_message_classes[f"{ULOG_PACKAGE}.{data.name}"]
             num_messages = len(data.data["timestamp"])
             for idx in range(num_messages):
-                timestamp = (
-                    data.data["timestamp"][idx] + time_offset_us
-                ) * 1000  # microseconds to nanoseconds
+                timestamp = convert_timestamp(data.data["timestamp"][idx])
                 msg = message_class()
                 _set_proto_field_from_ulog(
                     msg, data, idx, data.name, ulog, "", ulog_message_classes
@@ -218,10 +251,11 @@ def convert_ulog(
                     publish_time=timestamp,
                 )
 
+    # Write Log Messages
     for log_msg in itertools.chain(
         ulog.logged_messages, *ulog.logged_messages_tagged.values()
     ):
-        timestamp = (log_msg.timestamp + time_offset_us) * 1000
+        timestamp = convert_timestamp(log_msg.timestamp)
         proto_msg = log_pb2.Log()  # type: ignore
         proto_msg.timestamp.sec = int(timestamp / 1_000_000_000)  # type: ignore
         proto_msg.timestamp.nsec = int(timestamp % 1_000_000_000)  # type: ignore
@@ -232,6 +266,61 @@ def convert_ulog(
             message=proto_msg,
             log_time=timestamp,
             publish_time=timestamp,
+        )
+
+    # Write Parameter Messages
+    if ulog.initial_parameters:
+        initial_timestamp = convert_timestamp(ulog.start_timestamp)
+        changing_param_names = set(map(itemgetter(1), ulog.changed_parameters))
+
+        # Build a dynamic protobuf message type with a field per parameter
+        fields: typing.List[typing.Tuple[str, int | str, bool]] = []
+        for param_name, param_value in ulog.initial_parameters.items():
+            if isinstance(param_value, str):
+                field_type = FieldDescriptorProto.TYPE_STRING
+            elif np.issubdtype(type(param_value), np.floating):
+                field_type = FieldDescriptorProto.TYPE_DOUBLE
+            elif np.issubdtype(type(param_value), np.integer):
+                field_type = FieldDescriptorProto.TYPE_INT32
+            else:
+                raise ValueError(f"Unsupported parameter type: {type(value)}")
+
+            fields.append((param_name, field_type, False))
+        desc = _build_descriptor_proto("Parameters", fields)
+        pool = _build_descriptor_pool("parameters", [desc])
+        ParametersClass = GetMessageClass(pool.FindMessageTypeByName("Parameters"))  # type: ignore
+
+        params = ParametersClass()
+        for param_name, param_value in ulog.initial_parameters.items():
+            if np.issubdtype(type(param_value), np.floating):
+                param_value = float(param_value)
+            elif np.issubdtype(type(param_value), np.integer):
+                param_value = int(param_value)
+
+            setattr(params, param_name, param_value)
+            # If the parameter is going to change, additionally write it to its own topic
+            if param_name in changing_param_names:
+                mcap.write_message(
+                    topic=f"/parameter/{param_name}",
+                    message=_get_single_value_protobuf(param_value),
+                    log_time=initial_timestamp,
+                    publish_time=initial_timestamp,
+                )
+
+        mcap.write_message(
+            topic="/parameters",
+            message=params,
+            log_time=initial_timestamp,
+            publish_time=initial_timestamp,
+        )
+
+    for timestamp, param_name, param_value in ulog.changed_parameters:
+        timestamp_ns = convert_timestamp(timestamp)
+        mcap.write_message(
+            topic=f"/parameter/{param_name}",
+            message=_get_single_value_protobuf(param_value),
+            log_time=timestamp_ns,
+            publish_time=timestamp_ns,
         )
 
 
