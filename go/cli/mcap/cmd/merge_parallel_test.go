@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"testing"
 
@@ -42,8 +43,8 @@ func collectMessages(t *testing.T, r io.Reader) []uint64 {
 	require.NoError(t, err)
 	var times []uint64
 	for {
-		_, _, msg, err := it.Next(nil)
-		if err == io.EOF {
+		_, _, msg, err := it.NextInto(nil)
+		if errors.Is(err, io.EOF) {
 			break
 		}
 		require.NoError(t, err)
