@@ -314,6 +314,7 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	var prefetchCtx context.Context
 	if parallel {
 		prefetchCtx, cancelPrefetch = context.WithCancel(context.Background())
+		defer cancelPrefetch() // ensure cancel on all exit paths (idempotent)
 	}
 
 	// Open each input and create its iterator.
