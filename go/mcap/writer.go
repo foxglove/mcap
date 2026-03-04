@@ -888,6 +888,12 @@ type WriterOptions struct {
 	// Compressor is a custom compressor. If supplied it will take precedence
 	// over the built-in ones.
 	Compressor CustomCompressor
+
+	// Workers controls the number of parallel goroutines used for chunk
+	// compression. Currently wired to zstd's internal encoder concurrency.
+	// 0 means "use the compression library's default" (typically 1).
+	// Values > 1 are most effective with zstd compression on multi-core machines.
+	Workers int
 }
 
 // Convert an MCAP compression level to the corresponding lz4.CompressionLevel.
@@ -945,7 +951,11 @@ func NewWriter(w io.Writer, opts *WriterOptions) (*Writer, error) {
 			compressedWriter = newCountingCRCWriter(opts.Compressor.Compressor(), opts.IncludeCRC)
 		case opts.Compression == CompressionZSTD:
 			level := encoderLevelFromZstd(opts.CompressionLevel)
-			zw, err := zstd.NewWriter(&compressed, zstd.WithEncoderLevel(level))
+			zstdOpts := []zstd.EOption{zstd.WithEncoderLevel(level)}
+			if opts.Workers > 0 {
+				zstdOpts = append(zstdOpts, zstd.WithEncoderConcurrency(opts.Workers))
+			}
+			zw, err := zstd.NewWriter(&compressed, zstdOpts...)
 			if err != nil {
 				return nil, err
 			}
