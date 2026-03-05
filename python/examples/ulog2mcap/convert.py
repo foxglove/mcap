@@ -1,8 +1,8 @@
 import argparse
 import itertools
+import json
 import typing
 from datetime import datetime, timezone
-from operator import itemgetter
 
 import numpy as np
 import protos.Log_pb2 as log_pb2
@@ -11,10 +11,11 @@ from google.protobuf.descriptor_pb2 import (
     FieldDescriptorProto,
     FileDescriptorProto,
 )
-from google.protobuf.wrappers_pb2 import FloatValue, Int32Value, StringValue
 from google.protobuf.descriptor_pool import DescriptorPool
 from google.protobuf.message_factory import GetMessageClass, GetMessageClassesForFiles
-from mcap_protobuf.writer import Writer
+from mcap.well_known import MessageEncoding
+from mcap.writer import Writer
+from mcap_protobuf.schema import register_schema
 from pyulog import ULog
 
 ULOG_FD_NAME = "ulog_messages.proto"
@@ -179,19 +180,6 @@ def _set_proto_field_from_ulog(
                 )
 
 
-def _get_single_value_protobuf(
-    value: typing.Union[np.floating, np.integer, str, float, int],
-):
-    if np.issubdtype(type(value), np.floating) or isinstance(value, float):
-        return FloatValue(value=float(value))
-    elif np.issubdtype(type(value), np.integer) or isinstance(value, int):
-        return Int32Value(value=int(value))
-    elif isinstance(value, str):
-        return StringValue(value=value)
-    else:
-        raise ValueError(f"Unsupported parameter type: {type(value)}")
-
-
 def convert_ulog(
     ulog: ULog,
     mcap: Writer,
@@ -238,6 +226,13 @@ def convert_ulog(
                 f"/{data.name}/{data.multi_id}" if data.multi_id else f"/{data.name}"
             )
             message_class = ulog_message_classes[f"{ULOG_PACKAGE}.{data.name}"]
+
+            schema_id = register_schema(mcap, message_class)
+            channel_id = mcap.register_channel(
+                topic=topic_name,
+                message_encoding=MessageEncoding.Protobuf,
+                schema_id=schema_id,
+            )
             num_messages = len(data.data["timestamp"])
             for idx in range(num_messages):
                 timestamp = convert_timestamp(data.data["timestamp"][idx])
@@ -245,84 +240,101 @@ def convert_ulog(
                 _set_proto_field_from_ulog(
                     msg, data, idx, data.name, ulog, "", ulog_message_classes
                 )
-                mcap.write_message(
-                    topic=topic_name,
-                    message=msg,
+                mcap.add_message(
+                    channel_id=channel_id,
+                    data=msg.SerializeToString(),  # type: ignore
                     log_time=timestamp,
                     publish_time=timestamp,
                 )
 
     # Write Log Messages
-    for log_msg in itertools.chain(
-        ulog.logged_messages, *ulog.logged_messages_tagged.values()
-    ):
-        timestamp = convert_timestamp(log_msg.timestamp)
-        proto_msg = log_pb2.Log()  # type: ignore
-        proto_msg.timestamp.sec = int(timestamp / 1_000_000_000)  # type: ignore
-        proto_msg.timestamp.nsec = int(timestamp % 1_000_000_000)  # type: ignore
-        proto_msg.level = ulog_level_to_fox_log_level(log_msg.log_level_str())
-        proto_msg.message = log_msg.message
-        mcap.write_message(
+    if ulog.logged_messages or ulog.logged_messages_tagged:
+        log_schema_id = register_schema(mcap, log_pb2.Log)  # type: ignore
+        log_channel_id = mcap.register_channel(
             topic="/log_message",
-            message=proto_msg,
-            log_time=timestamp,
-            publish_time=timestamp,
+            message_encoding=MessageEncoding.Protobuf,
+            schema_id=log_schema_id,
         )
+        for log_msg in itertools.chain(
+            ulog.logged_messages, *ulog.logged_messages_tagged.values()
+        ):
+            timestamp = convert_timestamp(log_msg.timestamp)
+            proto_msg = log_pb2.Log()  # type: ignore
+            proto_msg.timestamp.sec = int(timestamp / 1_000_000_000)  # type: ignore
+            proto_msg.timestamp.nsec = int(timestamp % 1_000_000_000)  # type: ignore
+            proto_msg.level = ulog_level_to_fox_log_level(log_msg.log_level_str())
+            proto_msg.message = log_msg.message
+            mcap.add_message(
+                channel_id=log_channel_id,
+                data=proto_msg.SerializeToString(),  # type: ignore
+                log_time=timestamp,
+                publish_time=timestamp,
+            )
 
-    # Write Parameter Messages
+    # Write Parameter Messages as JSON on a single /parameters channel
     if ulog.initial_parameters:
         initial_timestamp = convert_timestamp(ulog.start_timestamp)
-        changing_param_names = set(map(itemgetter(1), ulog.changed_parameters))
 
-        # Build a dynamic protobuf message type with a field per parameter
-        fields: typing.List[typing.Tuple[str, int | str, bool]] = []
+        # Build JSON schema with a property per parameter
+        json_properties: typing.Dict[str, typing.Any] = {}
         for param_name, param_value in ulog.initial_parameters.items():
             if isinstance(param_value, str):
-                field_type = FieldDescriptorProto.TYPE_STRING
+                json_properties[param_name] = {"type": "string"}
             elif np.issubdtype(type(param_value), np.floating):
-                field_type = FieldDescriptorProto.TYPE_DOUBLE
+                json_properties[param_name] = {"type": "number"}
             elif np.issubdtype(type(param_value), np.integer):
-                field_type = FieldDescriptorProto.TYPE_INT32
+                json_properties[param_name] = {"type": "integer"}
             else:
                 raise ValueError(f"Unsupported parameter type: {type(param_value)}")
 
-            fields.append((param_name, field_type, False))
-        desc = _build_descriptor_proto("Parameters", fields)
-        pool = _build_descriptor_pool("parameters", [desc])
-        ParametersClass = GetMessageClass(pool.FindMessageTypeByName("Parameters"))  # type: ignore
+        json_schema: typing.Dict[str, typing.Any] = {
+            "type": "object",
+            "properties": json_properties,
+        }
 
-        params = ParametersClass()
+        # Register schema and channel via the internal writer
+        parameter_schema_id = mcap.register_schema(
+            name="Parameters",
+            encoding="jsonschema",
+            data=json.dumps(json_schema).encode("utf-8"),
+        )
+        parameter_channel_id = mcap.register_channel(
+            topic="/parameters",
+            message_encoding=MessageEncoding.JSON,
+            schema_id=parameter_schema_id,
+        )
+
+        # Write initial message with all parameters
+        initial_params: typing.Dict[str, typing.Any] = {}
         for param_name, param_value in ulog.initial_parameters.items():
+            if np.issubdtype(type(param_value), np.floating):
+                initial_params[param_name] = float(param_value)
+            elif np.issubdtype(type(param_value), np.integer):
+                initial_params[param_name] = int(param_value)
+            else:
+                initial_params[param_name] = param_value
+
+        mcap.add_message(
+            channel_id=parameter_channel_id,
+            log_time=initial_timestamp,
+            publish_time=initial_timestamp,
+            data=json.dumps(initial_params).encode("utf-8"),
+        )
+
+        # Write partial updates containing only the changed parameter
+        for timestamp, param_name, param_value in ulog.changed_parameters:
+            timestamp_ns = convert_timestamp(timestamp)
             if np.issubdtype(type(param_value), np.floating):
                 param_value = float(param_value)
             elif np.issubdtype(type(param_value), np.integer):
                 param_value = int(param_value)
 
-            setattr(params, param_name, param_value)
-            # If the parameter is going to change, additionally write it to its own topic
-            if param_name in changing_param_names:
-                mcap.write_message(
-                    topic=f"/parameter/{param_name}",
-                    message=_get_single_value_protobuf(param_value),
-                    log_time=initial_timestamp,
-                    publish_time=initial_timestamp,
-                )
-
-        mcap.write_message(
-            topic="/parameters",
-            message=params,
-            log_time=initial_timestamp,
-            publish_time=initial_timestamp,
-        )
-
-    for timestamp, param_name, param_value in ulog.changed_parameters:
-        timestamp_ns = convert_timestamp(timestamp)
-        mcap.write_message(
-            topic=f"/parameter/{param_name}",
-            message=_get_single_value_protobuf(param_value),
-            log_time=timestamp_ns,
-            publish_time=timestamp_ns,
-        )
+            mcap.add_message(
+                channel_id=parameter_channel_id,
+                log_time=timestamp_ns,
+                publish_time=timestamp_ns,
+                data=json.dumps({param_name: param_value}).encode("utf-8"),
+            )
 
 
 def parse_microseconds_date(date: str) -> datetime:
@@ -372,7 +384,10 @@ if __name__ == "__main__":
     if args.start_date:
         start_time = parse_microseconds_date(args.start_date)
 
-    with open(args.output_file, "wb") as stream, Writer(stream) as mcap:
+    with open(args.output_file, "wb") as stream:
+        mcap = Writer(stream)
+        mcap.start()
         convert_ulog(
             ulog, mcap, start_time=start_time, metadata=[(args.metadata_name, metadata)]
         )
+        mcap.finish()

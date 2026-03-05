@@ -2,37 +2,55 @@
 
 import contextlib
 import io
+import json
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from operator import attrgetter
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Generator, Iterator, Optional, cast
+from typing import Any, Callable, Generator, Iterator, Optional, cast
 
 import numpy as np
 import pytest
 from convert import convert_ulog
-from mcap_protobuf.decoder import DecoderFactory
-from mcap_protobuf.writer import Writer
+from mcap.writer import Writer
+from mcap.well_known import MessageEncoding
+from mcap_protobuf.decoder import DecoderFactory as ProtobufDecoderFactory
+from mcap.decoder import DecoderFactory as McapDecoderFactory
+from mcap.records import Schema
 from pyulog import ULog
 
 from mcap.reader import McapReader, make_reader
 
 
+class JSONDecoderFactory(McapDecoderFactory):
+
+    def decoder_for(
+        self, message_encoding: str, schema: Optional[Schema]
+    ) -> Optional[Callable[[bytes], Any]]:
+        if message_encoding != MessageEncoding.JSON:
+            return None
+
+        def decoder(data: bytes) -> Any:
+            return json.loads(data)
+
+        return decoder
+
+
 @dataclass
-class ProtobufMessage:
+class ReadMessage:
     log_time_ns: int
     topic: str
-    proto_msg: Any
+    msg: Any
 
 
-def read_protobuf_messages(reader: McapReader) -> Iterator[ProtobufMessage]:
-    for _, channel, message, proto_msg in reader.iter_decoded_messages():
-        yield ProtobufMessage(
+def read_messages(reader: McapReader) -> Iterator[ReadMessage]:
+    for _, channel, message, msg in reader.iter_decoded_messages():
+        yield ReadMessage(
             log_time_ns=message.log_time,
             topic=channel.topic,
-            proto_msg=proto_msg,
+            msg=msg,
         )
 
 
@@ -129,10 +147,14 @@ def _write_mcap_yield_reader(
     metadata: Optional[list[tuple[str, dict[str, str]]]] = None,
 ) -> Generator[McapReader, Any, None]:
     buffer = io.BytesIO()
-    with Writer(buffer) as mcap:
-        convert_ulog(cast(ULog, ulog), mcap, start_time=start_time, metadata=metadata)
+    mcap = Writer(buffer)
+    mcap.start()
+    convert_ulog(cast(ULog, ulog), mcap, start_time=start_time, metadata=metadata)
+    mcap.finish()
     buffer.seek(0)
-    yield make_reader(buffer, decoder_factories=[DecoderFactory()])
+    yield make_reader(
+        buffer, decoder_factories=[ProtobufDecoderFactory(), JSONDecoderFactory()]
+    )
 
 
 class TestMockedMcapWrites:
@@ -163,22 +185,14 @@ class TestMockedMcapWrites:
                 "sensor_data",
                 0,
                 {
-                    "timestamp": np.array([1000], dtype=np.uint64),
-                    "value": np.array([42.0], dtype=np.float32),
+                    "timestamp": np.array([1000, 3000], dtype=np.uint64),
+                    "value": np.array([42.0, 84.0], dtype=np.float32),
                 },
             ),
             _make_data(
                 "item_list",
                 0,
                 _complex_data_message(),
-            ),
-            _make_data(
-                "sensor_data",
-                0,
-                {
-                    "timestamp": np.array([3000], dtype=np.uint64),
-                    "value": np.array([84.0], dtype=np.float32),
-                },
             ),
         ]
 
@@ -210,19 +224,19 @@ class TestMockedMcapWrites:
         )
 
         with _write_mcap_yield_reader(mock_ulog) as reader:
-            messages = list(read_protobuf_messages(reader))
-        assert len(messages) == len(message_fixture)
+            messages = list(read_messages(reader))
+        assert len(messages) == 3
         assert list(map(attrgetter("log_time_ns"), messages)) == [
             1_000_000,
             2_000_000,
             3_000_000,
         ]  # ms -> ns in writer
-        assert messages[0].proto_msg.value == 42.0
-        assert messages[1].proto_msg.items[0].enabled
-        assert messages[1].proto_msg.items[0].matrix == [1.0, 0.0, 0.0, 0.0]
-        assert not messages[1].proto_msg.items[1].enabled
-        assert messages[1].proto_msg.items[1].matrix == [0.0, 1.0, 0.0, 0.0]
-        assert messages[2].proto_msg.value == 84.0
+        assert messages[0].msg.value == 42.0
+        assert messages[1].msg.items[0].enabled
+        assert messages[1].msg.items[0].matrix == [1.0, 0.0, 0.0, 0.0]
+        assert not messages[1].msg.items[1].enabled
+        assert messages[1].msg.items[1].matrix == [0.0, 1.0, 0.0, 0.0]
+        assert messages[2].msg.value == 84.0
 
     def test_add_messages_with_correct_timestamps_when_start_time_provided(
         self,
@@ -237,8 +251,8 @@ class TestMockedMcapWrites:
             start_timestamp=0,
         )
         with _write_mcap_yield_reader(mock_ulog, start_time=start_time) as reader:
-            messages = list(read_protobuf_messages(reader))
-        assert len(messages) == len(message_fixture)
+            messages = list(read_messages(reader))
+        assert len(messages) == 3
         assert list(map(attrgetter("log_time_ns"), messages)) == [
             1704067200001000000,
             1704067200002000000,
@@ -259,34 +273,17 @@ class TestMockedMcapWrites:
                 "text_topic",
                 0,
                 {
-                    "timestamp": np.array([1000], dtype=np.uint64),
-                    "text[0]": np.array([ord("M")], dtype=np.int8),
-                    "text[1]": np.array([ord("e")], dtype=np.int8),
-                    "text[2]": np.array([ord("s")], dtype=np.int8),
-                    "text[3]": np.array([ord("s")], dtype=np.int8),
-                    "text[4]": np.array([ord("a")], dtype=np.int8),
-                    "text[5]": np.array([ord("g")], dtype=np.int8),
-                    "text[6]": np.array([ord("e")], dtype=np.int8),
-                    "text[7]": np.array([ord(" ")], dtype=np.int8),
-                    "text[8]": np.array([ord("1")], dtype=np.int8),
-                    "text[9]": np.array([ord("!")], dtype=np.int8),
-                },
-            ),
-            _make_data(
-                "text_topic",
-                0,
-                {
-                    "timestamp": np.array([2000], dtype=np.uint64),
-                    "text[0]": np.array([ord("M")], dtype=np.int8),
-                    "text[1]": np.array([ord("e")], dtype=np.int8),
-                    "text[2]": np.array([ord("s")], dtype=np.int8),
-                    "text[3]": np.array([ord("s")], dtype=np.int8),
-                    "text[4]": np.array([ord("a")], dtype=np.int8),
-                    "text[5]": np.array([ord("g")], dtype=np.int8),
-                    "text[6]": np.array([ord("e")], dtype=np.int8),
-                    "text[7]": np.array([ord(" ")], dtype=np.int8),
-                    "text[8]": np.array([ord("2")], dtype=np.int8),
-                    "text[9]": np.array([ord("!")], dtype=np.int8),
+                    "timestamp": np.array([1000, 2000], dtype=np.uint64),
+                    "text[0]": np.array([ord("M"), ord("M")], dtype=np.int8),
+                    "text[1]": np.array([ord("e"), ord("e")], dtype=np.int8),
+                    "text[2]": np.array([ord("s"), ord("s")], dtype=np.int8),
+                    "text[3]": np.array([ord("s"), ord("s")], dtype=np.int8),
+                    "text[4]": np.array([ord("a"), ord("a")], dtype=np.int8),
+                    "text[5]": np.array([ord("g"), ord("g")], dtype=np.int8),
+                    "text[6]": np.array([ord("e"), ord("e")], dtype=np.int8),
+                    "text[7]": np.array([ord(" "), ord(" ")], dtype=np.int8),
+                    "text[8]": np.array([ord("1"), ord("2")], dtype=np.int8),
+                    "text[9]": np.array([ord("!"), ord("!")], dtype=np.int8),
                 },
             ),
         ]
@@ -295,10 +292,10 @@ class TestMockedMcapWrites:
             data_list=data_list,
         )
         with _write_mcap_yield_reader(mock_ulog) as reader:
-            messages = list(read_protobuf_messages(reader))
-        assert len(messages) == len(data_list)
+            messages = list(read_messages(reader))
+        assert len(messages) == 2
         assert list(map(attrgetter("log_time_ns"), messages)) == [1_000_000, 2_000_000]
-        assert list(map(attrgetter("proto_msg.text"), messages)) == [
+        assert list(map(attrgetter("msg.text"), messages)) == [
             "Message 1!",
             "Message 2!",
         ]
@@ -320,7 +317,7 @@ class TestMockedMcapWrites:
         )
         with _write_mcap_yield_reader(mock_ulog) as reader:
             summary = reader.get_summary()
-            messages = list(read_protobuf_messages(reader))
+            messages = list(read_messages(reader))
         assert summary is not None
         channel_topics = sorted(ch.topic for ch in summary.channels.values())
         assert channel_topics == ["/log_message"]
@@ -340,10 +337,10 @@ class TestMockedMcapWrites:
             ({"sec": 0, "nsec": 4_000_000}, 4, "four"),
         ]
         for msg, (ts, level, text) in zip(messages, expected):
-            assert msg.proto_msg.timestamp.sec == ts["sec"]
-            assert msg.proto_msg.timestamp.nsec == ts["nsec"]
-            assert msg.proto_msg.level == level
-            assert msg.proto_msg.message == text
+            assert msg.msg.timestamp.sec == ts["sec"]
+            assert msg.msg.timestamp.nsec == ts["nsec"]
+            assert msg.msg.level == level
+            assert msg.msg.message == text
 
     def test_write_tagged_log_messages_to_log_channel(self) -> None:
         """Should write ULog tagged log messages to the same /log_message channel."""
@@ -362,16 +359,16 @@ class TestMockedMcapWrites:
             logged_messages_tagged=logged_messages_tagged,
         )
         with _write_mcap_yield_reader(mock_ulog) as reader:
-            messages = list(read_protobuf_messages(reader))
+            messages = list(read_messages(reader))
         assert len(messages) == 4
         assert list(map(attrgetter("topic"), messages)) == ["/log_message"] * 4
-        assert list(map(attrgetter("proto_msg.message"), messages)) == [
+        assert list(map(attrgetter("msg.message"), messages)) == [
             "untagged",
             "tagged",
             "other tagged",
             "first tag again",
         ]
-        assert list(map(attrgetter("proto_msg.level"), messages)) == [
+        assert list(map(attrgetter("msg.level"), messages)) == [
             2,
             3,
             2,
@@ -390,16 +387,16 @@ class TestMockedMcapWrites:
                     "sensor_data",
                     0,
                     {
-                        "timestamp": np.array([1000], dtype=np.uint64),
-                        "value": np.array([42.0], dtype=np.float32),
+                        "timestamp": np.array([1000, 3000], dtype=np.uint64),
+                        "value": np.array([42.0, 84.0], dtype=np.float32),
                     },
                 ),
                 _make_data(
                     "sensor_data",
                     1,
                     {
-                        "timestamp": np.array([1000], dtype=np.uint64),
-                        "value": np.array([36.0], dtype=np.float32),
+                        "timestamp": np.array([1000, 3000], dtype=np.uint64),
+                        "value": np.array([36.0, 64.0], dtype=np.float32),
                     },
                 ),
                 _make_data(
@@ -407,26 +404,10 @@ class TestMockedMcapWrites:
                     0,
                     _complex_data_message(),
                 ),
-                _make_data(
-                    "sensor_data",
-                    0,
-                    {
-                        "timestamp": np.array([3000], dtype=np.uint64),
-                        "value": np.array([84.0], dtype=np.float32),
-                    },
-                ),
-                _make_data(
-                    "sensor_data",
-                    1,
-                    {
-                        "timestamp": np.array([3000], dtype=np.uint64),
-                        "value": np.array([64.0], dtype=np.float32),
-                    },
-                ),
             ],
         )
         with _write_mcap_yield_reader(mock_ulog) as reader:
-            messages = list(read_protobuf_messages(reader))
+            messages = list(read_messages(reader))
         assert len(messages) == 5
         assert list(map(attrgetter("log_time_ns"), messages)) == [
             1_000_000,
@@ -457,24 +438,8 @@ class TestMockedMcapWrites:
                 "sensor_data",
                 0,
                 {
-                    "timestamp": np.array([1000], dtype=np.uint64),
-                    "value": np.array([42.0], dtype=np.float32),
-                },
-            ),
-            _make_data(
-                "sensor_data",
-                0,
-                {
-                    "timestamp": np.array([2000], dtype=np.uint64),
-                    "value": np.array([np.nan], dtype=np.float32),
-                },
-            ),
-            _make_data(
-                "sensor_data",
-                0,
-                {
-                    "timestamp": np.array([3000], dtype=np.uint64),
-                    "value": np.array([1.5], dtype=np.float32),
+                    "timestamp": np.array([1000, 2000, 3000], dtype=np.uint64),
+                    "value": np.array([42.0, np.nan, 1.5], dtype=np.float32),
                 },
             ),
         ]
@@ -483,11 +448,11 @@ class TestMockedMcapWrites:
             data_list=data_list,
         )
         with _write_mcap_yield_reader(mock_ulog) as reader:
-            messages = list(read_protobuf_messages(reader))
+            messages = list(read_messages(reader))
         assert len(messages) == 3
-        assert messages[0].proto_msg.value == 42.0
-        assert np.isnan(messages[1].proto_msg.value)
-        assert messages[2].proto_msg.value == 1.5
+        assert messages[0].msg.value == 42.0
+        assert np.isnan(messages[1].msg.value)
+        assert messages[2].msg.value == 1.5
 
     def test_uint64_integer_conversion(self) -> None:
         """Should handle uint64 / large integer conversion in JSON."""
@@ -513,9 +478,9 @@ class TestMockedMcapWrites:
             data_list=data_list,
         )
         with _write_mcap_yield_reader(mock_ulog) as reader:
-            messages = list(read_protobuf_messages(reader))
+            messages = list(read_messages(reader))
         assert len(messages) == 1
-        assert messages[0].proto_msg.value == 18446744073709551615
+        assert messages[0].msg.value == 18446744073709551615
 
     def test_initial_parameters_written_as_single_message(self) -> None:
         """Should write all initial parameters as a single message on /parameters."""
@@ -530,15 +495,15 @@ class TestMockedMcapWrites:
             },
         )
         with _write_mcap_yield_reader(mock_ulog) as reader:
-            messages = list(read_protobuf_messages(reader))
+            messages = list(read_messages(reader))
         assert len(messages) == 1
         assert messages[0].topic == "/parameters"
         assert messages[0].log_time_ns == 5_000_000
-        assert messages[0].proto_msg.PARAM_FLOAT == pytest.approx(1.5)  # type: ignore
-        assert messages[0].proto_msg.PARAM_INT == 42
-        assert messages[0].proto_msg.PARAM_STR == "hello"
+        assert messages[0].msg["PARAM_FLOAT"] == pytest.approx(1.5)  # type: ignore
+        assert messages[0].msg["PARAM_INT"] == 42
+        assert messages[0].msg["PARAM_STR"] == "hello"
 
-    def test_changed_parameters_written_to_individual_topics(self) -> None:
+    def test_changed_parameters_written_as_partial_updates(self) -> None:
         """Should write changed parameters to individual /parameter/<name> topics."""
         mock_ulog = create_ulog_mock(
             message_formats={},
@@ -546,34 +511,25 @@ class TestMockedMcapWrites:
             start_timestamp=0,
             initial_parameters={
                 "SYS_AUTOSTART": np.int32(4001),
-                "CHANGED_PARAM": np.float32(0.15),
+                "CHANGED_PARAM": np.int32(1),
             },
             changed_parameters=[
-                (10000, "CHANGED_PARAM", np.float32(0.20)),
-                (20000, "CHANGED_PARAM", np.float32(0.25)),
+                (10000, "CHANGED_PARAM", np.int32(2)),
+                (20000, "CHANGED_PARAM", np.int32(3)),
             ],
         )
         with _write_mcap_yield_reader(mock_ulog) as reader:
-            messages = list(read_protobuf_messages(reader))
+            messages = list(read_messages(reader))
 
         # 1 bulk /parameters + 1 initial /parameter/CHANGED_PARAM + 2 changed
         params_msgs = [m for m in messages if m.topic == "/parameters"]
-        assert len(params_msgs) == 1
-        assert params_msgs[0].proto_msg.SYS_AUTOSTART == 4001
-        assert params_msgs[0].proto_msg.CHANGED_PARAM == pytest.approx(0.15)  # type: ignore
-
-        individual_msgs = [m for m in messages if m.topic == "/parameter/CHANGED_PARAM"]
-        assert len(individual_msgs) == 3  # initial + 2 changes
-        assert individual_msgs[0].log_time_ns == 0  # initial timestamp
-        assert individual_msgs[0].proto_msg.value == pytest.approx(0.15)  # type: ignore
-        assert individual_msgs[1].log_time_ns == 10_000_000
-        assert individual_msgs[1].proto_msg.value == pytest.approx(0.20)  # type: ignore
-        assert individual_msgs[2].log_time_ns == 20_000_000
-        assert individual_msgs[2].proto_msg.value == pytest.approx(0.25)  # type: ignore
-
-        # SYS_AUTOSTART doesn't change, so no individual topic for it
-        autostart_msgs = [m for m in messages if m.topic == "/parameter/SYS_AUTOSTART"]
-        assert len(autostart_msgs) == 0
+        assert len(params_msgs) == 3
+        assert params_msgs[0].log_time_ns == 0  # initial timestamp
+        assert params_msgs[0].msg == {"CHANGED_PARAM": 1, "SYS_AUTOSTART": 4001}
+        assert params_msgs[1].log_time_ns == 10_000_000
+        assert params_msgs[1].msg == {"CHANGED_PARAM": 2}
+        assert params_msgs[2].log_time_ns == 20_000_000
+        assert params_msgs[2].msg == {"CHANGED_PARAM": 3}
 
     def test_no_parameter_messages_when_no_parameters(self) -> None:
         """Should not write any parameter messages when there are no parameters."""
@@ -582,7 +538,7 @@ class TestMockedMcapWrites:
             data_list=[],
         )
         with _write_mcap_yield_reader(mock_ulog) as reader:
-            messages = list(read_protobuf_messages(reader))
+            messages = list(read_messages(reader))
         assert len(messages) == 0
 
     def test_parameters_with_start_time_offset(self) -> None:
@@ -598,7 +554,7 @@ class TestMockedMcapWrites:
             ],
         )
         with _write_mcap_yield_reader(mock_ulog, start_time=start_time) as reader:
-            messages = list(read_protobuf_messages(reader))
+            messages = list(read_messages(reader))
 
         params_msg = [m for m in messages if m.topic == "/parameters"][0]
         assert params_msg.log_time_ns == 1704067200000000000
@@ -606,7 +562,7 @@ class TestMockedMcapWrites:
         changed_msg = [
             m
             for m in messages
-            if m.topic == "/parameter/GAIN" and m.log_time_ns > 1704067200000000000
+            if m.topic == "/parameters" and m.log_time_ns > 1704067200000000000
         ][0]
         assert changed_msg.log_time_ns == 1704067200005000000
 
@@ -622,10 +578,15 @@ class TestFullConversion:
             raise FileNotFoundError(f"Fixture not found: {ulog_path}")
 
         output_path = tmp_path / "output.mcap"
-        with open(output_path, "wb") as stream, Writer(stream) as mcap:
+        with open(output_path, "wb") as stream:
+            mcap = Writer(stream)
+            mcap.start()
             convert_ulog(ULog(ulog_path.as_posix()), mcap)
+            mcap.finish()
         with open(output_path, "rb") as f:
-            reader = make_reader(f, decoder_factories=[DecoderFactory()])
+            reader = make_reader(
+                f, decoder_factories=[ProtobufDecoderFactory(), JSONDecoderFactory()]
+            )
             summary = reader.get_summary()
             assert summary is not None
             channel_count = len(summary.channels)
