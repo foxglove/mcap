@@ -504,7 +504,7 @@ class TestMockedMcapWrites:
         assert messages[0].msg["PARAM_STR"] == "hello"
 
     def test_changed_parameters_written_as_partial_updates(self) -> None:
-        """Should write changed parameters to as partial updates on /parameters"""
+        """Should write changed parameters as partial updates on /parameters"""
         mock_ulog = create_ulog_mock(
             message_formats={},
             data_list=[],
@@ -521,7 +521,6 @@ class TestMockedMcapWrites:
         with _write_mcap_yield_reader(mock_ulog) as reader:
             messages = list(read_messages(reader))
 
-        # 1 bulk /parameters + 1 initial /parameter/CHANGED_PARAM + 2 changed
         params_msgs = [m for m in messages if m.topic == "/parameters"]
         assert len(params_msgs) == 3
         assert params_msgs[0].log_time_ns == 0  # initial timestamp
