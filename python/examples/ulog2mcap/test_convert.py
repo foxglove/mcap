@@ -504,7 +504,7 @@ class TestMockedMcapWrites:
         assert messages[0].msg["PARAM_STR"] == "hello"
 
     def test_changed_parameters_written_as_partial_updates(self) -> None:
-        """Should write changed parameters to individual /parameter/<name> topics."""
+        """Should write changed parameters to as partial updates on /parameters"""
         mock_ulog = create_ulog_mock(
             message_formats={},
             data_list=[],
