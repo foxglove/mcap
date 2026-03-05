@@ -191,7 +191,7 @@ def convert_ulog(
     """Convert a ULog file to an MCAP file.
 
     :param ulog: The ULog file to convert.
-    :param mcap: The MCAP protobuf writer to write to.
+    :param mcap: The MCAP writer to write to.
     :param start_time: The start time to use for message timestamps,
         useful since ulog timestamps are stored in time-since-startup
         (use either timestamp in microseconds or ISO 8601 format).

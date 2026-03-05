@@ -230,7 +230,7 @@ class TestMockedMcapWrites:
             1_000_000,
             2_000_000,
             3_000_000,
-        ]  # ms -> ns in writer
+        ]  # us -> ns in writer
         assert messages[0].msg.value == 42.0
         assert messages[1].msg.items[0].enabled
         assert messages[1].msg.items[0].matrix == [1.0, 0.0, 0.0, 0.0]
