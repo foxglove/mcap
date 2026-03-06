@@ -41,6 +41,7 @@ words:
   - Anduril
   - bagfile
   - bfbs
+  - bytearray
   - callerid
   - cbor
   - cmake
@@ -49,10 +50,12 @@ words:
   - conans
   - crc
   - crcs
+  - cstr
   - datetime
   - DDSI
   - deserialization
   - distro
+  - dtype
   - elems
   - emerg
   - flatbuffer
@@ -66,6 +69,7 @@ words:
   - infima
   - inputfile
   - intrinsics
+  - issubdtype
   - jsonschema
   - kaitai
   - libmcap
@@ -76,6 +80,7 @@ words:
   - msgpack
   - nanos
   - nanosec
+  - ndarray
   - noenv
   - Norlab
   - nsec
@@ -89,6 +94,8 @@ words:
   - proto
   - protobuf
   - protoc
+  - protos
+  - pyulog
   - robocar
   - rosbag
   - rosmsg
@@ -99,6 +106,7 @@ words:
   - serde
   - sfixed
   - srgb
+  - staticmethod
   - stoull
   - struct
   - swiftformat
