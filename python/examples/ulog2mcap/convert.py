@@ -1,7 +1,9 @@
 import argparse
+from io import BufferedWriter
 import itertools
 import json
 import typing
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 import numpy as np
@@ -260,7 +262,7 @@ def convert_ulog(
         ):
             timestamp = convert_timestamp(log_msg.timestamp)
             proto_msg = log_pb2.Log()  # type: ignore
-            proto_msg.timestamp.sec = int(timestamp / 1_000_000_000)  # type: ignore
+            proto_msg.timestamp.sec = int(timestamp // 1_000_000_000)  # type: ignore
             proto_msg.timestamp.nsec = int(timestamp % 1_000_000_000)  # type: ignore
             proto_msg.level = ulog_level_to_fox_log_level(log_msg.log_level_str())
             proto_msg.message = log_msg.message
@@ -344,6 +346,16 @@ def parse_microseconds_date(date: str) -> datetime:
         return datetime.fromisoformat(date).astimezone(timezone.utc)
 
 
+@contextmanager
+def mcap_writer(stream: BufferedWriter):
+    mcap = Writer(stream)
+    mcap.start()
+    try:
+        yield mcap
+    finally:
+        mcap.finish()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert PX4 ULog file to MCAP file")
     parser.add_argument("input_file", type=str, help="Path to the input Ulog file.")
@@ -384,10 +396,7 @@ if __name__ == "__main__":
     if args.start_date:
         start_time = parse_microseconds_date(args.start_date)
 
-    with open(args.output_file, "wb") as stream:
-        mcap = Writer(stream)
-        mcap.start()
+    with open(args.output_file, "wb") as stream, mcap_writer(stream) as mcap:
         convert_ulog(
             ulog, mcap, start_time=start_time, metadata=[(args.metadata_name, metadata)]
         )
-        mcap.finish()
