@@ -53,7 +53,7 @@ jobs:
         with:
           node-version: 24.x
           cache: yarn
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
@@ -183,7 +183,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           lfs: false
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
@@ -202,7 +202,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           lfs: false
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
