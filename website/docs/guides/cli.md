@@ -59,6 +59,7 @@ Run `mcap --help` for detailed usage information.
     list        List records of an MCAP file
     merge       Merge a selection of MCAP files by record timestamp
     recover     Recover data from a potentially corrupt MCAP file
+    rename      Rename records of an MCAP file
     version     Output version information
 
     Flags:
@@ -171,6 +172,29 @@ AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
 ```
 
 Remote reads will use the index at the end of the file to minimize latency and data transfer.
+
+### Renaming channel topics
+
+Rename a channel's topic in an MCAP file. By default the file is modified in place:
+
+    $ mcap rename channel demo.mcap --from /tf --to /tf_renamed
+
+To write to a new file instead of modifying the original, use `--output`:
+
+    $ mcap rename channel demo.mcap --from /tf --to /tf_renamed --output demo-out.mcap
+
+Verify the result:
+
+<!-- cspell: disable -->
+
+    $ mcap info demo-out.mcap
+    ...
+    channels:
+      	(2) /tf_renamed  774 msgs (99.48 Hz)   : tf2_msgs/TFMessage [ros1msg]
+
+<!-- cspell: enable -->
+
+The command will fail if the target topic already exists in the file or if the source topic is not found.
 
 ### File Diagnostics
 
