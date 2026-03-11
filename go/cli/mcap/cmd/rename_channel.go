@@ -287,7 +287,13 @@ func init() {
 	renameCmd.AddCommand(renameChannelCmd)
 	renameChannelCmd.PersistentFlags().StringVar(&renameChannelFrom, "from", "", "existing topic name to rename")
 	renameChannelCmd.PersistentFlags().StringVar(&renameChannelTo, "to", "", "new topic name")
-	renameChannelCmd.PersistentFlags().StringVarP(&renameChannelOutput, "output", "o", "", "write renamed MCAP to a new file (default: in-place)")
+	renameChannelCmd.PersistentFlags().StringVarP(
+		&renameChannelOutput,
+		"output",
+		"o",
+		"",
+		"write renamed MCAP to a new file (default: in-place)",
+	)
 	err := renameChannelCmd.MarkPersistentFlagRequired("from")
 	if err != nil {
 		die("failed to mark flag required: %s", err)
