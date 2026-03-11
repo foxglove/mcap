@@ -341,7 +341,7 @@ Examples:
 	Args: cobra.ExactArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
 		compression := renameChannelCompression
-		if compression == "none" {
+		if compression == compressionNoneAlias {
 			compression = ""
 		}
 		opts := renameOpts{
