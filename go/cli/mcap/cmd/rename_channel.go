@@ -12,19 +12,35 @@ import (
 )
 
 var (
-	renameChannelFrom   string
-	renameChannelTo     string
-	renameChannelOutput string
+	renameChannelFrom        string
+	renameChannelTo          string
+	renameChannelOutput      string
+	renameChannelCompression string
+	renameChannelChunkSize   int64
+	renameChannelIncludeCRC  bool
 )
 
-func rewriteChannelTopics(dst io.Writer, src io.Reader, fromTopic string, toTopic string) (int, error) {
+type renameOpts struct {
+	compression mcap.CompressionFormat
+	chunkSize   int64
+	includeCRC  bool
+}
+
+func rewriteChannelTopics(
+	dst io.Writer,
+	src io.Reader,
+	fromTopic string,
+	toTopic string,
+	opts renameOpts,
+) (int, error) {
 	if fromTopic == toTopic {
 		return 0, fmt.Errorf("source and target topics are identical: %q", fromTopic)
 	}
 	writer, err := mcap.NewWriter(dst, &mcap.WriterOptions{
 		Chunked:     true,
-		ChunkSize:   1024 * 1024,
-		Compression: mcap.CompressionLZ4,
+		ChunkSize:   opts.chunkSize,
+		Compression: opts.compression,
+		IncludeCRC:  opts.includeCRC,
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to construct output writer: %w", err)
@@ -107,6 +123,23 @@ func rewriteChannelTopics(dst io.Writer, src io.Reader, fromTopic string, toTopi
 		return count, nil
 	}
 
+	// renameAndWriteChannel applies the topic rename to a single channel
+	// and writes it. Used for late channels that arrive after the initial flush.
+	renameAndWriteChannel := func(channel *mcap.Channel) (int, error) {
+		if channel.Topic == toTopic {
+			return 0, fmt.Errorf("target topic %q already exists in the file", toTopic)
+		}
+		count := 0
+		if channel.Topic == fromTopic {
+			channel.Topic = toTopic
+			count++
+		}
+		if err := writer.WriteChannel(channel); err != nil {
+			return count, fmt.Errorf("failed to write channel: %w", err)
+		}
+		return count, nil
+	}
+
 	renamed := 0
 	for {
 		tokenType, token, err := lexer.Next(nil)
@@ -126,21 +159,40 @@ func rewriteChannelTopics(dst io.Writer, src io.Reader, fromTopic string, toTopi
 				return renamed, fmt.Errorf("failed to write header: %w", err)
 			}
 		case mcap.TokenSchema:
-			// Buffer schemas; they'll be flushed with channels before messages.
-			tokenCopy := make([]byte, len(token))
-			copy(tokenCopy, token)
-			pending = append(pending, pendingRecord{tokenType, tokenCopy})
+			if flushed {
+				// Late schema (after the first message) — write directly.
+				schema, err := mcap.ParseSchema(token)
+				if err != nil {
+					return renamed, fmt.Errorf("failed to parse schema: %w", err)
+				}
+				if err := writer.WriteSchema(schema); err != nil {
+					return renamed, fmt.Errorf("failed to write schema: %w", err)
+				}
+			} else {
+				tokenCopy := make([]byte, len(token))
+				copy(tokenCopy, token)
+				pending = append(pending, pendingRecord{tokenType, tokenCopy})
+			}
 		case mcap.TokenChannel:
 			channel, err := mcap.ParseChannel(token)
 			if err != nil {
 				return renamed, fmt.Errorf("failed to parse channel: %w", err)
 			}
-			channels = append(channels, channel)
-			tokenCopy := make([]byte, len(token))
-			copy(tokenCopy, token)
-			pending = append(pending, pendingRecord{tokenType, tokenCopy})
+			if flushed {
+				// Late channel (after the first message) — rename and write directly.
+				n, err := renameAndWriteChannel(channel)
+				renamed += n
+				if err != nil {
+					return renamed, err
+				}
+			} else {
+				channels = append(channels, channel)
+				tokenCopy := make([]byte, len(token))
+				copy(tokenCopy, token)
+				pending = append(pending, pendingRecord{tokenType, tokenCopy})
+			}
 		case mcap.TokenMessage:
-			// First message means all channels have been seen.
+			// First message means the initial batch of channels has been seen.
 			n, err := flushPending()
 			renamed += n
 			if err != nil {
@@ -182,20 +234,35 @@ func rewriteChannelTopics(dst io.Writer, src io.Reader, fromTopic string, toTopi
 	return renamed, nil
 }
 
-func renameChannelInFile(inputPath string, outputPath string, fromTopic string, toTopic string) error {
-	input, err := os.Open(inputPath)
+func renameChannelInFile(
+	inputPath string,
+	outputPath string,
+	fromTopic string,
+	toTopic string,
+	opts renameOpts,
+) error {
+	resolvedInput, err := filepath.Abs(inputPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve input path: %w", err)
+	}
+
+	input, err := os.Open(resolvedInput)
 	if err != nil {
 		return fmt.Errorf("failed to open input file: %w", err)
 	}
 
-	var targetPath string
+	var resolvedTarget string
 	if outputPath == "" {
-		targetPath = inputPath
+		resolvedTarget = resolvedInput
 	} else {
-		targetPath = outputPath
+		resolvedTarget, err = filepath.Abs(outputPath)
+		if err != nil {
+			input.Close()
+			return fmt.Errorf("failed to resolve output path: %w", err)
+		}
 	}
 
-	inPlace := targetPath == inputPath
+	inPlace := resolvedTarget == resolvedInput
 	if inPlace {
 		// Preserve the original file's permissions after replacing it.
 		fi, err := input.Stat()
@@ -205,13 +272,13 @@ func renameChannelInFile(inputPath string, outputPath string, fromTopic string, 
 		}
 		originalMode := fi.Mode()
 
-		tmpfile, err := os.CreateTemp(filepath.Dir(inputPath), "mcap-rename-*")
+		tmpfile, err := os.CreateTemp(filepath.Dir(resolvedInput), "mcap-rename-*")
 		if err != nil {
 			input.Close()
 			return fmt.Errorf("failed to create temporary file: %w", err)
 		}
 		tmpname := tmpfile.Name()
-		renamed, rewriteErr := rewriteChannelTopics(tmpfile, input, fromTopic, toTopic)
+		renamed, rewriteErr := rewriteChannelTopics(tmpfile, input, fromTopic, toTopic, opts)
 		// Close both files before any rename or cleanup.
 		input.Close()
 		closeErr := tmpfile.Close()
@@ -231,7 +298,7 @@ func renameChannelInFile(inputPath string, outputPath string, fromTopic string, 
 			_ = os.Remove(tmpname)
 			return fmt.Errorf("failed to preserve file permissions: %w", err)
 		}
-		if err := os.Rename(tmpname, inputPath); err != nil {
+		if err := os.Rename(tmpname, resolvedInput); err != nil {
 			_ = os.Remove(tmpname)
 			return fmt.Errorf("failed to replace input file: %w", err)
 		}
@@ -241,22 +308,22 @@ func renameChannelInFile(inputPath string, outputPath string, fromTopic string, 
 	// Non-in-place path: input can be deferred.
 	defer input.Close()
 
-	output, err := os.Create(targetPath)
+	output, err := os.Create(resolvedTarget)
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}
-	renamed, rewriteErr := rewriteChannelTopics(output, input, fromTopic, toTopic)
+	renamed, rewriteErr := rewriteChannelTopics(output, input, fromTopic, toTopic, opts)
 	closeErr := output.Close()
 	if rewriteErr != nil {
-		_ = os.Remove(targetPath)
+		_ = os.Remove(resolvedTarget)
 		return rewriteErr
 	}
 	if closeErr != nil {
-		_ = os.Remove(targetPath)
+		_ = os.Remove(resolvedTarget)
 		return fmt.Errorf("failed to close output file: %w", closeErr)
 	}
 	if renamed == 0 {
-		_ = os.Remove(targetPath)
+		_ = os.Remove(resolvedTarget)
 		return fmt.Errorf("topic %q was not found", fromTopic)
 	}
 	return nil
@@ -273,10 +340,16 @@ Examples:
   mcap rename channel input.mcap --from /tf --to /tf_renamed --output output.mcap`,
 	Args: cobra.ExactArgs(1),
 	Run: func(_ *cobra.Command, args []string) {
-		if renameChannelFrom == renameChannelTo {
-			die("--from and --to must be different")
+		compression := renameChannelCompression
+		if compression == "none" {
+			compression = ""
 		}
-		err := renameChannelInFile(args[0], renameChannelOutput, renameChannelFrom, renameChannelTo)
+		opts := renameOpts{
+			compression: mcap.CompressionFormat(compression),
+			chunkSize:   renameChannelChunkSize,
+			includeCRC:  renameChannelIncludeCRC,
+		}
+		err := renameChannelInFile(args[0], renameChannelOutput, renameChannelFrom, renameChannelTo, opts)
 		if err != nil {
 			die("failed to rename channel: %s", err)
 		}
@@ -285,14 +358,27 @@ Examples:
 
 func init() {
 	renameCmd.AddCommand(renameChannelCmd)
-	renameChannelCmd.PersistentFlags().StringVar(&renameChannelFrom, "from", "", "existing topic name to rename")
-	renameChannelCmd.PersistentFlags().StringVar(&renameChannelTo, "to", "", "new topic name")
+	renameChannelCmd.PersistentFlags().StringVar(
+		&renameChannelFrom, "from", "", "existing topic name to rename",
+	)
+	renameChannelCmd.PersistentFlags().StringVar(
+		&renameChannelTo, "to", "", "new topic name",
+	)
 	renameChannelCmd.PersistentFlags().StringVarP(
-		&renameChannelOutput,
-		"output",
-		"o",
-		"",
+		&renameChannelOutput, "output", "o", "",
 		"write renamed MCAP to a new file (default: in-place)",
+	)
+	renameChannelCmd.PersistentFlags().StringVar(
+		&renameChannelCompression, "compression", "zstd",
+		"chunk compression algorithm (supported: zstd, lz4, none)",
+	)
+	renameChannelCmd.PersistentFlags().Int64Var(
+		&renameChannelChunkSize, "chunk-size", 8*1024*1024,
+		"chunk size to target",
+	)
+	renameChannelCmd.PersistentFlags().BoolVar(
+		&renameChannelIncludeCRC, "include-crc", true,
+		"include chunk CRC checksums in output",
 	)
 	err := renameChannelCmd.MarkPersistentFlagRequired("from")
 	if err != nil {

@@ -13,6 +13,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// defaultRenameOpts returns writer options matching the CLI defaults for tests.
+func defaultRenameOpts() renameOpts {
+	return renameOpts{
+		compression: mcap.CompressionZSTD,
+		chunkSize:   8 * 1024 * 1024,
+		includeCRC:  true,
+	}
+}
+
 func writeTestMCAPForRename(t *testing.T, path string) {
 	t.Helper()
 	f, err := os.Create(path)
@@ -93,6 +102,8 @@ func readTopicsFromMCAP(t *testing.T, path string) []string {
 }
 
 func TestRewriteChannelTopics(t *testing.T) {
+	opts := defaultRenameOpts()
+
 	t.Run("renames matching topic", func(t *testing.T) {
 		input := &bytes.Buffer{}
 		writer, err := mcap.NewWriter(input, &mcap.WriterOptions{Chunked: true})
@@ -113,7 +124,7 @@ func TestRewriteChannelTopics(t *testing.T) {
 		require.NoError(t, writer.Close())
 
 		output := &bytes.Buffer{}
-		renamed, err := rewriteChannelTopics(output, input, "/foo", "/foo_renamed")
+		renamed, err := rewriteChannelTopics(output, input, "/foo", "/foo_renamed", opts)
 		require.NoError(t, err)
 		assert.Equal(t, 1, renamed)
 
@@ -141,7 +152,7 @@ func TestRewriteChannelTopics(t *testing.T) {
 
 	t.Run("errors when from and to are identical", func(t *testing.T) {
 		output := &bytes.Buffer{}
-		_, err := rewriteChannelTopics(output, &bytes.Buffer{}, "/foo", "/foo")
+		_, err := rewriteChannelTopics(output, &bytes.Buffer{}, "/foo", "/foo", opts)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "identical")
 	})
@@ -165,7 +176,7 @@ func TestRewriteChannelTopics(t *testing.T) {
 		require.NoError(t, writer.Close())
 
 		output := &bytes.Buffer{}
-		_, err = rewriteChannelTopics(output, input, "/foo", "/bar")
+		_, err = rewriteChannelTopics(output, input, "/foo", "/bar", opts)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "already exists")
 	})
@@ -187,7 +198,7 @@ func TestRewriteChannelTopics(t *testing.T) {
 		require.NoError(t, writer.Close())
 
 		output := &bytes.Buffer{}
-		_, err = rewriteChannelTopics(output, input, "/foo", "/bar")
+		_, err = rewriteChannelTopics(output, input, "/foo", "/bar", opts)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "already exists")
 	})
@@ -206,7 +217,101 @@ func TestRewriteChannelTopics(t *testing.T) {
 		require.NoError(t, writer.Close())
 
 		output := &bytes.Buffer{}
-		_, err = rewriteChannelTopics(output, input, "/foo", "/bar")
+		_, err = rewriteChannelTopics(output, input, "/foo", "/bar", opts)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "already exists")
+	})
+
+	t.Run("handles late channels after first message", func(t *testing.T) {
+		// Build an MCAP with a channel introduced in a second chunk.
+		// Chunk 1: schema 1, channel 1 (/foo), message on channel 1
+		// Chunk 2: schema 2, channel 2 (/baz), message on channel 2
+		input := &bytes.Buffer{}
+		writer, err := mcap.NewWriter(input, &mcap.WriterOptions{
+			Chunked:   true,
+			ChunkSize: 1, // Force a new chunk after every record.
+		})
+		require.NoError(t, err)
+		require.NoError(t, writer.WriteHeader(&mcap.Header{}))
+		require.NoError(t, writer.WriteSchema(&mcap.Schema{
+			ID: 1, Name: "s1", Encoding: "ros1msg", Data: []byte{},
+		}))
+		require.NoError(t, writer.WriteChannel(&mcap.Channel{
+			ID: 1, SchemaID: 1, Topic: "/foo",
+		}))
+		require.NoError(t, writer.WriteMessage(&mcap.Message{
+			ChannelID: 1, Sequence: 1, LogTime: 1, PublishTime: 1, Data: []byte{1},
+		}))
+		// Late schema + channel arriving after messages.
+		require.NoError(t, writer.WriteSchema(&mcap.Schema{
+			ID: 2, Name: "s2", Encoding: "ros1msg", Data: []byte{},
+		}))
+		require.NoError(t, writer.WriteChannel(&mcap.Channel{
+			ID: 2, SchemaID: 2, Topic: "/baz",
+		}))
+		require.NoError(t, writer.WriteMessage(&mcap.Message{
+			ChannelID: 2, Sequence: 2, LogTime: 2, PublishTime: 2, Data: []byte{2},
+		}))
+		require.NoError(t, writer.Close())
+
+		output := &bytes.Buffer{}
+		renamed, err := rewriteChannelTopics(output, input, "/foo", "/foo_renamed", opts)
+		require.NoError(t, err)
+		assert.Equal(t, 1, renamed)
+
+		// Verify both channels are present in the output.
+		lexer, err := mcap.NewLexer(bytes.NewReader(output.Bytes()), &mcap.LexerOptions{})
+		require.NoError(t, err)
+		var topics []string
+		msgCount := 0
+		for {
+			tokenType, token, err := lexer.Next(nil)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			require.NoError(t, err)
+			if tokenType == mcap.TokenChannel {
+				ch, err := mcap.ParseChannel(token)
+				require.NoError(t, err)
+				topics = append(topics, ch.Topic)
+			}
+			if tokenType == mcap.TokenMessage {
+				msgCount++
+			}
+			if tokenType == mcap.TokenDataEnd {
+				break
+			}
+		}
+		assert.Equal(t, []string{"/foo_renamed", "/baz"}, topics)
+		assert.Equal(t, 2, msgCount)
+	})
+
+	t.Run("detects collision on late channel", func(t *testing.T) {
+		// Late channel has the target topic — should error.
+		input := &bytes.Buffer{}
+		writer, err := mcap.NewWriter(input, &mcap.WriterOptions{
+			Chunked:   true,
+			ChunkSize: 1,
+		})
+		require.NoError(t, err)
+		require.NoError(t, writer.WriteHeader(&mcap.Header{}))
+		require.NoError(t, writer.WriteChannel(&mcap.Channel{
+			ID: 1, SchemaID: 0, Topic: "/foo",
+		}))
+		require.NoError(t, writer.WriteMessage(&mcap.Message{
+			ChannelID: 1, Sequence: 1, LogTime: 1, PublishTime: 1, Data: []byte{1},
+		}))
+		// Late channel with the target topic.
+		require.NoError(t, writer.WriteChannel(&mcap.Channel{
+			ID: 2, SchemaID: 0, Topic: "/bar",
+		}))
+		require.NoError(t, writer.WriteMessage(&mcap.Message{
+			ChannelID: 2, Sequence: 2, LogTime: 2, PublishTime: 2, Data: []byte{2},
+		}))
+		require.NoError(t, writer.Close())
+
+		output := &bytes.Buffer{}
+		_, err = rewriteChannelTopics(output, input, "/foo", "/bar", opts)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "already exists")
 	})
@@ -218,7 +323,7 @@ func TestRenameChannelInFile_OutputFile(t *testing.T) {
 	outputPath := filepath.Join(tmp, "output.mcap")
 	writeTestMCAPForRename(t, inputPath)
 
-	err := renameChannelInFile(inputPath, outputPath, "/foo", "/foo_renamed")
+	err := renameChannelInFile(inputPath, outputPath, "/foo", "/foo_renamed", defaultRenameOpts())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"/foo", "/bar"}, readTopicsFromMCAP(t, inputPath))
 	assert.Equal(t, []string{"/foo_renamed", "/bar"}, readTopicsFromMCAP(t, outputPath))
@@ -229,7 +334,7 @@ func TestRenameChannelInFile_InPlace(t *testing.T) {
 	inputPath := filepath.Join(tmp, "input.mcap")
 	writeTestMCAPForRename(t, inputPath)
 
-	err := renameChannelInFile(inputPath, "", "/foo", "/foo_renamed")
+	err := renameChannelInFile(inputPath, "", "/foo", "/foo_renamed", defaultRenameOpts())
 	require.NoError(t, err)
 	assert.Equal(t, []string{"/foo_renamed", "/bar"}, readTopicsFromMCAP(t, inputPath))
 }
@@ -240,7 +345,7 @@ func TestRenameChannelInFile_MissingTopic(t *testing.T) {
 	outputPath := filepath.Join(tmp, "output.mcap")
 	writeTestMCAPForRename(t, inputPath)
 
-	err := renameChannelInFile(inputPath, outputPath, "/missing", "/newname")
+	err := renameChannelInFile(inputPath, outputPath, "/missing", "/newname", defaultRenameOpts())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "was not found")
 	_, statErr := os.Stat(outputPath)
@@ -253,9 +358,29 @@ func TestRenameChannelInFile_TopicCollision(t *testing.T) {
 	outputPath := filepath.Join(tmp, "output.mcap")
 	writeTestMCAPForRename(t, inputPath)
 
-	err := renameChannelInFile(inputPath, outputPath, "/foo", "/bar")
+	err := renameChannelInFile(inputPath, outputPath, "/foo", "/bar", defaultRenameOpts())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already exists")
 	_, statErr := os.Stat(outputPath)
 	assert.True(t, os.IsNotExist(statErr))
+}
+
+func TestRenameChannelInFile_PathNormalization(t *testing.T) {
+	// Verify that equivalent-but-different paths are detected as in-place.
+	// Without filepath.Abs, passing "./input.mcap" as --output when the
+	// positional arg is "input.mcap" would truncate the file.
+	tmp := t.TempDir()
+	inputPath := filepath.Join(tmp, "input.mcap")
+	writeTestMCAPForRename(t, inputPath)
+
+	// Use a relative-looking equivalent: tmp + "/../" + basename(tmp) + "/input.mcap"
+	base := filepath.Base(tmp)
+	equivalentOutput := filepath.Join(tmp, "..", base, "input.mcap")
+
+	err := renameChannelInFile(inputPath, equivalentOutput, "/foo", "/foo_renamed", defaultRenameOpts())
+	require.NoError(t, err)
+
+	// Should have done an in-place rename (not corrupted the file).
+	topics := readTopicsFromMCAP(t, inputPath)
+	assert.Equal(t, []string{"/foo_renamed", "/bar"}, topics)
 }
