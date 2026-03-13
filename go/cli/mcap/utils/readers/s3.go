@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -15,8 +17,15 @@ func init() {
 	RegisterReader("s3", newS3Reader)
 }
 
+func forcePathStyle() bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv("MCAP_S3_FORCE_PATH_STYLE")))
+	return value == "1" || value == "true" || value == "yes"
+}
+
 // Factory for S3 readers (called by registry).
 func newS3Reader(ctx context.Context, bucket, path string) (func() error, io.ReadSeekCloser, error) {
+	pathStyle := forcePathStyle()
+
 	// Try anonymous first
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithCredentialsProvider(aws.AnonymousCredentials{}),
@@ -25,7 +34,12 @@ func newS3Reader(ctx context.Context, bucket, path string) (func() error, io.Rea
 		return func() error { return nil }, nil, fmt.Errorf("failed to load AWS config: %w", err)
 	}
 
-	client := s3.NewFromConfig(cfg)
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if pathStyle {
+			o.UsePathStyle = true
+		}
+	})
+
 	rs, err := NewS3ReadSeekCloser(ctx, client, bucket, path)
 	if err == nil {
 		return rs.Close, rs, nil
@@ -37,7 +51,12 @@ func newS3Reader(ctx context.Context, bucket, path string) (func() error, io.Rea
 		return func() error { return nil }, nil, fmt.Errorf("failed to load authenticated AWS config: %w", err)
 	}
 
-	client = s3.NewFromConfig(cfg)
+	client = s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if pathStyle {
+			o.UsePathStyle = true
+		}
+	})
+
 	rs, err = NewS3ReadSeekCloser(ctx, client, bucket, path)
 	if err != nil {
 		return func() error { return nil }, nil, fmt.Errorf("failed to create S3 reader: %w", err)
