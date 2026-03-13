@@ -170,6 +170,23 @@ When reading from S3 you must specify the region of the bucket:
 AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
 ```
 
+Some S3-compatible storage systems require path-style addressing instead of the default virtual-host style. To enable this behavior, set the following environment variable:
+
+```bash
+MCAP_S3_FORCE_PATH_STYLE=true
+```
+
+Example:
+
+```bash
+MCAP_S3_FORCE_PATH_STYLE=true \
+AWS_REGION=eu-north-1 \
+AWS_ENDPOINT_URL_S3=https://s3.example.com:9000 \
+AWS_ACCESS_KEY_ID=... \
+AWS_SECRET_ACCESS_KEY=... \
+mcap info s3://my-bucket/demo.mcap
+```
+
 Remote reads will use the index at the end of the file to minimize latency and data transfer.
 
 ### File Diagnostics
