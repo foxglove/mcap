@@ -96,3 +96,10 @@ func TestNoErrorOnSchemalessMessages(t *testing.T) {
 	diagnosis := doctor.Examine()
 	assert.Empty(t, diagnosis.Errors)
 }
+
+func TestStrictMessageOrderFlagIsDoctorOnly(t *testing.T) {
+	assert.Nil(t, rootCmd.PersistentFlags().Lookup("strict-message-order"))
+	assert.NotNil(t, doctorCommand.Flags().Lookup("strict-message-order"))
+	assert.Nil(t, convertCmd.Flags().Lookup("strict-message-order"))
+	assert.Nil(t, mergeCmd.Flags().Lookup("strict-message-order"))
+}
