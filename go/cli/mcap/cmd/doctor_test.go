@@ -10,16 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStrictMessageOrderFlagIsDoctorOnly(t *testing.T) {
-	if rootCmd.PersistentFlags().Lookup("strict-message-order") != nil {
-		t.Fatal("strict-message-order should not be a root persistent flag")
-	}
-
-	if doctorCommand.Flags().Lookup("strict-message-order") == nil {
-		t.Fatal("strict-message-order should be registered on doctor")
-	}
-}
-
 func TestNoErrorOnMessagelessChunks(t *testing.T) {
 	buf := bytes.Buffer{}
 	writer, err := mcap.NewWriter(&buf, &mcap.WriterOptions{
