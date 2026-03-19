@@ -733,6 +733,6 @@ func init() {
 	rootCmd.AddCommand(doctorCommand)
 
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
-	rootCmd.PersistentFlags().BoolVarP(&strictMessageOrder, "strict-message-order", "",
+	doctorCommand.Flags().BoolVarP(&strictMessageOrder, "strict-message-order", "",
 		false, "Require that messages have a monotonic log time")
 }

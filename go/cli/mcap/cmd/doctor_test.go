@@ -1,5 +1,18 @@
 package cmd
 
+import "testing"
+
+func TestStrictMessageOrderFlagIsDoctorOnly(t *testing.T) {
+	if rootCmd.PersistentFlags().Lookup("strict-message-order") != nil {
+		t.Fatal("strict-message-order should not be a root persistent flag")
+	}
+
+	if doctorCommand.Flags().Lookup("strict-message-order") == nil {
+		t.Fatal("strict-message-order should be registered on doctor")
+	}
+}
+package cmd
+
 import (
 	"bytes"
 	"os"
