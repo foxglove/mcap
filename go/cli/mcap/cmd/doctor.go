@@ -732,7 +732,7 @@ var doctorCommand = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(doctorCommand)
 
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
+	doctorCommand.Flags().BoolVarP(&verbose, "verbose", "v", false, "Verbose output")
 	doctorCommand.Flags().BoolVarP(&strictMessageOrder, "strict-message-order", "",
 		false, "Require that messages have a monotonic log time")
 }
