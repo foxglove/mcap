@@ -240,7 +240,7 @@ Next, we'll register a channel to write our messages to:
 
 ```cpp
 mcap::Channel path_channel("/planner/path", "protobuf", path_schema.id);
-mcap.addChannel(path_channel);  // Assigned channel id written to path_channel.id
+writer.addChannel(path_channel);  // Assigned channel id written to path_channel.id
 ```
 
 ### Write messages
@@ -249,13 +249,13 @@ We can now finally write messages to the channel using its ID:
 
 ```cpp
 foxglove::PosesInFrame poses_msg;
-// Fill in path_msg.
+// Fill in poses_msg.
 uint64_t timestamp_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
                                 std::chrono::system_clock::now().time_since_epoch())
                                 .count();
-poses_msg.mutable_timestamp()->set_seconds(timestamp_ns / 1'000'000'000ull)
-poses_msg.mutable_timestamp()->set_nanos(timestamp_ns % 1'000'000'000ull)
-poses_msg.set_frame_id("base_link")
+poses_msg.mutable_timestamp()->set_seconds(timestamp_ns / 1'000'000'000ull);
+poses_msg.mutable_timestamp()->set_nanos(timestamp_ns % 1'000'000'000ull);
+poses_msg.set_frame_id("base_link");
 // Example path in a straight line down the X axis
 for (int i = 0; i < 10; ++i) {
   auto pose = poses_msg.add_poses();
