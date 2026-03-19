@@ -1,6 +1,14 @@
 package cmd
 
-import "testing"
+import (
+	"bytes"
+	"os"
+	"testing"
+
+	"github.com/foxglove/mcap/go/mcap"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
 
 func TestStrictMessageOrderFlagIsDoctorOnly(t *testing.T) {
 	if rootCmd.PersistentFlags().Lookup("strict-message-order") != nil {
@@ -11,17 +19,6 @@ func TestStrictMessageOrderFlagIsDoctorOnly(t *testing.T) {
 		t.Fatal("strict-message-order should be registered on doctor")
 	}
 }
-package cmd
-
-import (
-	"bytes"
-	"os"
-	"testing"
-
-	"github.com/foxglove/mcap/go/mcap"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-)
 
 func TestNoErrorOnMessagelessChunks(t *testing.T) {
 	buf := bytes.Buffer{}
