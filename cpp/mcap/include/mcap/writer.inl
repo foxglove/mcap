@@ -2,6 +2,10 @@
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
+#include <cerrno>
 #ifndef MCAP_COMPRESSION_NO_LZ4
 #  include <lz4frame.h>
 #  include <lz4hc.h>
@@ -43,12 +47,17 @@ FileWriter::~FileWriter() {
   end();
 }
 
-Status FileWriter::open(std::string_view filename) {
+Status FileWriter::open(std::string_view filename, uint64_t size_for_fsync) {
   end();
+  size_for_fsync_ = size_for_fsync;
   file_ = std::fopen(filename.data(), "wb");
   if (!file_) {
     const auto msg = internal::StrCat("failed to open file \"", filename, "\" for writing");
     return Status(StatusCode::OpenFailed, msg);
+  } else {
+    // Disable buffered file output on application layer. Although OS still will have its internal
+    // buffering for file write operations.
+    setbuf(file_, nullptr);
   }
   return StatusCode::Success;
 }
@@ -56,9 +65,31 @@ Status FileWriter::open(std::string_view filename) {
 void FileWriter::handleWrite(const std::byte* data, uint64_t size) {
   assert(file_);
   const size_t written = std::fwrite(data, 1, size, file_);
-  (void)written;
-  assert(written == size);
+  if (written != size) {
+    // Written size may be less than original size if an error occurred.
+    throw std::runtime_error(
+        std::string("Error during writing data to disk. Bytes to write:") +
+        std::to_string(size) + ", written:" + std::to_string(written));
+  }
   size_ += size;
+  bytes_since_fsync_ += size;
+  if (size_for_fsync_ > 0 && bytes_since_fsync_ >= size_for_fsync_) {
+    bytes_since_fsync_ = 0;
+    // get file descriptor of the file
+    auto fd = fileno(file_);
+    int ret = -1;
+#ifndef _WIN32
+    ret = fsync(fd);
+#else
+    ret = _commit(fd);
+#endif
+    if (ret != 0) {
+      // Errors more often happening when flushing data to the disk rather than when doing
+      // buffered write operation.
+      throw std::runtime_error(
+          std::string("Error during flushing file to disk: ") + strerror(errno));
+    }
+  }
 }
 
 void FileWriter::flush() {
@@ -73,6 +104,8 @@ void FileWriter::end() {
     file_ = nullptr;
   }
   size_ = 0;
+  size_for_fsync_ = 0;
+  bytes_since_fsync_ = 0;
 }
 
 uint64_t FileWriter::size() const {
@@ -343,7 +376,7 @@ Status McapWriter::open(const std::string_view filename, const McapWriterOptions
   // If the writer was opened, close it first
   close();
   fileOutput_ = std::make_unique<FileWriter>();
-  const auto status = fileOutput_->open(filename);
+  const auto status = fileOutput_->open(filename, options.sizeForFsynch);
   if (!status.ok()) {
     fileOutput_.reset();
     return status;
@@ -1112,7 +1145,7 @@ uint64_t McapWriter::write(IWritable& output, const DataEnd& dataEnd) {
 }
 
 uint64_t McapWriter::write(IWritable& output, const Record& record) {
-  write(output, OpCode(record.opcode));
+  write(output, record.opcode);
   write(output, record.dataSize);
   write(output, record.data, record.dataSize);
 
