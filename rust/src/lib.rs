@@ -92,7 +92,7 @@ pub enum McapError {
     BadMagic,
     #[error("Footer record couldn't be found at the end of the file, before the magic bytes")]
     BadFooter,
-    #[error("Attachment CRC failed (expected {saved:08X}, got {calculated:08X}")]
+    #[error("Attachment CRC failed (expected {saved:08X}, got {calculated:08X})")]
     BadAttachmentCrc { saved: u32, calculated: u32 },
     #[error("Chunk CRC failed (expected {saved:08X}, got {calculated:08X})")]
     BadChunkCrc { saved: u32, calculated: u32 },
