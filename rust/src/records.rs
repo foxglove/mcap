@@ -2,7 +2,7 @@
 //!
 //! See <https://mcap.dev/spec>
 //!
-//! You probably want to user higher-level interfaces, like
+//! You probably want to use higher-level interfaces, like
 //! [`Message`](crate::Message), [`Channel`](crate::Channel), and [`Schema`](crate::Schema),
 //! read from iterators like [`MessageStream`](crate::MessageStream).
 
