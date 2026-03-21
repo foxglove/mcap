@@ -33,7 +33,7 @@ Installing via `go install` is not supported. To build from source you must clon
 1. Clone the [mcap repository](https://github.com/foxglove/mcap).
 2. `$ cd go/cli/mcap`
 3. `$ make build`
-4. The binary will be built into the a newly created `bin` folder.
+4. The binary will be built into a newly created `bin` folder.
 
 ## Usage
 

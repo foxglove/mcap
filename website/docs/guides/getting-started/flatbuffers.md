@@ -6,7 +6,7 @@ description: Read, write, and visualize MCAP files containing FlatBuffers data.
 
 ## Read and write MCAP
 
-If you're starting from scratch, you can write code that allows **writes your FlatBuffers data to MCAP files** and subsequently **reads your FlatBuffers data from your MCAP files**.
+If you're starting from scratch, you can write code that allows you to **write your FlatBuffers data to MCAP files** and subsequently **read your FlatBuffers data from your MCAP files**.
 
 See also the [official FlatBuffers docs](https://google.github.io/flatbuffers/) to learn more about reading and writing FlatBuffers.
 
