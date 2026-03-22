@@ -18,10 +18,16 @@ To read Protobuf messages from an MCAP file using C++, we have two options:
 
 ### Statically generated class definitions
 
+:::note
+
+This guide is based on the `static_reader.cpp` example available in the [MCAP repo](https://github.com/foxglove/mcap/blob/main/cpp/examples/prptobuf/static_reader.cpp).
+
+:::
+
 First, we generate our class definitions and include the relevant header:
 
 ```cpp
-#include "foxglove/PosesInFrame.pb.h"
+#include "foxglove/PointCloud.pb.h"
 ```
 
 We also include the MCAP reader implementation:
@@ -32,10 +38,6 @@ We also include the MCAP reader implementation:
 ```
 
 And standard library dependencies:
-
-```cpp
-#include <memory>
-```
 
 Use the `mcap::McapReader::open()` method to open an MCAP file for reading:
 
@@ -55,19 +57,26 @@ Use a `mcap::MessageView` to iterate through all of the messages in the MCAP fil
 
 ```cpp
 auto messageView = reader.readMessages();
+std::cout << "topic\t\ttype\t\t\ttimestamp\t\tframe_id" << std::endl;
 for (auto it = messageView.begin(); it != messageView.end(); it++) {
-  // skip messages that we can't use
-  if ((it->schema->encoding != "protobuf") || it->schema->name != "foxglove.PosesInFrame") {
+  // skip any non-protobuf, non PointCloud messages.
+  if ((it->schema->encoding != "protobuf") || it->schema->name != "foxglove.PointCloud") {
     continue;
   }
-  foxglove::PosesInFrame path;
-  if (!path.ParseFromArray(static_cast<const void*>(it->message.data),
-                                  it->message.dataSize)) {
-    std::cerr << "could not parse PosesInFrame" << std::endl;
+  if (it->channel->messageEncoding != "protobuf") {
+    std::cerr << "expected message encoding 'protobuf', got " << it->channel->messageEncoding
+              << std::endl;
+    reader.close();
     return 1;
   }
-  std::cout << "Found message: " << path.ShortDebugString() << std::endl;
-  // print out the message
+  foxglove::PointCloud pointCloud;
+  if (!pointCloud.ParseFromArray(it->message.data, static_cast<int>(it->message.dataSize))) {
+    std::cerr << "could not parse pointcloud message" << std::endl;
+    return 1;
+  }
+  // Read a field out from the message, to prove that we can.
+  std::cout << it->channel->topic << "\t(" << it->schema->name << ")\t[" << it->message.logTime
+            << "]:\t{ frame_id: " << pointCloud.frame_id() << " }" << std::endl;
 }
 ```
 
@@ -79,6 +88,12 @@ reader.close();
 
 ### Dynamically read fields
 
+:::note
+
+This guide is based on the `dynamic_reader.cpp` example available in the [MCAP repo](https://github.com/foxglove/mcap/blob/main/cpp/examples/prptobuf/dynamic_reader.cpp).
+
+:::
+
 To read message fields dynamically, we must first include the relevant headers:
 
 ```cpp
@@ -88,6 +103,8 @@ To read message fields dynamically, we must first include the relevant headers:
 
 #define MCAP_IMPLEMENTATION
 #include "mcap/reader.hpp"
+#include <memory>
+#include <vector>
 
 namespace gp = google::protobuf;
 ```
@@ -134,7 +151,7 @@ Next, let's define our `LoadSchema()` helper function:
 ```cpp
 bool LoadSchema(const mcap::SchemaPtr schema, gp::SimpleDescriptorDatabase* protoDb) {
   gp::FileDescriptorSet fdSet;
-  if (!fdSet.ParseFromArray(static_cast<const void*>(schema->data.data()), schema->data.size())) {
+  if (!fdSet.ParseFromArray(schema->data.data(), static_cast<int>(schema->data.size()))) {
     std::cerr << "failed to parse schema data" << std::endl;
     return false;
   }
@@ -158,19 +175,31 @@ Once the `FileDescriptorSet` is loaded, we can get the descriptor by name:
 
 ```cpp
 descriptor = protoPool.FindMessageTypeByName(it->schema->name);
+if (descriptor == nullptr) {
+  std::cerr << "failed to find descriptor after loading pool" << std::endl;
+  reader.close();
+  return 1;
+}
 ```
 
 We can use this descriptor to parse our message:
 
 ```cpp
 auto message = std::unique_ptr<gp::Message>(protoFactory.GetPrototype(descriptor)->New());
-if (!message->ParseFromArray(static_cast<const void*>(it->message.data),
-                              it->message.dataSize)) {
-  std::cerr << "failed to parse message using included schema" << std::endl;
+if (!message->ParseFromArray(it->message.data, static_cast<int>(it->message.dataSize))) {
+  std::cerr << "failed to parse message using included foxglove.PointCloud schema" << std::endl;
   reader.close();
   return 1;
 }
-std::cout << message->ShortDebugString() << std::endl;
+
+std::vector<const gp::FieldDescriptor*> fields;
+message->GetReflection()->ListFields(*message, &fields);
+std::cout << it->channel->topic << "\t(" << it->schema->name << ")\t[" << it->message.logTime
+          << "]:\t{ ";
+for (const auto field : fields) {
+  std::cout << field->name() << " ";
+}
+std::cout << "}" << std::endl;
 ```
 
 Finally, we close the reader:
