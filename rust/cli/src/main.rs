@@ -4,20 +4,19 @@ mod logsetup;
 use std::process;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
-use log::error;
+use clap::{ArgAction, Parser, Subcommand};
 
 #[derive(Parser, Debug)]
-#[clap(name = "mcap")]
+#[command(name = "mcap")]
 struct Args {
     /// Verbosity (-v, -vv, -vvv, etc.)
-    #[clap(short, long, parse(from_occurrences))]
+    #[arg(short, long, action = ArgAction::Count)]
     verbose: u8,
 
-    #[clap(short, long, arg_enum, default_value = "auto")]
+    #[arg(short, long, value_enum, default_value_t = logsetup::Color::Auto)]
     color: logsetup::Color,
 
-    #[clap(subcommand)]
+    #[command(subcommand)]
     command: Command,
 }
 
@@ -41,7 +40,7 @@ fn run() -> Result<()> {
 
 fn main() {
     run().unwrap_or_else(|e| {
-        error!("{e:?}");
+        eprintln!("Error: {e:#}");
         process::exit(1);
     });
 }
@@ -69,7 +68,7 @@ mod tests {
         let parse_err = Args::try_parse_from(["mcap"]).expect_err("subcommand is required");
         assert_eq!(
             parse_err.kind(),
-            clap::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
+            clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
         );
     }
 

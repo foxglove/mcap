@@ -1,7 +1,9 @@
-use anyhow::*;
-use simplelog::*;
+use std::io::IsTerminal;
 
-#[derive(clap::ArgEnum, Debug, Copy, Clone)]
+use anyhow::Context;
+use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, SimpleLogger, TermLogger, TerminalMode};
+
+#[derive(clap::ValueEnum, Debug, Copy, Clone)]
 pub enum Color {
     Auto,
     Always,
@@ -29,7 +31,7 @@ pub fn init_logger(verbosity: u8, color: Color) {
     let color = match color {
         Color::Always => ColorChoice::AlwaysAnsi,
         Color::Auto => {
-            if atty::is(atty::Stream::Stderr) {
+            if std::io::stderr().is_terminal() {
                 ColorChoice::Auto
             } else {
                 ColorChoice::Never

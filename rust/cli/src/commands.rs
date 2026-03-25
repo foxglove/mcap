@@ -5,7 +5,8 @@ pub fn run_info() -> Result<()> {
 }
 
 pub fn run_version() -> Result<()> {
-    bail!("'version' is not implemented yet")
+    println!("{}", env!("CARGO_PKG_VERSION"));
+    Ok(())
 }
 
 #[cfg(test)]
@@ -19,8 +20,7 @@ mod tests {
     }
 
     #[test]
-    fn version_returns_not_implemented() {
-        let err = run_version().expect_err("version should be a stub");
-        assert_eq!(err.to_string(), "'version' is not implemented yet");
+    fn version_prints_successfully() {
+        run_version().expect("version should print successfully");
     }
 }
