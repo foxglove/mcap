@@ -1,7 +1,7 @@
 [package]
 name = "mcap-cli"
-description = "Rust CLI scaffold for MCAP"
-version = "0.1.0"
+description = "MCAP CLI"
+version = "0.0.1"
 edition = "2021"
 license = "MIT"
 publish = false
