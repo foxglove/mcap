@@ -1,0 +1,14 @@
+[package]
+name = "mcap-cli"
+description = "Rust CLI scaffold for MCAP"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+publish = false
+
+[dependencies]
+anyhow = "1"
+atty = "0.2"
+clap = { version = "3.2", features = ["derive"] }
+log = "0.4"
+simplelog = "0.12"
