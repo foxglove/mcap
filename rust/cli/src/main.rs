@@ -22,9 +22,9 @@ struct Args {
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 enum Command {
-    /// Show basic information about an MCAP file (stub)
+    /// Show basic information about an MCAP file
     Info,
-    /// Show CLI version information (stub)
+    /// Show CLI version information
     Version,
 }
 
