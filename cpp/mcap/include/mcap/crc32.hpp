@@ -72,18 +72,19 @@ static constexpr uint32_t CRC32_INIT = 0xffffffff;
  * presented at: https://github.com/komrad36/CRC#option-9-8-byte-tabular
  */
 inline uint32_t crc32Update(const uint32_t prev, const std::byte* const data, const size_t length) {
-  // Process bytes one by one until we reach the proper alignment.
   uint32_t r = prev;
-  size_t offset = 0;
-  for (; (uintptr_t(data + offset) & alignof(uint32_t)) != 0 && offset < length; offset++) {
-    r = CRC32_TABLE[(r ^ uint8_t(data[offset])) & 0xff] ^ (r >> 8);
-  }
-  if (offset == length) {
+
+  // Handle small inputs byte-by-byte, avoiding the 8-byte bulk loop below.
+  if (length <= 8) {
+    for (size_t i = 0; i < length; i++) {
+      r = CRC32_TABLE[(r ^ uint8_t(data[i])) & 0xff] ^ (r >> 8);
+    }
     return r;
   }
 
   // Process 8 bytes (2 uint32s) at a time.
-  size_t remainingBytes = length - offset;
+  size_t offset = 0;
+  size_t remainingBytes = length;
   for (; remainingBytes >= 8; offset += 8, remainingBytes -= 8) {
     r ^= getUint32LE(data + offset);
     uint32_t r2 = getUint32LE(data + offset + 4);
