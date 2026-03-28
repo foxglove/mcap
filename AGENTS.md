@@ -75,7 +75,7 @@ The Go workspace (`go/go.work`) includes the core library (`go/mcap`), ROS tools
 
 The workspace includes the `mcap` library crate and `mcap-cli`.
 
-## C++ (optional)
+## C++
 
 **Prerequisites:** Docker (builds run inside containers), Conan v1, CMake.
 
@@ -85,7 +85,7 @@ The workspace includes the `mcap` library crate and `mcap-cli`.
 | Test   | `cd cpp && make test`            |
 | Format | `cd cpp && make ci-format-check` |
 
-## Swift (optional)
+## Swift
 
 **Prerequisites:** Swift ≥ 5.5. `Package.swift` is at the **repo root** — run these commands from the root, not from `swift/`.
 
