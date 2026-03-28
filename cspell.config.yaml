@@ -44,10 +44,12 @@ words:
   - bytearray
   - callerid
   - cbor
+  - clippy
   - cmake
   - colcon
   - conanfile
   - conans
+  - corepack
   - crc
   - crcs
   - cstr
@@ -96,11 +98,14 @@ words:
   - protoc
   - protos
   - pyulog
+  - Quickstart
   - robocar
   - rosbag
   - rosmsg
   - rostime
   - RTPS
+  - rustc
+  - rustup
   - Saronic
   - schemaless
   - serde
@@ -169,7 +174,7 @@ overrides:
     ignoreRegExpList:
       - "0x[0-9a-f]+n?"
 
-  - filename: "(Pipfile|README.md|pyproject.toml|setup.cfg)"
+  - filename: "(AGENTS.md|Pipfile|README.md|pyproject.toml|setup.cfg)"
     words:
       - pypi
       - pyright

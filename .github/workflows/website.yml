@@ -58,7 +58,7 @@ jobs:
         with:
           python-version: "3.10"
 
-      - run: pip install pipenv
+      - run: pip install pipenv==2026.0.3
 
       - run: make -C python docs
 
