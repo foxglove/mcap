@@ -2,7 +2,7 @@
 
 # MCAP
 
-MCAP is a file format and logging library. It is commonly used in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
+MCAP is a logging library and file format. It is commonly used in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
 
 ## Documentation
 
