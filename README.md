@@ -35,7 +35,7 @@ Install with `brew install mcap` or download the latest version directly from th
 
 ## Contributing
 
-See [AGENTS.md](./AGENTS.md) for build/test/lint commands, prerequisites, and development caveats across all languages. For TypeScript-specific contribution guidance, see [typescript/CONTRIBUTING.md](./typescript/CONTRIBUTING.md).
+See [AGENTS.md](./AGENTS.md) for build/test/lint commands, prerequisites, and development setup for each language.
 
 ## License
 
