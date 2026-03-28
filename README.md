@@ -2,7 +2,7 @@
 
 # MCAP
 
-MCAP is a modular container format and logging library for pub/sub messages with arbitrary message serialization. It is primarily intended for use in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
+MCAP is a file format and logging library. It is commonly used in robotics applications, and works well under various workloads, resource constraints, and durability requirements.
 
 ## Documentation
 
