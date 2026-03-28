@@ -6,18 +6,18 @@ This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) contain
 
 ## Quick reference
 
-| Language | Build | Test | Lint | Notes |
-|---|---|---|---|---|
-| TypeScript | `yarn typescript:build` | `yarn typescript:test` | `yarn workspace @mcap/core lint:ci`, `yarn fmt:check` | Yarn 4 via corepack; root `package.json` has all scripts |
-| Python | `cd python && make build` | `cd python && make test` | `cd python && make lint` | Requires Python 3.10 + pipenv |
-| Go | `cd go && go build ./...` | `cd go && make test` | `cd go && make lint` | Requires `golangci-lint` on PATH |
-| Rust | `cd rust && cargo build -p mcap --all-features` | `cd rust && cargo test -p mcap --all-features` | `cd rust && cargo clippy -p mcap --all-targets -- --no-deps -D warnings` | Needs stable Rust ≥ 1.85 |
-| C++ | `cd cpp && make build` | `cd cpp && make test` | `cd cpp && make ci-format-check` | Docker-based build; optional |
-| Swift | `swift build` | `swift test` | N/A | Requires Swift ≥ 5.5; `Package.swift` is at repo root; optional |
+| Language   | Build                                           | Test                                           | Lint                                                                     | Notes                                                           |
+| ---------- | ----------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| TypeScript | `yarn typescript:build`                         | `yarn typescript:test`                         | `yarn workspace @mcap/core lint:ci`, `yarn fmt:check`                    | Yarn 4 via corepack; root `package.json` has all scripts        |
+| Python     | `cd python && make build`                       | `cd python && make test`                       | `cd python && make lint`                                                 | Requires Python 3.10 + pipenv                                   |
+| Go         | `cd go && go build ./...`                       | `cd go && make test`                           | `cd go && make lint`                                                     | Requires `golangci-lint` on PATH                                |
+| Rust       | `cd rust && cargo build -p mcap --all-features` | `cd rust && cargo test -p mcap --all-features` | `cd rust && cargo clippy -p mcap --all-targets -- --no-deps -D warnings` | Needs stable Rust ≥ 1.85                                        |
+| C++        | `cd cpp && make build`                          | `cd cpp && make test`                          | `cd cpp && make ci-format-check`                                         | Docker-based build; optional                                    |
+| Swift      | `swift build`                                   | `swift test`                                   | N/A                                                                      | Requires Swift ≥ 5.5; `Package.swift` is at repo root; optional |
 
 ## Prerequisites
 
-- **Node.js ≥ 16** with `corepack enable` (activates the Yarn version pinned via `packageManager` in `package.json`)
+- **Node.js ≥ 18.12** with `corepack enable` (activates the Yarn version pinned via `packageManager` in `package.json`)
 - **Python 3.10** with `pipenv` (`pip install pipenv`)
 - **Go** (version from `go/go.work`) with `golangci-lint` (see `.github/workflows/ci.yml` for the version used in CI)
 - **Rust stable ≥ 1.85** (`rustup default stable`)

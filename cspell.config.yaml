@@ -37,6 +37,10 @@ ignorePaths:
   - cpp/examples/protobuf/proto
 
 words:
+  - clippy
+  - corepack
+  - rustc
+  - rustup
   - Aescape
   - Anduril
   - bagfile
@@ -169,7 +173,7 @@ overrides:
     ignoreRegExpList:
       - "0x[0-9a-f]+n?"
 
-  - filename: "(Pipfile|README.md|pyproject.toml|setup.cfg)"
+  - filename: "(AGENTS.md|Pipfile|README.md|pyproject.toml|setup.cfg)"
     words:
       - pypi
       - pyright
