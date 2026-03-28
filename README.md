@@ -24,9 +24,6 @@ MCAP libraries are provided in the following languages. For guidance on each lan
 | Swift                 | [readme](./swift)      | [API docs](https://mcap.dev/docs/swift/documentation/mcap)      |              | see [releases](https://github.com/foxglove/mcap/releases)                            |
 | Rust                  | [readme](./rust)       | [API docs](https://mcap.dev/docs/rust/mcap)                     | `mcap`       | [![](https://shields.io/crates/v/mcap)](https://crates.io/crates/mcap)               |
 
-To run the conformance tests, you will need to use [Git LFS](https://git-lfs.github.com/),
-which is used to store the test logs under `tests/conformance/data`.
-
 ## MCAP CLI
 
 Inspect, merge, and split MCAP files from the command line using the MCAP CLI.
