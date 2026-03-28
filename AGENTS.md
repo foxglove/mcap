@@ -32,3 +32,4 @@ This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) contain
 - **Rust edition 2024**: Some dev-dependency crates require Rust edition 2024, so `rustc` < 1.85 will fail to compile tests. Run `rustup default stable` to ensure a recent enough toolchain.
 - **Conformance tests**: These orchestrate cross-language testing via the TypeScript harness. Run `yarn test:conformance:generate-inputs && yarn test:conformance`. They require Git LFS data and pre-built binaries for each target language.
 - **No services**: This is a pure library project — no web servers, databases, or Docker Compose stacks to run.
+- **Releasing**: See [RELEASING.md](./RELEASING.md) for the release process for each language.
