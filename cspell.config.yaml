@@ -37,10 +37,6 @@ ignorePaths:
   - cpp/examples/protobuf/proto
 
 words:
-  - clippy
-  - corepack
-  - rustc
-  - rustup
   - Aescape
   - Anduril
   - bagfile
@@ -48,10 +44,12 @@ words:
   - bytearray
   - callerid
   - cbor
+  - clippy
   - cmake
   - colcon
   - conanfile
   - conans
+  - corepack
   - crc
   - crcs
   - cstr
@@ -105,6 +103,8 @@ words:
   - rosmsg
   - rostime
   - RTPS
+  - rustc
+  - rustup
   - Saronic
   - schemaless
   - serde
