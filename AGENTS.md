@@ -19,15 +19,15 @@ corepack enable
 yarn install
 ```
 
-| Action    | Command                                                        |
-| --------- | -------------------------------------------------------------- |
-| Build     | `yarn typescript:build`                                        |
-| Test      | `yarn typescript:test`                                         |
-| Lint      | `yarn workspace @mcap/core lint:ci`                            |
-| Format    | `yarn fmt:check` (check) / `yarn fmt` (fix)                    |
-| Typecheck | `yarn tsc:all`                                                 |
-| Validate  | `yarn workspace @foxglove/mcap-example-validate validate FILE` |
-| Bench     | `yarn workspace @foxglove/mcap-benchmarks bench`               |
+| Action    | Command                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| Build     | `yarn typescript:build`                                                                           |
+| Test      | `yarn typescript:test`                                                                            |
+| Lint      | `yarn workspace @mcap/core lint:ci` (repeat for `@mcap/support`, `@mcap/nodejs`, `@mcap/browser`) |
+| Format    | `yarn fmt:check` (check) / `yarn fmt` (fix)                                                       |
+| Typecheck | `yarn tsc:all`                                                                                    |
+| Validate  | `yarn workspace @foxglove/mcap-example-validate validate FILE`                                    |
+| Bench     | `yarn workspace @foxglove/mcap-benchmarks bench`                                                  |
 
 All scripts are defined in the root `package.json`. Each workspace (`@mcap/core`, `@mcap/support`, `@mcap/nodejs`, `@mcap/browser`) also has its own `lint:ci`, `build`, and `test` scripts.
 
@@ -89,7 +89,8 @@ The workspace includes the `mcap` library crate and `mcap-cli`.
 
 **Prerequisites:** Swift ≥ 5.5. `Package.swift` is at the **repo root** — run these commands from the root, not from `swift/`.
 
-| Action | Command       |
-| ------ | ------------- |
-| Build  | `swift build` |
-| Test   | `swift test`  |
+| Action | Command                                                              |
+| ------ | -------------------------------------------------------------------- |
+| Build  | `swift build`                                                        |
+| Test   | `swift test`                                                         |
+| Lint   | See SwiftLint and SwiftFormat commands in `.github/workflows/ci.yml` |
