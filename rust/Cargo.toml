@@ -64,6 +64,10 @@ opt-level = 3
 debug = true
 lto = true
 
+[workspace]
+members = ["cli"]
+resolver = "2"
+
 [[example]]
 name = "conformance_reader_async"
 required-features = ["tokio"]
