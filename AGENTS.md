@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) container file format, with implementations in TypeScript, Python, Go, Rust, C++, and Swift. There are no running services — this is purely a library/SDK project. The core functionality is writing and reading MCAP files.
+This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) log file format, with implementations in TypeScript, Python, Go, Rust, C++, and Swift. There are no running services — this is purely a library/SDK project. The core functionality is writing and reading MCAP files.
 
 ## General prerequisites
 
