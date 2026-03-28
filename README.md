@@ -11,7 +11,7 @@ MCAP is a modular container format and logging library for pub/sub messages with
 - [Motivation](https://mcap.dev/files/evaluation.pdf)
 - [Support Matrix](https://mcap.dev/reference)
 
-## Developer quick start
+## Quickstart
 
 MCAP libraries are provided in the following languages. For guidance on each language, see its corresponding README:
 
