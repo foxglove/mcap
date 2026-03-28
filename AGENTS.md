@@ -79,11 +79,11 @@ The workspace includes the `mcap` library crate and `mcap-cli`.
 
 **Prerequisites:** Docker (builds run inside containers), Conan v1, CMake.
 
-| Action | Command                          |
-| ------ | -------------------------------- |
-| Build  | `cd cpp && make build`           |
-| Test   | `cd cpp && make test`            |
-| Format | `cd cpp && make format-check`    |
+| Action | Command                       |
+| ------ | ----------------------------- |
+| Build  | `cd cpp && make build`        |
+| Test   | `cd cpp && make test`         |
+| Format | `cd cpp && make format-check` |
 
 ## Swift
 
