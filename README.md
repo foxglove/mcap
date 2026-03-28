@@ -35,11 +35,7 @@ Install with `brew install mcap` or download the latest version directly from th
 
 ## Contributing
 
-See [AGENTS.md](./AGENTS.md) for build/test/lint commands, prerequisites, and development setup for each language.
-
-## Releasing
-
-See [RELEASING.md](./RELEASING.md) for the release process for each language.
+See [AGENTS.md](./AGENTS.md) for build/test/lint commands, prerequisites, and development setup for each language. For releasing packages, see [RELEASING.md](./RELEASING.md).
 
 ## Stay in touch
 
