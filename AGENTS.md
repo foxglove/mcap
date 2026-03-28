@@ -83,7 +83,7 @@ The workspace includes the `mcap` library crate and `mcap-cli`.
 | ------ | -------------------------------- |
 | Build  | `cd cpp && make build`           |
 | Test   | `cd cpp && make test`            |
-| Format | `cd cpp && make ci-format-check` |
+| Format | `cd cpp && make format-check`    |
 
 ## Swift
 
