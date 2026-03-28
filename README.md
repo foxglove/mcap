@@ -37,13 +37,13 @@ Install with `brew install mcap` or download the latest version directly from th
 
 See [AGENTS.md](./AGENTS.md) for build/test/lint commands, prerequisites, and development setup for each language.
 
-## License
-
-[MIT License](/LICENSE).
-
 ## Releasing
 
 See [RELEASING.md](./RELEASING.md) for the release process for each language.
+
+## Stay in touch
+
+Join our [Discord community](https://foxglove.dev/chat) to ask questions, share feedback, and stay up to date on what our team is working on.
 
 ## Citations
 
@@ -67,6 +67,6 @@ Please replace the version and date fields with the version of the software you
 used, and the date you obtained it. Citing MCAP will help spread awareness of
 the project and strengthen the ecosystem.
 
-## Stay in touch
+## License
 
-Join our [Discord community](https://foxglove.dev/chat) to ask questions, share feedback, and stay up to date on what our team is working on.
+[MIT License](/LICENSE).
