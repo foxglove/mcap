@@ -65,6 +65,7 @@ words:
   - flatc
   - fwrite
   - gendeps
+  - genmsg
   - genpy
   - gentools
   - golangci
@@ -118,6 +119,7 @@ words:
   - swiftlint
   - tfmessage
   - typecheck
+  - isort
   - typedoc
   - ulog
   - unchunked
