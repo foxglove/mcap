@@ -3,7 +3,7 @@ use std::io::IsTerminal;
 use anyhow::Context;
 use simplelog::{ColorChoice, ConfigBuilder, LevelFilter, SimpleLogger, TermLogger, TerminalMode};
 
-#[derive(clap::ValueEnum, Debug, Copy, Clone)]
+#[derive(clap::ValueEnum, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Color {
     Auto,
     Always,

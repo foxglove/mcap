@@ -1,41 +1,20 @@
+mod cli;
+mod cli_io;
 mod commands;
 mod logsetup;
+mod output;
+mod time;
 
 use std::process;
 
 use anyhow::Result;
-use clap::{ArgAction, Parser, Subcommand};
-
-#[derive(Parser, Debug)]
-#[command(name = "mcap")]
-struct Args {
-    /// Verbosity (-v, -vv, -vvv, etc.)
-    #[arg(short, long, action = ArgAction::Count)]
-    verbose: u8,
-
-    #[arg(short, long, value_enum, default_value_t = logsetup::Color::Auto)]
-    color: logsetup::Color,
-
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Subcommand, Debug, PartialEq, Eq)]
-enum Command {
-    /// Show basic information about an MCAP file
-    Info,
-    /// Show CLI version information
-    Version,
-}
+use clap::Parser;
 
 fn run() -> Result<()> {
-    let args = Args::parse();
+    let args = cli::Args::parse();
     logsetup::init_logger(args.verbose, args.color);
 
-    match args.command {
-        Command::Info => commands::run_info(),
-        Command::Version => commands::run_version(),
-    }
+    commands::dispatch(args.command)
 }
 
 fn main() {
@@ -49,7 +28,10 @@ fn main() {
 mod tests {
     use clap::Parser;
 
-    use super::{Args, Command};
+    use crate::cli::{
+        AddCommand, AddSubcommand, Args, Command, GetCommand, GetSubcommand, ListCommand,
+        ListSubcommand, VersionCommand,
+    };
 
     #[test]
     fn parses_info_subcommand() {
@@ -60,7 +42,10 @@ mod tests {
     #[test]
     fn parses_version_subcommand() {
         let args = Args::try_parse_from(["mcap", "version"]).expect("version should parse");
-        assert_eq!(args.command, Command::Version);
+        assert_eq!(
+            args.command,
+            Command::Version(VersionCommand { library: false })
+        );
     }
 
     #[test]
@@ -77,5 +62,41 @@ mod tests {
         let args = Args::try_parse_from(["mcap", "-vv", "info"]).expect("verbosity should parse");
         assert_eq!(args.verbose, 2);
         assert_eq!(args.command, Command::Info);
+    }
+
+    #[test]
+    fn parses_nested_list_subcommands() {
+        let args =
+            Args::try_parse_from(["mcap", "list", "channels"]).expect("list channels should parse");
+        assert_eq!(
+            args.command,
+            Command::List(ListCommand {
+                command: ListSubcommand::Channels,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_nested_get_subcommands() {
+        let args = Args::try_parse_from(["mcap", "get", "attachment"])
+            .expect("get attachment should parse");
+        assert_eq!(
+            args.command,
+            Command::Get(GetCommand {
+                command: GetSubcommand::Attachment,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_nested_add_subcommands() {
+        let args =
+            Args::try_parse_from(["mcap", "add", "metadata"]).expect("add metadata should parse");
+        assert_eq!(
+            args.command,
+            Command::Add(AddCommand {
+                command: AddSubcommand::Metadata,
+            })
+        );
     }
 }
