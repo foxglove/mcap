@@ -46,10 +46,10 @@ lint: sync
 	uv run black --check --diff --color --extend-exclude="_vendor" mcap-ros1-support
 	uv run black --check --diff --color --extend-exclude="_vendor" mcap-ros2-support
 	uv run isort .
-	cd mcap && uv run pyright
-	cd mcap-protobuf-support && uv run pyright mcap_protobuf
-	cd mcap-ros1-support && uv run pyright mcap_ros1
-	cd mcap-ros2-support && uv run pyright mcap_ros2
+	uv run pyright --project mcap
+	uv run pyright --project mcap-protobuf-support mcap-protobuf-support/mcap_protobuf
+	uv run pyright --project mcap-ros1-support mcap-ros1-support/mcap_ros1
+	uv run pyright --project mcap-ros2-support mcap-ros2-support/mcap_ros2
 
 .PHONY: docs
 docs: sync
