@@ -11,6 +11,7 @@ use crate::{
 
 pub fn run(args: RecoverArgs) -> Result<()> {
     let input = input_bytes_from_optional_file(Some(&args.file))?;
+    crate::cli_io::ensure_local_path(&args.output)?;
     let output = std::fs::File::create(&args.output)
         .with_context(|| format!("failed to create output {}", args.output.display()))?;
     let compression = compression_from_str(&args.compression)?;

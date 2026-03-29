@@ -9,6 +9,9 @@ use crate::{
 };
 
 pub fn run(args: GetAttachmentArgs) -> Result<()> {
+    if let Some(ref output) = args.output {
+        crate::cli_io::ensure_local_path(output)?;
+    }
     let bytes = open_local_mcap(&args.file)?;
     let summary = Summary::read(&bytes)?
         .ok_or_else(|| anyhow::anyhow!("failed to read summary from {}", args.file.display()))?;

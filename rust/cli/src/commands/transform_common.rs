@@ -28,6 +28,7 @@ pub fn input_bytes_from_optional_file(file: Option<&PathBuf>) -> Result<Vec<u8>>
 
 pub fn write_output_bytes(output: Option<&PathBuf>, bytes: &[u8]) -> Result<()> {
     if let Some(path) = output {
+        cli_io::ensure_local_path(path)?;
         std::fs::write(path, bytes)
             .with_context(|| format!("failed to write output file {}", path.display()))?;
         return Ok(());

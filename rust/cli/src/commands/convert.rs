@@ -47,6 +47,7 @@ fn convert_mcap_to_mcap(args: ConvertArgs) -> Result<()> {
     }
 
     let input_bytes = input_bytes_from_optional_file(Some(&args.input))?;
+    crate::cli_io::ensure_local_path(&args.output)?;
     let compression = compression_from_str(&args.compression)?;
     let (profile, library) = extract_header_fields(&input_bytes);
     let output_file = std::fs::File::create(&args.output)
