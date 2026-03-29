@@ -28,7 +28,7 @@ ignorePaths:
   - "*.pyc"
   - "*.svg"
   - "*.webp"
-  - Pipfile*
+  - python/uv.lock
   - mkdocs.yml
   - fathom.html
   - _vendor
@@ -90,7 +90,7 @@ words:
   - numpy
   - omgidl
   - parseable
-  - pipenv
+  - uv
   - pointcloud
   - pointclouds
   - proto
@@ -174,7 +174,7 @@ overrides:
     ignoreRegExpList:
       - "0x[0-9a-f]+n?"
 
-  - filename: "(AGENTS.md|Pipfile|README.md|pyproject.toml|setup.cfg)"
+  - filename: "(AGENTS.md|README.md|pyproject.toml|setup.cfg)"
     words:
       - pypi
       - pyright
@@ -182,7 +182,6 @@ overrides:
       - setuptools
       - addopts
       - xfail
-      - Pipfile
       - pyyaml
 
   - filename: "python/**/*.rst"
