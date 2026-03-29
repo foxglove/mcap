@@ -31,9 +31,9 @@ mod tests {
     use clap::Parser;
 
     use crate::cli::{
-        AddCommand, AddMetadataArgs, AddSubcommand, Args, CatArgs, Command, DoctorArgs, DuArgs,
-        FilterArgs, GetAttachmentArgs, GetCommand, GetSubcommand, ListCommand, ListSubcommand,
-        MergeArgs, RecoverArgs, SortArgs, VersionCommand,
+        AddCommand, AddMetadataArgs, AddSubcommand, Args, CatArgs, Command, ConvertArgs,
+        DoctorArgs, DuArgs, FilterArgs, GetAttachmentArgs, GetCommand, GetSubcommand, ListCommand,
+        ListSubcommand, MergeArgs, RecoverArgs, SortArgs, VersionCommand,
     };
 
     #[test]
@@ -313,6 +313,37 @@ mod tests {
             Command::Du(DuArgs {
                 file: PathBuf::from("in.mcap"),
                 approximate: true,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_convert_with_options() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "convert",
+            "input.mcap",
+            "output.mcap",
+            "--compression",
+            "none",
+            "--chunk-size",
+            "4096",
+            "--include-crc",
+            "false",
+            "--chunked",
+            "false",
+        ])
+        .expect("convert options should parse");
+        assert_eq!(
+            args.command,
+            Command::Convert(ConvertArgs {
+                input: PathBuf::from("input.mcap"),
+                output: PathBuf::from("output.mcap"),
+                ament_prefix_path: None,
+                compression: "none".to_string(),
+                chunk_size: 4096,
+                include_crc: false,
+                chunked: false,
             })
         );
     }

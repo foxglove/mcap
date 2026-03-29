@@ -42,8 +42,8 @@ pub enum Command {
     Cat(CatArgs),
     /// Create a compressed copy of an MCAP file
     Compress(CompressArgs),
-    /// Convert a bag file to an MCAP file
-    Convert,
+    /// Convert an input recording file to MCAP
+    Convert(ConvertArgs),
     /// Create an uncompressed copy of an MCAP file
     Decompress(DecompressArgs),
     /// Check an MCAP file structure
@@ -207,6 +207,29 @@ pub struct DecompressArgs {
     /// Chunk size for output file
     #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
     pub chunk_size: u64,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct ConvertArgs {
+    /// Input file path (.mcap, .bag, or .db3)
+    pub input: PathBuf,
+    /// Output MCAP file path
+    pub output: PathBuf,
+    /// (ROS 2 db3 only) prefix path(s) for message definitions
+    #[arg(long = "ament-prefix-path")]
+    pub ament_prefix_path: Option<String>,
+    /// Chunk compression algorithm (zstd, lz4, none)
+    #[arg(long = "compression", default_value = "zstd")]
+    pub compression: String,
+    /// Chunk size target for output file
+    #[arg(long = "chunk-size", default_value_t = 8 * 1024 * 1024)]
+    pub chunk_size: u64,
+    /// Include chunk CRC checksums in output
+    #[arg(long = "include-crc", default_value_t = true, action = ArgAction::Set)]
+    pub include_crc: bool,
+    /// Chunk the output file
+    #[arg(long = "chunked", default_value_t = true, action = ArgAction::Set)]
+    pub chunked: bool,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

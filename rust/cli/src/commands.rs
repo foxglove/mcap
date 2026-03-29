@@ -49,7 +49,7 @@ pub fn dispatch(command: Command) -> Result<()> {
 
         Command::Cat(args) => cat::run(args),
         Command::Compress(args) => compress::run(args),
-        Command::Convert => convert::run(),
+        Command::Convert(args) => convert::run(args),
         Command::Decompress(args) => decompress::run(args),
         Command::Doctor(args) => doctor::run(args),
         Command::Du(args) => du::run(args),
