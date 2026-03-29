@@ -6,7 +6,7 @@ use crate::logsetup;
 
 #[derive(Parser, Debug, PartialEq, Eq)]
 #[command(name = "mcap", bin_name = "mcap")]
-pub struct ArgsRoot {
+pub struct Args {
     /// Verbosity (-v, -vv, -vvv, etc.)
     #[arg(short, long, action = ArgAction::Count, global = true)]
     pub verbose: u8,
@@ -31,8 +31,6 @@ pub struct ArgsRoot {
     #[command(subcommand)]
     pub command: Command,
 }
-
-pub type Args = ArgsRoot;
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum Command {
