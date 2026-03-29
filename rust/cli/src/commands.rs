@@ -26,7 +26,7 @@ use crate::cli::{AddSubcommand, Command, GetSubcommand, ListSubcommand};
 
 pub fn dispatch(command: Command) -> Result<()> {
     match command {
-        Command::Info => info::run(),
+        Command::Info(args) => info::run(args),
         Command::Version(args) => version::run(args),
 
         Command::Add(args) => match args.command {
@@ -38,11 +38,11 @@ pub fn dispatch(command: Command) -> Result<()> {
             GetSubcommand::Metadata => get_metadata::run(),
         },
         Command::List(args) => match args.command {
-            ListSubcommand::Attachments => list_attachments::run(),
-            ListSubcommand::Channels => list_channels::run(),
-            ListSubcommand::Chunks => list_chunks::run(),
-            ListSubcommand::Metadata => list_metadata::run(),
-            ListSubcommand::Schemas => list_schemas::run(),
+            ListSubcommand::Attachments(input) => list_attachments::run(input),
+            ListSubcommand::Channels(input) => list_channels::run(input),
+            ListSubcommand::Chunks(input) => list_chunks::run(input),
+            ListSubcommand::Metadata(input) => list_metadata::run(input),
+            ListSubcommand::Schemas(input) => list_schemas::run(input),
         },
 
         Command::Cat => cat::run(),
@@ -61,21 +61,26 @@ pub fn dispatch(command: Command) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::dispatch;
-    use crate::cli::{AddCommand, AddSubcommand, Command, ListCommand, ListSubcommand};
+    use crate::cli::{AddCommand, AddSubcommand, Command, InputFile, ListCommand, ListSubcommand};
+    use std::path::PathBuf;
 
     #[test]
-    fn info_returns_not_implemented() {
-        let err = dispatch(Command::Info).expect_err("info should be a stub");
-        assert_eq!(err.to_string(), "'info' is not implemented yet");
+    fn info_command_executes() {
+        dispatch(Command::Info(InputFile {
+            file: PathBuf::from("non-existent.mcap"),
+        }))
+        .expect_err("info should fail for missing file");
     }
 
     #[test]
-    fn list_subcommands_stub_with_specific_names() {
+    fn list_subcommands_execute() {
         let err = dispatch(Command::List(ListCommand {
-            command: ListSubcommand::Channels,
+            command: ListSubcommand::Channels(InputFile {
+                file: PathBuf::from("non-existent.mcap"),
+            }),
         }))
-        .expect_err("list channels should be a stub");
-        assert_eq!(err.to_string(), "'list channels' is not implemented yet");
+        .expect_err("list channels should fail for missing file");
+        assert!(err.to_string().contains("failed to read file"));
     }
 
     #[test]

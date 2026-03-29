@@ -26,6 +26,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use clap::Parser;
 
     use crate::cli::{
@@ -35,8 +37,13 @@ mod tests {
 
     #[test]
     fn parses_info_subcommand() {
-        let args = Args::try_parse_from(["mcap", "info"]).expect("info should parse");
-        assert_eq!(args.command, Command::Info);
+        let args = Args::try_parse_from(["mcap", "info", "demo.mcap"]).expect("info should parse");
+        assert_eq!(
+            args.command,
+            Command::Info(crate::cli::InputFile {
+                file: PathBuf::from("demo.mcap"),
+            })
+        );
     }
 
     #[test]
@@ -59,19 +66,27 @@ mod tests {
 
     #[test]
     fn parses_global_verbosity_flag() {
-        let args = Args::try_parse_from(["mcap", "-vv", "info"]).expect("verbosity should parse");
+        let args = Args::try_parse_from(["mcap", "-vv", "info", "demo.mcap"])
+            .expect("verbosity should parse");
         assert_eq!(args.verbose, 2);
-        assert_eq!(args.command, Command::Info);
+        assert_eq!(
+            args.command,
+            Command::Info(crate::cli::InputFile {
+                file: PathBuf::from("demo.mcap"),
+            })
+        );
     }
 
     #[test]
     fn parses_nested_list_subcommands() {
-        let args =
-            Args::try_parse_from(["mcap", "list", "channels"]).expect("list channels should parse");
+        let args = Args::try_parse_from(["mcap", "list", "channels", "demo.mcap"])
+            .expect("list channels should parse");
         assert_eq!(
             args.command,
             Command::List(ListCommand {
-                command: ListSubcommand::Channels,
+                command: ListSubcommand::Channels(crate::cli::InputFile {
+                    file: PathBuf::from("demo.mcap"),
+                }),
             })
         );
     }
