@@ -32,7 +32,8 @@ mod tests {
 
     use crate::cli::{
         AddCommand, AddMetadataArgs, AddSubcommand, Args, CatArgs, Command, FilterArgs,
-        GetAttachmentArgs, GetCommand, GetSubcommand, ListCommand, ListSubcommand, VersionCommand,
+        GetAttachmentArgs, GetCommand, GetSubcommand, ListCommand, ListSubcommand, MergeArgs,
+        RecoverArgs, SortArgs, VersionCommand,
     };
 
     #[test]
@@ -201,6 +202,90 @@ mod tests {
                 output_compression: "lz4".to_string(),
                 chunk_size: 12345,
                 unchunked: true,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_sort_with_options() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "sort",
+            "input.mcap",
+            "-o",
+            "sorted.mcap",
+            "--chunk-size",
+            "8192",
+            "--compression",
+            "none",
+            "--include-crc",
+            "false",
+            "--chunked",
+            "false",
+        ])
+        .expect("sort options should parse");
+        assert_eq!(
+            args.command,
+            Command::Sort(SortArgs {
+                file: PathBuf::from("input.mcap"),
+                output_file: PathBuf::from("sorted.mcap"),
+                chunk_size: 8192,
+                compression: "none".to_string(),
+                include_crc: false,
+                chunked: false,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_merge_with_options() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "merge",
+            "a.mcap",
+            "b.mcap",
+            "-o",
+            "merged.mcap",
+            "--chunk-size",
+            "16384",
+            "--compression",
+            "zstd",
+        ])
+        .expect("merge options should parse");
+        assert_eq!(
+            args.command,
+            Command::Merge(MergeArgs {
+                files: vec![PathBuf::from("a.mcap"), PathBuf::from("b.mcap")],
+                output_file: PathBuf::from("merged.mcap"),
+                chunk_size: 16384,
+                compression: "zstd".to_string(),
+                include_crc: true,
+                chunked: true,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_recover_with_options() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "recover",
+            "in.mcap",
+            "-o",
+            "out.mcap",
+            "--chunk-size",
+            "2048",
+            "--compression",
+            "none",
+        ])
+        .expect("recover options should parse");
+        assert_eq!(
+            args.command,
+            Command::Recover(RecoverArgs {
+                file: PathBuf::from("in.mcap"),
+                output: PathBuf::from("out.mcap"),
+                chunk_size: 2048,
+                compression: "none".to_string(),
             })
         );
     }

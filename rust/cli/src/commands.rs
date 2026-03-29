@@ -54,9 +54,9 @@ pub fn dispatch(command: Command) -> Result<()> {
         Command::Doctor => doctor::run(),
         Command::Du => du::run(),
         Command::Filter(args) => filter::run(args),
-        Command::Merge => merge::run(),
-        Command::Recover => recover::run(),
-        Command::Sort => sort::run(),
+        Command::Merge(args) => merge::run(args),
+        Command::Recover(args) => recover::run(args),
+        Command::Sort(args) => sort::run(args),
     }
 }
 

@@ -59,11 +59,11 @@ pub enum Command {
     /// List records of an MCAP file
     List(ListCommand),
     /// Merge a selection of MCAP files by record timestamp
-    Merge,
+    Merge(MergeArgs),
     /// Recover data from a potentially corrupt MCAP file
-    Recover,
+    Recover(RecoverArgs),
     /// Read an MCAP file and write messages sorted by log time
-    Sort,
+    Sort(SortArgs),
     /// Output version information
     Version(VersionCommand),
 }
@@ -207,6 +207,63 @@ pub struct DecompressArgs {
     /// Chunk size for output file
     #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
     pub chunk_size: u64,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct SortArgs {
+    /// Input MCAP file path
+    pub file: PathBuf,
+    /// Output MCAP file path
+    #[arg(short = 'o', long = "output-file")]
+    pub output_file: PathBuf,
+    /// Chunk size for output file
+    #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
+    pub chunk_size: u64,
+    /// Compression algorithm (zstd, lz4, none)
+    #[arg(long = "compression", default_value = "zstd")]
+    pub compression: String,
+    /// Include chunk CRCs in output
+    #[arg(long = "include-crc", default_value_t = true, action = ArgAction::Set)]
+    pub include_crc: bool,
+    /// Create an indexed and chunk-compressed output
+    #[arg(long = "chunked", default_value_t = true, action = ArgAction::Set)]
+    pub chunked: bool,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct MergeArgs {
+    /// Input MCAP files to merge
+    pub files: Vec<PathBuf>,
+    /// Output MCAP file path
+    #[arg(short = 'o', long = "output-file")]
+    pub output_file: PathBuf,
+    /// Chunk size for output file
+    #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
+    pub chunk_size: u64,
+    /// Compression algorithm (zstd, lz4, none)
+    #[arg(long = "compression", default_value = "zstd")]
+    pub compression: String,
+    /// Include chunk CRCs in output
+    #[arg(long = "include-crc", default_value_t = true, action = ArgAction::Set)]
+    pub include_crc: bool,
+    /// Create an indexed and chunk-compressed output
+    #[arg(long = "chunked", default_value_t = true, action = ArgAction::Set)]
+    pub chunked: bool,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct RecoverArgs {
+    /// Input MCAP file path
+    pub file: PathBuf,
+    /// Output MCAP file path
+    #[arg(short = 'o', long = "output")]
+    pub output: PathBuf,
+    /// Chunk size for recovered output
+    #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
+    pub chunk_size: u64,
+    /// Compression algorithm (zstd, lz4, none)
+    #[arg(long = "compression", default_value = "zstd")]
+    pub compression: String,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

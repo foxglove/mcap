@@ -869,6 +869,7 @@ dependencies = [
  "base64",
  "chrono",
  "clap 4.6.0",
+ "enumset",
  "log",
  "mcap",
  "regex",
