@@ -20,11 +20,11 @@ pub struct Args {
     )]
     pub color: logsetup::Color,
 
-    /// Config file path (reserved for future implementation)
+    /// Config file path
     #[arg(long, global = true)]
     pub config: Option<PathBuf>,
 
-    /// Record pprof-style profiling output (reserved for future implementation)
+    /// Record pprof-style profiling output
     #[arg(long, default_value_t = false, global = true)]
     pub pprof_profile: bool,
 
