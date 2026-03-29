@@ -23,16 +23,16 @@ pub fn create_local_file(path: &Path) -> Result<File> {
     File::create(path).with_context(|| format!("failed to create file {}", path.display()))
 }
 
-pub fn reading_stdin() -> Result<bool> {
-    Ok(!std::io::stdin().is_terminal())
+pub fn reading_stdin() -> bool {
+    !std::io::stdin().is_terminal()
 }
 
-pub fn stdout_redirected() -> Result<bool> {
-    Ok(!std::io::stdout().is_terminal())
+pub fn stdout_redirected() -> bool {
+    !std::io::stdout().is_terminal()
 }
 
 pub fn ensure_stdout_redirected_for_binary_output() -> Result<()> {
-    if !stdout_redirected()? {
+    if !stdout_redirected() {
         anyhow::bail!(
             "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe"
         );
@@ -41,7 +41,7 @@ pub fn ensure_stdout_redirected_for_binary_output() -> Result<()> {
 }
 
 pub fn read_paths_from_stdin() -> Result<Vec<PathBuf>> {
-    if !reading_stdin()? {
+    if !reading_stdin() {
         return Ok(Vec::new());
     }
     let mut input = String::new();
