@@ -13,6 +13,12 @@ use clap::Parser;
 fn run() -> Result<()> {
     let args = cli::Args::parse();
     logsetup::init_logger(args.verbose, args.color);
+    if args.config.is_some() {
+        anyhow::bail!("'--config' is not implemented yet");
+    }
+    if args.pprof_profile {
+        anyhow::bail!("'--pprof-profile' is not implemented yet");
+    }
 
     commands::dispatch(args.command)
 }
