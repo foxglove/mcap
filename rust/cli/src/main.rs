@@ -31,8 +31,8 @@ mod tests {
     use clap::Parser;
 
     use crate::cli::{
-        AddCommand, AddMetadataArgs, AddSubcommand, Args, Command, GetAttachmentArgs, GetCommand,
-        GetSubcommand, ListCommand, ListSubcommand, VersionCommand,
+        AddCommand, AddMetadataArgs, AddSubcommand, Args, CatArgs, Command, FilterArgs,
+        GetAttachmentArgs, GetCommand, GetSubcommand, ListCommand, ListSubcommand, VersionCommand,
     };
 
     #[test]
@@ -130,6 +130,77 @@ mod tests {
                     name: "meta".to_string(),
                     key_values: vec!["foo=bar".to_string()],
                 }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_cat_with_options() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "cat",
+            "a.mcap",
+            "b.mcap",
+            "--topics",
+            "/tf,/diag",
+            "--start",
+            "1970-01-01T00:00:01Z",
+            "--end",
+            "1970-01-01T00:00:02Z",
+            "--json",
+        ])
+        .expect("cat options should parse");
+        assert_eq!(
+            args.command,
+            Command::Cat(CatArgs {
+                files: vec![PathBuf::from("a.mcap"), PathBuf::from("b.mcap")],
+                topics: Some("/tf,/diag".to_string()),
+                start: Some("1970-01-01T00:00:01Z".to_string()),
+                end: Some("1970-01-01T00:00:02Z".to_string()),
+                json: true,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_filter_with_options() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "filter",
+            "demo.mcap",
+            "-o",
+            "out.mcap",
+            "-y",
+            "^/tf$",
+            "-n",
+            "^/debug$",
+            "--include-metadata",
+            "--include-attachments",
+            "--start",
+            "1000",
+            "--end",
+            "2000",
+            "--output-compression",
+            "lz4",
+            "--chunk-size",
+            "12345",
+            "--unchunked",
+        ])
+        .expect("filter options should parse");
+        assert_eq!(
+            args.command,
+            Command::Filter(FilterArgs {
+                file: Some(PathBuf::from("demo.mcap")),
+                output: Some(PathBuf::from("out.mcap")),
+                include_topic_regex: vec!["^/tf$".to_string()],
+                exclude_topic_regex: vec!["^/debug$".to_string()],
+                include_metadata: true,
+                include_attachments: true,
+                start: Some("1000".to_string()),
+                end: Some("2000".to_string()),
+                output_compression: "lz4".to_string(),
+                chunk_size: 12345,
+                unchunked: true,
             })
         );
     }

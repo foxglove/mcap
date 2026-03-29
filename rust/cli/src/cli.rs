@@ -39,19 +39,19 @@ pub enum Command {
     /// Add records to an existing MCAP file
     Add(AddCommand),
     /// Concatenate the messages in one or more MCAP files to stdout
-    Cat,
+    Cat(CatArgs),
     /// Create a compressed copy of an MCAP file
-    Compress,
+    Compress(CompressArgs),
     /// Convert a bag file to an MCAP file
     Convert,
     /// Create an uncompressed copy of an MCAP file
-    Decompress,
+    Decompress(DecompressArgs),
     /// Check an MCAP file structure
     Doctor,
     /// Compute byte usage statistics for MCAP records
     Du,
     /// Copy filtered MCAP data to a new file
-    Filter,
+    Filter(FilterArgs),
     /// Get a record from an MCAP file
     Get(GetCommand),
     /// Report statistics about an MCAP file
@@ -123,6 +123,90 @@ pub enum ListSubcommand {
 pub struct InputFile {
     /// Input MCAP file path
     pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct CatArgs {
+    /// Input MCAP files. If omitted, reads from stdin when piped.
+    pub files: Vec<PathBuf>,
+    /// Comma-separated list of topics to include
+    #[arg(long = "topics")]
+    pub topics: Option<String>,
+    /// Start time (RFC3339 or integer nanoseconds)
+    #[arg(long = "start")]
+    pub start: Option<String>,
+    /// End time (RFC3339 or integer nanoseconds)
+    #[arg(long = "end")]
+    pub end: Option<String>,
+    /// Print messages as newline-delimited JSON
+    #[arg(long = "json", default_value_t = false)]
+    pub json: bool,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct FilterArgs {
+    /// Input MCAP file path (reads stdin when omitted and piped)
+    pub file: Option<PathBuf>,
+    /// Output MCAP file path (stdout requires redirection)
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+    /// Include messages with topics matching regex (repeatable)
+    #[arg(short = 'y', long = "include-topic-regex")]
+    pub include_topic_regex: Vec<String>,
+    /// Exclude messages with topics matching regex (repeatable)
+    #[arg(short = 'n', long = "exclude-topic-regex")]
+    pub exclude_topic_regex: Vec<String>,
+    /// Include metadata records in output
+    #[arg(long = "include-metadata", default_value_t = false)]
+    pub include_metadata: bool,
+    /// Include attachment records in output
+    #[arg(long = "include-attachments", default_value_t = false)]
+    pub include_attachments: bool,
+    /// Start time (RFC3339 or integer nanoseconds)
+    #[arg(long = "start")]
+    pub start: Option<String>,
+    /// End time (RFC3339 or integer nanoseconds)
+    #[arg(long = "end")]
+    pub end: Option<String>,
+    /// Output compression (zstd, lz4, none)
+    #[arg(long = "output-compression", default_value = "zstd")]
+    pub output_compression: String,
+    /// Chunk size for output file
+    #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
+    pub chunk_size: u64,
+    /// Write output unchunked
+    #[arg(long = "unchunked", default_value_t = false)]
+    pub unchunked: bool,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct CompressArgs {
+    /// Input MCAP file path (reads stdin when omitted and piped)
+    pub file: Option<PathBuf>,
+    /// Output MCAP file path (stdout requires redirection)
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+    /// Compression algorithm (zstd, lz4, none)
+    #[arg(long = "compression", default_value = "zstd")]
+    pub compression: String,
+    /// Chunk size for output file
+    #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
+    pub chunk_size: u64,
+    /// Write output unchunked
+    #[arg(long = "unchunked", default_value_t = false)]
+    pub unchunked: bool,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct DecompressArgs {
+    /// Input MCAP file path (reads stdin when omitted and piped)
+    pub file: Option<PathBuf>,
+    /// Output MCAP file path (stdout requires redirection)
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+    /// Chunk size for output file
+    #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
+    pub chunk_size: u64,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

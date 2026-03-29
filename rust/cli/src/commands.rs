@@ -19,6 +19,7 @@ mod merge;
 mod recover;
 mod rewrite;
 mod sort;
+mod transform_common;
 mod version;
 
 use anyhow::Result;
@@ -46,13 +47,13 @@ pub fn dispatch(command: Command) -> Result<()> {
             ListSubcommand::Schemas(input) => list_schemas::run(input),
         },
 
-        Command::Cat => cat::run(),
-        Command::Compress => compress::run(),
+        Command::Cat(args) => cat::run(args),
+        Command::Compress(args) => compress::run(args),
         Command::Convert => convert::run(),
-        Command::Decompress => decompress::run(),
+        Command::Decompress(args) => decompress::run(args),
         Command::Doctor => doctor::run(),
         Command::Du => du::run(),
-        Command::Filter => filter::run(),
+        Command::Filter(args) => filter::run(args),
         Command::Merge => merge::run(),
         Command::Recover => recover::run(),
         Command::Sort => sort::run(),
