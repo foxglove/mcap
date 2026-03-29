@@ -47,9 +47,9 @@ pub enum Command {
     /// Create an uncompressed copy of an MCAP file
     Decompress(DecompressArgs),
     /// Check an MCAP file structure
-    Doctor,
+    Doctor(DoctorArgs),
     /// Compute byte usage statistics for MCAP records
-    Du,
+    Du(DuArgs),
     /// Copy filtered MCAP data to a new file
     Filter(FilterArgs),
     /// Get a record from an MCAP file
@@ -207,6 +207,24 @@ pub struct DecompressArgs {
     /// Chunk size for output file
     #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
     pub chunk_size: u64,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct DoctorArgs {
+    /// Input MCAP file path
+    pub file: PathBuf,
+    /// Require monotonic message log time ordering
+    #[arg(long = "strict-message-order", default_value_t = false)]
+    pub strict_message_order: bool,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct DuArgs {
+    /// Input MCAP file path
+    pub file: PathBuf,
+    /// Fast approximation that skips chunk decompression
+    #[arg(long = "approximate", default_value_t = false)]
+    pub approximate: bool,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

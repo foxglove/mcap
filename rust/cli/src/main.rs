@@ -31,9 +31,9 @@ mod tests {
     use clap::Parser;
 
     use crate::cli::{
-        AddCommand, AddMetadataArgs, AddSubcommand, Args, CatArgs, Command, FilterArgs,
-        GetAttachmentArgs, GetCommand, GetSubcommand, ListCommand, ListSubcommand, MergeArgs,
-        RecoverArgs, SortArgs, VersionCommand,
+        AddCommand, AddMetadataArgs, AddSubcommand, Args, CatArgs, Command, DoctorArgs, DuArgs,
+        FilterArgs, GetAttachmentArgs, GetCommand, GetSubcommand, ListCommand, ListSubcommand,
+        MergeArgs, RecoverArgs, SortArgs, VersionCommand,
     };
 
     #[test]
@@ -286,6 +286,33 @@ mod tests {
                 output: PathBuf::from("out.mcap"),
                 chunk_size: 2048,
                 compression: "none".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_doctor_with_options() {
+        let args = Args::try_parse_from(["mcap", "doctor", "in.mcap", "--strict-message-order"])
+            .expect("doctor options should parse");
+        assert_eq!(
+            args.command,
+            Command::Doctor(DoctorArgs {
+                file: PathBuf::from("in.mcap"),
+                strict_message_order: true,
+            })
+        );
+        assert_eq!(args.verbose, 0);
+    }
+
+    #[test]
+    fn parses_du_with_options() {
+        let args = Args::try_parse_from(["mcap", "du", "in.mcap", "--approximate"])
+            .expect("du options should parse");
+        assert_eq!(
+            args.command,
+            Command::Du(DuArgs {
+                file: PathBuf::from("in.mcap"),
+                approximate: true,
             })
         );
     }
