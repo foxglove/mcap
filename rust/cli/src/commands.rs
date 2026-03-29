@@ -17,6 +17,7 @@ mod list_metadata;
 mod list_schemas;
 mod merge;
 mod recover;
+mod rewrite;
 mod sort;
 mod version;
 
@@ -30,12 +31,12 @@ pub fn dispatch(command: Command) -> Result<()> {
         Command::Version(args) => version::run(args),
 
         Command::Add(args) => match args.command {
-            AddSubcommand::Attachment => add_attachment::run(),
-            AddSubcommand::Metadata => add_metadata::run(),
+            AddSubcommand::Attachment(args) => add_attachment::run(args),
+            AddSubcommand::Metadata(args) => add_metadata::run(args),
         },
         Command::Get(args) => match args.command {
-            GetSubcommand::Attachment => get_attachment::run(),
-            GetSubcommand::Metadata => get_metadata::run(),
+            GetSubcommand::Attachment(args) => get_attachment::run(args),
+            GetSubcommand::Metadata(args) => get_metadata::run(args),
         },
         Command::List(args) => match args.command {
             ListSubcommand::Attachments(input) => list_attachments::run(input),
@@ -61,7 +62,10 @@ pub fn dispatch(command: Command) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::dispatch;
-    use crate::cli::{AddCommand, AddSubcommand, Command, InputFile, ListCommand, ListSubcommand};
+    use crate::cli::{
+        AddAttachmentArgs, AddCommand, AddSubcommand, Command, InputFile, ListCommand,
+        ListSubcommand,
+    };
     use std::path::PathBuf;
 
     #[test]
@@ -86,9 +90,16 @@ mod tests {
     #[test]
     fn add_subcommands_stub_with_specific_names() {
         let err = dispatch(Command::Add(AddCommand {
-            command: AddSubcommand::Attachment,
+            command: AddSubcommand::Attachment(AddAttachmentArgs {
+                file: PathBuf::from("non-existent.mcap"),
+                attachment_file: PathBuf::from("file.bin"),
+                name: None,
+                content_type: "application/octet-stream".to_string(),
+                log_time: None,
+                creation_time: None,
+            }),
         }))
         .expect_err("add attachment should be a stub");
-        assert_eq!(err.to_string(), "'add attachment' is not implemented yet");
+        assert!(err.to_string().contains("failed to read attachment file"));
     }
 }

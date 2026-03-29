@@ -31,8 +31,8 @@ mod tests {
     use clap::Parser;
 
     use crate::cli::{
-        AddCommand, AddSubcommand, Args, Command, GetCommand, GetSubcommand, ListCommand,
-        ListSubcommand, VersionCommand,
+        AddCommand, AddMetadataArgs, AddSubcommand, Args, Command, GetAttachmentArgs, GetCommand,
+        GetSubcommand, ListCommand, ListSubcommand, VersionCommand,
     };
 
     #[test]
@@ -93,24 +93,43 @@ mod tests {
 
     #[test]
     fn parses_nested_get_subcommands() {
-        let args = Args::try_parse_from(["mcap", "get", "attachment"])
-            .expect("get attachment should parse");
+        let args =
+            Args::try_parse_from(["mcap", "get", "attachment", "demo.mcap", "--name", "foo"])
+                .expect("get attachment should parse");
         assert_eq!(
             args.command,
             Command::Get(GetCommand {
-                command: GetSubcommand::Attachment,
+                command: GetSubcommand::Attachment(GetAttachmentArgs {
+                    file: PathBuf::from("demo.mcap"),
+                    name: "foo".to_string(),
+                    offset: None,
+                    output: None,
+                }),
             })
         );
     }
 
     #[test]
     fn parses_nested_add_subcommands() {
-        let args =
-            Args::try_parse_from(["mcap", "add", "metadata"]).expect("add metadata should parse");
+        let args = Args::try_parse_from([
+            "mcap",
+            "add",
+            "metadata",
+            "demo.mcap",
+            "--name",
+            "meta",
+            "--key",
+            "foo=bar",
+        ])
+        .expect("add metadata should parse");
         assert_eq!(
             args.command,
             Command::Add(AddCommand {
-                command: AddSubcommand::Metadata,
+                command: AddSubcommand::Metadata(AddMetadataArgs {
+                    file: PathBuf::from("demo.mcap"),
+                    name: "meta".to_string(),
+                    key_values: vec!["foo=bar".to_string()],
+                }),
             })
         );
     }

@@ -78,9 +78,9 @@ pub struct AddCommand {
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum AddSubcommand {
     /// Add an attachment to an MCAP file
-    Attachment,
+    Attachment(AddAttachmentArgs),
     /// Add metadata to an MCAP file
-    Metadata,
+    Metadata(AddMetadataArgs),
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -93,9 +93,9 @@ pub struct GetCommand {
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum GetSubcommand {
     /// Get an attachment by name or offset
-    Attachment,
+    Attachment(GetAttachmentArgs),
     /// Get metadata by name
-    Metadata,
+    Metadata(GetMetadataArgs),
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -123,6 +123,63 @@ pub enum ListSubcommand {
 pub struct InputFile {
     /// Input MCAP file path
     pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct GetAttachmentArgs {
+    /// Input MCAP file path
+    pub file: PathBuf,
+    /// Name of attachment to extract
+    #[arg(short = 'n', long = "name")]
+    pub name: String,
+    /// Optional attachment offset when multiple names match
+    #[arg(long = "offset")]
+    pub offset: Option<u64>,
+    /// Optional output path (stdout requires redirection)
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct GetMetadataArgs {
+    /// Input MCAP file path
+    pub file: PathBuf,
+    /// Name of metadata record to fetch
+    #[arg(short = 'n', long = "name")]
+    pub name: String,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct AddAttachmentArgs {
+    /// Input MCAP file path to mutate
+    pub file: PathBuf,
+    /// Attachment payload file path
+    #[arg(short = 'f', long = "file")]
+    pub attachment_file: PathBuf,
+    /// Attachment name (defaults to attachment filename)
+    #[arg(short = 'n', long = "name")]
+    pub name: Option<String>,
+    /// Attachment media type
+    #[arg(long = "content-type", default_value = "application/octet-stream")]
+    pub content_type: String,
+    /// Attachment log time (RFC3339 or integer nanoseconds)
+    #[arg(long = "log-time")]
+    pub log_time: Option<String>,
+    /// Attachment creation time (RFC3339 or integer nanoseconds)
+    #[arg(long = "creation-time")]
+    pub creation_time: Option<String>,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct AddMetadataArgs {
+    /// Input MCAP file path to mutate
+    pub file: PathBuf,
+    /// Metadata record name
+    #[arg(short = 'n', long = "name")]
+    pub name: String,
+    /// Key-value pair in the form key=value (repeatable)
+    #[arg(short = 'k', long = "key", value_name = "KEY=VALUE")]
+    pub key_values: Vec<String>,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
