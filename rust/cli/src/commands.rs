@@ -23,8 +23,10 @@ mod version;
 use anyhow::Result;
 
 use crate::cli::{AddSubcommand, Command, GetSubcommand, ListSubcommand};
+use crate::context::CommandContext;
 
-pub fn dispatch(command: Command) -> Result<()> {
+pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
+    let _ = (ctx.verbose, ctx.color, &ctx.config, ctx.pprof_profile);
     match command {
         Command::Info => info::run(),
         Command::Version(args) => version::run(args),
@@ -62,27 +64,35 @@ pub fn dispatch(command: Command) -> Result<()> {
 mod tests {
     use super::dispatch;
     use crate::cli::{AddCommand, AddSubcommand, Command, ListCommand, ListSubcommand};
+    use crate::context::CommandContext;
 
     #[test]
     fn info_returns_not_implemented() {
-        let err = dispatch(Command::Info).expect_err("info should be a stub");
+        let err = dispatch(&CommandContext::default(), Command::Info)
+            .expect_err("info should be a stub");
         assert_eq!(err.to_string(), "'info' is not implemented yet");
     }
 
     #[test]
     fn list_subcommands_stub_with_specific_names() {
-        let err = dispatch(Command::List(ListCommand {
-            command: ListSubcommand::Channels,
-        }))
+        let err = dispatch(
+            &CommandContext::default(),
+            Command::List(ListCommand {
+                command: ListSubcommand::Channels,
+            }),
+        )
         .expect_err("list channels should be a stub");
         assert_eq!(err.to_string(), "'list channels' is not implemented yet");
     }
 
     #[test]
     fn add_subcommands_stub_with_specific_names() {
-        let err = dispatch(Command::Add(AddCommand {
-            command: AddSubcommand::Attachment,
-        }))
+        let err = dispatch(
+            &CommandContext::default(),
+            Command::Add(AddCommand {
+                command: AddSubcommand::Attachment,
+            }),
+        )
         .expect_err("add attachment should be a stub");
         assert_eq!(err.to_string(), "'add attachment' is not implemented yet");
     }

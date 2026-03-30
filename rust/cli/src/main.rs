@@ -1,5 +1,6 @@
 mod cli;
 mod cli_io;
+mod context;
 mod commands;
 mod logsetup;
 mod output;
@@ -9,10 +10,12 @@ use std::process;
 
 use anyhow::Result;
 use clap::Parser;
+use context::CommandContext;
 
 fn run() -> Result<()> {
     let args = cli::Args::parse();
     logsetup::init_logger(args.verbose, args.color);
+    let ctx = CommandContext::new(args.verbose, args.color, args.config.clone(), args.pprof_profile);
     if args.config.is_some() {
         anyhow::bail!("'--config' is not implemented yet");
     }
@@ -20,7 +23,7 @@ fn run() -> Result<()> {
         anyhow::bail!("'--pprof-profile' is not implemented yet");
     }
 
-    commands::dispatch(args.command)
+    commands::dispatch(&ctx, args.command)
 }
 
 fn main() {

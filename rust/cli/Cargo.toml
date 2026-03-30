@@ -11,5 +11,5 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 log = "0.4"
 simplelog = "0.12"
-mcap = { path = ".." }
+mcap = { path = "../mcap" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
