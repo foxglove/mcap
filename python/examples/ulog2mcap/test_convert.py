@@ -14,14 +14,14 @@ from typing import Any, Callable, Generator, Iterator, Optional, cast
 import numpy as np
 import pytest
 from convert import convert_ulog
-from mcap.writer import Writer
-from mcap.well_known import MessageEncoding
 from mcap_protobuf.decoder import DecoderFactory as ProtobufDecoderFactory
-from mcap.decoder import DecoderFactory as McapDecoderFactory
-from mcap.records import Schema
 from pyulog import ULog
 
+from mcap.decoder import DecoderFactory as McapDecoderFactory
 from mcap.reader import McapReader, make_reader
+from mcap.records import Schema
+from mcap.well_known import MessageEncoding
+from mcap.writer import Writer
 
 
 class JSONDecoderFactory(McapDecoderFactory):
