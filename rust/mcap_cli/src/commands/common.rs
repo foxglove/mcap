@@ -77,6 +77,23 @@ pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
     Ok(out)
 }
 
+pub fn decimal_time(t: u64) -> String {
+    format!("{}.{:09}", t / 1_000_000_000, t % 1_000_000_000)
+}
+
+pub fn formatted_time(t: u64) -> String {
+    let seconds = (t / 1_000_000_000) as i64;
+    let nanos = (t % 1_000_000_000) as u32;
+    match chrono::DateTime::from_timestamp(seconds, nanos) {
+        Some(dt) => format!(
+            "{} ({})",
+            dt.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+            decimal_time(t)
+        ),
+        None => decimal_time(t),
+    }
+}
+
 pub fn format_table(rows: &[Vec<String>]) -> String {
     if rows.is_empty() {
         return String::new();
@@ -121,7 +138,7 @@ pub fn print_table(rows: &[Vec<String>]) {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{format_table, parse_mcap, print_table};
+    use super::{decimal_time, format_table, formatted_time, parse_mcap, print_table};
     use mcap::records;
 
     #[test]
@@ -143,6 +160,15 @@ mod tests {
         assert!(lines[0].starts_with("id"));
         assert!(lines[1].contains('\t'));
         assert!(lines[2].contains("/barbaz"));
+    }
+
+    #[test]
+    fn formatted_time_includes_rfc3339_and_decimal() {
+        assert_eq!(
+            formatted_time(1_000_000_000),
+            "1970-01-01T00:00:01.000000000Z (1.000000000)"
+        );
+        assert_eq!(decimal_time(1_234_567_890), "1.234567890");
     }
 
     #[test]

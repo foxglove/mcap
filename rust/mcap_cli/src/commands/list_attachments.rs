@@ -27,8 +27,8 @@ fn render_attachment_rows(indexes: &[mcap::records::AttachmentIndex]) -> Vec<Vec
         rows.push(vec![
             index.name.clone(),
             index.media_type.clone(),
-            index.log_time.to_string(),
-            index.create_time.to_string(),
+            common::formatted_time(index.log_time),
+            common::formatted_time(index.create_time),
             index.data_size.to_string(),
             index.offset.to_string(),
         ]);

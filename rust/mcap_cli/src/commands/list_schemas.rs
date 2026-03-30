@@ -21,8 +21,8 @@ fn render_schema_rows(
     ]];
 
     for schema in schemas.values() {
-        let data = match String::from_utf8(schema.data.clone()) {
-            Ok(text) => text,
+        let data = match std::str::from_utf8(&schema.data) {
+            Ok(text) => text.to_string(),
             Err(_) => format!("<{} bytes binary>", schema.data.len()),
         };
         rows.push(vec![
