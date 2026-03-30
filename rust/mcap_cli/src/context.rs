@@ -3,6 +3,10 @@ use std::path::PathBuf;
 use crate::logsetup::Color;
 
 /// Global CLI execution context shared across command handlers.
+///
+/// This scaffold stores global options that upcoming command implementations
+/// will consume as real command behavior lands.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct CommandContext {
     verbose: u8,
@@ -22,6 +26,7 @@ impl Default for CommandContext {
     }
 }
 
+#[allow(dead_code)]
 impl CommandContext {
     pub fn new(verbose: u8, color: Color, config: Option<PathBuf>, pprof_profile: bool) -> Self {
         Self {
