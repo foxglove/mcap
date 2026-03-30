@@ -28,35 +28,35 @@ use crate::context::CommandContext;
 pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
     let _ = (ctx.verbose, ctx.color, &ctx.config, ctx.pprof_profile);
     match command {
-        Command::Info => info::run(),
-        Command::Version(args) => version::run(args),
+        Command::Info => info::run(ctx),
+        Command::Version(args) => version::run(ctx, args),
 
         Command::Add(args) => match args.command {
-            AddSubcommand::Attachment => add_attachment::run(),
-            AddSubcommand::Metadata => add_metadata::run(),
+            AddSubcommand::Attachment => add_attachment::run(ctx),
+            AddSubcommand::Metadata => add_metadata::run(ctx),
         },
         Command::Get(args) => match args.command {
-            GetSubcommand::Attachment => get_attachment::run(),
-            GetSubcommand::Metadata => get_metadata::run(),
+            GetSubcommand::Attachment => get_attachment::run(ctx),
+            GetSubcommand::Metadata => get_metadata::run(ctx),
         },
         Command::List(args) => match args.command {
-            ListSubcommand::Attachments => list_attachments::run(),
-            ListSubcommand::Channels => list_channels::run(),
-            ListSubcommand::Chunks => list_chunks::run(),
-            ListSubcommand::Metadata => list_metadata::run(),
-            ListSubcommand::Schemas => list_schemas::run(),
+            ListSubcommand::Attachments => list_attachments::run(ctx),
+            ListSubcommand::Channels => list_channels::run(ctx),
+            ListSubcommand::Chunks => list_chunks::run(ctx),
+            ListSubcommand::Metadata => list_metadata::run(ctx),
+            ListSubcommand::Schemas => list_schemas::run(ctx),
         },
 
-        Command::Cat => cat::run(),
-        Command::Compress => compress::run(),
-        Command::Convert => convert::run(),
-        Command::Decompress => decompress::run(),
-        Command::Doctor => doctor::run(),
-        Command::Du => du::run(),
-        Command::Filter => filter::run(),
-        Command::Merge => merge::run(),
-        Command::Recover => recover::run(),
-        Command::Sort => sort::run(),
+        Command::Cat => cat::run(ctx),
+        Command::Compress => compress::run(ctx),
+        Command::Convert => convert::run(ctx),
+        Command::Decompress => decompress::run(ctx),
+        Command::Doctor => doctor::run(ctx),
+        Command::Du => du::run(ctx),
+        Command::Filter => filter::run(ctx),
+        Command::Merge => merge::run(ctx),
+        Command::Recover => recover::run(ctx),
+        Command::Sort => sort::run(ctx),
     }
 }
 
@@ -68,8 +68,8 @@ mod tests {
 
     #[test]
     fn info_returns_not_implemented() {
-        let err = dispatch(&CommandContext::default(), Command::Info)
-            .expect_err("info should be a stub");
+        let err =
+            dispatch(&CommandContext::default(), Command::Info).expect_err("info should be a stub");
         assert_eq!(err.to_string(), "'info' is not implemented yet");
     }
 

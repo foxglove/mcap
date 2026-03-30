@@ -1,8 +1,9 @@
 use anyhow::Result;
 
 use crate::cli::VersionCommand;
+use crate::context::CommandContext;
 
-pub fn run(args: VersionCommand) -> Result<()> {
+pub fn run(_ctx: &CommandContext, args: VersionCommand) -> Result<()> {
     println!("{}", selected_version(args));
     Ok(())
 }
