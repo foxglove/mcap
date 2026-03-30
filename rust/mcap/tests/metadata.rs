@@ -10,7 +10,7 @@ use tempfile::tempfile;
 
 #[test]
 fn smoke() -> Result<()> {
-    let mapped = map_mcap("../tests/conformance/data/OneMetadata/OneMetadata.mcap")?;
+    let mapped = map_mcap("../../tests/conformance/data/OneMetadata/OneMetadata.mcap")?;
     let metas = mcap::read::LinearReader::new(&mapped)?
         .filter_map(|record| match record.unwrap() {
             mcap::records::Record::Metadata(m) => Some(m),
@@ -32,7 +32,7 @@ fn smoke() -> Result<()> {
 
 #[test]
 fn round_trip() -> Result<()> {
-    let mapped = map_mcap("../tests/conformance/data/OneMetadata/OneMetadata.mcap")?;
+    let mapped = map_mcap("../../tests/conformance/data/OneMetadata/OneMetadata.mcap")?;
     let metas =
         mcap::read::LinearReader::new(&mapped)?.filter_map(|record| match record.unwrap() {
             mcap::records::Record::Metadata(m) => Some(m),

@@ -53,5 +53,5 @@ Tag a release matching the version number `releases/swift/vX.Y.Z`
 
 ## Rust
 
-1. Update the version in rust/Cargo.toml
+1. Update the version in rust/mcap/Cargo.toml
 2. Tag a release matching the version number `releases/rust/vX.Y.Z`
