@@ -528,6 +528,23 @@ mod tests {
         buffer
     }
 
+    fn first_chunk_message_index_bytes(mcap: &[u8]) -> (Vec<u8>, u64) {
+        let summary = mcap::Summary::read(mcap)
+            .expect("summary read should succeed")
+            .expect("summary should exist");
+        let chunk = summary
+            .chunk_indexes
+            .first()
+            .expect("chunk index should be present");
+
+        let start = usize::try_from(chunk.chunk_start_offset + chunk.chunk_length)
+            .expect("message index start in range");
+        let end =
+            usize::try_from(chunk.chunk_start_offset + chunk.chunk_length + chunk.message_index_length)
+                .expect("message index end in range");
+        (mcap[start..end].to_vec(), chunk.uncompressed_size)
+    }
+
     #[test]
     fn exact_usage_counts_unchunked_message_payloads() {
         let mcap = write_test_file(
@@ -609,35 +626,59 @@ mod tests {
     }
 
     #[test]
+    fn approximate_usage_falls_back_when_no_chunk_indexes() {
+        let mcap = write_test_file(false, None, &[(1, 0, 10), (1, 1, 10)], &[(1, "/data")]);
+        let approximate = collect_usage_approximate(&mcap).expect("approximate");
+        assert!(approximate.is_none());
+    }
+
+    #[test]
     fn parse_chunk_message_indexes_rejects_trailing_bytes() {
-        let mut file = write_test_file(
+        let file = write_test_file(
             true,
             Some(1024 * 1024),
             &[(1, 0, 10), (1, 1, 10)],
             &[(1, "/data")],
         );
-        let summary = mcap::Summary::read(&file)
-            .expect("summary read should succeed")
-            .expect("summary should exist");
-        let chunk = summary
-            .chunk_indexes
-            .first()
-            .expect("chunk index should be present");
-
-        let start = usize::try_from(chunk.chunk_start_offset + chunk.chunk_length)
-            .expect("message index start in range");
-        let end = usize::try_from(
-            chunk.chunk_start_offset + chunk.chunk_length + chunk.message_index_length,
-        )
-        .expect("message index end in range");
-        let mut buf = file[start..end].to_vec();
+        let (mut buf, _) = first_chunk_message_index_bytes(&file);
         buf.push(0);
-        file.clear();
 
         let err =
             parse_chunk_message_indexes(&buf, 100, &BTreeMap::from([(1u16, "/demo".to_string())]))
                 .expect_err("should fail on trailing bytes");
         assert!(err.to_string().contains("trailing bytes"));
+    }
+
+    #[test]
+    fn parse_chunk_message_indexes_rejects_unknown_channel() {
+        let file = write_test_file(
+            true,
+            Some(1024 * 1024),
+            &[(1, 0, 10), (1, 1, 10)],
+            &[(1, "/data")],
+        );
+        let (buf, uncompressed_size) = first_chunk_message_index_bytes(&file);
+
+        let err =
+            parse_chunk_message_indexes(&buf, uncompressed_size, &BTreeMap::new())
+                .expect_err("should fail on unknown channel");
+        assert!(err.to_string().contains("unknown channel"));
+    }
+
+    #[test]
+    fn parse_chunk_message_indexes_rejects_offset_beyond_chunk_size() {
+        let file = write_test_file(
+            true,
+            Some(1024 * 1024),
+            &[(1, 0, 10), (1, 1, 10)],
+            &[(1, "/data")],
+        );
+        let (buf, _) = first_chunk_message_index_bytes(&file);
+
+        let err =
+            parse_chunk_message_indexes(&buf, 0, &BTreeMap::from([(1u16, "/data".to_string())]))
+                .expect_err("should fail on invalid offset");
+        assert!(err.to_string().contains("exceeds chunk uncompressed size"));
     }
 
     #[test]
