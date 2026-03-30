@@ -518,6 +518,7 @@ jobs:
       - run: cargo build -p mcap --all-features
       - run: cargo test -p mcap --all-features
       - run: cargo build -p mcap-cli
+      - run: cargo run -p mcap-cli -- --version
       - run: cargo test -p mcap-cli
       - run: cargo build -p mcap --all-features --target wasm32-unknown-unknown
       - run: cargo check -p mcap --all-features --target wasm32-unknown-unknown

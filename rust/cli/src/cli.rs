@@ -5,7 +5,7 @@ use clap::{ArgAction, Parser, Subcommand};
 use crate::logsetup;
 
 #[derive(Parser, Debug, PartialEq, Eq)]
-#[command(name = "mcap", bin_name = "mcap")]
+#[command(name = "mcap", bin_name = "mcap", version = env!("CARGO_PKG_VERSION"))]
 pub struct Args {
     /// Verbosity (-v, -vv, -vvv, etc.)
     #[arg(short, long, action = ArgAction::Count, global = true)]
