@@ -1,8 +1,51 @@
-use anyhow::Result;
+use std::collections::BTreeMap;
 
-use crate::commands::not_implemented;
+use anyhow::{Context, Result};
+
+use crate::cli::AddMetadataCommand;
+use crate::commands::add_common;
 use crate::context::CommandContext;
 
-pub fn run(_ctx: &CommandContext) -> Result<()> {
-    Err(not_implemented("add metadata"))
+pub fn run(_ctx: &CommandContext, args: AddMetadataCommand) -> Result<()> {
+    let metadata_map = parse_key_values(&args.key_values)?;
+    let metadata = mcap::records::Metadata {
+        name: args.name,
+        metadata: metadata_map,
+    };
+    add_common::amend_mcap_file(&args.file, &[], &[metadata]).with_context(|| {
+        format!(
+            "failed to add metadata to '{}'. You may need to run `mcap recover` to repair the file.",
+            args.file.display()
+        )
+    })?;
+    Ok(())
+}
+
+pub(crate) fn parse_key_values(values: &[String]) -> Result<BTreeMap<String, String>> {
+    let mut out = BTreeMap::new();
+    for value in values {
+        let Some((key, val)) = value.split_once('=') else {
+            anyhow::bail!("failed to parse key/value '{value}', expected key=value");
+        };
+        out.insert(key.to_string(), val.to_string());
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_key_values;
+
+    #[test]
+    fn parse_key_values_accepts_valid_pairs() {
+        let out = parse_key_values(&["a=1".to_string(), "b=2".to_string()]).expect("parse");
+        assert_eq!(out.get("a"), Some(&"1".to_string()));
+        assert_eq!(out.get("b"), Some(&"2".to_string()));
+    }
+
+    #[test]
+    fn parse_key_values_rejects_invalid_pair() {
+        let err = parse_key_values(&["invalid".to_string()]).expect_err("must fail");
+        assert!(err.to_string().contains("expected key=value"));
+    }
 }
