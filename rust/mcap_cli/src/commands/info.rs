@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::time::Duration;
 
 use anyhow::Result;
 
@@ -181,8 +180,36 @@ fn format_duration(start: u64, end: u64) -> (f64, String) {
     } else {
         (start - end, "-")
     };
-    let duration = Duration::from_nanos(diff);
-    (diff as f64, format!("{sign}{duration:?}"))
+    (
+        diff as f64,
+        format!("{sign}{}", format_duration_human(diff)),
+    )
+}
+
+fn format_duration_human(nanos: u64) -> String {
+    let total_seconds = nanos / 1_000_000_000;
+    let fractional_nanos = nanos % 1_000_000_000;
+    let hours = total_seconds / 3600;
+    let minutes = (total_seconds % 3600) / 60;
+    let seconds = total_seconds % 60;
+
+    let seconds_with_fraction = if fractional_nanos == 0 {
+        seconds.to_string()
+    } else {
+        let mut fractional = format!("{fractional_nanos:09}");
+        while fractional.ends_with('0') {
+            fractional.pop();
+        }
+        format!("{seconds}.{fractional}")
+    };
+
+    if hours > 0 {
+        format!("{hours}h{minutes}m{seconds_with_fraction}s")
+    } else if minutes > 0 {
+        format!("{minutes}m{seconds_with_fraction}s")
+    } else {
+        format!("{seconds_with_fraction}s")
+    }
 }
 
 fn human_bytes(num_bytes: u64) -> String {
@@ -267,7 +294,7 @@ fn count_chunk_overlaps(chunks: &[mcap::records::ChunkIndex]) -> (bool, usize, u
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{count_chunk_overlaps, human_bytes, render_info};
+    use super::{count_chunk_overlaps, format_duration, human_bytes, render_info};
     use crate::commands::common;
     use crate::commands::common::{ParsedMcap, ParsedSchema};
     use mcap::records::{self, ChunkIndex, Header, Statistics};
@@ -370,5 +397,12 @@ mod tests {
         assert!(rendered.contains("messages: 2"));
         assert!(rendered.contains("channels:"));
         assert!(rendered.contains("/demo"));
+    }
+
+    #[test]
+    fn duration_format_is_human_readable() {
+        assert_eq!(format_duration(0, 7_200_000_000_000).1, "2h0m0s");
+        assert_eq!(format_duration(0, 1_500_000_000).1, "1.5s");
+        assert_eq!(format_duration(2_000_000_000, 1_000_000_000).1, "-1s");
     }
 }

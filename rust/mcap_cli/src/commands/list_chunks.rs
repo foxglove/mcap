@@ -33,8 +33,8 @@ fn render_chunk_rows(chunk_indexes: &[mcap::records::ChunkIndex]) -> Vec<Vec<Str
         rows.push(vec![
             chunk.chunk_start_offset.to_string(),
             chunk.chunk_length.to_string(),
-            common::formatted_time(chunk.message_start_time),
-            common::formatted_time(chunk.message_end_time),
+            common::decimal_time(chunk.message_start_time),
+            common::decimal_time(chunk.message_end_time),
             chunk.compression.clone(),
             chunk.compressed_size.to_string(),
             chunk.uncompressed_size.to_string(),
@@ -80,7 +80,7 @@ mod tests {
             ]
         );
         assert_eq!(rows[1][0], "30");
-        assert_eq!(rows[1][2], "1970-01-01T00:00:00.000000010Z (0.000000010)");
+        assert_eq!(rows[1][2], "0.000000010");
         assert_eq!(rows[1][7], "0.500000");
     }
 }

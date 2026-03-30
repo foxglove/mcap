@@ -57,17 +57,6 @@ fn parse_mcap_from_summary(
         return Ok(None);
     };
 
-    let has_any_summary_data = summary.stats.is_some()
-        || !summary.channels.is_empty()
-        || !summary.schemas.is_empty()
-        || !summary.chunk_indexes.is_empty()
-        || !summary.attachment_indexes.is_empty()
-        || !summary.metadata_indexes.is_empty();
-
-    if !has_any_summary_data {
-        return Ok(None);
-    }
-
     let mut out = ParsedMcap {
         header,
         statistics: summary.stats,
@@ -234,7 +223,10 @@ pub fn print_table(rows: &[Vec<String>]) {
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{decimal_time, format_table, formatted_time, parse_mcap, print_table};
+    use super::{
+        decimal_time, format_table, formatted_time, parse_mcap, parse_mcap_from_summary,
+        print_table,
+    };
     use mcap::records;
 
     #[test]
@@ -346,5 +338,29 @@ mod tests {
         assert!(parsed.header.is_some());
         assert!(parsed.channels.contains_key(&channel_id));
         assert!(parsed.schemas.contains_key(&schema_id));
+    }
+
+    #[test]
+    fn parse_mcap_from_summary_accepts_empty_summary() {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::Writer::new(std::io::Cursor::new(&mut buffer)).expect("writer");
+            writer.finish().expect("finish writer");
+        }
+
+        let parsed = parse_mcap_from_summary(&buffer, None).expect("parse from summary");
+        assert!(parsed.is_some());
+        let parsed = parsed.expect("parsed summary output");
+        if let Some(stats) = &parsed.statistics {
+            assert_eq!(stats.message_count, 0);
+            assert_eq!(stats.channel_count, 0);
+            assert_eq!(stats.attachment_count, 0);
+            assert_eq!(stats.metadata_count, 0);
+        }
+        assert!(parsed.channels.is_empty());
+        assert!(parsed.schemas.is_empty());
+        assert!(parsed.chunk_indexes.is_empty());
+        assert!(parsed.attachment_indexes.is_empty());
+        assert!(parsed.metadata_indexes.is_empty());
     }
 }
