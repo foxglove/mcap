@@ -45,7 +45,7 @@ lint: sync
 	uv run black --check --diff --color mcap-protobuf-support
 	uv run black --check --diff --color --extend-exclude="_vendor" mcap-ros1-support
 	uv run black --check --diff --color --extend-exclude="_vendor" mcap-ros2-support
-	uv run isort .
+	uv run isort --check-only --diff .
 	uv run pyright --project mcap
 	uv run pyright --project mcap-protobuf-support mcap-protobuf-support/mcap_protobuf
 	uv run pyright --project mcap-ros1-support mcap-ros1-support/mcap_ros1

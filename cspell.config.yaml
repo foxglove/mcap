@@ -72,6 +72,7 @@ words:
   - infima
   - inputfile
   - intrinsics
+  - isort
   - issubdtype
   - jsonschema
   - kaitai
@@ -91,7 +92,6 @@ words:
   - numpy
   - omgidl
   - parseable
-  - uv
   - pointcloud
   - pointclouds
   - proto
@@ -119,11 +119,11 @@ words:
   - swiftlint
   - tfmessage
   - typecheck
-  - isort
   - typedoc
   - ulog
   - unchunked
   - unindexed
+  - uv
   - vcpkg
   - velodyne
   - waabi
