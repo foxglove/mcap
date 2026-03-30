@@ -125,37 +125,14 @@ pub struct VersionCommand {
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct InfoCommand {
+pub struct FileCommand {
     /// Local path to the MCAP file
     pub file: PathBuf,
 }
 
-#[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct ListAttachmentsCommand {
-    /// Local path to the MCAP file
-    pub file: PathBuf,
-}
-
-#[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct ListChannelsCommand {
-    /// Local path to the MCAP file
-    pub file: PathBuf,
-}
-
-#[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct ListChunksCommand {
-    /// Local path to the MCAP file
-    pub file: PathBuf,
-}
-
-#[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct ListMetadataCommand {
-    /// Local path to the MCAP file
-    pub file: PathBuf,
-}
-
-#[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct ListSchemasCommand {
-    /// Local path to the MCAP file
-    pub file: PathBuf,
-}
+pub type InfoCommand = FileCommand;
+pub type ListAttachmentsCommand = FileCommand;
+pub type ListChannelsCommand = FileCommand;
+pub type ListChunksCommand = FileCommand;
+pub type ListMetadataCommand = FileCommand;
+pub type ListSchemasCommand = FileCommand;

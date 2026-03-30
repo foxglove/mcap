@@ -9,7 +9,7 @@ use crate::commands::common;
 use crate::context::CommandContext;
 
 pub fn run(_ctx: &CommandContext, args: InfoCommand) -> Result<()> {
-    let mcap = common::read_file(&args.file)?;
+    let mcap = common::map_file(&args.file)?;
     let parsed = common::parse_mcap(&mcap)?;
     print!("{}", render_info(&parsed));
     Ok(())
@@ -36,9 +36,9 @@ fn render_info(parsed: &common::ParsedMcap) -> String {
         let _ = writeln!(
             &mut out,
             "start: {}",
-            decimal_time(stats.message_start_time)
+            formatted_time(stats.message_start_time)
         );
-        let _ = writeln!(&mut out, "end: {}", decimal_time(stats.message_end_time));
+        let _ = writeln!(&mut out, "end: {}", formatted_time(stats.message_end_time));
     }
 
     if !parsed.chunk_indexes.is_empty() {
@@ -175,6 +175,19 @@ fn decimal_time(t: u64) -> String {
     format!("{}.{:09}", t / 1_000_000_000, t % 1_000_000_000)
 }
 
+fn formatted_time(t: u64) -> String {
+    let seconds = (t / 1_000_000_000) as i64;
+    let nanos = (t % 1_000_000_000) as u32;
+    match chrono::DateTime::from_timestamp(seconds, nanos) {
+        Some(dt) => format!(
+            "{} ({})",
+            dt.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+            decimal_time(t)
+        ),
+        None => decimal_time(t),
+    }
+}
+
 fn format_duration(start: u64, end: u64) -> (f64, String) {
     let (diff, sign) = if end >= start {
         (end - start, "")
@@ -267,13 +280,21 @@ fn count_chunk_overlaps(chunks: &[mcap::records::ChunkIndex]) -> (bool, usize, u
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{count_chunk_overlaps, decimal_time, human_bytes, render_info};
+    use super::{count_chunk_overlaps, decimal_time, formatted_time, human_bytes, render_info};
     use crate::commands::common::{ParsedMcap, ParsedSchema};
     use mcap::records::{self, ChunkIndex, Header, Statistics};
 
     #[test]
     fn decimal_time_formats_nanos() {
         assert_eq!(decimal_time(1_234_567_890), "1.234567890");
+    }
+
+    #[test]
+    fn formatted_time_includes_rfc3339_and_decimal() {
+        assert_eq!(
+            formatted_time(1_000_000_000),
+            "1970-01-01T00:00:01.000000000Z (1.000000000)"
+        );
     }
 
     #[test]

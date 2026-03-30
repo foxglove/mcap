@@ -4,7 +4,7 @@ use crate::context::CommandContext;
 use anyhow::Result;
 
 pub fn run(_ctx: &CommandContext, args: ListSchemasCommand) -> Result<()> {
-    let mcap = common::read_file(&args.file)?;
+    let mcap = common::map_file(&args.file)?;
     let parsed = common::parse_mcap(&mcap)?;
     common::print_table(&render_schema_rows(&parsed.schemas));
     Ok(())
@@ -21,11 +21,15 @@ fn render_schema_rows(
     ]];
 
     for schema in schemas.values() {
+        let data = match String::from_utf8(schema.data.clone()) {
+            Ok(text) => text,
+            Err(_) => format!("<{} bytes binary>", schema.data.len()),
+        };
         rows.push(vec![
             schema.header.id.to_string(),
             schema.header.name.clone(),
             schema.header.encoding.clone(),
-            String::from_utf8_lossy(schema.data.as_slice()).to_string(),
+            data,
         ]);
     }
     rows
@@ -59,5 +63,24 @@ mod tests {
         assert_eq!(rows[1][0], "2");
         assert_eq!(rows[1][1], "demo");
         assert_eq!(rows[1][3], r#"{"type":"object"}"#);
+    }
+
+    #[test]
+    fn render_rows_marks_binary_schema_data() {
+        let mut schemas = BTreeMap::new();
+        schemas.insert(
+            3,
+            ParsedSchema {
+                header: SchemaHeader {
+                    id: 3,
+                    name: "binary".to_string(),
+                    encoding: "protobuf".to_string(),
+                },
+                data: vec![0, 159, 146, 150],
+            },
+        );
+
+        let rows = render_schema_rows(&schemas);
+        assert_eq!(rows[1][3], "<4 bytes binary>");
     }
 }

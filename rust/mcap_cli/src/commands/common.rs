@@ -3,6 +3,7 @@ use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use mcap::records::{self, Record};
+use memmap2::Mmap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedSchema {
@@ -21,8 +22,10 @@ pub struct ParsedMcap {
     pub metadata_indexes: Vec<records::MetadataIndex>,
 }
 
-pub fn read_file(path: &Path) -> anyhow::Result<Vec<u8>> {
-    std::fs::read(path).with_context(|| format!("couldn't read '{}'", path.display()))
+pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
+    let file =
+        std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
+    unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
 }
 
 pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {

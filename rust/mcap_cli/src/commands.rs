@@ -85,7 +85,7 @@ mod tests {
             }),
         )
         .expect_err("info should fail on missing file");
-        assert!(err.to_string().contains("couldn't read"));
+        assert!(err.to_string().contains("couldn't open"));
     }
 
     #[test]
@@ -99,7 +99,7 @@ mod tests {
             }),
         )
         .expect_err("list channels should fail on missing file");
-        assert!(err.to_string().contains("couldn't read"));
+        assert!(err.to_string().contains("couldn't open"));
     }
 
     #[test]
@@ -136,7 +136,7 @@ mod tests {
         ] {
             let err = dispatch(&ctx, Command::List(ListCommand { command }))
                 .expect_err("list command should fail on missing file");
-            assert!(err.to_string().contains("couldn't read"));
+            assert!(err.to_string().contains("couldn't open"));
         }
     }
 }

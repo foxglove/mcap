@@ -5,7 +5,7 @@ use crate::commands::common;
 use crate::context::CommandContext;
 
 pub fn run(_ctx: &CommandContext, args: ListAttachmentsCommand) -> Result<()> {
-    let mcap = common::read_file(&args.file)?;
+    let mcap = common::map_file(&args.file)?;
     let parsed = common::parse_mcap(&mcap)?;
     let mut indexes = parsed.attachment_indexes;
     indexes.sort_by_key(|index| index.offset);

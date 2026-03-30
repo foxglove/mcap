@@ -5,7 +5,7 @@ use crate::commands::common;
 use crate::context::CommandContext;
 
 pub fn run(_ctx: &CommandContext, args: ListChunksCommand) -> Result<()> {
-    let mcap = common::read_file(&args.file)?;
+    let mcap = common::map_file(&args.file)?;
     let parsed = common::parse_mcap(&mcap)?;
     common::print_table(&render_chunk_rows(&parsed.chunk_indexes));
     Ok(())
