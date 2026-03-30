@@ -25,6 +25,10 @@ use anyhow::Result;
 use crate::cli::{AddSubcommand, Command, GetSubcommand, ListSubcommand};
 use crate::context::CommandContext;
 
+pub fn not_implemented(command_name: &str) -> anyhow::Error {
+    anyhow::anyhow!("'{command_name}' is not implemented yet")
+}
+
 pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
     let _ = (ctx.verbose, ctx.color, &ctx.config, ctx.pprof_profile);
     match command {

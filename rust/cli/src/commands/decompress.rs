@@ -1,7 +1,8 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 
+use crate::commands::not_implemented;
 use crate::context::CommandContext;
 
 pub fn run(_ctx: &CommandContext) -> Result<()> {
-    bail!("'decompress' is not implemented yet")
+    Err(not_implemented("decompress"))
 }
