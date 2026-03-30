@@ -57,5 +57,5 @@ pub fn read_paths_from_stdin() -> Result<Vec<PathBuf>> {
 }
 
 pub fn has_mcap_magic(bytes: &[u8]) -> bool {
-    bytes.starts_with(MAGIC) && bytes.ends_with(MAGIC)
+    bytes.len() >= MAGIC.len() * 2 && bytes.starts_with(MAGIC) && bytes.ends_with(MAGIC)
 }
