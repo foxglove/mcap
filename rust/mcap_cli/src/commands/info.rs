@@ -308,7 +308,7 @@ mod tests {
     fn formatted_time_includes_rfc3339_and_decimal() {
         assert_eq!(
             common::formatted_time(1_000_000_000),
-            "1970-01-01T00:00:01.000000000Z (1.000000000)"
+            "1970-01-01T00:00:01Z (1.000000000)"
         );
     }
 

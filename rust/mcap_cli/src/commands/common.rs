@@ -172,10 +172,28 @@ pub fn formatted_time(t: u64) -> String {
     match chrono::DateTime::from_timestamp(seconds, nanos) {
         Some(dt) => format!(
             "{} ({})",
-            dt.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
+            format_rfc3339_trimmed(dt),
             decimal_time(t)
         ),
         None => decimal_time(t),
+    }
+}
+
+fn format_rfc3339_trimmed(dt: chrono::DateTime<chrono::Utc>) -> String {
+    let rendered = dt.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
+    let Some(without_z) = rendered.strip_suffix('Z') else {
+        return rendered;
+    };
+
+    let Some((prefix, fractional)) = without_z.split_once('.') else {
+        return rendered;
+    };
+
+    let trimmed = fractional.trim_end_matches('0');
+    if trimmed.is_empty() {
+        format!("{prefix}Z")
+    } else {
+        format!("{prefix}.{trimmed}Z")
     }
 }
 
@@ -254,9 +272,13 @@ mod tests {
     fn formatted_time_includes_rfc3339_and_decimal() {
         assert_eq!(
             formatted_time(1_000_000_000),
-            "1970-01-01T00:00:01.000000000Z (1.000000000)"
+            "1970-01-01T00:00:01Z (1.000000000)"
         );
         assert_eq!(decimal_time(1_234_567_890), "1.234567890");
+        assert_eq!(
+            formatted_time(1_234_567_890),
+            "1970-01-01T00:00:01.23456789Z (1.234567890)"
+        );
     }
 
     #[test]
