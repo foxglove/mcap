@@ -10,7 +10,7 @@ use tempfile::tempfile;
 
 #[test]
 fn smoke() -> Result<()> {
-    let mapped = map_mcap("../tests/conformance/data/OneMessage/OneMessage.mcap")?;
+    let mapped = map_mcap("../../tests/conformance/data/OneMessage/OneMessage.mcap")?;
     let messages = mcap::MessageStream::new(&mapped)?.collect::<mcap::McapResult<Vec<_>>>()?;
 
     assert_eq!(messages.len(), 1);
@@ -50,7 +50,7 @@ fn round_trip_no_chunks() -> Result<()> {
 }
 
 fn run_round_trip(use_chunks: bool) -> Result<()> {
-    let mapped = map_mcap("../tests/conformance/data/OneMessage/OneMessage.mcap")?;
+    let mapped = map_mcap("../../tests/conformance/data/OneMessage/OneMessage.mcap")?;
     let messages = mcap::MessageStream::new(&mapped)?;
 
     let mut tmp = tempfile()?;
