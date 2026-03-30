@@ -11,7 +11,7 @@ pub enum Color {
 }
 
 /// Set up simplelog to spit messages to stderr.
-pub fn init_logger(verbosity: u8, color: Color) {
+pub fn init_logger(verbosity: u8, color: Color) -> anyhow::Result<()> {
     let mut builder = ConfigBuilder::new();
     // Shut a bunch of stuff off - we're just spitting to stderr.
     builder.set_location_level(LevelFilter::Trace);
@@ -43,5 +43,4 @@ pub fn init_logger(verbosity: u8, color: Color) {
     TermLogger::init(level, config.clone(), TerminalMode::Stderr, color)
         .or_else(|_| SimpleLogger::init(level, config))
         .context("Couldn't init logger")
-        .unwrap()
 }

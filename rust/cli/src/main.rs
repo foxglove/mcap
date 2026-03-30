@@ -1,7 +1,7 @@
 mod cli;
 mod cli_io;
-mod context;
 mod commands;
+mod context;
 mod logsetup;
 mod output;
 mod time;
@@ -14,8 +14,13 @@ use context::CommandContext;
 
 fn run() -> Result<()> {
     let args = cli::Args::parse();
-    logsetup::init_logger(args.verbose, args.color);
-    let ctx = CommandContext::new(args.verbose, args.color, args.config.clone(), args.pprof_profile);
+    logsetup::init_logger(args.verbose, args.color)?;
+    let ctx = CommandContext::new(
+        args.verbose,
+        args.color,
+        args.config.clone(),
+        args.pprof_profile,
+    );
     if args.config.is_some() {
         anyhow::bail!("'--config' is not implemented yet");
     }
