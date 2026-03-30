@@ -1,10 +1,10 @@
 import argparse
-from io import BufferedWriter
 import itertools
 import json
 import typing
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from io import BufferedWriter
 
 import numpy as np
 import protos.Log_pb2 as log_pb2
@@ -15,10 +15,11 @@ from google.protobuf.descriptor_pb2 import (
 )
 from google.protobuf.descriptor_pool import DescriptorPool
 from google.protobuf.message_factory import GetMessageClass, GetMessageClassesForFiles
-from mcap.well_known import MessageEncoding
-from mcap.writer import Writer
 from mcap_protobuf.schema import register_schema
 from pyulog import ULog
+
+from mcap.well_known import MessageEncoding
+from mcap.writer import Writer
 
 ULOG_FD_NAME = "ulog_messages.proto"
 ULOG_PACKAGE = "ulog"

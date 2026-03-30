@@ -92,10 +92,8 @@ jobs:
         with:
           node-version: 24.x
           cache: yarn
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.10"
-      - run: cd python && pip install -e mcap
+      - uses: astral-sh/setup-uv@v8.0.0
+      - run: uv sync --frozen --directory python
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner py-
@@ -299,10 +297,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           lfs: true
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.10"
-      - run: pip install pipenv==2026.0.3
+      - uses: astral-sh/setup-uv@v8.0.0
       - run: make lint
       - run: make test
       - run: make examples

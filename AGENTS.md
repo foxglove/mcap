@@ -33,13 +33,12 @@ All scripts are defined in the root `package.json`. Each workspace (`@mcap/core`
 
 ## Python
 
-**Prerequisites:** Python 3.10 + pipenv (`pip install pipenv`).
-
-The Pipfile `[requires]` section pins `python_version = "3.10"`. Use `pipenv install --dev --python python3.10` instead of `make pipenv` if the `--deploy` flag fails due to a patch version mismatch.
+**Prerequisites:** Python 3.10 + [uv](https://docs.astral.sh/uv/).
 
 ```
+python3 -m pip install uv
 cd python
-SETUPTOOLS_ENABLE_FEATURES="legacy-editable" pipenv install --dev --python python3.10
+uv sync --frozen
 ```
 
 | Action | Command                   |

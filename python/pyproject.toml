@@ -1,0 +1,53 @@
+[project]
+name = "mcap-python-tooling"
+version = "0.0.0"
+description = "Development tooling environment for MCAP Python packages"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "foxglove-schemas-protobuf",
+    "lz4",
+    "mcap",
+    "mcap-protobuf-support",
+    "mcap-ros1-support",
+    "mcap-ros2-support",
+    "protobuf>=4.25",
+    "zstandard",
+]
+
+[dependency-groups]
+dev = [
+    "black",
+    "build",
+    "flake8",
+    "genmsg",
+    "genpy",
+    "isort",
+    "m2r2",
+    "pyright",
+    "pytest",
+    "pyyaml",
+    "sphinx",
+    "std_msgs",
+    "types-protobuf",
+    "typing-extensions",
+]
+ulog2mcap-example = [
+    "numpy",
+    "pyulog",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.uv.sources]
+mcap = { path = "mcap", editable = true }
+mcap-protobuf-support = { path = "mcap-protobuf-support", editable = true }
+mcap-ros1-support = { path = "mcap-ros1-support", editable = true }
+mcap-ros2-support = { path = "mcap-ros2-support", editable = true }
+genmsg = { index = "ros" }
+genpy = { index = "ros" }
+std_msgs = { index = "ros" }
+
+[[tool.uv.index]]
+name = "ros"
+url = "https://rospypi.github.io/simple"

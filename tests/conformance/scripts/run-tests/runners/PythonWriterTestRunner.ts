@@ -10,7 +10,7 @@ export default class PythonWriterTestRunner extends WriteTestRunner {
 
   async runWriteTest(filePath: string): Promise<Uint8Array> {
     const { stdout, stderr } = await promisify(exec)(
-      `python3 tests/run_writer_test.py ${filePath}`,
+      `uv run --project .. -- python3 tests/run_writer_test.py ${filePath}`,
       {
         cwd: "../../python/mcap",
         encoding: undefined,
