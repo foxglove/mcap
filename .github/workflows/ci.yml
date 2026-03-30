@@ -514,11 +514,12 @@ jobs:
       - run: cargo clippy -p mcap --no-default-features --features tokio -- --no-deps -D warnings
       - run: cargo clippy -p mcap --no-default-features --features tokio,lz4 -- --no-deps -D warnings
       - run: cargo clippy -p mcap --no-default-features --features tokio,zstd -- --no-deps -D warnings
-      - run: cargo clippy -p mcap-cli --all-targets -- --no-deps -D warnings
+      - run: cargo clippy -p mcap_cli --all-targets -- --no-deps -D warnings
       - run: cargo build -p mcap --all-features
       - run: cargo test -p mcap --all-features
-      - run: cargo build -p mcap-cli
-      - run: cargo test -p mcap-cli
+      - run: cargo build -p mcap_cli
+      - run: cargo run -p mcap_cli -- --version
+      - run: cargo test -p mcap_cli
       - run: cargo build -p mcap --all-features --target wasm32-unknown-unknown
       - run: cargo check -p mcap --all-features --target wasm32-unknown-unknown
       - run: cargo publish -p mcap --dry-run

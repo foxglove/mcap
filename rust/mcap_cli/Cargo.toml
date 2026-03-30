@@ -1,13 +1,18 @@
 [package]
-name = "mcap-cli"
+name = "mcap_cli"
 description = "MCAP CLI"
 version = "0.0.1"
 edition = "2021"
 license = "MIT"
 publish = false
 
+[[bin]]
+name = "mcap"
+path = "src/main.rs"
+
 [dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 log = "0.4"
 simplelog = "0.12"
+mcap = { path = "../mcap" }

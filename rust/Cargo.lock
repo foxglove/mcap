@@ -804,12 +804,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "mcap-cli"
+name = "mcap_cli"
 version = "0.0.1"
 dependencies = [
  "anyhow",
  "clap 4.6.0",
  "log",
+ "mcap",
  "simplelog",
 ]
 
