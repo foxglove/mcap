@@ -31,7 +31,7 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
 pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
     let mut out = ParsedMcap::default();
 
-    for record in mcap::read::ChunkFlattener::new(mcap)? {
+    for record in mcap::read::LinearReader::new(mcap)? {
         match record? {
             Record::Header(header) => {
                 if let Some(existing) = &out.header {
@@ -90,14 +90,19 @@ pub fn format_table(rows: &[Vec<String>]) -> String {
     }
 
     let mut out = String::new();
+    let last_col_idx = rows[0].len().saturating_sub(1);
     for row in rows {
         let mut line = String::new();
         for (idx, value) in row.iter().enumerate() {
             if idx > 0 {
                 line.push('\t');
             }
-            let width = widths[idx];
-            let _ = write!(&mut line, "{value:<width$}");
+            if idx == last_col_idx {
+                line.push_str(value);
+            } else {
+                let width = widths[idx];
+                let _ = write!(&mut line, "{value:<width$}");
+            }
         }
         let _ = writeln!(&mut out, "{line}");
     }
@@ -138,6 +143,19 @@ mod tests {
         assert!(lines[0].starts_with("id"));
         assert!(lines[1].contains('\t'));
         assert!(lines[2].contains("/barbaz"));
+    }
+
+    #[test]
+    fn table_formatter_omits_trailing_whitespace() {
+        let rows = vec![
+            vec!["col1".to_string(), "col2".to_string()],
+            vec!["a".to_string(), "b".to_string()],
+        ];
+        let rendered = format_table(&rows);
+        for line in rendered.lines() {
+            assert!(!line.ends_with(' '));
+            assert!(!line.ends_with('\t'));
+        }
     }
 
     #[test]
