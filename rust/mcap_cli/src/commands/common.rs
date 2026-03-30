@@ -29,52 +29,149 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
 }
 
 pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
-    let mut out = ParsedMcap::default();
+    let header = read_header(mcap)?;
+    if let Some(parsed_from_summary) = parse_mcap_from_summary(mcap, header.clone())? {
+        return Ok(parsed_from_summary);
+    }
 
+    eprintln!(
+        "Warning: MCAP summary is unavailable/incomplete; falling back to a full linear scan. \
+This can be very slow for very large files."
+    );
+    parse_mcap_linear(mcap, header)
+}
+
+fn read_header(mcap: &[u8]) -> Result<Option<records::Header>> {
+    let mut reader = mcap::read::LinearReader::new(mcap)?;
+    match reader.next() {
+        Some(Ok(Record::Header(header))) => Ok(Some(header)),
+        Some(Ok(_)) | None => Ok(None),
+        Some(Err(err)) => Err(err.into()),
+    }
+}
+
+fn parse_mcap_from_summary(
+    mcap: &[u8],
+    header: Option<records::Header>,
+) -> Result<Option<ParsedMcap>> {
+    let Some(summary) = mcap::Summary::read(mcap)? else {
+        return Ok(None);
+    };
+
+    let has_any_summary_data = summary.stats.is_some()
+        || !summary.channels.is_empty()
+        || !summary.schemas.is_empty()
+        || !summary.chunk_indexes.is_empty()
+        || !summary.attachment_indexes.is_empty()
+        || !summary.metadata_indexes.is_empty();
+
+    if !has_any_summary_data {
+        return Ok(None);
+    }
+
+    let mut out = ParsedMcap {
+        header,
+        statistics: summary.stats,
+        channels: std::collections::BTreeMap::new(),
+        schemas: std::collections::BTreeMap::new(),
+        chunk_indexes: summary.chunk_indexes,
+        attachment_indexes: summary.attachment_indexes,
+        metadata_indexes: summary.metadata_indexes,
+    };
+
+    for schema in summary.schemas.values() {
+        let schema = schema.as_ref();
+        out.schemas.insert(
+            schema.id,
+            ParsedSchema {
+                header: records::SchemaHeader {
+                    id: schema.id,
+                    name: schema.name.clone(),
+                    encoding: schema.encoding.clone(),
+                },
+                data: schema.data.clone().into_owned(),
+            },
+        );
+    }
+
+    for channel in summary.channels.values() {
+        let channel = channel.as_ref();
+        out.channels.insert(
+            channel.id,
+            records::Channel {
+                id: channel.id,
+                schema_id: channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0),
+                topic: channel.topic.clone(),
+                message_encoding: channel.message_encoding.clone(),
+                metadata: channel.metadata.clone(),
+            },
+        );
+    }
+
+    Ok(Some(out))
+}
+
+fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
+    let mut out = ParsedMcap {
+        header,
+        ..ParsedMcap::default()
+    };
     for record in mcap::read::LinearReader::new(mcap)? {
-        match record? {
-            Record::Header(header) => {
-                if let Some(existing) = &out.header {
-                    if existing != &header {
-                        bail!("conflicting MCAP header records");
-                    }
-                } else {
-                    out.header = Some(header);
-                }
+        let record = record?;
+        if let Record::Chunk { header, data } = record {
+            for nested_record in mcap::read::ChunkReader::new(header, data.as_ref())? {
+                collect_record(&mut out, nested_record?)?;
             }
-            Record::Statistics(statistics) => {
-                out.statistics = Some(statistics);
-            }
-            Record::Channel(channel) => {
-                if let Some(existing) = out.channels.get(&channel.id) {
-                    if existing != &channel {
-                        bail!("conflicting channel definition for id {}", channel.id);
-                    }
-                } else {
-                    out.channels.insert(channel.id, channel);
-                }
-            }
-            Record::Schema { header, data } => {
-                let schema = ParsedSchema {
-                    header,
-                    data: data.into_owned(),
-                };
-                if let Some(existing) = out.schemas.get(&schema.header.id) {
-                    if existing != &schema {
-                        bail!("conflicting schema definition for id {}", schema.header.id);
-                    }
-                } else {
-                    out.schemas.insert(schema.header.id, schema);
-                }
-            }
-            Record::ChunkIndex(index) => out.chunk_indexes.push(index),
-            Record::AttachmentIndex(index) => out.attachment_indexes.push(index),
-            Record::MetadataIndex(index) => out.metadata_indexes.push(index),
-            _ => {}
+        } else {
+            collect_record(&mut out, record)?;
         }
     }
 
     Ok(out)
+}
+
+fn collect_record(out: &mut ParsedMcap, record: Record<'_>) -> Result<()> {
+    match record {
+        Record::Header(header) => {
+            if let Some(existing) = &out.header {
+                if existing != &header {
+                    bail!("conflicting MCAP header records");
+                }
+            } else {
+                out.header = Some(header);
+            }
+        }
+        Record::Statistics(statistics) => {
+            out.statistics = Some(statistics);
+        }
+        Record::Channel(channel) => {
+            if let Some(existing) = out.channels.get(&channel.id) {
+                if existing != &channel {
+                    bail!("conflicting channel definition for id {}", channel.id);
+                }
+            } else {
+                out.channels.insert(channel.id, channel);
+            }
+        }
+        Record::Schema { header, data } => {
+            let schema = ParsedSchema {
+                header,
+                data: data.into_owned(),
+            };
+            if let Some(existing) = out.schemas.get(&schema.header.id) {
+                if existing != &schema {
+                    bail!("conflicting schema definition for id {}", schema.header.id);
+                }
+            } else {
+                out.schemas.insert(schema.header.id, schema);
+            }
+        }
+        Record::ChunkIndex(index) => out.chunk_indexes.push(index),
+        Record::AttachmentIndex(index) => out.attachment_indexes.push(index),
+        Record::MetadataIndex(index) => out.metadata_indexes.push(index),
+        _ => {}
+    }
+    Ok(())
 }
 
 pub fn decimal_time(t: u64) -> String {
@@ -189,6 +286,42 @@ mod tests {
         let mut buffer = Vec::new();
         let (schema_id, channel_id) = {
             let mut writer = mcap::Writer::new(std::io::Cursor::new(&mut buffer)).expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 10,
+                        publish_time: 11,
+                    },
+                    br#"{"k":"v"}"#,
+                )
+                .expect("write message");
+            writer.finish().expect("finish writer");
+            (schema_id, channel_id)
+        };
+
+        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        assert!(parsed.header.is_some());
+        assert!(parsed.channels.contains_key(&channel_id));
+        assert!(parsed.schemas.contains_key(&schema_id));
+    }
+
+    #[test]
+    fn parse_mcap_falls_back_for_summaryless_files() {
+        let mut buffer = Vec::new();
+        let (schema_id, channel_id) = {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
             let schema_id = writer
                 .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
                 .expect("schema");
