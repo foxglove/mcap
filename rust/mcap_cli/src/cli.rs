@@ -47,7 +47,7 @@ pub enum Command {
     /// Check an MCAP file structure
     Doctor,
     /// Compute byte usage statistics for MCAP records
-    Du,
+    Du(DuCommand),
     /// Copy filtered MCAP data to a new file
     Filter,
     /// Get a record from an MCAP file
@@ -126,6 +126,16 @@ pub struct VersionCommand {
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct FileCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct DuCommand {
+    /// Fast approximation using message indexes (skips decompression, may over-count if non-message records are interleaved in chunks)
+    #[arg(long, default_value_t = false)]
+    pub approximate: bool,
+
     /// Local path to the MCAP file
     pub file: PathBuf,
 }
