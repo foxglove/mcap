@@ -91,9 +91,37 @@ pub struct GetCommand {
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum GetSubcommand {
     /// Get an attachment by name or offset
-    Attachment,
+    Attachment(GetAttachmentCommand),
     /// Get metadata by name
-    Metadata,
+    Metadata(GetMetadataCommand),
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct GetAttachmentCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+
+    /// Name of attachment to extract
+    #[arg(short = 'n', long = "name")]
+    pub name: String,
+
+    /// Offset of attachment to extract
+    #[arg(long = "offset")]
+    pub offset: Option<u64>,
+
+    /// Location to write attachment bytes
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct GetMetadataCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+
+    /// Name of metadata record to get
+    #[arg(short = 'n', long = "name")]
+    pub name: String,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
