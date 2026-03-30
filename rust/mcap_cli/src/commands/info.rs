@@ -131,6 +131,34 @@ fn render_channel_summary_rows(
     duration_seconds: f64,
 ) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
+    let max_channel_id_width = parsed
+        .channels
+        .keys()
+        .max()
+        .copied()
+        .map(digits_u16)
+        .unwrap_or(1);
+    let max_count_width = parsed
+        .statistics
+        .as_ref()
+        .map(|stats| {
+            parsed
+                .channels
+                .keys()
+                .map(|channel_id| {
+                    stats
+                        .channel_message_counts
+                        .get(channel_id)
+                        .copied()
+                        .unwrap_or_default()
+                })
+                .max()
+                .unwrap_or_default()
+                .to_string()
+                .len()
+        })
+        .unwrap_or(0);
+
     for channel in parsed.channels.values() {
         let msg_col = if let Some(stats) = &parsed.statistics {
             let count = stats
@@ -144,12 +172,14 @@ fn render_channel_summary_rows(
                 let delta = (max_hz - min_hz).max(f64::EPSILON);
                 let precision = ((-delta.log10()).ceil() as i32).max(0) as usize;
                 if precision > 2 {
-                    format!("{count} msgs ({max_hz:.2}Hz)")
+                    format!("{count:>max_count_width$} msgs ({max_hz:.2}Hz)")
                 } else {
-                    format!("{count} msgs ({min_hz:.precision$}..{max_hz:.precision$}Hz)")
+                    format!(
+                        "{count:>max_count_width$} msgs ({min_hz:.precision$}..{max_hz:.precision$}Hz)"
+                    )
                 }
             } else {
-                format!("{count} msgs")
+                format!("{count:>max_count_width$} msgs")
             }
         } else {
             String::new()
@@ -165,8 +195,10 @@ fn render_channel_summary_rows(
             },
         };
 
+        let channel_id_width = digits_u16(channel.id);
+        let channel_padding = " ".repeat(max_channel_id_width.saturating_sub(channel_id_width) + 1);
         rows.push(vec![
-            format!("\t({}) {}", channel.id, channel.topic),
+            format!("\t({}){}{}", channel.id, channel_padding, channel.topic),
             msg_col,
             schema_col,
         ]);
@@ -187,6 +219,16 @@ fn format_duration(start: u64, end: u64) -> (f64, String) {
 }
 
 fn format_duration_human(nanos: u64) -> String {
+    if nanos < 1_000 {
+        return format!("{nanos}ns");
+    }
+    if nanos < 1_000_000 {
+        return format_fractional_subsecond(nanos, 1_000, "µs");
+    }
+    if nanos < 1_000_000_000 {
+        return format_fractional_subsecond(nanos, 1_000_000, "ms");
+    }
+
     let total_seconds = nanos / 1_000_000_000;
     let fractional_nanos = nanos % 1_000_000_000;
     let hours = total_seconds / 3600;
@@ -210,6 +252,28 @@ fn format_duration_human(nanos: u64) -> String {
     } else {
         format!("{seconds_with_fraction}s")
     }
+}
+
+fn format_fractional_subsecond(nanos: u64, unit_nanos: u64, unit: &str) -> String {
+    let whole = nanos / unit_nanos;
+    let remainder = nanos % unit_nanos;
+    if remainder == 0 {
+        return format!("{whole}{unit}");
+    }
+
+    let width = unit_nanos.ilog10() as usize;
+    let mut fractional = format!("{remainder:0width$}");
+    while fractional.ends_with('0') {
+        fractional.pop();
+    }
+    format!("{whole}.{fractional}{unit}")
+}
+
+fn digits_u16(value: u16) -> usize {
+    if value == 0 {
+        return 1;
+    }
+    value.ilog10() as usize + 1
 }
 
 fn human_bytes(num_bytes: u64) -> String {
@@ -294,7 +358,10 @@ fn count_chunk_overlaps(chunks: &[mcap::records::ChunkIndex]) -> (bool, usize, u
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{count_chunk_overlaps, format_duration, human_bytes, render_info};
+    use super::{
+        count_chunk_overlaps, format_duration, human_bytes, render_channel_summary_rows,
+        render_info,
+    };
     use crate::commands::common;
     use crate::commands::common::{ParsedMcap, ParsedSchema};
     use mcap::records::{self, ChunkIndex, Header, Statistics};
@@ -404,5 +471,47 @@ mod tests {
         assert_eq!(format_duration(0, 7_200_000_000_000).1, "2h0m0s");
         assert_eq!(format_duration(0, 1_500_000_000).1, "1.5s");
         assert_eq!(format_duration(2_000_000_000, 1_000_000_000).1, "-1s");
+        assert_eq!(format_duration(0, 500_000_000).1, "500ms");
+        assert_eq!(format_duration(0, 100_000).1, "100µs");
+        assert_eq!(format_duration(0, 1_500).1, "1.5µs");
+        assert_eq!(format_duration(0, 10).1, "10ns");
+    }
+
+    #[test]
+    fn channel_summary_rows_align_columns() {
+        let mut parsed = ParsedMcap {
+            statistics: Some(Statistics::default()),
+            ..ParsedMcap::default()
+        };
+        parsed.channels.insert(
+            1,
+            records::Channel {
+                id: 1,
+                schema_id: 0,
+                topic: "/alpha".to_string(),
+                message_encoding: "json".to_string(),
+                metadata: BTreeMap::new(),
+            },
+        );
+        parsed.channels.insert(
+            12,
+            records::Channel {
+                id: 12,
+                schema_id: 0,
+                topic: "/beta".to_string(),
+                message_encoding: "json".to_string(),
+                metadata: BTreeMap::new(),
+            },
+        );
+        if let Some(stats) = &mut parsed.statistics {
+            stats.channel_message_counts.insert(1, 7);
+            stats.channel_message_counts.insert(12, 123);
+        }
+
+        let rows = render_channel_summary_rows(&parsed, 0.0);
+        assert_eq!(rows[0][0], "\t(1)  /alpha");
+        assert_eq!(rows[1][0], "\t(12) /beta");
+        assert_eq!(rows[0][1], "  7 msgs");
+        assert_eq!(rows[1][1], "123 msgs");
     }
 }
