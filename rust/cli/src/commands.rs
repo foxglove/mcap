@@ -30,7 +30,12 @@ pub fn not_implemented(command_name: &str) -> anyhow::Error {
 }
 
 pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
-    let _ = (ctx.verbose, ctx.color, &ctx.config, ctx.pprof_profile);
+    let _ = (
+        ctx.verbose(),
+        ctx.color(),
+        ctx.config(),
+        ctx.pprof_profile(),
+    );
     match command {
         Command::Info => info::run(ctx),
         Command::Version(args) => version::run(ctx, args),

@@ -5,10 +5,10 @@ use crate::logsetup::Color;
 /// Global CLI execution context shared across command handlers.
 #[derive(Debug, Clone)]
 pub struct CommandContext {
-    pub verbose: u8,
-    pub color: Color,
-    pub config: Option<PathBuf>,
-    pub pprof_profile: bool,
+    verbose: u8,
+    color: Color,
+    config: Option<PathBuf>,
+    pprof_profile: bool,
 }
 
 impl Default for CommandContext {
@@ -30,5 +30,21 @@ impl CommandContext {
             config,
             pprof_profile,
         }
+    }
+
+    pub fn verbose(&self) -> u8 {
+        self.verbose
+    }
+
+    pub fn color(&self) -> Color {
+        self.color
+    }
+
+    pub fn config(&self) -> Option<&PathBuf> {
+        self.config.as_ref()
+    }
+
+    pub fn pprof_profile(&self) -> bool {
+        self.pprof_profile
     }
 }
