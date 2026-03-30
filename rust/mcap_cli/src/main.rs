@@ -1,10 +1,7 @@
 mod cli;
-mod cli_io;
 mod commands;
 mod context;
 mod logsetup;
-mod output;
-mod time;
 
 use std::process;
 
