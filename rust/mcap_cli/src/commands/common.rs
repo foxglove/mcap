@@ -170,11 +170,7 @@ pub fn formatted_time(t: u64) -> String {
     let seconds = (t / 1_000_000_000) as i64;
     let nanos = (t % 1_000_000_000) as u32;
     match chrono::DateTime::from_timestamp(seconds, nanos) {
-        Some(dt) => format!(
-            "{} ({})",
-            format_rfc3339_trimmed(dt),
-            decimal_time(t)
-        ),
+        Some(dt) => format!("{} ({})", format_rfc3339_trimmed(dt), decimal_time(t)),
         None => decimal_time(t),
     }
 }
