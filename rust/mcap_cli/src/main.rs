@@ -36,7 +36,8 @@ mod tests {
 
     use crate::cli::{
         AddCommand, AddSubcommand, Args, Command, GetCommand, GetSubcommand, InfoCommand,
-        ListChannelsCommand, ListCommand, ListSubcommand, VersionCommand,
+        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
     };
 
     #[test]
@@ -89,6 +90,62 @@ mod tests {
             args.command,
             Command::List(ListCommand {
                 command: ListSubcommand::Channels(ListChannelsCommand {
+                    file: "demo.mcap".into(),
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_list_attachments_subcommand() {
+        let args = Args::try_parse_from(["mcap", "list", "attachments", "demo.mcap"])
+            .expect("list attachments should parse");
+        assert_eq!(
+            args.command,
+            Command::List(ListCommand {
+                command: ListSubcommand::Attachments(ListAttachmentsCommand {
+                    file: "demo.mcap".into(),
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_list_chunks_subcommand() {
+        let args = Args::try_parse_from(["mcap", "list", "chunks", "demo.mcap"])
+            .expect("list chunks should parse");
+        assert_eq!(
+            args.command,
+            Command::List(ListCommand {
+                command: ListSubcommand::Chunks(ListChunksCommand {
+                    file: "demo.mcap".into(),
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_list_metadata_subcommand() {
+        let args = Args::try_parse_from(["mcap", "list", "metadata", "demo.mcap"])
+            .expect("list metadata should parse");
+        assert_eq!(
+            args.command,
+            Command::List(ListCommand {
+                command: ListSubcommand::Metadata(ListMetadataCommand {
+                    file: "demo.mcap".into(),
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_list_schemas_subcommand() {
+        let args = Args::try_parse_from(["mcap", "list", "schemas", "demo.mcap"])
+            .expect("list schemas should parse");
+        assert_eq!(
+            args.command,
+            Command::List(ListCommand {
+                command: ListSubcommand::Schemas(ListSchemasCommand {
                     file: "demo.mcap".into(),
                 }),
             })
