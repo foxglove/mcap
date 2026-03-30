@@ -53,7 +53,7 @@ pub enum Command {
     /// Get a record from an MCAP file
     Get(GetCommand),
     /// Report statistics about an MCAP file
-    Info,
+    Info(InfoCommand),
     /// List records of an MCAP file
     List(ListCommand),
     /// Merge a selection of MCAP files by record timestamp
@@ -106,15 +106,15 @@ pub struct ListCommand {
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum ListSubcommand {
     /// List attachments in an MCAP file
-    Attachments,
+    Attachments(ListAttachmentsCommand),
     /// List channels in an MCAP file
-    Channels,
+    Channels(ListChannelsCommand),
     /// List chunks in an MCAP file
-    Chunks,
+    Chunks(ListChunksCommand),
     /// List metadata in an MCAP file
-    Metadata,
+    Metadata(ListMetadataCommand),
     /// List schemas in an MCAP file
-    Schemas,
+    Schemas(ListSchemasCommand),
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -123,3 +123,16 @@ pub struct VersionCommand {
     #[arg(short = 'l', long = "library", default_value_t = false)]
     pub library: bool,
 }
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct FileCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+}
+
+pub type InfoCommand = FileCommand;
+pub type ListAttachmentsCommand = FileCommand;
+pub type ListChannelsCommand = FileCommand;
+pub type ListChunksCommand = FileCommand;
+pub type ListMetadataCommand = FileCommand;
+pub type ListSchemasCommand = FileCommand;
