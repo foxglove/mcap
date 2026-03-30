@@ -109,10 +109,9 @@ fn collect_usage_approximate(mcap: &[u8]) -> Result<Option<Usage>> {
     usage
         .record_kind_size
         .insert("chunk".to_string(), total_chunk_on_disk);
-    usage.record_kind_size.insert(
-        "message index".to_string(),
-        total_message_indexes_on_disk,
-    );
+    usage
+        .record_kind_size
+        .insert("message index".to_string(), total_message_indexes_on_disk);
 
     let minimum_file_size = MCAP_MAGIC_SIZE + FOOTER_RECORD_SIZE + MCAP_MAGIC_SIZE;
     if total_file_size >= minimum_file_size {
@@ -246,8 +245,11 @@ fn compute_topic_sizes_from_index(
             );
         }
 
-        let (chunk_topic_sizes, chunk_total_size) =
-            parse_chunk_message_indexes(&mcap[start..end], chunk.uncompressed_size, channel_topics)?;
+        let (chunk_topic_sizes, chunk_total_size) = parse_chunk_message_indexes(
+            &mcap[start..end],
+            chunk.uncompressed_size,
+            channel_topics,
+        )?;
 
         for (topic, size) in chunk_topic_sizes {
             *topic_sizes.entry(topic).or_default() += size;
@@ -284,9 +286,11 @@ fn parse_chunk_message_indexes(
                 pos
             );
         }
-        let record_end = pos + 9 + usize::try_from(record_len).map_err(|_| {
-            anyhow!("message index record length out of range at offset {pos}: {record_len}")
-        })?;
+        let record_end = pos
+            + 9
+            + usize::try_from(record_len).map_err(|_| {
+                anyhow!("message index record length out of range at offset {pos}: {record_len}")
+            })?;
         if record_end > buf.len() {
             bail!("message index record extends beyond buffer at offset {pos}");
         }
@@ -307,7 +311,10 @@ fn parse_chunk_message_indexes(
     }
 
     if pos != buf.len() {
-        bail!("message index buffer has {} trailing bytes", buf.len() - pos);
+        bail!(
+            "message index buffer has {} trailing bytes",
+            buf.len() - pos
+        );
     }
 
     if entries.is_empty() {
@@ -349,7 +356,11 @@ fn parse_chunk_message_indexes(
     Ok((topic_sizes, total_size))
 }
 
-fn print_record_table(record_kind_size: &BTreeMap<String, u64>, total_size: u64, approximate: bool) {
+fn print_record_table(
+    record_kind_size: &BTreeMap<String, u64>,
+    total_size: u64,
+    approximate: bool,
+) {
     if approximate {
         println!("Top level record stats (approximate):");
     } else {
@@ -494,7 +505,7 @@ mod tests {
 
             for (_id, topic) in channels {
                 writer
-                    .add_channel(schema_id, *topic, "raw", &BTreeMap::new())
+                    .add_channel(schema_id, topic, "raw", &BTreeMap::new())
                     .expect("add channel");
             }
 
@@ -615,8 +626,10 @@ mod tests {
 
         let start = usize::try_from(chunk.chunk_start_offset + chunk.chunk_length)
             .expect("message index start in range");
-        let end = usize::try_from(chunk.chunk_start_offset + chunk.chunk_length + chunk.message_index_length)
-            .expect("message index end in range");
+        let end = usize::try_from(
+            chunk.chunk_start_offset + chunk.chunk_length + chunk.message_index_length,
+        )
+        .expect("message index end in range");
         let mut buf = file[start..end].to_vec();
         buf.push(0);
         file.clear();

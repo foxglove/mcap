@@ -71,8 +71,8 @@ mod tests {
     use super::dispatch;
     use crate::cli::{
         AddCommand, AddSubcommand, Command, DuCommand, InfoCommand, ListAttachmentsCommand,
-        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand, ListSchemasCommand,
-        ListSubcommand,
+        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
+        ListSchemasCommand, ListSubcommand,
     };
     use crate::context::CommandContext;
 
