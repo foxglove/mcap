@@ -1,6 +1,7 @@
 mod add_attachment;
 mod add_metadata;
 mod cat;
+mod common;
 mod compress;
 mod convert;
 mod decompress;
@@ -31,7 +32,7 @@ pub fn not_implemented(command_name: &str) -> anyhow::Error {
 
 pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
     match command {
-        Command::Info => info::run(ctx),
+        Command::Info(args) => info::run(ctx, args),
         Command::Version(args) => version::run(ctx, args),
 
         Command::Add(args) => match args.command {
@@ -43,11 +44,11 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
             GetSubcommand::Metadata => get_metadata::run(ctx),
         },
         Command::List(args) => match args.command {
-            ListSubcommand::Attachments => list_attachments::run(ctx),
-            ListSubcommand::Channels => list_channels::run(ctx),
-            ListSubcommand::Chunks => list_chunks::run(ctx),
-            ListSubcommand::Metadata => list_metadata::run(ctx),
-            ListSubcommand::Schemas => list_schemas::run(ctx),
+            ListSubcommand::Attachments(args) => list_attachments::run(ctx, args),
+            ListSubcommand::Channels(args) => list_channels::run(ctx, args),
+            ListSubcommand::Chunks(args) => list_chunks::run(ctx, args),
+            ListSubcommand::Metadata(args) => list_metadata::run(ctx, args),
+            ListSubcommand::Schemas(args) => list_schemas::run(ctx, args),
         },
 
         Command::Cat => cat::run(ctx),
@@ -65,27 +66,40 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::dispatch;
-    use crate::cli::{AddCommand, AddSubcommand, Command, ListCommand, ListSubcommand};
+    use crate::cli::{
+        AddCommand, AddSubcommand, Command, InfoCommand, ListAttachmentsCommand,
+        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
+        ListSchemasCommand, ListSubcommand,
+    };
     use crate::context::CommandContext;
 
     #[test]
-    fn info_returns_not_implemented() {
-        let err =
-            dispatch(&CommandContext::default(), Command::Info).expect_err("info should be a stub");
-        assert_eq!(err.to_string(), "'info' is not implemented yet");
+    fn info_requires_existing_file() {
+        let err = dispatch(
+            &CommandContext::default(),
+            Command::Info(InfoCommand {
+                file: PathBuf::from("does-not-exist.mcap"),
+            }),
+        )
+        .expect_err("info should fail on missing file");
+        assert!(err.to_string().contains("couldn't read"));
     }
 
     #[test]
-    fn list_subcommands_stub_with_specific_names() {
+    fn list_subcommands_require_existing_file() {
         let err = dispatch(
             &CommandContext::default(),
             Command::List(ListCommand {
-                command: ListSubcommand::Channels,
+                command: ListSubcommand::Channels(ListChannelsCommand {
+                    file: PathBuf::from("does-not-exist.mcap"),
+                }),
             }),
         )
-        .expect_err("list channels should be a stub");
-        assert_eq!(err.to_string(), "'list channels' is not implemented yet");
+        .expect_err("list channels should fail on missing file");
+        assert!(err.to_string().contains("couldn't read"));
     }
 
     #[test]
@@ -98,5 +112,31 @@ mod tests {
         )
         .expect_err("add attachment should be a stub");
         assert_eq!(err.to_string(), "'add attachment' is not implemented yet");
+    }
+
+    #[test]
+    fn list_all_subcommands_are_wired() {
+        let ctx = CommandContext::default();
+        for command in [
+            ListSubcommand::Attachments(ListAttachmentsCommand {
+                file: PathBuf::from("does-not-exist.mcap"),
+            }),
+            ListSubcommand::Channels(ListChannelsCommand {
+                file: PathBuf::from("does-not-exist.mcap"),
+            }),
+            ListSubcommand::Chunks(ListChunksCommand {
+                file: PathBuf::from("does-not-exist.mcap"),
+            }),
+            ListSubcommand::Metadata(ListMetadataCommand {
+                file: PathBuf::from("does-not-exist.mcap"),
+            }),
+            ListSubcommand::Schemas(ListSchemasCommand {
+                file: PathBuf::from("does-not-exist.mcap"),
+            }),
+        ] {
+            let err = dispatch(&ctx, Command::List(ListCommand { command }))
+                .expect_err("list command should fail on missing file");
+            assert!(err.to_string().contains("couldn't read"));
+        }
     }
 }

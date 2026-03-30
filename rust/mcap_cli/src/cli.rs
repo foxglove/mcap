@@ -53,7 +53,7 @@ pub enum Command {
     /// Get a record from an MCAP file
     Get(GetCommand),
     /// Report statistics about an MCAP file
-    Info,
+    Info(InfoCommand),
     /// List records of an MCAP file
     List(ListCommand),
     /// Merge a selection of MCAP files by record timestamp
@@ -106,15 +106,15 @@ pub struct ListCommand {
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum ListSubcommand {
     /// List attachments in an MCAP file
-    Attachments,
+    Attachments(ListAttachmentsCommand),
     /// List channels in an MCAP file
-    Channels,
+    Channels(ListChannelsCommand),
     /// List chunks in an MCAP file
-    Chunks,
+    Chunks(ListChunksCommand),
     /// List metadata in an MCAP file
-    Metadata,
+    Metadata(ListMetadataCommand),
     /// List schemas in an MCAP file
-    Schemas,
+    Schemas(ListSchemasCommand),
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -122,4 +122,40 @@ pub struct VersionCommand {
     /// Print MCAP library version instead of CLI version
     #[arg(short = 'l', long = "library", default_value_t = false)]
     pub library: bool,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct InfoCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct ListAttachmentsCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct ListChannelsCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct ListChunksCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct ListMetadataCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct ListSchemasCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
 }

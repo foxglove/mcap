@@ -811,6 +811,7 @@ dependencies = [
  "clap 4.6.0",
  "log",
  "mcap",
+ "serde_json",
  "simplelog",
 ]
 
