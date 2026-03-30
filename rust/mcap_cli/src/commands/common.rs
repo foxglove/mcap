@@ -35,8 +35,7 @@ pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
     }
 
     eprintln!(
-        "Warning: MCAP summary is unavailable/incomplete; falling back to a full linear scan. \
-This can be very slow for very large files."
+        "Warning: summary section not available; full scan may be slow. Run `mcap doctor` for details."
     );
     parse_mcap_linear(mcap, header)
 }
