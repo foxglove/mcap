@@ -249,7 +249,12 @@ pub struct FilterCommand {
     pub start: Option<String>,
 
     /// Include messages at or after this time (seconds)
-    #[arg(short = 's', long = "start-secs", default_value_t = 0)]
+    #[arg(
+        short = 's',
+        long = "start-secs",
+        default_value_t = 0,
+        conflicts_with = "start_nsecs"
+    )]
     pub start_secs: u64,
 
     /// Deprecated: include messages at or after this time (nanoseconds)
@@ -261,7 +266,12 @@ pub struct FilterCommand {
     pub end: Option<String>,
 
     /// Include messages before this time (seconds)
-    #[arg(short = 'e', long = "end-secs", default_value_t = 0)]
+    #[arg(
+        short = 'e',
+        long = "end-secs",
+        default_value_t = 0,
+        conflicts_with = "end_nsecs"
+    )]
     pub end_secs: u64,
 
     /// Deprecated: include messages before this time (nanoseconds)
