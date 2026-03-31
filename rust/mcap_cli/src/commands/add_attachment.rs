@@ -49,12 +49,8 @@ pub fn run(_ctx: &CommandContext, args: AddAttachmentCommand) -> Result<()> {
         data: attachment_data,
     };
 
-    add_common::amend_mcap_file(&args.file, &[attachment], &[]).with_context(|| {
-        format!(
-            "failed to add attachment to '{}'. You may need to run `mcap recover` to repair the file.",
-            args.file.display()
-        )
-    })?;
+    add_common::amend_mcap_file(&args.file, &[attachment], &[])
+        .with_context(|| format!("failed to add attachment to '{}'", args.file.display()))?;
     Ok(())
 }
 

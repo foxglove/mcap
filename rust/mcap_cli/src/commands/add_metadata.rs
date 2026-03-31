@@ -12,12 +12,8 @@ pub fn run(_ctx: &CommandContext, args: AddMetadataCommand) -> Result<()> {
         name: args.name,
         metadata: metadata_map,
     };
-    add_common::amend_mcap_file(&args.file, &[], &[metadata]).with_context(|| {
-        format!(
-            "failed to add metadata to '{}'. You may need to run `mcap recover` to repair the file.",
-            args.file.display()
-        )
-    })?;
+    add_common::amend_mcap_file(&args.file, &[], &[metadata])
+        .with_context(|| format!("failed to add metadata to '{}'", args.file.display()))?;
     Ok(())
 }
 

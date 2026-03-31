@@ -691,6 +691,7 @@ mod tests {
     };
     use anyhow::Result;
     use mcap::records::{self, MessageHeader};
+    use mcap::sans_io::linear_reader::{LinearReadEvent, LinearReader, LinearReaderOptions};
 
     fn make_input_mcap(
         data_crc: bool,
@@ -780,6 +781,46 @@ mod tests {
         };
         let data_end = parse_data_end(&output, data_end_offset)?;
         assert_eq!(data_end.data_section_crc, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn amend_produces_valid_data_section_crc_when_enabled() -> Result<()> {
+        let input = make_input_mcap(true, true, true, true)?;
+        let output = amend_mcap_bytes(
+            &input,
+            &[AttachmentToAdd {
+                log_time: 123,
+                create_time: 122,
+                name: "a.bin".to_string(),
+                media_type: "application/octet-stream".to_string(),
+                data: vec![1, 2, 3, 4],
+            }],
+            &[records::Metadata {
+                name: "demo".to_string(),
+                metadata: BTreeMap::from([("k".to_string(), "v".to_string())]),
+            }],
+        )?;
+
+        let mut reader = LinearReader::new_with_options(
+            LinearReaderOptions::default()
+                .with_validate_data_section_crc(true)
+                .with_validate_summary_section_crc(true),
+        );
+        let mut remaining = output.as_slice();
+        while let Some(event) = reader.next_event() {
+            match event? {
+                LinearReadEvent::ReadRequest(need) => {
+                    let read_len = need.min(remaining.len());
+                    reader
+                        .insert(read_len)
+                        .copy_from_slice(&remaining[..read_len]);
+                    reader.notify_read(read_len);
+                    remaining = &remaining[read_len..];
+                }
+                LinearReadEvent::Record { .. } => {}
+            }
+        }
         Ok(())
     }
 
