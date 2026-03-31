@@ -683,12 +683,9 @@ mod tests {
         let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
         assert!(!summary.channels.is_empty());
         assert!(!summary.schemas.is_empty());
-        assert!(
-            mcap::MessageStream::new(&bytes)?
-                .collect::<mcap::McapResult<Vec<_>>>()?
-                .len()
-                > 0
-        );
+        assert!(!mcap::MessageStream::new(&bytes)?
+            .collect::<mcap::McapResult<Vec<_>>>()?
+            .is_empty());
         Ok(())
     }
 }
