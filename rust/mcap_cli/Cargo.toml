@@ -12,8 +12,10 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+binrw = "0.12"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap = { version = "4", features = ["derive"] }
+crc32fast = "1"
 log = "0.4"
 memmap2 = "0.9"
 mcap = { path = "../mcap" }

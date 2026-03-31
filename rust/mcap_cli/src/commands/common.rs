@@ -166,6 +166,14 @@ pub fn decimal_time(t: u64) -> String {
     format!("{}.{:09}", t / 1_000_000_000, t % 1_000_000_000)
 }
 
+pub fn raw_time(t: u64) -> String {
+    t.to_string()
+}
+
+pub fn write_raw_time(writer: &mut impl std::io::Write, t: u64) -> std::io::Result<()> {
+    write!(writer, "{t}")
+}
+
 pub fn formatted_time(t: u64) -> String {
     let seconds = (t / 1_000_000_000) as i64;
     let nanos = (t % 1_000_000_000) as u32;
@@ -253,7 +261,7 @@ mod tests {
 
     use super::{
         decimal_time, format_table, formatted_time, human_bytes, parse_mcap,
-        parse_mcap_from_summary, print_table,
+        parse_mcap_from_summary, print_table, write_raw_time,
     };
     use mcap::records;
 
@@ -288,6 +296,21 @@ mod tests {
         assert_eq!(
             formatted_time(1_234_567_890),
             "1970-01-01T00:00:01.23456789Z (1.234567890)"
+        );
+    }
+
+    #[test]
+    fn raw_time_is_unformatted_nanoseconds() {
+        assert_eq!(super::raw_time(1_234_567_890), "1234567890");
+    }
+
+    #[test]
+    fn write_raw_time_writes_unformatted_nanoseconds() {
+        let mut out = Vec::new();
+        write_raw_time(&mut out, 1_234_567_890).expect("should write raw time");
+        assert_eq!(
+            String::from_utf8(out).expect("raw time output should be utf8"),
+            "1234567890"
         );
     }
 
