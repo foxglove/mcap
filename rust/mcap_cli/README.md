@@ -6,23 +6,25 @@ It is not ready for production use yet.
 
 ## Implementation status
 
+Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
+
 | Command | Status | Notes |
 | --- | --- | --- |
-| `add` | 🔴 Not implemented | `add attachment` and `add metadata` are currently stubs. |
-| `cat` | 🔴 Not implemented | Stub command. |
-| `compress` | 🔴 Not implemented | Stub command. |
-| `convert` | 🔴 Not implemented | Stub command. |
-| `decompress` | 🔴 Not implemented | Stub command. |
-| `doctor` | 🔴 Not implemented | Stub command. |
-| `du` | 🟢 Implemented | Supports exact mode and `--approximate` mode with fallback behavior. |
-| `filter` | 🔴 Not implemented | Stub command. |
-| `get` | 🔴 Not implemented | `get attachment` and `get metadata` are currently stubs. |
-| `info` | 🟢 Implemented | Reports MCAP file statistics. |
-| `list` | 🟢 Implemented | Supports `attachments`, `channels`, `chunks`, `metadata`, and `schemas`. |
-| `merge` | 🔴 Not implemented | Stub command. |
-| `recover` | 🔴 Not implemented | Stub command. |
-| `sort` | 🔴 Not implemented | Stub command. |
-| `version` | 🟢 Implemented | Supports CLI and library version output. |
+| `add` | 🔴 | — |
+| `cat` | 🔴 | — |
+| `compress` | 🔴 | — |
+| `convert` | 🔴 | — |
+| `decompress` | 🔴 | — |
+| `doctor` | 🔴 | — |
+| `du` | 🟢 | Exact mode and `--approximate` mode are implemented (with approximate fallback behavior). |
+| `filter` | 🔴 | — |
+| `get` | 🔴 | — |
+| `info` | 🟢 | Implemented. |
+| `list` | 🟢 | Implemented for `attachments`, `channels`, `chunks`, `metadata`, and `schemas`. |
+| `merge` | 🔴 | — |
+| `recover` | 🔴 | — |
+| `sort` | 🔴 | — |
+| `version` | 🟢 | Implemented with both CLI and library version output modes. |
 
 ## Intentional divergences from Go CLI
 
