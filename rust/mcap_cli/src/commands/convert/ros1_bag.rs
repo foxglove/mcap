@@ -16,6 +16,7 @@ const OP_BAG_CHUNK_INFO: u8 = 0x06;
 
 const KEY_OP: &str = "op";
 const KEY_COMPRESSION: &str = "compression";
+const KEY_SIZE: &str = "size";
 const KEY_CONN: &str = "conn";
 const KEY_TOPIC: &str = "topic";
 const KEY_TIME: &str = "time";
@@ -87,6 +88,21 @@ pub fn convert_ros1_bag<W: std::io::Write + Seek, R: Read + Seek>(
     })?;
 
     writer.finish().context("failed to finalize MCAP writer")?;
+    Ok(())
+}
+
+pub fn validate_ros1_bag_magic<R: Read + Seek>(input: &mut R) -> Result<()> {
+    let mut magic = vec![0u8; BAG_MAGIC.len()];
+    input
+        .read_exact(&mut magic)
+        .context("failed to read ROS1 bag magic")?;
+    ensure!(
+        magic == BAG_MAGIC,
+        "invalid ROS1 bag magic (expected '#ROSBAG V2.0\\n')"
+    );
+    input
+        .rewind()
+        .context("failed to rewind input after ROS1 bag magic check")?;
     Ok(())
 }
 
@@ -208,7 +224,12 @@ fn process_chunk<W: std::io::Write + Seek>(
     data: &[u8],
 ) -> Result<()> {
     let compression = header_string(header_fields, KEY_COMPRESSION)?;
-    let decompressed = decompress_chunk(compression, data)?;
+    let expected_decompressed_size = header_u32(header_fields, KEY_SIZE)? as usize;
+    ensure!(
+        expected_decompressed_size <= MAX_RECORD_SECTION_SIZE as usize,
+        "chunk uncompressed size {expected_decompressed_size} exceeds maximum {MAX_RECORD_SECTION_SIZE}"
+    );
+    let decompressed = decompress_chunk(compression, data, expected_decompressed_size)?;
     process_records(Cursor::new(decompressed), |record| {
         process_record(writer, state, record)
     })
@@ -381,30 +402,69 @@ fn conn_id_to_channel_id(conn_id: u32) -> Result<u16> {
     u16::try_from(conn_id).with_context(|| format!("connection id {conn_id} exceeds u16 range"))
 }
 
-fn decompress_chunk(compression: &str, compressed: &[u8]) -> Result<Vec<u8>> {
+fn decompress_chunk(
+    compression: &str,
+    compressed: &[u8],
+    expected_decompressed_size: usize,
+) -> Result<Vec<u8>> {
     match compression {
-        "none" => Ok(compressed.to_vec()),
+        "none" => {
+            ensure!(
+                compressed.len() == expected_decompressed_size,
+                "chunk size mismatch for uncompressed chunk: header declared {expected_decompressed_size} bytes, found {} bytes",
+                compressed.len()
+            );
+            Ok(compressed.to_vec())
+        }
         "bz2" => {
             let mut decoder = bzip2::read::BzDecoder::new(Cursor::new(compressed));
-            let mut out = Vec::new();
-            decoder
-                .read_to_end(&mut out)
-                .context("failed to decompress bz2 ROS1 bag chunk")?;
+            let out = read_limited(
+                &mut decoder,
+                expected_decompressed_size,
+                "failed to decompress bz2 ROS1 bag chunk",
+            )?;
             Ok(out)
         }
         "lz4" => {
             let mut decoder = lz4::Decoder::new(Cursor::new(compressed))
                 .context("failed to initialize lz4 decoder for ROS1 bag chunk")?;
-            let mut out = Vec::new();
-            decoder
-                .read_to_end(&mut out)
-                .context("failed to decompress lz4 ROS1 bag chunk")?;
+            let out = read_limited(
+                &mut decoder,
+                expected_decompressed_size,
+                "failed to decompress lz4 ROS1 bag chunk",
+            )?;
             let (_reader, result) = decoder.finish();
             result.context("failed finalizing lz4 ROS1 bag chunk decoder")?;
             Ok(out)
         }
         other => bail!("unsupported ROS1 bag chunk compression '{other}'"),
     }
+}
+
+fn read_limited<R: Read>(
+    reader: &mut R,
+    expected_decompressed_size: usize,
+    context: &'static str,
+) -> Result<Vec<u8>> {
+    let mut out = Vec::with_capacity(expected_decompressed_size.min(1024 * 1024));
+    let mut buf = [0u8; 8192];
+    loop {
+        let read = reader.read(&mut buf).context(context)?;
+        if read == 0 {
+            break;
+        }
+        ensure!(
+            out.len() + read <= expected_decompressed_size,
+            "decompressed ROS1 chunk exceeded declared size {expected_decompressed_size}"
+        );
+        out.extend_from_slice(&buf[..read]);
+    }
+    ensure!(
+        out.len() == expected_decompressed_size,
+        "decompressed ROS1 chunk size mismatch: declared {expected_decompressed_size}, got {}",
+        out.len()
+    );
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -576,7 +636,7 @@ mod tests {
     #[test]
     fn decompress_none_is_identity() {
         let data = vec![1, 2, 3, 4];
-        let out = decompress_chunk("none", &data).expect("none should succeed");
+        let out = decompress_chunk("none", &data, data.len()).expect("none should succeed");
         assert_eq!(out, data);
     }
 
@@ -592,7 +652,8 @@ mod tests {
                 .expect("failed to write bz2 payload");
             encoder.finish().expect("failed to finalize bz2 payload");
         }
-        let out = decompress_chunk("bz2", &encoded).expect("bz2 decode should succeed");
+        let out =
+            decompress_chunk("bz2", &encoded, payload.len()).expect("bz2 decode should succeed");
         assert_eq!(out, payload);
     }
 
@@ -610,16 +671,40 @@ mod tests {
             let (_writer, result) = encoder.finish();
             result.expect("failed to finalize lz4 payload");
         }
-        let out = decompress_chunk("lz4", &encoded).expect("lz4 decode should succeed");
+        let out =
+            decompress_chunk("lz4", &encoded, payload.len()).expect("lz4 decode should succeed");
         assert_eq!(out, payload);
     }
 
     #[test]
     fn rejects_unknown_compression() {
-        let err = decompress_chunk("snappy", &[1, 2, 3]).expect_err("unsupported expected");
+        let err = decompress_chunk("snappy", &[1, 2, 3], 3).expect_err("unsupported expected");
         assert!(err
             .to_string()
             .contains("unsupported ROS1 bag chunk compression"));
+    }
+
+    #[test]
+    fn rejects_none_chunk_size_mismatch() {
+        let err = decompress_chunk("none", &[1, 2, 3], 2).expect_err("size mismatch expected");
+        assert!(err.to_string().contains("chunk size mismatch"));
+    }
+
+    #[test]
+    fn rejects_decompressed_chunk_exceeding_declared_size() {
+        let payload = b"oversized";
+        let mut encoded = Vec::new();
+        {
+            let mut encoder =
+                bzip2::write::BzEncoder::new(&mut encoded, bzip2::Compression::best());
+            encoder
+                .write_all(payload)
+                .expect("failed to write bz2 payload");
+            encoder.finish().expect("failed to finalize bz2 payload");
+        }
+        let err = decompress_chunk("bz2", &encoded, payload.len() - 1)
+            .expect_err("oversized decompression should fail");
+        assert!(err.to_string().contains("exceeded declared size"));
     }
 
     #[test]

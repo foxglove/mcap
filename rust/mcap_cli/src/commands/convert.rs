@@ -17,8 +17,9 @@ enum InputFileType {
 
 pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     let file_type = detect_file_type(&args.input)?;
-    let input = File::open(&args.input)
+    let mut input = File::open(&args.input)
         .with_context(|| format!("failed to open input '{}'", args.input.display()))?;
+    validate_input(file_type, &mut input)?;
 
     let output = File::create(&args.output)
         .with_context(|| format!("failed to open output '{}'", args.output.display()))?;
@@ -33,6 +34,12 @@ pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
 
     match file_type {
         InputFileType::Ros1Bag => ros1_bag::convert_ros1_bag(writer, input, opts),
+    }
+}
+
+fn validate_input(file_type: InputFileType, input: &mut File) -> Result<()> {
+    match file_type {
+        InputFileType::Ros1Bag => ros1_bag::validate_ros1_bag_magic(input),
     }
 }
 
