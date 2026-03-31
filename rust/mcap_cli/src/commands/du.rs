@@ -539,9 +539,10 @@ mod tests {
 
         let start = usize::try_from(chunk.chunk_start_offset + chunk.chunk_length)
             .expect("message index start in range");
-        let end =
-            usize::try_from(chunk.chunk_start_offset + chunk.chunk_length + chunk.message_index_length)
-                .expect("message index end in range");
+        let end = usize::try_from(
+            chunk.chunk_start_offset + chunk.chunk_length + chunk.message_index_length,
+        )
+        .expect("message index end in range");
         (mcap[start..end].to_vec(), chunk.uncompressed_size)
     }
 
@@ -659,9 +660,8 @@ mod tests {
         );
         let (buf, uncompressed_size) = first_chunk_message_index_bytes(&file);
 
-        let err =
-            parse_chunk_message_indexes(&buf, uncompressed_size, &BTreeMap::new())
-                .expect_err("should fail on unknown channel");
+        let err = parse_chunk_message_indexes(&buf, uncompressed_size, &BTreeMap::new())
+            .expect_err("should fail on unknown channel");
         assert!(err.to_string().contains("unknown channel"));
     }
 
