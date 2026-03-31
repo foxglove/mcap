@@ -822,6 +822,7 @@ dependencies = [
  "log",
  "mcap",
  "memmap2",
+ "rayon",
  "serde_json",
  "simplelog",
 ]

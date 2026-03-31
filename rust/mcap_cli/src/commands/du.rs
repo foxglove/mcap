@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 use anyhow::{anyhow, bail, Result};
 use mcap::records::{self, op, Record};
@@ -10,7 +12,10 @@ use crate::context::CommandContext;
 
 const MCAP_MAGIC_SIZE: u64 = mcap::MAGIC.len() as u64;
 const FOOTER_RECORD_SIZE: u64 = 29;
-const MESSAGE_OVERHEAD: u64 = 31;
+const RECORD_ENVELOPE_SIZE: usize = 9;
+const MESSAGE_HEADER_SIZE: u64 = 22;
+const MESSAGE_OVERHEAD: u64 = RECORD_ENVELOPE_SIZE as u64 + MESSAGE_HEADER_SIZE;
+const MAX_APPROX_WORKERS: usize = 16;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct Usage {
@@ -233,33 +238,30 @@ fn compute_topic_sizes_from_index(
     chunk_indexes: &[records::ChunkIndex],
     channel_topics: &BTreeMap<u16, String>,
 ) -> Result<(BTreeMap<String, u64>, u64)> {
+    let worker_count = std::thread::available_parallelism()
+        .map(|parallelism| parallelism.get())
+        .unwrap_or(1)
+        .min(MAX_APPROX_WORKERS)
+        .min(chunk_indexes.len());
+
+    if worker_count <= 1 || chunk_indexes.len() <= 1 {
+        return compute_topic_sizes_from_index_sequential(mcap, chunk_indexes, channel_topics);
+    }
+
+    compute_topic_sizes_from_index_parallel(mcap, chunk_indexes, channel_topics, worker_count)
+}
+
+fn compute_topic_sizes_from_index_sequential(
+    mcap: &[u8],
+    chunk_indexes: &[records::ChunkIndex],
+    channel_topics: &BTreeMap<u16, String>,
+) -> Result<(BTreeMap<String, u64>, u64)> {
     let mut topic_sizes = BTreeMap::<String, u64>::new();
     let mut total_size = 0u64;
 
     for chunk in chunk_indexes {
-        if chunk.message_index_length == 0 {
-            continue;
-        }
-
-        let message_index_offset = chunk.chunk_start_offset + chunk.chunk_length;
-        let message_index_end = message_index_offset + chunk.message_index_length;
-        let start = usize::try_from(message_index_offset)
-            .map_err(|_| anyhow!("message index offset out of range: {message_index_offset}"))?;
-        let end = usize::try_from(message_index_end)
-            .map_err(|_| anyhow!("message index end out of range: {message_index_end}"))?;
-        if end > mcap.len() {
-            bail!(
-                "message index section extends beyond file ({} > {})",
-                end,
-                mcap.len()
-            );
-        }
-
-        let (chunk_topic_sizes, chunk_total_size) = parse_chunk_message_indexes(
-            &mcap[start..end],
-            chunk.uncompressed_size,
-            channel_topics,
-        )?;
+        let (chunk_topic_sizes, chunk_total_size) =
+            compute_topic_sizes_for_chunk(mcap, chunk, channel_topics)?;
 
         for (topic, size) in chunk_topic_sizes {
             *topic_sizes.entry(topic).or_default() += size;
@@ -270,6 +272,114 @@ fn compute_topic_sizes_from_index(
     Ok((topic_sizes, total_size))
 }
 
+fn compute_topic_sizes_from_index_parallel(
+    mcap: &[u8],
+    chunk_indexes: &[records::ChunkIndex],
+    channel_topics: &BTreeMap<u16, String>,
+    worker_count: usize,
+) -> Result<(BTreeMap<String, u64>, u64)> {
+    let next_index = AtomicUsize::new(0);
+    let stop = AtomicBool::new(false);
+    let first_error = Mutex::new(None::<anyhow::Error>);
+    let partials = Mutex::new(Vec::<(BTreeMap<String, u64>, u64)>::new());
+
+    std::thread::scope(|scope| {
+        for _ in 0..worker_count {
+            scope.spawn(|| {
+                let mut local_sizes = BTreeMap::<String, u64>::new();
+                let mut local_total = 0u64;
+
+                loop {
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
+
+                    let index = next_index.fetch_add(1, Ordering::Relaxed);
+                    if index >= chunk_indexes.len() {
+                        break;
+                    }
+
+                    match compute_topic_sizes_for_chunk(mcap, &chunk_indexes[index], channel_topics)
+                    {
+                        Ok((chunk_sizes, chunk_total)) => {
+                            for (topic, size) in chunk_sizes {
+                                *local_sizes.entry(topic).or_default() += size;
+                            }
+                            local_total += chunk_total;
+                        }
+                        Err(err) => {
+                            stop.store(true, Ordering::Relaxed);
+                            let mut guard = first_error
+                                .lock()
+                                .expect("failed to lock first_error mutex");
+                            if guard.is_none() {
+                                *guard = Some(err);
+                            }
+                            break;
+                        }
+                    }
+                }
+
+                if !local_sizes.is_empty() || local_total > 0 {
+                    partials
+                        .lock()
+                        .expect("failed to lock partials mutex")
+                        .push((local_sizes, local_total));
+                }
+            });
+        }
+    });
+
+    if let Some(err) = first_error
+        .lock()
+        .expect("failed to lock first_error mutex")
+        .take()
+    {
+        return Err(err);
+    }
+
+    let mut merged_sizes = BTreeMap::<String, u64>::new();
+    let mut merged_total = 0u64;
+    for (sizes, total) in partials
+        .lock()
+        .expect("failed to lock partials mutex")
+        .drain(..)
+    {
+        for (topic, size) in sizes {
+            *merged_sizes.entry(topic).or_default() += size;
+        }
+        merged_total += total;
+    }
+
+    Ok((merged_sizes, merged_total))
+}
+
+fn compute_topic_sizes_for_chunk(
+    mcap: &[u8],
+    chunk: &records::ChunkIndex,
+    channel_topics: &BTreeMap<u16, String>,
+) -> Result<(BTreeMap<String, u64>, u64)> {
+    if chunk.message_index_length == 0 {
+        return Ok((BTreeMap::new(), 0));
+    }
+
+    let message_index_offset = chunk.chunk_start_offset + chunk.chunk_length;
+    let message_index_end = message_index_offset + chunk.message_index_length;
+    let start = usize::try_from(message_index_offset)
+        .map_err(|_| anyhow!("message index offset out of range: {message_index_offset}"))?;
+    let end = usize::try_from(message_index_end)
+        .map_err(|_| anyhow!("message index end out of range: {message_index_end}"))?;
+    if end > mcap.len() {
+        bail!(
+            "message index section extends beyond file ({} > {})",
+            end,
+            mcap.len()
+        );
+    }
+
+    parse_chunk_message_indexes(&mcap[start..end], chunk.uncompressed_size, channel_topics)
+}
+
 fn parse_chunk_message_indexes(
     buf: &[u8],
     uncompressed_size: u64,
@@ -278,7 +388,7 @@ fn parse_chunk_message_indexes(
     let mut entries = Vec::<OffsetEntry>::new();
     let mut pos = 0usize;
 
-    while pos + 9 <= buf.len() {
+    while pos + RECORD_ENVELOPE_SIZE <= buf.len() {
         let opcode = buf[pos];
         if opcode != op::MESSAGE_INDEX {
             bail!(
@@ -287,8 +397,11 @@ fn parse_chunk_message_indexes(
             );
         }
 
-        let record_len =
-            u64::from_le_bytes(buf[pos + 1..pos + 9].try_into().expect("slice length"));
+        let record_len = u64::from_le_bytes(
+            buf[pos + 1..pos + RECORD_ENVELOPE_SIZE]
+                .try_into()
+                .expect("slice length"),
+        );
         if record_len > buf.len() as u64 {
             bail!(
                 "message index record length {} exceeds buffer size at offset {}",
@@ -297,7 +410,7 @@ fn parse_chunk_message_indexes(
             );
         }
         let record_end = pos
-            + 9
+            + RECORD_ENVELOPE_SIZE
             + usize::try_from(record_len).map_err(|_| {
                 anyhow!("message index record length out of range at offset {pos}: {record_len}")
             })?;
@@ -305,7 +418,7 @@ fn parse_chunk_message_indexes(
             bail!("message index record extends beyond buffer at offset {pos}");
         }
 
-        let body = &buf[pos + 9..record_end];
+        let body = &buf[pos + RECORD_ENVELOPE_SIZE..record_end];
         let record = mcap::parse_record(op::MESSAGE_INDEX, body)?;
         let Record::MessageIndex(message_index) = record else {
             bail!("failed to parse message index at offset {pos}");
