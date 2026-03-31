@@ -54,6 +54,7 @@ struct Doctor {
     saw_data_end: bool,
     saw_footer: bool,
     saw_top_level_message: bool,
+    message_index_warning_emitted: bool,
     last_top_level_message_time: Option<u64>,
     global_max_log_time: Option<u64>,
     min_log_time: Option<u64>,
@@ -86,6 +87,7 @@ impl Doctor {
             saw_data_end: false,
             saw_footer: false,
             saw_top_level_message: false,
+            message_index_warning_emitted: false,
             last_top_level_message_time: None,
             global_max_log_time: None,
             min_log_time: None,
@@ -183,16 +185,12 @@ impl Doctor {
             }
             mcap::records::Record::MessageIndex(_) => {
                 if self.saw_top_level_message {
-                    self.warn(
-                        "Message index in file has message records outside chunks. Indexed readers will miss these messages.",
-                    );
+                    self.warn_message_index_outside_chunks_once();
                 }
             }
             mcap::records::Record::ChunkIndex(chunk_index) => {
                 if self.saw_top_level_message {
-                    self.warn(
-                        "Message index in file has message records outside chunks. Indexed readers will miss these messages.",
-                    );
+                    self.warn_message_index_outside_chunks_once();
                 }
                 if self
                     .chunk_indexes
@@ -235,6 +233,16 @@ impl Doctor {
         if !self.saw_footer {
             self.error("File does not contain a Footer record");
         }
+    }
+
+    fn warn_message_index_outside_chunks_once(&mut self) {
+        if self.message_index_warning_emitted {
+            return;
+        }
+        self.message_index_warning_emitted = true;
+        self.warn(
+            "Message index in file has message records outside chunks. Indexed readers will miss these messages.",
+        );
     }
 
     fn examine_schema(&mut self, header: mcap::records::SchemaHeader, data: &[u8]) {
