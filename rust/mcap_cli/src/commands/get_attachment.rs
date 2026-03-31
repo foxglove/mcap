@@ -24,10 +24,9 @@ pub fn run(_ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
     if let Some(output) = args.output {
         std::fs::write(&output, &attachment.data)
             .with_context(|| format!("failed to write attachment to '{}'", output.display()))?;
+    } else if std::io::stdout().is_terminal() {
+        anyhow::bail!("{PLEASE_REDIRECT}");
     } else {
-        if std::io::stdout().is_terminal() {
-            anyhow::bail!("{PLEASE_REDIRECT}");
-        }
         std::io::stdout()
             .write_all(&attachment.data)
             .context("failed to write attachment to stdout")?;
@@ -62,6 +61,11 @@ fn select_attachment_index<'a>(
     }
 
     if !has_multiple {
+        if let Some(offset) = offset {
+            if first_match.offset != offset {
+                anyhow::bail!("failed to find attachment {name} at offset {offset}");
+            }
+        }
         return Ok(first_match);
     }
 
@@ -130,6 +134,17 @@ mod tests {
         let indexes = vec![attachment("a", 10), attachment("a", 20)];
         let err = select_attachment_index(&indexes, "a", Some(999))
             .expect_err("unknown offset should error");
+        assert_eq!(
+            err.to_string(),
+            "failed to find attachment a at offset 999"
+        );
+    }
+
+    #[test]
+    fn errors_when_single_match_has_different_offset() {
+        let indexes = vec![attachment("a", 10)];
+        let err = select_attachment_index(&indexes, "a", Some(999))
+            .expect_err("single record should enforce provided offset");
         assert_eq!(
             err.to_string(),
             "failed to find attachment a at offset 999"
