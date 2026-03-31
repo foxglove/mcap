@@ -23,6 +23,9 @@ pub(crate) fn parse_key_values(values: &[String]) -> Result<BTreeMap<String, Str
         let Some((key, val)) = value.split_once('=') else {
             anyhow::bail!("failed to parse key/value '{value}', expected key=value");
         };
+        if key.is_empty() {
+            anyhow::bail!("metadata key must not be empty in '{value}'");
+        }
         if out.insert(key.to_string(), val.to_string()).is_some() {
             anyhow::bail!("duplicate metadata key '{key}'");
         }
@@ -45,6 +48,12 @@ mod tests {
     fn parse_key_values_rejects_invalid_pair() {
         let err = parse_key_values(&["invalid".to_string()]).expect_err("must fail");
         assert!(err.to_string().contains("expected key=value"));
+    }
+
+    #[test]
+    fn parse_key_values_rejects_empty_key() {
+        let err = parse_key_values(&["=value".to_string()]).expect_err("must fail");
+        assert!(err.to_string().contains("metadata key must not be empty"));
     }
 
     #[test]
