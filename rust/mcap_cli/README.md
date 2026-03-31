@@ -10,7 +10,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 
 | Command | Status | Notes |
 | --- | --- | --- |
-| `add` | 🟢 | `add attachment` and `add metadata` are implemented. |
+| `add` | 🟢 | |
 | `cat` | 🟡 | Core `cat` output is implemented; Go-parity gaps remain (`--topic`/time-range filters, `--json`, stdin input, remote URI input). |
 | `compress` | 🔴 | |
 | `convert` | 🔴 | |
@@ -18,7 +18,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | `doctor` | 🔴 | |
 | `du` | 🟢 | |
 | `filter` | 🔴 | |
-| `get` | 🟢 | `get attachment` and `get metadata` are implemented. |
+| `get` | 🟢 | |
 | `info` | 🟢 | |
 | `list` | 🟢 | |
 | `merge` | 🔴 | |
