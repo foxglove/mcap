@@ -120,8 +120,13 @@ fn write_message_fields(
     data: &[u8],
     max_preview_bytes: usize,
 ) -> Result<bool> {
-    let raw_log_time = common::raw_time(log_time);
-    if let Err(err) = write!(writer, "{} {} [{}] ", raw_log_time, topic, schema_name) {
+    if let Err(err) = common::write_raw_time(writer, log_time) {
+        if err.kind() == std::io::ErrorKind::BrokenPipe {
+            return Ok(true);
+        }
+        return Err(err.into());
+    }
+    if let Err(err) = write!(writer, " {} [{}] ", topic, schema_name) {
         if err.kind() == std::io::ErrorKind::BrokenPipe {
             return Ok(true);
         }
