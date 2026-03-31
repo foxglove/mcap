@@ -948,6 +948,46 @@ mod tests {
     }
 
     #[test]
+    fn amend_preserves_existing_attachments_when_adding_more() -> Result<()> {
+        let input = make_input_mcap(true, true, true, true)?;
+        let with_first_attachment = amend_mcap_bytes(
+            &input,
+            &[AttachmentToAdd {
+                log_time: 100,
+                create_time: 90,
+                name: "first.bin".to_string(),
+                media_type: "application/octet-stream".to_string(),
+                data: vec![1, 2, 3],
+            }],
+            &[],
+        )?;
+        let with_second_attachment = amend_mcap_bytes(
+            &with_first_attachment,
+            &[AttachmentToAdd {
+                log_time: 200,
+                create_time: 190,
+                name: "second.bin".to_string(),
+                media_type: "application/octet-stream".to_string(),
+                data: vec![4, 5, 6, 7],
+            }],
+            &[],
+        )?;
+
+        let summary = mcap::Summary::read(&with_second_attachment)?.expect("summary should exist");
+        assert_eq!(summary.attachment_indexes.len(), 2);
+
+        let first_attachment =
+            mcap::read::attachment(&with_second_attachment, &summary.attachment_indexes[0])?;
+        let second_attachment =
+            mcap::read::attachment(&with_second_attachment, &summary.attachment_indexes[1])?;
+        assert_eq!(first_attachment.name, "first.bin");
+        assert_eq!(first_attachment.data.as_ref(), &[1, 2, 3]);
+        assert_eq!(second_attachment.name, "second.bin");
+        assert_eq!(second_attachment.data.as_ref(), &[4, 5, 6, 7]);
+        Ok(())
+    }
+
+    #[test]
     fn amend_preserves_summary_offsets_disabled_mode() -> Result<()> {
         let input = make_input_mcap(true, true, false, true)?;
         let output = amend_mcap_bytes(
