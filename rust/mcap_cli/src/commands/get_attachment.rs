@@ -40,40 +40,31 @@ fn select_attachment_index<'a>(
     name: &str,
     offset: Option<u64>,
 ) -> Result<&'a mcap::records::AttachmentIndex> {
-    let mut matches = indexes.iter().filter(|index| index.name == name);
-    let Some(first_match) = matches.next() else {
-        anyhow::bail!("attachment {name} not found");
-    };
+    let matches: Vec<&mcap::records::AttachmentIndex> =
+        indexes.iter().filter(|index| index.name == name).collect();
 
-    let mut has_multiple = false;
-    let mut requested_match = None;
-    let requested_offset = offset.unwrap_or(0);
-
-    if first_match.offset == requested_offset {
-        requested_match = Some(first_match);
-    }
-
-    for matched_index in matches {
-        has_multiple = true;
-        if matched_index.offset == requested_offset {
-            requested_match = Some(matched_index);
-        }
-    }
-
-    if !has_multiple {
-        if let Some(offset) = offset {
-            if first_match.offset != offset {
-                anyhow::bail!("failed to find attachment {name} at offset {offset}");
+    match matches.len() {
+        0 => anyhow::bail!("attachment {name} not found"),
+        1 => {
+            let first_match = matches[0];
+            if let Some(offset) = offset {
+                if first_match.offset != offset {
+                    anyhow::bail!("failed to find attachment {name} at offset {offset}");
+                }
             }
+            Ok(first_match)
         }
-        return Ok(first_match);
-    }
+        _ => {
+            let offset = offset.ok_or_else(|| {
+                anyhow::anyhow!("multiple attachments named {name} exist (specify an offset)")
+            })?;
 
-    let Some(offset) = offset else {
-        anyhow::bail!("multiple attachments named {name} exist (specify an offset)");
-    };
-    requested_match
-        .ok_or_else(|| anyhow::anyhow!("failed to find attachment {name} at offset {offset}"))
+            matches
+                .into_iter()
+                .find(|index| index.offset == offset)
+                .ok_or_else(|| anyhow::anyhow!("failed to find attachment {name} at offset {offset}"))
+        }
+    }
 }
 
 #[cfg(test)]
