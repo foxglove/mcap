@@ -408,8 +408,9 @@ mod tests {
             &[],
         ));
 
-        let conn_data = [
-            encode_field_string(KEY_TOPIC, "/demo"),
+        let conn0_topic = "/demo0";
+        let conn0_data = [
+            encode_field_string(KEY_TOPIC, conn0_topic),
             encode_field_string(KEY_TYPE, "demo_msgs/Msg"),
             encode_field_string(KEY_MD5SUM, "abc123"),
             encode_field_string(KEY_MESSAGE_DEFINITION, "uint8 data\n"),
@@ -419,17 +420,26 @@ mod tests {
             vec![
                 encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
                 encode_field_bytes(KEY_CONN, &0u32.to_le_bytes()),
-                encode_field_string(KEY_TOPIC, "/demo"),
+                encode_field_string(KEY_TOPIC, conn0_topic),
             ],
-            &conn_data,
+            &conn0_data,
         ));
+
+        let conn1_topic = "/demo1";
+        let conn1_data = [
+            encode_field_string(KEY_TOPIC, conn1_topic),
+            encode_field_string(KEY_TYPE, "demo_msgs/Msg"),
+            encode_field_string(KEY_MD5SUM, "abc123"),
+            encode_field_string(KEY_MESSAGE_DEFINITION, "uint8 data\n"),
+        ]
+        .concat();
         bag.extend(encode_record(
             vec![
                 encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
                 encode_field_bytes(KEY_CONN, &1u32.to_le_bytes()),
-                encode_field_string(KEY_TOPIC, "/demo"),
+                encode_field_string(KEY_TOPIC, conn1_topic),
             ],
-            &conn_data,
+            &conn1_data,
         ));
 
         bag.extend(encode_record(
@@ -510,6 +520,24 @@ mod tests {
     }
 
     #[test]
+    fn decompress_lz4_round_trip() {
+        let payload = b"hello rosbag lz4";
+        let mut encoded = Vec::new();
+        {
+            let mut encoder = lz4::EncoderBuilder::new()
+                .build(&mut encoded)
+                .expect("failed to build lz4 encoder");
+            encoder
+                .write_all(payload)
+                .expect("failed to write lz4 payload");
+            let (_writer, result) = encoder.finish();
+            result.expect("failed to finalize lz4 payload");
+        }
+        let out = decompress_chunk("lz4", &encoded).expect("lz4 decode should succeed");
+        assert_eq!(out, payload);
+    }
+
+    #[test]
     fn rejects_unknown_compression() {
         let err = decompress_chunk("snappy", &[1, 2, 3]).expect_err("unsupported expected");
         assert!(err.to_string().contains("unsupported ROS1 bag chunk compression"));
@@ -530,7 +558,7 @@ mod tests {
 
         let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
         assert_eq!(summary.schemas.len(), 1);
-        assert_eq!(summary.channels.len(), 1);
+        assert_eq!(summary.channels.len(), 2);
         let channel = summary
             .channels
             .values()
