@@ -56,7 +56,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
         Command::Compress => compress::run(ctx),
         Command::Convert => convert::run(ctx),
         Command::Decompress => decompress::run(ctx),
-        Command::Doctor => doctor::run(ctx),
+        Command::Doctor(args) => doctor::run(ctx, args),
         Command::Du(args) => du::run(ctx, args),
         Command::Filter => filter::run(ctx),
         Command::Merge => merge::run(ctx),
@@ -72,8 +72,8 @@ mod tests {
     use super::dispatch;
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command, DuCommand,
-        GetAttachmentCommand, GetMetadataCommand, InfoCommand, ListAttachmentsCommand,
-        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
+        DoctorCommand, GetAttachmentCommand, GetMetadataCommand, InfoCommand,
+        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
         ListSchemasCommand, ListSubcommand,
     };
     use crate::context::CommandContext;
@@ -114,6 +114,19 @@ mod tests {
             }),
         )
         .expect_err("du should fail on missing file");
+        assert!(err.to_string().contains("couldn't open"));
+    }
+
+    #[test]
+    fn doctor_requires_existing_file() {
+        let err = dispatch(
+            &CommandContext::default(),
+            Command::Doctor(DoctorCommand {
+                strict_message_order: false,
+                file: PathBuf::from("does-not-exist.mcap"),
+            }),
+        )
+        .expect_err("doctor should fail on missing file");
         assert!(err.to_string().contains("couldn't open"));
     }
 
