@@ -53,7 +53,7 @@ jobs:
         with:
           node-version: 24.x
           cache: yarn
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
@@ -181,7 +181,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           lfs: false
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
@@ -200,7 +200,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           lfs: false
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.conan/data
           key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
@@ -455,7 +455,7 @@ jobs:
         env:
           GOARCH: ${{ matrix.arch }}
           OUTPUT: mcap-${{ matrix.os }}-${{ matrix.arch }}
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: mcap-cli-${{ matrix.os }}-${{ matrix.arch }}
           path: go/cli/mcap/bin/mcap-${{ matrix.os }}-${{ matrix.arch }}

@@ -35,10 +35,11 @@ mod tests {
     use clap::Parser;
 
     use crate::cli::{
-        AddCommand, AddSubcommand, Args, Command, ConvertCommand, ConvertCompression, GetCommand,
-        GetSubcommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand,
-        ListChunksCommand, ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand,
-        VersionCommand,
+        AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
+        Command, ConvertCommand, ConvertCompression, DuCommand, GetAttachmentCommand, GetCommand,
+        GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
+        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
+        ListSchemasCommand, ListSubcommand, VersionCommand,
     };
 
     #[test]
@@ -59,6 +60,23 @@ mod tests {
             args.command,
             Command::Version(VersionCommand { library: false })
         );
+    }
+
+    #[test]
+    fn parses_cat_subcommand_with_files() {
+        let args =
+            Args::try_parse_from(["mcap", "cat", "a.mcap", "b.mcap"]).expect("cat should parse");
+        assert_eq!(
+            args.command,
+            Command::Cat(CatCommand {
+                files: vec!["a.mcap".into(), "b.mcap".into()],
+            })
+        );
+    }
+
+    #[test]
+    fn cat_requires_at_least_one_file() {
+        Args::try_parse_from(["mcap", "cat"]).expect_err("cat requires at least one file");
     }
 
     #[test]
@@ -155,24 +173,116 @@ mod tests {
 
     #[test]
     fn parses_nested_get_subcommands() {
-        let args = Args::try_parse_from(["mcap", "get", "attachment"])
+        let args = Args::try_parse_from(["mcap", "get", "attachment", "demo.mcap", "--name", "a"])
             .expect("get attachment should parse");
         assert_eq!(
             args.command,
             Command::Get(GetCommand {
-                command: GetSubcommand::Attachment,
+                command: GetSubcommand::Attachment(GetAttachmentCommand {
+                    file: "demo.mcap".into(),
+                    name: "a".to_string(),
+                    offset: None,
+                    output: None,
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_get_metadata_subcommand() {
+        let args = Args::try_parse_from(["mcap", "get", "metadata", "demo.mcap", "--name", "cfg"])
+            .expect("get metadata should parse");
+        assert_eq!(
+            args.command,
+            Command::Get(GetCommand {
+                command: GetSubcommand::Metadata(GetMetadataCommand {
+                    file: "demo.mcap".into(),
+                    name: "cfg".to_string(),
+                }),
             })
         );
     }
 
     #[test]
     fn parses_nested_add_subcommands() {
-        let args =
-            Args::try_parse_from(["mcap", "add", "metadata"]).expect("add metadata should parse");
+        let args = Args::try_parse_from([
+            "mcap",
+            "add",
+            "metadata",
+            "demo.mcap",
+            "--name",
+            "robot",
+            "-k",
+            "foo=bar",
+        ])
+        .expect("add metadata should parse");
         assert_eq!(
             args.command,
             Command::Add(AddCommand {
-                command: AddSubcommand::Metadata,
+                command: AddSubcommand::Metadata(AddMetadataCommand {
+                    file: "demo.mcap".into(),
+                    name: "robot".to_string(),
+                    key_values: vec!["foo=bar".to_string()],
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_add_attachment_subcommand() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "add",
+            "attachment",
+            "demo.mcap",
+            "-f",
+            "payload.bin",
+            "-n",
+            "payload",
+            "--content-type",
+            "application/octet-stream",
+            "--log-time",
+            "100",
+            "--creation-time",
+            "99",
+        ])
+        .expect("add attachment should parse");
+        assert_eq!(
+            args.command,
+            Command::Add(AddCommand {
+                command: AddSubcommand::Attachment(AddAttachmentCommand {
+                    file: "demo.mcap".into(),
+                    attachment_file: "payload.bin".into(),
+                    name: Some("payload".to_string()),
+                    content_type: "application/octet-stream".to_string(),
+                    log_time: Some("100".to_string()),
+                    creation_time: Some("99".to_string()),
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_du_subcommand() {
+        let args = Args::try_parse_from(["mcap", "du", "demo.mcap"]).expect("du should parse");
+        assert_eq!(
+            args.command,
+            Command::Du(DuCommand {
+                approximate: false,
+                file: "demo.mcap".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_du_approximate_subcommand() {
+        let args = Args::try_parse_from(["mcap", "du", "--approximate", "demo.mcap"])
+            .expect("du --approximate should parse");
+        assert_eq!(
+            args.command,
+            Command::Du(DuCommand {
+                approximate: true,
+                file: "demo.mcap".into(),
             })
         );
     }

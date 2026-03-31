@@ -37,7 +37,7 @@ pub enum Command {
     /// Add records to an existing MCAP file
     Add(AddCommand),
     /// Concatenate the messages in one or more MCAP files to stdout
-    Cat,
+    Cat(CatCommand),
     /// Create a compressed copy of an MCAP file
     Compress,
     /// Convert a bag file to an MCAP file
@@ -47,7 +47,7 @@ pub enum Command {
     /// Check an MCAP file structure
     Doctor,
     /// Compute byte usage statistics for MCAP records
-    Du,
+    Du(DuCommand),
     /// Copy filtered MCAP data to a new file
     Filter,
     /// Get a record from an MCAP file
@@ -73,12 +73,67 @@ pub struct AddCommand {
     pub command: AddSubcommand,
 }
 
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+#[command(arg_required_else_help = true)]
+pub struct CatCommand {
+    /// One or more local paths to MCAP files
+    pub files: Vec<PathBuf>,
+}
+
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum AddSubcommand {
     /// Add an attachment to an MCAP file
-    Attachment,
+    Attachment(AddAttachmentCommand),
     /// Add metadata to an MCAP file
-    Metadata,
+    Metadata(AddMetadataCommand),
+}
+
+/// Add an attachment to an MCAP file.
+///
+/// WARNING: this command rewrites the MCAP file in place and can leave it
+/// corrupted if interrupted (for example process kill or disk full).
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct AddAttachmentCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+
+    /// Filename of attachment to add
+    #[arg(short = 'f', long = "file")]
+    pub attachment_file: PathBuf,
+
+    /// Name of attachment to add (defaults to attachment file path)
+    #[arg(short = 'n', long = "name")]
+    pub name: Option<String>,
+
+    /// Content type of attachment
+    #[arg(long = "content-type", default_value = "application/octet-stream")]
+    pub content_type: String,
+
+    /// Attachment log time in nanoseconds or RFC3339 format
+    #[arg(long = "log-time")]
+    pub log_time: Option<String>,
+
+    /// Attachment creation time in nanoseconds or RFC3339 format
+    #[arg(long = "creation-time")]
+    pub creation_time: Option<String>,
+}
+
+/// Add metadata to an MCAP file.
+///
+/// WARNING: this command rewrites the MCAP file in place and can leave it
+/// corrupted if interrupted (for example process kill or disk full).
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct AddMetadataCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+
+    /// Name of metadata record to add
+    #[arg(short = 'n', long = "name")]
+    pub name: String,
+
+    /// Key-value pair in key=value format
+    #[arg(short = 'k', long = "key")]
+    pub key_values: Vec<String>,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -91,9 +146,37 @@ pub struct GetCommand {
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum GetSubcommand {
     /// Get an attachment by name or offset
-    Attachment,
+    Attachment(GetAttachmentCommand),
     /// Get metadata by name
-    Metadata,
+    Metadata(GetMetadataCommand),
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct GetAttachmentCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+
+    /// Name of attachment to extract
+    #[arg(short = 'n', long = "name")]
+    pub name: String,
+
+    /// Offset of attachment to extract
+    #[arg(long = "offset")]
+    pub offset: Option<u64>,
+
+    /// Location to write attachment bytes
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct GetMetadataCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+
+    /// Name of metadata record to get
+    #[arg(short = 'n', long = "name")]
+    pub name: String,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -158,6 +241,16 @@ pub struct ConvertCommand {
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct FileCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct DuCommand {
+    /// Fast approximation using message indexes (skips decompression, may over-count if non-message records are interleaved in chunks)
+    #[arg(long, default_value_t = false)]
+    pub approximate: bool,
+
     /// Local path to the MCAP file
     pub file: PathBuf,
 }

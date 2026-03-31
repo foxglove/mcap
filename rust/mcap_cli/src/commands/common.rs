@@ -166,6 +166,14 @@ pub fn decimal_time(t: u64) -> String {
     format!("{}.{:09}", t / 1_000_000_000, t % 1_000_000_000)
 }
 
+pub fn raw_time(t: u64) -> String {
+    t.to_string()
+}
+
+pub fn write_raw_time(writer: &mut impl std::io::Write, t: u64) -> std::io::Result<()> {
+    write!(writer, "{t}")
+}
+
 pub fn formatted_time(t: u64) -> String {
     let seconds = (t / 1_000_000_000) as i64;
     let nanos = (t % 1_000_000_000) as u32;
@@ -173,6 +181,20 @@ pub fn formatted_time(t: u64) -> String {
         Some(dt) => format!("{} ({})", format_rfc3339_trimmed(dt), decimal_time(t)),
         None => decimal_time(t),
     }
+}
+
+pub fn human_bytes(num_bytes: u64) -> String {
+    let prefixes = ["B", "KiB", "MiB", "GiB"];
+    for (index, prefix) in prefixes.iter().enumerate() {
+        let displayed = num_bytes as f64 / 1024f64.powi(index as i32);
+        if displayed <= 1024.0 {
+            return format!("{displayed:.2} {prefix}");
+        }
+    }
+
+    let last = prefixes.len() - 1;
+    let displayed = num_bytes as f64 / 1024f64.powi(last as i32);
+    format!("{displayed:.2} {}", prefixes[last])
 }
 
 fn format_rfc3339_trimmed(dt: chrono::DateTime<chrono::Utc>) -> String {
@@ -238,8 +260,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        decimal_time, format_table, formatted_time, parse_mcap, parse_mcap_from_summary,
-        print_table,
+        decimal_time, format_table, formatted_time, human_bytes, parse_mcap,
+        parse_mcap_from_summary, print_table, write_raw_time,
     };
     use mcap::records;
 
@@ -278,6 +300,21 @@ mod tests {
     }
 
     #[test]
+    fn raw_time_is_unformatted_nanoseconds() {
+        assert_eq!(super::raw_time(1_234_567_890), "1234567890");
+    }
+
+    #[test]
+    fn write_raw_time_writes_unformatted_nanoseconds() {
+        let mut out = Vec::new();
+        write_raw_time(&mut out, 1_234_567_890).expect("should write raw time");
+        assert_eq!(
+            String::from_utf8(out).expect("raw time output should be utf8"),
+            "1234567890"
+        );
+    }
+
+    #[test]
     fn table_formatter_omits_trailing_whitespace() {
         let rows = vec![
             vec!["col1".to_string(), "col2".to_string()],
@@ -288,6 +325,12 @@ mod tests {
             assert!(!line.ends_with(' '));
             assert!(!line.ends_with('\t'));
         }
+    }
+
+    #[test]
+    fn human_bytes_scales_units() {
+        assert_eq!(human_bytes(2), "2.00 B");
+        assert_eq!(human_bytes(2 * 1024), "2.00 KiB");
     }
 
     #[test]
