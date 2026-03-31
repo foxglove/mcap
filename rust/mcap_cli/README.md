@@ -1,6 +1,6 @@
-# WIP Rust CLI
+# MCAP CLI (WIP)
 
-This directory contains a WIP Rust implementation of the MCAP CLI.
+This directory contains a WIP port of the MCAP CLI from Go to Rust.
 
 It is not ready for production use yet.
 
@@ -10,21 +10,21 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 
 | Command | Status | Notes |
 | --- | --- | --- |
-| `add` | 🔴 | — |
-| `cat` | 🔴 | — |
-| `compress` | 🔴 | — |
-| `convert` | 🔴 | — |
-| `decompress` | 🔴 | — |
-| `doctor` | 🔴 | — |
-| `du` | 🟢 | Exact mode and `--approximate` mode are implemented (with approximate fallback behavior). |
-| `filter` | 🔴 | — |
-| `get` | 🔴 | — |
-| `info` | 🟢 | Implemented. |
-| `list` | 🟢 | Implemented for `attachments`, `channels`, `chunks`, `metadata`, and `schemas`. |
-| `merge` | 🔴 | — |
-| `recover` | 🔴 | — |
-| `sort` | 🔴 | — |
-| `version` | 🟢 | Implemented with both CLI and library version output modes. |
+| `add` | 🔴 | |
+| `cat` | 🔴 | |
+| `compress` | 🔴 | |
+| `convert` | 🔴 | |
+| `decompress` | 🔴 | |
+| `doctor` | 🔴 | |
+| `du` | 🟢 | |
+| `filter` | 🔴 | |
+| `get` | 🔴 | |
+| `info` | 🟢 | |
+| `list` | 🟢 | |
+| `merge` | 🔴 | |
+| `recover` | 🔴 | |
+| `sort` | 🔴 | |
+| `version` | 🟢 | |
 
 ## Intentional divergences from Go CLI
 
