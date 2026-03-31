@@ -9,36 +9,27 @@ use crate::context::CommandContext;
 pub fn run(_ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
     let mcap = common::map_file(&args.file)?;
     let parsed = common::parse_mcap(&mcap)?;
-    let metadata = merged_metadata_for_name(&mcap, &parsed.metadata_indexes, &args.name)?;
+    let metadata = latest_metadata_for_name(&mcap, &parsed.metadata_indexes, &args.name)?;
     let pretty =
         serde_json::to_string_pretty(&metadata).context("failed to serialize metadata to JSON")?;
     println!("{pretty}");
     Ok(())
 }
 
-fn merged_metadata_for_name(
+fn latest_metadata_for_name(
     mcap: &[u8],
     indexes: &[mcap::records::MetadataIndex],
     name: &str,
 ) -> Result<BTreeMap<String, String>> {
-    let mut matching_indexes: Vec<&mcap::records::MetadataIndex> =
-        indexes.iter().filter(|index| index.name == name).collect();
-    if matching_indexes.is_empty() {
-        anyhow::bail!("metadata {name} does not exist");
-    }
+    let index = indexes
+        .iter()
+        .filter(|index| index.name == name)
+        .max_by_key(|index| index.offset)
+        .ok_or_else(|| anyhow::anyhow!("metadata {name} does not exist"))?;
 
-    matching_indexes.sort_by_key(|index| index.offset);
-
-    let mut merged = BTreeMap::new();
-    for index in matching_indexes {
-        let record = mcap::read::metadata(mcap, index)
-            .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
-        for (key, value) in record.metadata {
-            merged.insert(key, value);
-        }
-    }
-
-    Ok(merged)
+    let record = mcap::read::metadata(mcap, index)
+        .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
+    Ok(record.metadata)
 }
 
 #[cfg(test)]
@@ -47,7 +38,7 @@ mod tests {
 
     use mcap::records::MetadataIndex;
 
-    use super::merged_metadata_for_name;
+    use super::latest_metadata_for_name;
 
     fn metadata_index(name: &str, offset: u64, length: u64) -> MetadataIndex {
         MetadataIndex {
@@ -59,7 +50,7 @@ mod tests {
 
     #[test]
     fn errors_when_metadata_name_missing() {
-        let err = merged_metadata_for_name(
+        let err = latest_metadata_for_name(
             &[],
             &[metadata_index("demo", 0, 0)],
             "other",
@@ -69,7 +60,7 @@ mod tests {
     }
 
     #[test]
-    fn merges_metadata_records_by_offset_order() {
+    fn returns_latest_metadata_record_by_offset() {
         let mut mcap_bytes = Vec::new();
         let (first, second) = {
             let mut writer = mcap::WriteOptions::new()
@@ -102,16 +93,15 @@ mod tests {
             (indexes[0].clone(), indexes[1].clone())
         };
 
-        let merged = merged_metadata_for_name(
+        let latest = latest_metadata_for_name(
             &mcap_bytes,
             &[second.clone(), first.clone()],
             "config",
         )
-        .expect("metadata should merge");
+        .expect("metadata should resolve to latest");
         assert_eq!(
-            merged,
+            latest,
             BTreeMap::from([
-                ("a".to_string(), "1".to_string()),
                 ("b".to_string(), "2".to_string()),
                 ("c".to_string(), "3".to_string()),
             ])
