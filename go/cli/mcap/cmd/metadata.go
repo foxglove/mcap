@@ -152,6 +152,8 @@ var getMetadataCmd = &cobra.Command{
 				return fmt.Errorf("failed to collect mcap info: %w", err)
 			}
 
+			output := make(map[string]string)
+
 			metadataIndexes := make(map[string][]*mcap.MetadataIndex)
 			for _, idx := range info.MetadataIndexes {
 				metadataIndexes[idx.Name] = append(metadataIndexes[idx.Name], idx)
@@ -161,28 +163,26 @@ var getMetadataCmd = &cobra.Command{
 				return fmt.Errorf("metadata %s does not exist", getMetadataName)
 			}
 
-			latestIdx := indexes[0]
-			for _, idx := range indexes[1:] {
-				if idx.Offset > latestIdx.Offset {
-					latestIdx = idx
+			for _, idx := range indexes {
+				_, err = rs.Seek(int64(idx.Offset+1+8), io.SeekStart)
+				if err != nil {
+					return fmt.Errorf("failed to seek to metadata record at %d: %w", idx.Offset, err)
+				}
+				data := make([]byte, idx.Length)
+				_, err = io.ReadFull(rs, data)
+				if err != nil {
+					return fmt.Errorf("failed to read metadata record: %w", err)
+				}
+				record, err := mcap.ParseMetadata(data)
+				if err != nil {
+					return fmt.Errorf("failed to parse metadata: %w", err)
+				}
+				for k, v := range record.Metadata {
+					output[k] = v
 				}
 			}
 
-			_, err = rs.Seek(int64(latestIdx.Offset+1+8), io.SeekStart)
-			if err != nil {
-				return fmt.Errorf("failed to seek to metadata record at %d: %w", latestIdx.Offset, err)
-			}
-			data := make([]byte, latestIdx.Length)
-			_, err = io.ReadFull(rs, data)
-			if err != nil {
-				return fmt.Errorf("failed to read metadata record: %w", err)
-			}
-			record, err := mcap.ParseMetadata(data)
-			if err != nil {
-				return fmt.Errorf("failed to parse metadata: %w", err)
-			}
-
-			jsonBytes, err := json.Marshal(record.Metadata)
+			jsonBytes, err := json.Marshal(output)
 			if err != nil {
 				return fmt.Errorf("failed to marshal output to JSON: %w", err)
 			}
