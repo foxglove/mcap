@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result};
@@ -665,24 +666,24 @@ fn read_record_at_offset<'a>(mcap: &'a [u8], offset: u64) -> Result<RawRecordRef
     })
 }
 
-fn opcode_name(opcode: u8) -> String {
+fn opcode_name(opcode: u8) -> Cow<'static, str> {
     match opcode {
-        mcap::records::op::HEADER => "Header".to_string(),
-        mcap::records::op::FOOTER => "Footer".to_string(),
-        mcap::records::op::SCHEMA => "Schema".to_string(),
-        mcap::records::op::CHANNEL => "Channel".to_string(),
-        mcap::records::op::MESSAGE => "Message".to_string(),
-        mcap::records::op::CHUNK => "Chunk".to_string(),
-        mcap::records::op::MESSAGE_INDEX => "MessageIndex".to_string(),
-        mcap::records::op::CHUNK_INDEX => "ChunkIndex".to_string(),
-        mcap::records::op::ATTACHMENT => "Attachment".to_string(),
-        mcap::records::op::ATTACHMENT_INDEX => "AttachmentIndex".to_string(),
-        mcap::records::op::STATISTICS => "Statistics".to_string(),
-        mcap::records::op::METADATA => "Metadata".to_string(),
-        mcap::records::op::METADATA_INDEX => "MetadataIndex".to_string(),
-        mcap::records::op::SUMMARY_OFFSET => "SummaryOffset".to_string(),
-        mcap::records::op::DATA_END => "DataEnd".to_string(),
-        _ => format!("opcode 0x{opcode:02x}"),
+        mcap::records::op::HEADER => Cow::Borrowed("Header"),
+        mcap::records::op::FOOTER => Cow::Borrowed("Footer"),
+        mcap::records::op::SCHEMA => Cow::Borrowed("Schema"),
+        mcap::records::op::CHANNEL => Cow::Borrowed("Channel"),
+        mcap::records::op::MESSAGE => Cow::Borrowed("Message"),
+        mcap::records::op::CHUNK => Cow::Borrowed("Chunk"),
+        mcap::records::op::MESSAGE_INDEX => Cow::Borrowed("MessageIndex"),
+        mcap::records::op::CHUNK_INDEX => Cow::Borrowed("ChunkIndex"),
+        mcap::records::op::ATTACHMENT => Cow::Borrowed("Attachment"),
+        mcap::records::op::ATTACHMENT_INDEX => Cow::Borrowed("AttachmentIndex"),
+        mcap::records::op::STATISTICS => Cow::Borrowed("Statistics"),
+        mcap::records::op::METADATA => Cow::Borrowed("Metadata"),
+        mcap::records::op::METADATA_INDEX => Cow::Borrowed("MetadataIndex"),
+        mcap::records::op::SUMMARY_OFFSET => Cow::Borrowed("SummaryOffset"),
+        mcap::records::op::DATA_END => Cow::Borrowed("DataEnd"),
+        _ => Cow::Owned(format!("opcode 0x{opcode:02x}")),
     }
 }
 
