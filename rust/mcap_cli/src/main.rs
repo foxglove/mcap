@@ -35,9 +35,10 @@ mod tests {
     use clap::Parser;
 
     use crate::cli::{
-        AddCommand, AddSubcommand, Args, Command, GetCommand, GetSubcommand, InfoCommand,
-        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
+        AddCommand, AddSubcommand, Args, Command, ConvertCommand, ConvertCompression, GetCommand,
+        GetSubcommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand,
+        ListChunksCommand, ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand,
+        VersionCommand,
     };
 
     #[test]
@@ -172,6 +173,51 @@ mod tests {
             args.command,
             Command::Add(AddCommand {
                 command: AddSubcommand::Metadata,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_convert_with_defaults() {
+        let args = Args::try_parse_from(["mcap", "convert", "input.bag", "output.mcap"])
+            .expect("convert should parse");
+        assert_eq!(
+            args.command,
+            Command::Convert(ConvertCommand {
+                input: "input.bag".into(),
+                output: "output.mcap".into(),
+                compression: ConvertCompression::Zstd,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: true,
+                chunked: true,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_convert_with_all_flags() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "convert",
+            "input.bag",
+            "output.mcap",
+            "--compression",
+            "none",
+            "--chunk-size",
+            "1024",
+            "--include-crc=false",
+            "--chunked=false",
+        ])
+        .expect("convert with flags should parse");
+        assert_eq!(
+            args.command,
+            Command::Convert(ConvertCommand {
+                input: "input.bag".into(),
+                output: "output.mcap".into(),
+                compression: ConvertCompression::None,
+                chunk_size: 1024,
+                include_crc: false,
+                chunked: false,
             })
         );
     }
