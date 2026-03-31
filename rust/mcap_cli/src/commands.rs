@@ -51,7 +51,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
             ListSubcommand::Schemas(args) => list_schemas::run(ctx, args),
         },
 
-        Command::Cat => cat::run(ctx),
+        Command::Cat(args) => cat::run(ctx, args),
         Command::Compress => compress::run(ctx),
         Command::Convert => convert::run(ctx),
         Command::Decompress => decompress::run(ctx),
