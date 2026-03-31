@@ -19,4 +19,3 @@ memmap2 = "0.9"
 mcap = { path = "../mcap" }
 serde_json = "1"
 simplelog = "0.12"
-rayon = "1"
