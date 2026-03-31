@@ -63,9 +63,7 @@ struct Doctor {
 
 fn diagnose_mcap(mcap: &[u8], strict_message_order: bool) -> Diagnosis {
     let mut doctor = Doctor::new(strict_message_order);
-    if let Err(err) = doctor.scan_top_level(mcap) {
-        doctor.error(format!("Failed while scanning file: {err:#}"));
-    }
+    doctor.scan_top_level(mcap);
     doctor.finalize_record_presence();
     doctor.validate_chunk_indexes(mcap);
     doctor.validate_statistics();
@@ -104,7 +102,7 @@ impl Doctor {
         self.diagnosis.errors.push(message.into());
     }
 
-    fn scan_top_level(&mut self, mcap: &[u8]) -> Result<()> {
+    fn scan_top_level(&mut self, mcap: &[u8]) {
         let mut reader = mcap::sans_io::LinearReader::new_with_options(
             mcap::sans_io::LinearReaderOptions::default()
                 .with_emit_chunks(true)
@@ -117,27 +115,38 @@ impl Doctor {
         let mut next_record_offset = mcap::MAGIC.len() as u64;
 
         while let Some(event) = reader.next_event() {
-            match event? {
-                mcap::sans_io::LinearReadEvent::ReadRequest(need) => {
+            match event {
+                Err(err) => {
+                    self.error(format!("Failed to read next token: {err:#}"));
+                    break;
+                }
+                Ok(mcap::sans_io::LinearReadEvent::ReadRequest(need)) => {
                     let read = need.min(remaining.len());
                     let dst = reader.insert(read);
                     dst.copy_from_slice(&remaining[..read]);
                     reader.notify_read(read);
                     remaining = &remaining[read..];
                 }
-                mcap::sans_io::LinearReadEvent::Record { opcode, data } => {
+                Ok(mcap::sans_io::LinearReadEvent::Record { opcode, data }) => {
                     let record_offset = next_record_offset;
                     next_record_offset += 9 + data.len() as u64;
-                    let record = mcap::parse_record(opcode, data)?;
-                    self.handle_top_level_record(record, record_offset)?;
+                    let record = match mcap::parse_record(opcode, data) {
+                        Ok(record) => record,
+                        Err(err) => {
+                            self.error(format!(
+                                "Failed to parse top-level record at offset {}: {err:#}",
+                                record_offset
+                            ));
+                            continue;
+                        }
+                    };
+                    self.handle_top_level_record(record, record_offset);
                 }
             }
         }
-
-        Ok(())
     }
 
-    fn handle_top_level_record(&mut self, record: mcap::records::Record<'_>, offset: u64) -> Result<()> {
+    fn handle_top_level_record(&mut self, record: mcap::records::Record<'_>, offset: u64) {
         match record {
             mcap::records::Record::Header(header) => {
                 if header.library.is_empty() {
@@ -145,7 +154,10 @@ impl Doctor {
                         "Set the Header.library field to a value that identifies the software that produced the file.",
                     );
                 }
-                if !header.profile.is_empty() && header.profile != "ros1" && header.profile != "ros2" {
+                if !header.profile.is_empty()
+                    && header.profile != "ros1"
+                    && header.profile != "ros2"
+                {
                     self.warn(format!(
                         "Header.profile field {:?} is not a well-known profile.",
                         header.profile
@@ -166,7 +178,7 @@ impl Doctor {
                 self.examine_top_level_message(&header);
             }
             mcap::records::Record::Chunk { header, data } => {
-                self.examine_chunk(header, data.as_ref(), offset)?;
+                self.examine_chunk(header, data.as_ref(), offset);
             }
             mcap::records::Record::MessageIndex(_) => {
                 if self.saw_top_level_message {
@@ -208,10 +220,11 @@ impl Doctor {
             mcap::records::Record::MetadataIndex(_) => {}
             mcap::records::Record::SummaryOffset(_) => {}
             mcap::records::Record::Unknown { opcode, .. } => {
-                self.warn(format!("Encountered unknown top-level record opcode 0x{opcode:02x}"));
+                self.warn(format!(
+                    "Encountered unknown top-level record opcode 0x{opcode:02x}"
+                ));
             }
         }
-        Ok(())
     }
 
     fn finalize_record_presence(&mut self) {
@@ -329,10 +342,15 @@ impl Doctor {
                     channel.id
                 ));
             }
-            self.channels_in_data_section.insert(channel.id, channel.clone());
+            self.channels_in_data_section
+                .insert(channel.id, channel.clone());
         }
 
-        if channel.schema_id != 0 && !self.schemas_in_data_section.contains_key(&channel.schema_id) {
+        if channel.schema_id != 0
+            && !self
+                .schemas_in_data_section
+                .contains_key(&channel.schema_id)
+        {
             self.error(format!(
                 "Encountered Channel ({}) with unknown Schema ({})",
                 channel.id, channel.schema_id
@@ -370,18 +388,32 @@ impl Doctor {
         header: mcap::records::ChunkHeader,
         data: &[u8],
         start_offset: u64,
-    ) -> Result<()> {
+    ) {
         let mut referenced_channels = BTreeSet::new();
         let mut min_log_time = None::<u64>;
         let mut max_log_time = None::<u64>;
         let mut chunk_message_count = 0u64;
 
-        let chunk_reader = mcap::read::ChunkReader::new(header.clone(), data)
-            .with_context(|| format!("failed to read chunk at offset {start_offset}"))?;
+        let chunk_reader = match mcap::read::ChunkReader::new(header.clone(), data) {
+            Ok(reader) => reader,
+            Err(err) => {
+                self.error(format!(
+                    "failed to read chunk at offset {start_offset}: {err:#}"
+                ));
+                return;
+            }
+        };
 
         for nested_record in chunk_reader {
-            let nested_record = nested_record
-                .with_context(|| format!("failed to parse nested chunk record at {start_offset}"))?;
+            let nested_record = match nested_record {
+                Ok(record) => record,
+                Err(err) => {
+                    self.error(format!(
+                        "failed to parse nested chunk record at {start_offset}: {err:#}"
+                    ));
+                    continue;
+                }
+            };
             match nested_record {
                 mcap::records::Record::Schema { header, data } => {
                     self.examine_schema(header, data.as_ref());
@@ -417,13 +449,18 @@ impl Doctor {
                         }
                     }
 
-                    min_log_time = Some(min_log_time.map_or(header.log_time, |min| min.min(header.log_time)));
-                    max_log_time = Some(max_log_time.map_or(header.log_time, |max| max.max(header.log_time)));
+                    min_log_time =
+                        Some(min_log_time.map_or(header.log_time, |min| min.min(header.log_time)));
+                    max_log_time =
+                        Some(max_log_time.map_or(header.log_time, |max| max.max(header.log_time)));
                     chunk_message_count += 1;
                     self.observe_message_time(header.log_time);
                 }
                 other => {
-                    self.error(format!("Illegal record in chunk: {}", opcode_name(other.opcode())));
+                    self.error(format!(
+                        "Illegal record in chunk: {}",
+                        opcode_name(other.opcode())
+                    ));
                 }
             }
         }
@@ -447,13 +484,14 @@ impl Doctor {
 
         self.channels_referenced_in_chunks_by_offset
             .insert(start_offset, referenced_channels);
-
-        Ok(())
     }
 
     fn observe_message_time(&mut self, log_time: u64) {
         self.message_count += 1;
-        self.global_max_log_time = Some(self.global_max_log_time.map_or(log_time, |max| max.max(log_time)));
+        self.global_max_log_time = Some(
+            self.global_max_log_time
+                .map_or(log_time, |max| max.max(log_time)),
+        );
         self.min_log_time = Some(self.min_log_time.map_or(log_time, |min| min.min(log_time)));
         self.max_log_time = Some(self.max_log_time.map_or(log_time, |max| max.max(log_time)));
     }
@@ -465,8 +503,9 @@ impl Doctor {
             .map(|(offset, index)| (*offset, index.clone()))
             .collect();
         for (chunk_offset, chunk_index) in chunk_indexes {
-            if let Some(channels_referenced) =
-                self.channels_referenced_in_chunks_by_offset.get(&chunk_offset)
+            if let Some(channels_referenced) = self
+                .channels_referenced_in_chunks_by_offset
+                .get(&chunk_offset)
             {
                 let channel_ids: Vec<u16> = channels_referenced.iter().copied().collect();
                 for channel_id in channel_ids {
@@ -481,7 +520,9 @@ impl Doctor {
                         .get(&channel_id)
                         .map(|channel| channel.schema_id);
                     if let Some(schema_id) = schema_id {
-                        if schema_id != 0 && !self.schema_ids_in_summary_section.contains(&schema_id) {
+                        if schema_id != 0
+                            && !self.schema_ids_in_summary_section.contains(&schema_id)
+                        {
                             self.error(format!(
                                 "Indexed chunk at offset {} contains messages referencing schema ({}) not duplicated in summary section",
                                 chunk_offset, schema_id
@@ -714,12 +755,18 @@ mod tests {
         );
         let diagnosis = diagnose_mcap(&mcap, false);
         assert!(
-            diagnosis.errors.iter().any(|msg| msg.contains("channel (1)")),
+            diagnosis
+                .errors
+                .iter()
+                .any(|msg| msg.contains("channel (1)")),
             "{:?}",
             diagnosis.errors
         );
         assert!(
-            diagnosis.errors.iter().any(|msg| msg.contains("schema (1)")),
+            diagnosis
+                .errors
+                .iter()
+                .any(|msg| msg.contains("schema (1)")),
             "{:?}",
             diagnosis.errors
         );

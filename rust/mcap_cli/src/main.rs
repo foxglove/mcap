@@ -37,9 +37,8 @@ mod tests {
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
         Command, DoctorCommand, DuCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand,
-        GetSubcommand,
-        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
+        GetSubcommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand,
+        ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
     };
 
     #[test]
@@ -302,13 +301,8 @@ mod tests {
 
     #[test]
     fn parses_doctor_with_strict_message_order_flag() {
-        let args = Args::try_parse_from([
-            "mcap",
-            "doctor",
-            "--strict-message-order",
-            "demo.mcap",
-        ])
-        .expect("doctor --strict-message-order should parse");
+        let args = Args::try_parse_from(["mcap", "doctor", "--strict-message-order", "demo.mcap"])
+            .expect("doctor --strict-message-order should parse");
         assert_eq!(
             args.command,
             Command::Doctor(DoctorCommand {
