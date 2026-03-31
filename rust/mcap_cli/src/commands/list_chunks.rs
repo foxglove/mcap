@@ -33,8 +33,8 @@ fn render_chunk_rows(chunk_indexes: &[mcap::records::ChunkIndex]) -> Vec<Vec<Str
         rows.push(vec![
             chunk.chunk_start_offset.to_string(),
             chunk.chunk_length.to_string(),
-            chunk.message_start_time.to_string(),
-            chunk.message_end_time.to_string(),
+            common::raw_time(chunk.message_start_time),
+            common::raw_time(chunk.message_end_time),
             chunk.compression.clone(),
             chunk.compressed_size.to_string(),
             chunk.uncompressed_size.to_string(),
