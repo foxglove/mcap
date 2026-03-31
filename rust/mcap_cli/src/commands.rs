@@ -57,7 +57,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
         Command::Convert => convert::run(ctx),
         Command::Decompress => decompress::run(ctx),
         Command::Doctor => doctor::run(ctx),
-        Command::Du => du::run(ctx),
+        Command::Du(args) => du::run(ctx, args),
         Command::Filter => filter::run(ctx),
         Command::Merge => merge::run(ctx),
         Command::Recover => recover::run(ctx),
@@ -71,7 +71,7 @@ mod tests {
 
     use super::dispatch;
     use crate::cli::{
-        AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
+        AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command, DuCommand,
         GetAttachmentCommand, GetMetadataCommand, InfoCommand, ListAttachmentsCommand,
         ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
         ListSchemasCommand, ListSubcommand,
@@ -101,6 +101,19 @@ mod tests {
             }),
         )
         .expect_err("list channels should fail on missing file");
+        assert!(err.to_string().contains("couldn't open"));
+    }
+
+    #[test]
+    fn du_requires_existing_file() {
+        let err = dispatch(
+            &CommandContext::default(),
+            Command::Du(DuCommand {
+                approximate: false,
+                file: PathBuf::from("does-not-exist.mcap"),
+            }),
+        )
+        .expect_err("du should fail on missing file");
         assert!(err.to_string().contains("couldn't open"));
     }
 

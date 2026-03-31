@@ -36,8 +36,8 @@ mod tests {
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        Command, GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
-        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        Command, DuCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand,
+        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
         ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
     };
 
@@ -257,6 +257,31 @@ mod tests {
                     log_time: Some("100".to_string()),
                     creation_time: Some("99".to_string()),
                 }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_du_subcommand() {
+        let args = Args::try_parse_from(["mcap", "du", "demo.mcap"]).expect("du should parse");
+        assert_eq!(
+            args.command,
+            Command::Du(DuCommand {
+                approximate: false,
+                file: "demo.mcap".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_du_approximate_subcommand() {
+        let args = Args::try_parse_from(["mcap", "du", "--approximate", "demo.mcap"])
+            .expect("du --approximate should parse");
+        assert_eq!(
+            args.command,
+            Command::Du(DuCommand {
+                approximate: true,
+                file: "demo.mcap".into(),
             })
         );
     }

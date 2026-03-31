@@ -77,12 +77,16 @@ fn render_info(parsed: &common::ParsedMcap) -> String {
                 "\t{compression}: [{}/{} chunks] [{}/{} ({ratio:.2}%)]",
                 stats.count,
                 chunk_count,
-                human_bytes(stats.uncompressed_size),
-                human_bytes(stats.compressed_size),
+                common::human_bytes(stats.uncompressed_size),
+                common::human_bytes(stats.compressed_size),
             );
             if duration_seconds > 0.0 {
                 let throughput = (stats.compressed_size as f64 / duration_seconds).max(0.0);
-                let _ = write!(&mut out, " [{}/sec]", human_bytes(throughput as u64));
+                let _ = write!(
+                    &mut out,
+                    " [{}/sec]",
+                    common::human_bytes(throughput as u64)
+                );
             }
             let _ = writeln!(&mut out);
         }
@@ -91,18 +95,18 @@ fn render_info(parsed: &common::ParsedMcap) -> String {
         let _ = writeln!(
             &mut out,
             "\tmax uncompressed size: {}",
-            human_bytes(largest_uncompressed)
+            common::human_bytes(largest_uncompressed)
         );
         let _ = writeln!(
             &mut out,
             "\tmax compressed size: {}",
-            human_bytes(largest_compressed)
+            common::human_bytes(largest_compressed)
         );
         if has_overlaps {
             let _ = writeln!(
                 &mut out,
                 "\toverlaps: [max concurrent: {max_active_chunks}, decompressed: {}]",
-                human_bytes(max_total_uncompressed_size)
+                common::human_bytes(max_total_uncompressed_size)
             );
         } else {
             let _ = writeln!(&mut out, "\toverlaps: no");
@@ -276,20 +280,6 @@ fn digits_u16(value: u16) -> usize {
     value.ilog10() as usize + 1
 }
 
-fn human_bytes(num_bytes: u64) -> String {
-    let prefixes = ["B", "KiB", "MiB", "GiB"];
-    for (index, prefix) in prefixes.iter().enumerate() {
-        let displayed = num_bytes as f64 / 1024f64.powi(index as i32);
-        if displayed <= 1024.0 {
-            return format!("{displayed:.2} {prefix}");
-        }
-    }
-
-    let last = prefixes.len() - 1;
-    let displayed = num_bytes as f64 / 1024f64.powi(last as i32);
-    format!("{displayed:.2} {}", prefixes[last])
-}
-
 #[derive(Default)]
 struct CompressionStats {
     count: usize,
@@ -358,10 +348,7 @@ fn count_chunk_overlaps(chunks: &[mcap::records::ChunkIndex]) -> (bool, usize, u
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{
-        count_chunk_overlaps, format_duration, human_bytes, render_channel_summary_rows,
-        render_info,
-    };
+    use super::{count_chunk_overlaps, format_duration, render_channel_summary_rows, render_info};
     use crate::commands::common;
     use crate::commands::common::{ParsedMcap, ParsedSchema};
     use mcap::records::{self, ChunkIndex, Header, Statistics};
@@ -381,8 +368,8 @@ mod tests {
 
     #[test]
     fn human_bytes_scales_units() {
-        assert_eq!(human_bytes(2), "2.00 B");
-        assert_eq!(human_bytes(2 * 1024), "2.00 KiB");
+        assert_eq!(common::human_bytes(2), "2.00 B");
+        assert_eq!(common::human_bytes(2 * 1024), "2.00 KiB");
     }
 
     #[test]
