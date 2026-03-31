@@ -32,7 +32,12 @@ pub fn run(_ctx: &CommandContext, args: DuCommand) -> Result<()> {
     let (usage, used_approximate) = if args.approximate {
         match collect_usage_approximate(&mcap)? {
             Some(usage) => (usage, true),
-            None => (collect_usage_exact(&mcap)?, false),
+            None => {
+                eprintln!(
+                    "Warning: summary/chunk indexes unavailable; falling back to exact du scan."
+                );
+                (collect_usage_exact(&mcap)?, false)
+            }
         }
     } else {
         (collect_usage_exact(&mcap)?, false)
@@ -483,7 +488,7 @@ mod tests {
         chunked: bool,
         chunk_size: Option<u64>,
         messages: &[(u16, u64, usize)],
-        channels: &[(u16, &str)],
+        channels: &[&str],
     ) -> Vec<u8> {
         let mut buffer = Vec::new();
         {
@@ -496,7 +501,7 @@ mod tests {
                 .add_schema("test_schema", "raw", b"{}")
                 .expect("add schema");
 
-            for (_id, topic) in channels {
+            for topic in channels {
                 writer
                     .add_channel(schema_id, topic, "raw", &BTreeMap::new())
                     .expect("add channel");
@@ -545,7 +550,7 @@ mod tests {
             false,
             None,
             &[(1, 0, 100), (1, 1, 50), (2, 2, 25)],
-            &[(1, "/camera"), (2, "/imu")],
+            &["/camera", "/imu"],
         );
 
         let usage = collect_usage_exact(&mcap).expect("collect exact usage");
@@ -560,7 +565,7 @@ mod tests {
             true,
             Some(128),
             &[(1, 0, 100), (2, 1, 60), (1, 2, 40)],
-            &[(1, "/alpha"), (2, "/beta")],
+            &["/alpha", "/beta"],
         );
 
         let usage = collect_usage_exact(&mcap).expect("collect exact usage");
@@ -575,7 +580,7 @@ mod tests {
             true,
             Some(256),
             &[(1, 0, 90), (2, 1, 30), (1, 2, 10), (2, 3, 70)],
-            &[(1, "/left"), (2, "/right")],
+            &["/left", "/right"],
         );
 
         let exact = collect_usage_exact(&mcap).expect("exact");
@@ -621,7 +626,7 @@ mod tests {
 
     #[test]
     fn approximate_usage_falls_back_when_no_chunk_indexes() {
-        let mcap = write_test_file(false, None, &[(1, 0, 10), (1, 1, 10)], &[(1, "/data")]);
+        let mcap = write_test_file(false, None, &[(1, 0, 10), (1, 1, 10)], &["/data"]);
         let approximate = collect_usage_approximate(&mcap).expect("approximate");
         assert!(approximate.is_none());
     }
@@ -632,7 +637,7 @@ mod tests {
             true,
             Some(1024 * 1024),
             &[(1, 0, 10), (1, 1, 10)],
-            &[(1, "/data")],
+            &["/data"],
         );
         let (mut buf, _) = first_chunk_message_index_bytes(&file);
         buf.push(0);
@@ -649,7 +654,7 @@ mod tests {
             true,
             Some(1024 * 1024),
             &[(1, 0, 10), (1, 1, 10)],
-            &[(1, "/data")],
+            &["/data"],
         );
         let (buf, uncompressed_size) = first_chunk_message_index_bytes(&file);
 
@@ -664,7 +669,7 @@ mod tests {
             true,
             Some(1024 * 1024),
             &[(1, 0, 10), (1, 1, 10)],
-            &[(1, "/data")],
+            &["/data"],
         );
         let (buf, _) = first_chunk_message_index_bytes(&file);
 
@@ -700,7 +705,7 @@ mod tests {
 
     #[test]
     fn exact_usage_includes_magic_bytes_baseline() {
-        let mcap = write_test_file(false, None, &[(1, 0, 10)], &[(1, "/data")]);
+        let mcap = write_test_file(false, None, &[(1, 0, 10)], &["/data"]);
         let usage = collect_usage_exact(&mcap).expect("collect exact usage");
         assert!(usage.total_size >= 2 * MCAP_MAGIC_SIZE);
     }
