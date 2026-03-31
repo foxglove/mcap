@@ -1,7 +1,8 @@
 mod ros1_bag;
 
 use std::fs::File;
-use std::io::{BufWriter, Read, Seek};
+use std::io::BufWriter;
+use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use mcap::{Compression, WriteOptions};
@@ -9,17 +10,15 @@ use mcap::{Compression, WriteOptions};
 use crate::cli::{ConvertCommand, ConvertCompression};
 use crate::context::CommandContext;
 
-const ROS1_BAG_MAGIC: &[u8] = b"#ROSBAG V2.0\n";
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InputFileType {
     Ros1Bag,
 }
 
 pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
-    let mut input = File::open(&args.input)
+    let file_type = detect_file_type(&args.input)?;
+    let input = File::open(&args.input)
         .with_context(|| format!("failed to open input '{}'", args.input.display()))?;
-    let file_type = detect_file_type(&mut input)?;
 
     let output = File::create(&args.output)
         .with_context(|| format!("failed to open output '{}'", args.output.display()))?;
@@ -60,22 +59,20 @@ fn build_write_options(
         .calculate_attachment_crcs(include_crc)
 }
 
-fn detect_file_type<R: Read + Seek>(reader: &mut R) -> Result<InputFileType> {
-    let mut magic = vec![0u8; ROS1_BAG_MAGIC.len()];
-    reader
-        .read_exact(&mut magic)
-        .context("failed to read input magic bytes")?;
-    reader
-        .rewind()
-        .context("failed to rewind input after magic check")?;
-
-    if magic == ROS1_BAG_MAGIC {
+fn detect_file_type(path: &Path) -> Result<InputFileType> {
+    if path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("bag"))
+    {
         return Ok(InputFileType::Ros1Bag);
     }
 
-    let rendered = String::from_utf8_lossy(&magic);
     bail!(
-        "unsupported input format (expected ROS1 bag '#ROSBAG V2.0\\n', got prefix '{rendered}')"
+        "unsupported input file extension '{}' (expected .bag for ROS1 bag input)",
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or("<none>")
     );
 }
 
@@ -83,6 +80,7 @@ fn detect_file_type<R: Read + Seek>(reader: &mut R) -> Result<InputFileType> {
 mod tests {
     use std::collections::BTreeMap;
     use std::io::{Cursor, Read, Seek, SeekFrom};
+    use std::path::Path;
 
     use super::{build_write_options, detect_file_type, InputFileType};
     use crate::cli::ConvertCompression;
@@ -132,30 +130,21 @@ mod tests {
     }
 
     #[test]
-    fn detects_ros1_bag_magic() {
-        let mut cursor = Cursor::new(b"#ROSBAG V2.0\nrest".to_vec());
-        let file_type = detect_file_type(&mut cursor).expect("magic should parse");
+    fn detects_ros1_bag_extension() {
+        let file_type = detect_file_type(Path::new("/tmp/input.bag")).expect("detect");
         assert_eq!(file_type, InputFileType::Ros1Bag);
     }
 
     #[test]
-    fn rejects_unknown_magic() {
-        let mut cursor = Cursor::new(b"not_a_rosbag!".to_vec());
-        let err = detect_file_type(&mut cursor).expect_err("format should be rejected");
-        assert!(
-            err.to_string().contains("unsupported input format"),
-            "actual error: {err:#}"
-        );
+    fn detects_ros1_bag_extension_case_insensitive() {
+        let file_type = detect_file_type(Path::new("/tmp/input.BAG")).expect("detect");
+        assert_eq!(file_type, InputFileType::Ros1Bag);
     }
 
     #[test]
-    fn rejects_magic_without_newline() {
-        let mut cursor = Cursor::new(b"#ROSBAG V2.0xmore".to_vec());
-        let err = detect_file_type(&mut cursor).expect_err("format should be rejected");
-        assert!(
-            err.to_string().contains("unsupported input format"),
-            "actual error: {err:#}"
-        );
+    fn rejects_non_bag_extension() {
+        let err = detect_file_type(Path::new("/tmp/input.mcap")).expect_err("non-bag should fail");
+        assert!(err.to_string().contains("unsupported input file extension"));
     }
 
     #[test]
