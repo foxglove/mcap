@@ -1,6 +1,6 @@
-# Experimental Rust CLI
+# WIP Rust CLI
 
-This directory contains an experimental Rust implementation of the MCAP CLI.
+This directory contains a WIP Rust implementation of the MCAP CLI.
 
 It is not ready for production use yet.
 
