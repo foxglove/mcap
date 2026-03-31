@@ -16,6 +16,8 @@ pub(crate) struct AttachmentToAdd {
     pub(crate) create_time: u64,
     pub(crate) name: String,
     pub(crate) media_type: String,
+    // TODO: stream attachment payload directly from the source file during
+    // amendment instead of storing a full in-memory copy.
     pub(crate) data: Vec<u8>,
 }
 
@@ -298,6 +300,9 @@ fn parse_existing_layout(input: &[u8]) -> Result<ExistingLayout> {
     let data_end = parse_data_end(input, old_data_end_offset)?;
     Ok(ExistingLayout {
         emit_summary_offsets: footer.summary_offset_start != 0,
+        // A data section CRC of 0 is ambiguous: it can mean either "CRC disabled"
+        // or a rare legitimate CRC value of 0. We follow the existing Go CLI
+        // convention and treat 0 as disabled.
         data_crc_enabled: data_end.data_section_crc != 0,
         summary_crc_enabled: footer.summary_crc != 0,
         old_data_end_crc: data_end.data_section_crc,
@@ -684,10 +689,13 @@ fn append_record(output: &mut Vec<u8>, opcode: u8, body: &[u8]) {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::fs;
     use std::io::Cursor;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        amend_mcap_bytes, parse_data_end, AttachmentToAdd, DATA_END_RECORD_LEN, FOOTER_RECORD_LEN,
+        amend_mcap_bytes, amend_mcap_file, parse_data_end, AttachmentToAdd, DATA_END_RECORD_LEN,
+        FOOTER_RECORD_LEN,
     };
     use anyhow::Result;
     use mcap::records::{self, MessageHeader};
@@ -801,6 +809,59 @@ mod tests {
                 metadata: BTreeMap::from([("k".to_string(), "v".to_string())]),
             }],
         )?;
+
+        let mut reader = LinearReader::new_with_options(
+            LinearReaderOptions::default()
+                .with_validate_data_section_crc(true)
+                .with_validate_summary_section_crc(true),
+        );
+        let mut remaining = output.as_slice();
+        while let Some(event) = reader.next_event() {
+            match event? {
+                LinearReadEvent::ReadRequest(need) => {
+                    let read_len = need.min(remaining.len());
+                    reader
+                        .insert(read_len)
+                        .copy_from_slice(&remaining[..read_len]);
+                    reader.notify_read(read_len);
+                    remaining = &remaining[read_len..];
+                }
+                LinearReadEvent::Record { .. } => {}
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn amend_file_path_produces_valid_data_section_crc_when_enabled() -> Result<()> {
+        let input = make_input_mcap(true, true, true, true)?;
+        let mut path = std::env::temp_dir();
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time should be after epoch")
+            .as_nanos();
+        path.push(format!(
+            "mcap-cli-add-common-{pid}-{nonce}.mcap",
+            pid = std::process::id()
+        ));
+
+        fs::write(&path, &input)?;
+        amend_mcap_file(
+            &path,
+            &[AttachmentToAdd {
+                log_time: 101,
+                create_time: 100,
+                name: "calibration.bin".to_string(),
+                media_type: "application/octet-stream".to_string(),
+                data: vec![9, 8, 7, 6, 5],
+            }],
+            &[records::Metadata {
+                name: "demo".to_string(),
+                metadata: BTreeMap::from([("k".to_string(), "v".to_string())]),
+            }],
+        )?;
+        let output = fs::read(&path)?;
+        let _ = fs::remove_file(&path);
 
         let mut reader = LinearReader::new_with_options(
             LinearReaderOptions::default()
