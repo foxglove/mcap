@@ -22,6 +22,7 @@ const KEY_TIME: &str = "time";
 const KEY_TYPE: &str = "type";
 const KEY_MD5SUM: &str = "md5sum";
 const KEY_MESSAGE_DEFINITION: &str = "message_definition";
+const MAX_RECORD_SECTION_SIZE: u32 = 1 << 30; // 1 GiB
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct SchemaKey {
@@ -231,12 +232,20 @@ fn read_record<R: Read>(reader: &mut R) -> Result<Option<BagRecord>> {
     else {
         return Ok(None);
     };
+    ensure!(
+        header_len <= MAX_RECORD_SECTION_SIZE,
+        "record header length {header_len} exceeds maximum {MAX_RECORD_SECTION_SIZE}"
+    );
     let mut header = vec![0u8; header_len as usize];
     reader
         .read_exact(&mut header)
         .context("failed to read record header bytes")?;
 
     let data_len = read_u32(reader).context("failed to read record data length")?;
+    ensure!(
+        data_len <= MAX_RECORD_SECTION_SIZE,
+        "record data length {data_len} exceeds maximum {MAX_RECORD_SECTION_SIZE}"
+    );
     let mut data = vec![0u8; data_len as usize];
     reader
         .read_exact(&mut data)
@@ -408,7 +417,7 @@ mod tests {
     use super::{
         decompress_chunk, parse_header_fields, process_records, read_record, BAG_MAGIC, KEY_CONN,
         KEY_MD5SUM, KEY_MESSAGE_DEFINITION, KEY_OP, KEY_TIME, KEY_TOPIC, KEY_TYPE,
-        OP_BAG_CONNECTION, OP_BAG_HEADER, OP_BAG_MESSAGE_DATA,
+        MAX_RECORD_SECTION_SIZE, OP_BAG_CONNECTION, OP_BAG_HEADER, OP_BAG_MESSAGE_DATA,
     };
 
     fn encode_field_bytes(key: &str, value: &[u8]) -> Vec<u8> {
@@ -543,6 +552,25 @@ mod tests {
         })
         .expect("process should succeed");
         assert_eq!(seen, vec![1, 2]);
+    }
+
+    #[test]
+    fn read_record_rejects_oversized_header_length() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&(MAX_RECORD_SECTION_SIZE + 1).to_le_bytes());
+        let mut reader = Cursor::new(bytes);
+        let err = read_record(&mut reader).expect_err("oversized header should fail");
+        assert!(err.to_string().contains("record header length"));
+    }
+
+    #[test]
+    fn read_record_rejects_oversized_data_length() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&0u32.to_le_bytes());
+        bytes.extend_from_slice(&(MAX_RECORD_SECTION_SIZE + 1).to_le_bytes());
+        let mut reader = Cursor::new(bytes);
+        let err = read_record(&mut reader).expect_err("oversized data should fail");
+        assert!(err.to_string().contains("record data length"));
     }
 
     #[test]

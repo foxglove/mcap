@@ -9,7 +9,7 @@ use mcap::{Compression, WriteOptions};
 use crate::cli::{ConvertCommand, ConvertCompression};
 use crate::context::CommandContext;
 
-const ROS1_BAG_MAGIC: &[u8] = b"#ROSBAG V2.0";
+const ROS1_BAG_MAGIC: &[u8] = b"#ROSBAG V2.0\n";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InputFileType {
@@ -74,7 +74,9 @@ fn detect_file_type<R: Read + Seek>(reader: &mut R) -> Result<InputFileType> {
     }
 
     let rendered = String::from_utf8_lossy(&magic);
-    bail!("unsupported input format (expected ROS1 bag '#ROSBAG V2.0', got prefix '{rendered}')");
+    bail!(
+        "unsupported input format (expected ROS1 bag '#ROSBAG V2.0\\n', got prefix '{rendered}')"
+    );
 }
 
 #[cfg(test)]
@@ -138,7 +140,17 @@ mod tests {
 
     #[test]
     fn rejects_unknown_magic() {
-        let mut cursor = Cursor::new(b"not_a_rosbag".to_vec());
+        let mut cursor = Cursor::new(b"not_a_rosbag!".to_vec());
+        let err = detect_file_type(&mut cursor).expect_err("format should be rejected");
+        assert!(
+            err.to_string().contains("unsupported input format"),
+            "actual error: {err:#}"
+        );
+    }
+
+    #[test]
+    fn rejects_magic_without_newline() {
+        let mut cursor = Cursor::new(b"#ROSBAG V2.0xmore".to_vec());
         let err = detect_file_type(&mut cursor).expect_err("format should be rejected");
         assert!(
             err.to_string().contains("unsupported input format"),
