@@ -91,6 +91,9 @@ fn collect_usage_approximate(mcap: &[u8]) -> Result<Option<Usage>> {
         Ok(footer) => footer,
         Err(_) => return Ok(None),
     };
+    if footer.summary_start == 0 {
+        return Ok(None);
+    }
 
     let total_file_size = mcap.len() as u64;
     let mut usage = Usage {
@@ -455,6 +458,7 @@ fn record_kind_name(opcode: u8) -> Option<&'static str> {
         op::CHUNK => Some("chunk"),
         op::MESSAGE_INDEX => Some("message index"),
         op::CHUNK_INDEX => Some("chunk index"),
+        op::ATTACHMENT => Some("attachment"),
         op::ATTACHMENT_INDEX => Some("attachment index"),
         op::STATISTICS => Some("statistics"),
         op::METADATA => Some("metadata"),
@@ -674,7 +678,7 @@ mod tests {
     fn record_kind_name_matches_go_token_strings() {
         assert_eq!(record_kind_name(op::HEADER), Some("header"));
         assert_eq!(record_kind_name(op::MESSAGE_INDEX), Some("message index"));
-        assert_eq!(record_kind_name(op::ATTACHMENT), None);
+        assert_eq!(record_kind_name(op::ATTACHMENT), Some("attachment"));
     }
 
     #[test]
