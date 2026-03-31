@@ -50,12 +50,8 @@ mod tests {
 
     #[test]
     fn errors_when_metadata_name_missing() {
-        let err = latest_metadata_for_name(
-            &[],
-            &[metadata_index("demo", 0, 0)],
-            "other",
-        )
-        .expect_err("missing metadata should fail");
+        let err = latest_metadata_for_name(&[], &[metadata_index("demo", 0, 0)], "other")
+            .expect_err("missing metadata should fail");
         assert_eq!(err.to_string(), "metadata other does not exist");
     }
 
@@ -93,12 +89,9 @@ mod tests {
             (indexes[0].clone(), indexes[1].clone())
         };
 
-        let latest = latest_metadata_for_name(
-            &mcap_bytes,
-            &[second.clone(), first.clone()],
-            "config",
-        )
-        .expect("metadata should resolve to latest");
+        let latest =
+            latest_metadata_for_name(&mcap_bytes, &[second.clone(), first.clone()], "config")
+                .expect("metadata should resolve to latest");
         assert_eq!(
             latest,
             BTreeMap::from([

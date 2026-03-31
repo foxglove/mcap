@@ -72,9 +72,8 @@ fn select_attachment_index<'a>(
     let Some(offset) = offset else {
         anyhow::bail!("multiple attachments named {name} exist (specify an offset)");
     };
-    requested_match.ok_or_else(|| {
-        anyhow::anyhow!("failed to find attachment {name} at offset {offset}")
-    })
+    requested_match
+        .ok_or_else(|| anyhow::anyhow!("failed to find attachment {name} at offset {offset}"))
 }
 
 #[cfg(test)]
@@ -134,10 +133,7 @@ mod tests {
         let indexes = vec![attachment("a", 10), attachment("a", 20)];
         let err = select_attachment_index(&indexes, "a", Some(999))
             .expect_err("unknown offset should error");
-        assert_eq!(
-            err.to_string(),
-            "failed to find attachment a at offset 999"
-        );
+        assert_eq!(err.to_string(), "failed to find attachment a at offset 999");
     }
 
     #[test]
@@ -145,9 +141,6 @@ mod tests {
         let indexes = vec![attachment("a", 10)];
         let err = select_attachment_index(&indexes, "a", Some(999))
             .expect_err("single record should enforce provided offset");
-        assert_eq!(
-            err.to_string(),
-            "failed to find attachment a at offset 999"
-        );
+        assert_eq!(err.to_string(), "failed to find attachment a at offset 999");
     }
 }
