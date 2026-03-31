@@ -487,7 +487,7 @@ mod tests {
     fn write_test_file(
         chunked: bool,
         chunk_size: Option<u64>,
-        messages: &[(u16, u64, usize)],
+        messages: &[(usize, u64, usize)],
         channels: &[&str],
     ) -> Vec<u8> {
         let mut buffer = Vec::new();
@@ -501,17 +501,23 @@ mod tests {
                 .add_schema("test_schema", "raw", b"{}")
                 .expect("add schema");
 
+            let mut channel_ids = Vec::with_capacity(channels.len());
             for topic in channels {
-                writer
+                let channel_id = writer
                     .add_channel(schema_id, topic, "raw", &BTreeMap::new())
                     .expect("add channel");
+                channel_ids.push(channel_id);
             }
 
-            for (channel_id, log_time, size) in messages {
+            for (channel_index, log_time, size) in messages {
+                let channel_id = channel_ids
+                    .get(*channel_index)
+                    .copied()
+                    .expect("message channel index should be in range");
                 writer
                     .write_to_known_channel(
                         &MessageHeader {
-                            channel_id: *channel_id,
+                            channel_id,
                             sequence: 0,
                             log_time: *log_time,
                             publish_time: *log_time,
@@ -549,7 +555,7 @@ mod tests {
         let mcap = write_test_file(
             false,
             None,
-            &[(1, 0, 100), (1, 1, 50), (2, 2, 25)],
+            &[(0, 0, 100), (0, 1, 50), (1, 2, 25)],
             &["/camera", "/imu"],
         );
 
@@ -564,7 +570,7 @@ mod tests {
         let mcap = write_test_file(
             true,
             Some(128),
-            &[(1, 0, 100), (2, 1, 60), (1, 2, 40)],
+            &[(0, 0, 100), (1, 1, 60), (0, 2, 40)],
             &["/alpha", "/beta"],
         );
 
@@ -579,7 +585,7 @@ mod tests {
         let mcap = write_test_file(
             true,
             Some(256),
-            &[(1, 0, 90), (2, 1, 30), (1, 2, 10), (2, 3, 70)],
+            &[(0, 0, 90), (1, 1, 30), (0, 2, 10), (1, 3, 70)],
             &["/left", "/right"],
         );
 
@@ -626,7 +632,7 @@ mod tests {
 
     #[test]
     fn approximate_usage_falls_back_when_no_chunk_indexes() {
-        let mcap = write_test_file(false, None, &[(1, 0, 10), (1, 1, 10)], &["/data"]);
+        let mcap = write_test_file(false, None, &[(0, 0, 10), (0, 1, 10)], &["/data"]);
         let approximate = collect_usage_approximate(&mcap).expect("approximate");
         assert!(approximate.is_none());
     }
@@ -636,7 +642,7 @@ mod tests {
         let file = write_test_file(
             true,
             Some(1024 * 1024),
-            &[(1, 0, 10), (1, 1, 10)],
+            &[(0, 0, 10), (0, 1, 10)],
             &["/data"],
         );
         let (mut buf, _) = first_chunk_message_index_bytes(&file);
@@ -653,7 +659,7 @@ mod tests {
         let file = write_test_file(
             true,
             Some(1024 * 1024),
-            &[(1, 0, 10), (1, 1, 10)],
+            &[(0, 0, 10), (0, 1, 10)],
             &["/data"],
         );
         let (buf, uncompressed_size) = first_chunk_message_index_bytes(&file);
@@ -668,7 +674,7 @@ mod tests {
         let file = write_test_file(
             true,
             Some(1024 * 1024),
-            &[(1, 0, 10), (1, 1, 10)],
+            &[(0, 0, 10), (0, 1, 10)],
             &["/data"],
         );
         let (buf, _) = first_chunk_message_index_bytes(&file);
@@ -705,7 +711,7 @@ mod tests {
 
     #[test]
     fn exact_usage_includes_magic_bytes_baseline() {
-        let mcap = write_test_file(false, None, &[(1, 0, 10)], &["/data"]);
+        let mcap = write_test_file(false, None, &[(0, 0, 10)], &["/data"]);
         let usage = collect_usage_exact(&mcap).expect("collect exact usage");
         assert!(usage.total_size >= 2 * MCAP_MAGIC_SIZE);
     }
