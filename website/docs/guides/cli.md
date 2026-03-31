@@ -59,7 +59,6 @@ Run `mcap --help` for detailed usage information.
     list        List records of an MCAP file
     merge       Merge a selection of MCAP files by record timestamp
     recover     Recover data from a potentially corrupt MCAP file
-    rename      Rename records of an MCAP file
     version     Output version information
 
     Flags:
@@ -175,15 +174,11 @@ Remote reads will use the index at the end of the file to minimize latency and d
 
 ### Renaming channel topics
 
-Rename a channel's topic in an MCAP file. By default the file is modified in place:
+The `mcap filter` command supports renaming a channel's topic via `--rename-from` and `--rename-to`:
 
-    $ mcap rename channel demo.mcap --from /tf --to /tf_renamed
+    $ mcap filter demo.mcap -o demo-out.mcap --rename-from /tf --rename-to /tf_renamed
 
-To write to a new file instead of modifying the original, use `--output`:
-
-    $ mcap rename channel demo.mcap --from /tf --to /tf_renamed --output demo-out.mcap
-
-Verify the result:
+This can be combined with other filter options like time range or topic selection. Verify the result:
 
 <!-- cspell: disable -->
 
@@ -194,7 +189,7 @@ Verify the result:
 
 <!-- cspell: enable -->
 
-The command will fail if the target topic already exists in the file or if the source topic is not found.
+The command will fail if the target topic already exists in the file.
 
 ### File Diagnostics
 

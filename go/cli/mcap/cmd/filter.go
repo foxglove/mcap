@@ -33,6 +33,8 @@ type filterFlags struct {
 	outputCompression           string
 	chunkSize                   int64
 	unchunked                   bool
+	renameFrom                  string
+	renameTo                    string
 }
 
 type filterOpts struct {
@@ -47,6 +49,8 @@ type filterOpts struct {
 	compressionFormat           mcap.CompressionFormat
 	chunkSize                   int64
 	unchunked                   bool
+	renameFrom                  string
+	renameTo                    string
 }
 
 // parseDateOrNanos parses a string containing either an RFC3339-formatted date with timezone
@@ -136,6 +140,16 @@ func buildFilterOptions(flags *filterFlags) (*filterOpts, error) {
 
 	opts.chunkSize = flags.chunkSize
 	opts.unchunked = flags.unchunked
+
+	if (flags.renameFrom == "") != (flags.renameTo == "") {
+		return nil, errors.New("--rename-from and --rename-to must be used together")
+	}
+	if flags.renameFrom != "" && flags.renameFrom == flags.renameTo {
+		return nil, fmt.Errorf("--rename-from and --rename-to must be different")
+	}
+	opts.renameFrom = flags.renameFrom
+	opts.renameTo = flags.renameTo
+
 	return opts, nil
 }
 
@@ -234,6 +248,24 @@ func includeTopic(topic string, opts *filterOpts) bool {
 	return true
 }
 
+// applyTopicRename returns a shallow copy of the channel with the topic renamed
+// if it matches opts.renameFrom. It returns an error if the channel's topic
+// matches opts.renameTo (collision).
+func applyTopicRename(channel *mcap.Channel, opts *filterOpts) (*mcap.Channel, error) {
+	if opts.renameFrom == "" {
+		return channel, nil
+	}
+	if channel.Topic == opts.renameTo {
+		return nil, fmt.Errorf("target topic %q already exists in the file", opts.renameTo)
+	}
+	if channel.Topic == opts.renameFrom {
+		renamed := *channel
+		renamed.Topic = opts.renameTo
+		return &renamed, nil
+	}
+	return channel, nil
+}
+
 type markableSchema struct {
 	*mcap.Schema
 	written bool
@@ -324,13 +356,17 @@ func filterSeekable(
 	addMessage := func(schema *mcap.Schema, channel *mcap.Channel, msg *mcap.Message) error {
 		// Ensure schema and channel are written before messages
 		if !writtenChannels[channel.ID] {
+			renamedChannel, err := applyTopicRename(channel, opts)
+			if err != nil {
+				return err
+			}
 			if channel.SchemaID != 0 && !writtenSchemas[channel.SchemaID] {
 				if err := mcapWriter.WriteSchema(schema); err != nil {
 					return err
 				}
 				writtenSchemas[channel.SchemaID] = true
 			}
-			if err := mcapWriter.WriteChannel(channel); err != nil {
+			if err := mcapWriter.WriteChannel(renamedChannel); err != nil {
 				return err
 			}
 			writtenChannels[channel.ID] = true
@@ -558,9 +594,17 @@ func filterStreaming(
 			if err != nil {
 				return err
 			}
-			if includeTopic(channel.Topic, opts) {
-				channels[channel.ID] = markableChannel{channel, false}
+			// Check topic inclusion using the original topic name (before rename),
+			// consistent with the seekable path which builds the topic set from
+			// original channel topics.
+			if !includeTopic(channel.Topic, opts) {
+				continue
 			}
+			renamedChannel, err := applyTopicRename(channel, opts)
+			if err != nil {
+				return err
+			}
+			channels[renamedChannel.ID] = markableChannel{renamedChannel, false}
 		case mcap.TokenMessage:
 			message, err := mcap.ParseMessage(data)
 			if err != nil {
@@ -706,6 +750,16 @@ usage:
 			"zstd",
 			"compression algorithm to use on output file",
 		)
+		renameFrom := filterCmd.PersistentFlags().String(
+			"rename-from",
+			"",
+			"existing topic name to rename (requires --rename-to)",
+		)
+		renameTo := filterCmd.PersistentFlags().String(
+			"rename-to",
+			"",
+			"new topic name (requires --rename-from)",
+		)
 		filterCmd.Run = func(_ *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(&filterFlags{
 				output:                      *output,
@@ -722,6 +776,8 @@ usage:
 				includeMetadata:             *includeMetadata,
 				includeAttachments:          *includeAttachments,
 				outputCompression:           *outputCompression,
+				renameFrom:                  *renameFrom,
+				renameTo:                    *renameTo,
 			})
 			if err != nil {
 				die("configuration error: %s", err)
