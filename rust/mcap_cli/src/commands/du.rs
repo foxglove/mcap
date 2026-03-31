@@ -61,10 +61,7 @@ fn collect_usage_exact(mcap: &[u8]) -> Result<Usage> {
     };
     let mut channels = BTreeMap::<u16, String>::new();
     scan_top_level_records(mcap, |opcode, data| {
-        let Some(kind) = record_kind_name(opcode) else {
-            return Ok(());
-        };
-
+        let kind = record_kind_name(opcode);
         let record_size = (RECORD_ENVELOPE_SIZE + data.len()) as u64;
         usage.total_size += record_size;
         *usage.record_kind_size.entry(kind.to_string()).or_default() += record_size;
@@ -566,26 +563,26 @@ fn print_topic_table(topic_message_size: &BTreeMap<String, u64>, total_message_s
     common::print_table(&rows);
 }
 
-fn record_kind_name(opcode: u8) -> Option<&'static str> {
+fn record_kind_name(opcode: u8) -> &'static str {
     match opcode {
-        op::HEADER => Some("header"),
-        op::FOOTER => Some("footer"),
-        op::SCHEMA => Some("schema"),
-        op::CHANNEL => Some("channel"),
-        op::MESSAGE => Some("message"),
-        op::CHUNK => Some("chunk"),
-        op::MESSAGE_INDEX => Some("message index"),
-        op::CHUNK_INDEX => Some("chunk index"),
-        op::ATTACHMENT => Some("attachment"),
-        op::ATTACHMENT_INDEX => Some("attachment index"),
-        op::STATISTICS => Some("statistics"),
-        op::METADATA => Some("metadata"),
-        op::METADATA_INDEX => Some("metadata index"),
-        op::SUMMARY_OFFSET => Some("summary offset"),
-        op::DATA_END => Some("data end"),
+        op::HEADER => "header",
+        op::FOOTER => "footer",
+        op::SCHEMA => "schema",
+        op::CHANNEL => "channel",
+        op::MESSAGE => "message",
+        op::CHUNK => "chunk",
+        op::MESSAGE_INDEX => "message index",
+        op::CHUNK_INDEX => "chunk index",
+        op::ATTACHMENT => "attachment",
+        op::ATTACHMENT_INDEX => "attachment index",
+        op::STATISTICS => "statistics",
+        op::METADATA => "metadata",
+        op::METADATA_INDEX => "metadata index",
+        op::SUMMARY_OFFSET => "summary offset",
+        op::DATA_END => "data end",
         // Keep unknown opcodes in size accounting so totals stay accurate if
         // newer MCAP versions introduce record types this CLI doesn't yet name.
-        _ => Some("unknown"),
+        _ => "unknown",
     }
 }
 
@@ -595,7 +592,7 @@ mod tests {
 
     use super::{
         collect_usage_approximate, collect_usage_exact, parse_chunk_message_indexes,
-        print_record_table, print_topic_table, record_kind_name, Usage, MCAP_MAGIC_SIZE,
+        print_record_table, print_topic_table, record_kind_name, Usage,
     };
     use mcap::records::{op, MessageHeader};
 
@@ -802,9 +799,9 @@ mod tests {
 
     #[test]
     fn record_kind_name_matches_go_token_strings() {
-        assert_eq!(record_kind_name(op::HEADER), Some("header"));
-        assert_eq!(record_kind_name(op::MESSAGE_INDEX), Some("message index"));
-        assert_eq!(record_kind_name(op::ATTACHMENT), Some("attachment"));
+        assert_eq!(record_kind_name(op::HEADER), "header");
+        assert_eq!(record_kind_name(op::MESSAGE_INDEX), "message index");
+        assert_eq!(record_kind_name(op::ATTACHMENT), "attachment");
     }
 
     #[test]
@@ -828,6 +825,6 @@ mod tests {
     fn exact_usage_includes_magic_bytes_baseline() {
         let mcap = write_test_file(false, None, &[(0, 0, 10)], &["/data"]);
         let usage = collect_usage_exact(&mcap).expect("collect exact usage");
-        assert!(usage.total_size >= 2 * MCAP_MAGIC_SIZE);
+        assert_eq!(usage.total_size, mcap.len() as u64);
     }
 }
