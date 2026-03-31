@@ -70,6 +70,13 @@ pub(crate) fn amend_mcap_file(
             .with_context(|| format!("data end offset out of range for '{}'", file.display()))?;
         fs::write(&backup_path, tail)
             .with_context(|| format!("failed to write tail backup '{}'", backup_path.display()))?;
+        let backup_file = fs::OpenOptions::new()
+            .read(true)
+            .open(&backup_path)
+            .with_context(|| format!("failed to reopen tail backup '{}'", backup_path.display()))?;
+        backup_file
+            .sync_all()
+            .with_context(|| format!("failed to sync tail backup '{}'", backup_path.display()))?;
         let summary = collect_existing_summary(&mapped)?;
         (layout, summary)
     };
@@ -193,6 +200,9 @@ pub(crate) fn amend_mcap_file(
         writable_file
             .flush()
             .context("failed to flush output file")?;
+        writable_file
+            .sync_all()
+            .context("failed to sync output file")?;
         Ok(())
     })();
 
@@ -205,8 +215,11 @@ pub(crate) fn amend_mcap_file(
         }
         Err(err) => Err(err).with_context(|| {
             format!(
-                "in-place update failed; restore file tail from backup '{}'",
-                backup_path.display()
+                "in-place update failed; original tail backup saved at '{}'. \
+to restore manually: truncate '{}' to {} bytes and append the backup file contents.",
+                backup_path.display(),
+                file.display(),
+                layout.old_data_end_offset
             )
         }),
     }

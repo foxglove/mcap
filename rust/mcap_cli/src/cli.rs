@@ -81,10 +81,12 @@ pub enum AddSubcommand {
     Metadata(AddMetadataCommand),
 }
 
+/// Add an attachment to an MCAP file.
+///
+/// WARNING: this command rewrites the MCAP file in place and can leave it
+/// corrupted if interrupted (for example process kill or disk full).
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct AddAttachmentCommand {
-    /// WARNING: this command rewrites the MCAP file in place and can leave
-    /// it corrupted if interrupted (for example process kill or disk full).
     /// Local path to the MCAP file
     pub file: PathBuf,
 
@@ -109,10 +111,12 @@ pub struct AddAttachmentCommand {
     pub creation_time: Option<String>,
 }
 
+/// Add metadata to an MCAP file.
+///
+/// WARNING: this command rewrites the MCAP file in place and can leave it
+/// corrupted if interrupted (for example process kill or disk full).
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct AddMetadataCommand {
-    /// WARNING: this command rewrites the MCAP file in place and can leave
-    /// it corrupted if interrupted (for example process kill or disk full).
     /// Local path to the MCAP file
     pub file: PathBuf,
 
