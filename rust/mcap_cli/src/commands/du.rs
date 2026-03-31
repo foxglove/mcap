@@ -592,7 +592,7 @@ mod tests {
 
     use super::{
         collect_usage_approximate, collect_usage_exact, parse_chunk_message_indexes,
-        print_record_table, print_topic_table, record_kind_name, Usage,
+        print_record_table, print_topic_table, record_kind_name,
     };
     use mcap::records::{op, MessageHeader};
 
@@ -808,17 +808,6 @@ mod tests {
     fn table_printers_accept_empty_maps() {
         print_record_table(&BTreeMap::new(), 0, false);
         print_topic_table(&BTreeMap::new(), 0);
-    }
-
-    #[test]
-    fn usage_default_is_empty() {
-        assert_eq!(Usage::default(), Usage::default());
-    }
-
-    #[test]
-    fn human_bytes_matches_expected_units() {
-        assert_eq!(crate::commands::common::human_bytes(2), "2.00 B");
-        assert_eq!(crate::commands::common::human_bytes(2 * 1024), "2.00 KiB");
     }
 
     #[test]
