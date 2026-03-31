@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Seek, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
 use binrw::prelude::*;
@@ -58,133 +59,171 @@ pub(crate) fn amend_mcap_file(
     attachments: &[AttachmentToAdd],
     metadata: &[records::Metadata],
 ) -> Result<()> {
+    let backup_path = make_tail_backup_path(file)?;
     let (layout, mut existing_summary) = {
         let mapped = crate::commands::common::map_file(file)
             .with_context(|| format!("failed to read '{}'", file.display()))?;
         let layout = parse_existing_layout(&mapped)?;
+        let tail_start = layout.old_data_end_offset as usize;
+        let tail = mapped
+            .get(tail_start..)
+            .with_context(|| format!("data end offset out of range for '{}'", file.display()))?;
+        fs::write(&backup_path, tail)
+            .with_context(|| format!("failed to write tail backup '{}'", backup_path.display()))?;
         let summary = collect_existing_summary(&mapped)?;
         (layout, summary)
     };
 
-    let mut writable_file = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(file)
-        .with_context(|| format!("failed to open '{}' for in-place update", file.display()))?;
-    writable_file
-        .seek(std::io::SeekFrom::Start(layout.old_data_end_offset))
-        .with_context(|| format!("failed to seek in '{}'", file.display()))?;
-
-    let mut data_hasher = layout
-        .data_crc_enabled
-        .then(|| crc32fast::Hasher::new_with_initial(layout.old_data_end_crc));
-
-    let mut new_attachment_indexes = Vec::with_capacity(attachments.len());
-    for attachment in attachments {
-        let offset = writable_file
-            .stream_position()
-            .context("failed to query output offset")?;
-        let record_bytes = build_attachment_record(attachment)?;
-        if let Some(hasher) = &mut data_hasher {
-            hasher.update(&record_bytes);
-        }
+    let write_result: Result<()> = (|| {
+        let mut writable_file = fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(file)
+            .with_context(|| format!("failed to open '{}' for in-place update", file.display()))?;
         writable_file
-            .write_all(&record_bytes)
-            .context("failed to write attachment record")?;
-        new_attachment_indexes.push(records::AttachmentIndex {
-            offset,
-            length: record_bytes.len() as u64,
-            log_time: attachment.log_time,
-            create_time: attachment.create_time,
-            data_size: attachment.data.len() as u64,
-            name: attachment.name.clone(),
-            media_type: attachment.media_type.clone(),
-        });
-    }
+            .seek(std::io::SeekFrom::Start(layout.old_data_end_offset))
+            .with_context(|| format!("failed to seek in '{}'", file.display()))?;
 
-    let mut new_metadata_indexes = Vec::with_capacity(metadata.len());
-    for metadata_record in metadata {
-        let offset = writable_file
-            .stream_position()
-            .context("failed to query output offset")?;
-        let record_bytes = build_metadata_record(metadata_record)?;
-        if let Some(hasher) = &mut data_hasher {
-            hasher.update(&record_bytes);
+        let mut data_hasher = layout
+            .data_crc_enabled
+            .then(|| crc32fast::Hasher::new_with_initial(layout.old_data_end_crc));
+
+        let mut new_attachment_indexes = Vec::with_capacity(attachments.len());
+        for attachment in attachments {
+            let offset = writable_file
+                .stream_position()
+                .context("failed to query output offset")?;
+            let record_bytes = build_attachment_record(attachment)?;
+            if let Some(hasher) = &mut data_hasher {
+                hasher.update(&record_bytes);
+            }
+            writable_file
+                .write_all(&record_bytes)
+                .context("failed to write attachment record")?;
+            new_attachment_indexes.push(records::AttachmentIndex {
+                offset,
+                length: record_bytes.len() as u64,
+                log_time: attachment.log_time,
+                create_time: attachment.create_time,
+                data_size: attachment.data.len() as u64,
+                name: attachment.name.clone(),
+                media_type: attachment.media_type.clone(),
+            });
         }
+
+        let mut new_metadata_indexes = Vec::with_capacity(metadata.len());
+        for metadata_record in metadata {
+            let offset = writable_file
+                .stream_position()
+                .context("failed to query output offset")?;
+            let record_bytes = build_metadata_record(metadata_record)?;
+            if let Some(hasher) = &mut data_hasher {
+                hasher.update(&record_bytes);
+            }
+            writable_file
+                .write_all(&record_bytes)
+                .context("failed to write metadata record")?;
+            new_metadata_indexes.push(records::MetadataIndex {
+                offset,
+                length: record_bytes.len() as u64,
+                name: metadata_record.name.clone(),
+            });
+        }
+
+        let data_section_crc = data_hasher.map(|hasher| hasher.finalize()).unwrap_or(0);
+        let mut data_end_record = Vec::new();
+        append_data_end_record(&mut data_end_record, data_section_crc)?;
         writable_file
-            .write_all(&record_bytes)
-            .context("failed to write metadata record")?;
-        new_metadata_indexes.push(records::MetadataIndex {
-            offset,
-            length: record_bytes.len() as u64,
-            name: metadata_record.name.clone(),
-        });
-    }
+            .write_all(&data_end_record)
+            .context("failed to write data end record")?;
 
-    let data_section_crc = data_hasher.map(|hasher| hasher.finalize()).unwrap_or(0);
-    let mut data_end_record = Vec::new();
-    append_data_end_record(&mut data_end_record, data_section_crc)?;
-    writable_file
-        .write_all(&data_end_record)
-        .context("failed to write data end record")?;
+        if let Some(statistics) = &mut existing_summary.statistics {
+            statistics.attachment_count = statistics
+                .attachment_count
+                .saturating_add(new_attachment_indexes.len() as u32);
+            statistics.metadata_count = statistics
+                .metadata_count
+                .saturating_add(new_metadata_indexes.len() as u32);
+        }
 
-    if let Some(statistics) = &mut existing_summary.statistics {
-        statistics.attachment_count = statistics
-            .attachment_count
-            .saturating_add(new_attachment_indexes.len() as u32);
-        statistics.metadata_count = statistics
-            .metadata_count
-            .saturating_add(new_metadata_indexes.len() as u32);
-    }
+        let summary_start = writable_file
+            .stream_position()
+            .context("failed to query summary start offset")?;
+        let summary = build_summary_bytes(
+            &existing_summary,
+            &new_attachment_indexes,
+            &new_metadata_indexes,
+            summary_start,
+            layout.emit_summary_offsets,
+        )?;
+        writable_file
+            .write_all(&summary.bytes)
+            .context("failed to write summary records")?;
 
-    let summary_start = writable_file
-        .stream_position()
-        .context("failed to query summary start offset")?;
-    let summary = build_summary_bytes(
-        &existing_summary,
-        &new_attachment_indexes,
-        &new_metadata_indexes,
-        summary_start,
-        layout.emit_summary_offsets,
-    )?;
-    writable_file
-        .write_all(&summary.bytes)
-        .context("failed to write summary records")?;
+        let summary_crc = if layout.summary_crc_enabled {
+            compute_summary_crc(
+                &summary.bytes,
+                summary.summary_start,
+                summary.summary_offset_start,
+            )
+        } else {
+            0
+        };
 
-    let summary_crc = if layout.summary_crc_enabled {
-        compute_summary_crc(
-            &summary.bytes,
+        let mut footer_record = Vec::new();
+        append_footer_record(
+            &mut footer_record,
             summary.summary_start,
             summary.summary_offset_start,
-        )
-    } else {
-        0
-    };
+            summary_crc,
+        )?;
+        writable_file
+            .write_all(&footer_record)
+            .context("failed to write footer")?;
+        writable_file
+            .write_all(mcap::MAGIC)
+            .context("failed to write trailing magic")?;
 
-    let mut footer_record = Vec::new();
-    append_footer_record(
-        &mut footer_record,
-        summary.summary_start,
-        summary.summary_offset_start,
-        summary_crc,
-    )?;
-    writable_file
-        .write_all(&footer_record)
-        .context("failed to write footer")?;
-    writable_file
-        .write_all(mcap::MAGIC)
-        .context("failed to write trailing magic")?;
+        let final_length = writable_file
+            .stream_position()
+            .context("failed to query final output length")?;
+        writable_file
+            .set_len(final_length)
+            .context("failed to truncate output file")?;
+        writable_file
+            .flush()
+            .context("failed to flush output file")?;
+        Ok(())
+    })();
 
-    let final_length = writable_file
-        .stream_position()
-        .context("failed to query final output length")?;
-    writable_file
-        .set_len(final_length)
-        .context("failed to truncate output file")?;
-    writable_file
-        .flush()
-        .context("failed to flush output file")?;
-    Ok(())
+    match write_result {
+        Ok(()) => {
+            fs::remove_file(&backup_path).with_context(|| {
+                format!("failed to remove tail backup '{}'", backup_path.display())
+            })?;
+            Ok(())
+        }
+        Err(err) => Err(err).with_context(|| {
+            format!(
+                "in-place update failed; restore file tail from backup '{}'",
+                backup_path.display()
+            )
+        }),
+    }
+}
+
+fn make_tail_backup_path(file: &Path) -> Result<PathBuf> {
+    let file_name = file
+        .file_name()
+        .and_then(|name| name.to_str())
+        .context("input path has no valid filename")?;
+    let pid = std::process::id();
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system time is before unix epoch")?
+        .as_nanos();
+    let backup_name = format!("{file_name}.mcap-add-tail-{pid}-{nonce}.bak");
+    Ok(file.with_file_name(backup_name))
 }
 
 #[cfg(test)]

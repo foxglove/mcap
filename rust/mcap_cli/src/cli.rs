@@ -83,6 +83,8 @@ pub enum AddSubcommand {
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct AddAttachmentCommand {
+    /// WARNING: this command rewrites the MCAP file in place and can leave
+    /// it corrupted if interrupted (for example process kill or disk full).
     /// Local path to the MCAP file
     pub file: PathBuf,
 
@@ -109,6 +111,8 @@ pub struct AddAttachmentCommand {
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct AddMetadataCommand {
+    /// WARNING: this command rewrites the MCAP file in place and can leave
+    /// it corrupted if interrupted (for example process kill or disk full).
     /// Local path to the MCAP file
     pub file: PathBuf,
 
