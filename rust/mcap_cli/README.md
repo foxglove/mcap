@@ -15,7 +15,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | `compress`   | 🔴     |                                                                                                                                  |
 | `convert`    | 🔴     |                                                                                                                                  |
 | `decompress` | 🔴     |                                                                                                                                  |
-| `doctor`     | 🔴     |                                                                                                                                  |
+| `doctor`     | 🟢     |                                                                                                                                  |
 | `du`         | 🟢     |                                                                                                                                  |
 | `filter`     | 🔴     |                                                                                                                                  |
 | `get`        | 🟢     |                                                                                                                                  |
