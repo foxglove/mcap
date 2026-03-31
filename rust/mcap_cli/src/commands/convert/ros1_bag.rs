@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use std::io::{Cursor, Read, Seek};
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail, ensure};
+use anyhow::{bail, ensure, Context, Result};
 
 const BAG_MAGIC: &[u8] = b"#ROSBAG V2.0\n";
 
@@ -81,7 +81,9 @@ pub fn convert_ros1_bag<W: std::io::Write + Seek, R: Read + Seek>(
         .context("failed to create MCAP writer")?;
     let mut state = ConversionState::new();
 
-    process_records(input, |record| process_record(&mut writer, &mut state, record))?;
+    process_records(input, |record| {
+        process_record(&mut writer, &mut state, record)
+    })?;
 
     writer.finish().context("failed to finalize MCAP writer")?;
     Ok(())
@@ -165,6 +167,12 @@ fn process_message<W: std::io::Write + Seek>(
     let Some(conn_info) = state.connections.get(&conn_id) else {
         bail!("message references unknown connection id {conn_id}");
     };
+    // We intentionally write via the high-level `Writer::write()` path (instead of
+    // `write_to_known_channel`) so we can preserve ROS `conn` IDs as MCAP channel IDs.
+    // `add_channel()` auto-assigns channel IDs, and `write_to_known_channel()` requires
+    // those writer-assigned IDs. Reconstructing a channel with the explicit ID here keeps
+    // Go parity for conn->channel mapping, while `Writer::write()` deduplicates channel and
+    // schema records after first use.
     let schema = mcap::Schema {
         id: conn_info.schema_id,
         name: conn_info.schema_name.clone(),
@@ -218,7 +226,8 @@ fn process_records<R: Read, F: FnMut(BagRecord) -> Result<()>>(
 }
 
 fn read_record<R: Read>(reader: &mut R) -> Result<Option<BagRecord>> {
-    let Some(header_len) = read_u32_maybe_eof(reader).context("failed to read record header length")?
+    let Some(header_len) =
+        read_u32_maybe_eof(reader).context("failed to read record header length")?
     else {
         return Ok(None);
     };
@@ -328,7 +337,9 @@ fn header_u32(header_fields: &BTreeMap<String, Vec<u8>>, key: &str) -> Result<u3
         "header field '{key}' expected 4 bytes, got {}",
         bytes.len()
     );
-    Ok(u32::from_le_bytes(bytes.try_into().expect("length verified")))
+    Ok(u32::from_le_bytes(
+        bytes.try_into().expect("length verified"),
+    ))
 }
 
 fn required_string(fields: &BTreeMap<String, Vec<u8>>, key: &str) -> Result<String> {
@@ -390,13 +401,14 @@ fn decompress_chunk(compression: &str, compressed: &[u8]) -> Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use std::io::{Cursor, Read, Seek, SeekFrom, Write};
+    use std::path::PathBuf;
 
     use anyhow::{Context, Result};
 
     use super::{
-        BAG_MAGIC, KEY_CONN, KEY_MD5SUM, KEY_MESSAGE_DEFINITION, KEY_OP, KEY_TIME, KEY_TOPIC,
-        KEY_TYPE, OP_BAG_CONNECTION, OP_BAG_HEADER, OP_BAG_MESSAGE_DATA, decompress_chunk,
-        parse_header_fields, process_records, read_record,
+        decompress_chunk, parse_header_fields, process_records, read_record, BAG_MAGIC, KEY_CONN,
+        KEY_MD5SUM, KEY_MESSAGE_DEFINITION, KEY_OP, KEY_TIME, KEY_TOPIC, KEY_TYPE,
+        OP_BAG_CONNECTION, OP_BAG_HEADER, OP_BAG_MESSAGE_DATA,
     };
 
     fn encode_field_bytes(key: &str, value: &[u8]) -> Vec<u8> {
@@ -491,6 +503,12 @@ mod tests {
         bag
     }
 
+    fn fixture_path(relative_from_repo_root: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(relative_from_repo_root)
+    }
+
     #[test]
     fn parses_header_fields_with_binary_values() {
         let mut encoded = Vec::new();
@@ -539,7 +557,8 @@ mod tests {
         let payload = b"hello rosbag bz2";
         let mut encoded = Vec::new();
         {
-            let mut encoder = bzip2::write::BzEncoder::new(&mut encoded, bzip2::Compression::best());
+            let mut encoder =
+                bzip2::write::BzEncoder::new(&mut encoded, bzip2::Compression::best());
             encoder
                 .write_all(payload)
                 .expect("failed to write bz2 payload");
@@ -570,7 +589,9 @@ mod tests {
     #[test]
     fn rejects_unknown_compression() {
         let err = decompress_chunk("snappy", &[1, 2, 3]).expect_err("unsupported expected");
-        assert!(err.to_string().contains("unsupported ROS1 bag chunk compression"));
+        assert!(err
+            .to_string()
+            .contains("unsupported ROS1 bag chunk compression"));
     }
 
     #[test]
@@ -608,8 +629,9 @@ mod tests {
 
     #[test]
     fn convert_real_bz2_ros1_bag_fixture() -> Result<()> {
-        let input = std::fs::File::open("/workspace/go/ros/testdata/markers.bz2.bag")
-            .context("failed to open markers.bz2.bag fixture")?;
+        let fixture = fixture_path("go/ros/testdata/markers.bz2.bag");
+        let input =
+            std::fs::File::open(&fixture).context("failed to open markers.bz2.bag fixture")?;
         let mut output = Cursor::new(Vec::<u8>::new());
         super::convert_ros1_bag(
             &mut output,
@@ -646,8 +668,8 @@ mod tests {
 
     #[test]
     fn convert_real_uncompressed_ros1_bag_fixture() -> Result<()> {
-        let input = std::fs::File::open("/workspace/testdata/bags/demo.bag")
-            .context("failed to open demo.bag fixture")?;
+        let fixture = fixture_path("testdata/bags/demo.bag");
+        let input = std::fs::File::open(&fixture).context("failed to open demo.bag fixture")?;
         let mut output = Cursor::new(Vec::<u8>::new());
         super::convert_ros1_bag(
             &mut output,
@@ -661,10 +683,12 @@ mod tests {
         let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
         assert!(!summary.channels.is_empty());
         assert!(!summary.schemas.is_empty());
-        assert!(mcap::MessageStream::new(&bytes)?
-            .collect::<mcap::McapResult<Vec<_>>>()?
-            .len()
-            > 0);
+        assert!(
+            mcap::MessageStream::new(&bytes)?
+                .collect::<mcap::McapResult<Vec<_>>>()?
+                .len()
+                > 0
+        );
         Ok(())
     }
 }

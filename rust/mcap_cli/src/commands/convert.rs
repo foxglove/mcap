@@ -3,7 +3,7 @@ mod ros1_bag;
 use std::fs::File;
 use std::io::{BufWriter, Read, Seek};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use mcap::{Compression, WriteOptions};
 
 use crate::cli::{ConvertCommand, ConvertCompression};
@@ -74,9 +74,7 @@ fn detect_file_type<R: Read + Seek>(reader: &mut R) -> Result<InputFileType> {
     }
 
     let rendered = String::from_utf8_lossy(&magic);
-    bail!(
-        "unsupported input format (expected ROS1 bag '#ROSBAG V2.0', got prefix '{rendered}')"
-    );
+    bail!("unsupported input format (expected ROS1 bag '#ROSBAG V2.0', got prefix '{rendered}')");
 }
 
 #[cfg(test)]
@@ -84,7 +82,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::io::{Cursor, Read, Seek, SeekFrom};
 
-    use super::{InputFileType, build_write_options, detect_file_type};
+    use super::{build_write_options, detect_file_type, InputFileType};
     use crate::cli::ConvertCompression;
 
     fn build_sample_mcap(include_crc: bool) -> Vec<u8> {
