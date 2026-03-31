@@ -36,9 +36,9 @@ mod tests {
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, Command,
-        GetCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand,
-        ListChunksCommand, ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand,
-        VersionCommand,
+        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
+        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
     };
 
     #[test]
@@ -155,12 +155,32 @@ mod tests {
 
     #[test]
     fn parses_nested_get_subcommands() {
-        let args = Args::try_parse_from(["mcap", "get", "attachment"])
+        let args = Args::try_parse_from(["mcap", "get", "attachment", "demo.mcap", "--name", "a"])
             .expect("get attachment should parse");
         assert_eq!(
             args.command,
             Command::Get(GetCommand {
-                command: GetSubcommand::Attachment,
+                command: GetSubcommand::Attachment(GetAttachmentCommand {
+                    file: "demo.mcap".into(),
+                    name: "a".to_string(),
+                    offset: None,
+                    output: None,
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_get_metadata_subcommand() {
+        let args = Args::try_parse_from(["mcap", "get", "metadata", "demo.mcap", "--name", "cfg"])
+            .expect("get metadata should parse");
+        assert_eq!(
+            args.command,
+            Command::Get(GetCommand {
+                command: GetSubcommand::Metadata(GetMetadataCommand {
+                    file: "demo.mcap".into(),
+                    name: "cfg".to_string(),
+                }),
             })
         );
     }
