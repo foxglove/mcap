@@ -96,7 +96,10 @@ mod tests {
     #[test]
     fn payload_preview_truncates_with_ellipsis() {
         let data: Vec<u8> = (0..12).collect();
-        assert_eq!(format_payload_preview(&data, 10), "[0 1 2 3 4 5 6 7 8 9]...");
+        assert_eq!(
+            format_payload_preview(&data, 10),
+            "[0 1 2 3 4 5 6 7 8 9]..."
+        );
     }
 
     #[test]
@@ -108,6 +111,9 @@ mod tests {
     #[test]
     fn message_line_uses_no_schema_for_schemaless_channel() {
         let message = sample_message(None, vec![1, 2, 3]);
-        assert_eq!(format_message_line(&message), "42 /demo [no schema] [1 2 3]");
+        assert_eq!(
+            format_message_line(&message),
+            "42 /demo [no schema] [1 2 3]"
+        );
     }
 }
