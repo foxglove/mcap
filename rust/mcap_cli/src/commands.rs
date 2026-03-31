@@ -40,8 +40,8 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
             AddSubcommand::Metadata => add_metadata::run(ctx),
         },
         Command::Get(args) => match args.command {
-            GetSubcommand::Attachment => get_attachment::run(ctx),
-            GetSubcommand::Metadata => get_metadata::run(ctx),
+            GetSubcommand::Attachment(args) => get_attachment::run(ctx, args),
+            GetSubcommand::Metadata(args) => get_metadata::run(ctx, args),
         },
         Command::List(args) => match args.command {
             ListSubcommand::Attachments(args) => list_attachments::run(ctx, args),
@@ -70,9 +70,9 @@ mod tests {
 
     use super::dispatch;
     use crate::cli::{
-        AddCommand, AddSubcommand, Command, InfoCommand, ListAttachmentsCommand,
-        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
-        ListSchemasCommand, ListSubcommand,
+        AddCommand, AddSubcommand, Command, GetAttachmentCommand, GetMetadataCommand, InfoCommand,
+        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand,
     };
     use crate::context::CommandContext;
 
@@ -112,6 +112,35 @@ mod tests {
         )
         .expect_err("add attachment should be a stub");
         assert_eq!(err.to_string(), "'add attachment' is not implemented yet");
+    }
+
+    #[test]
+    fn get_subcommands_require_existing_file() {
+        let attachment_err = dispatch(
+            &CommandContext::default(),
+            Command::Get(crate::cli::GetCommand {
+                command: crate::cli::GetSubcommand::Attachment(GetAttachmentCommand {
+                    file: PathBuf::from("does-not-exist.mcap"),
+                    name: "attachment.bin".to_string(),
+                    offset: None,
+                    output: None,
+                }),
+            }),
+        )
+        .expect_err("get attachment should fail on missing file");
+        assert!(attachment_err.to_string().contains("couldn't open"));
+
+        let metadata_err = dispatch(
+            &CommandContext::default(),
+            Command::Get(crate::cli::GetCommand {
+                command: crate::cli::GetSubcommand::Metadata(GetMetadataCommand {
+                    file: PathBuf::from("does-not-exist.mcap"),
+                    name: "demo".to_string(),
+                }),
+            }),
+        )
+        .expect_err("get metadata should fail on missing file");
+        assert!(metadata_err.to_string().contains("couldn't open"));
     }
 
     #[test]
