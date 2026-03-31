@@ -121,6 +121,11 @@ impl Doctor {
             match event {
                 Err(err) => {
                     self.error(format!("Failed to read next token: {err:#}"));
+                    // Stop scanning after an event-level reader error. At this point the
+                    // underlying stream state may be desynchronized (bad magic, CRC mismatch,
+                    // mid-record corruption), so continuing to call `next_event()` is not
+                    // reliable. We still keep previously collected diagnostics and run the
+                    // post-scan cross-checks below.
                     break;
                 }
                 Ok(mcap::sans_io::LinearReadEvent::ReadRequest(need)) => {
