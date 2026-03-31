@@ -36,9 +36,9 @@ mod tests {
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        Command, DuCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand,
-        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
+        Command, DuCommand, FilterCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand,
+        GetSubcommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand,
+        ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
     };
 
     #[test]
@@ -282,6 +282,52 @@ mod tests {
             Command::Du(DuCommand {
                 approximate: true,
                 file: "demo.mcap".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_filter_subcommand_with_flags() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "filter",
+            "in.mcap",
+            "-o",
+            "out.mcap",
+            "-y",
+            "camera.*",
+            "-l",
+            "camera_.*",
+            "-S",
+            "100",
+            "-E",
+            "200",
+            "--include-metadata",
+            "--include-attachments",
+            "--output-compression",
+            "lz4",
+            "--chunk-size",
+            "2048",
+        ])
+        .expect("filter should parse");
+        assert_eq!(
+            args.command,
+            Command::Filter(FilterCommand {
+                file: Some("in.mcap".into()),
+                output: Some("out.mcap".into()),
+                include_topic_regex: vec!["camera.*".to_string()],
+                exclude_topic_regex: vec![],
+                last_per_channel_topic_regex: vec!["camera_.*".to_string()],
+                start: Some("100".to_string()),
+                start_secs: 0,
+                start_nsecs: 0,
+                end: Some("200".to_string()),
+                end_secs: 0,
+                end_nsecs: 0,
+                include_metadata: true,
+                include_attachments: true,
+                output_compression: "lz4".to_string(),
+                chunk_size: 2048,
             })
         );
     }
