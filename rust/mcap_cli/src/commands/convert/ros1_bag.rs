@@ -1,5 +1,7 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read, Seek};
+use std::sync::Arc;
 
 use anyhow::{Context, Result, bail, ensure};
 
@@ -30,6 +32,11 @@ struct SchemaKey {
 #[derive(Debug, Clone)]
 struct ConnectionInfo {
     channel_id: u16,
+    topic: String,
+    schema_id: u16,
+    schema_name: String,
+    schema_data: Vec<u8>,
+    metadata: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone)]
@@ -126,10 +133,18 @@ fn process_connection<W: std::io::Write + Seek>(
     };
 
     let metadata = to_string_map(conn_data)?;
-    let channel_id = writer
-        .add_channel(schema_id, topic, "ros1", &metadata)
-        .context("failed to write ROS1 channel")?;
-    state.connections.insert(conn_id, ConnectionInfo { channel_id });
+    let channel_id = conn_id_to_channel_id(conn_id)?;
+    state.connections.insert(
+        conn_id,
+        ConnectionInfo {
+            channel_id,
+            topic: topic.to_string(),
+            schema_id,
+            schema_name: msg_type,
+            schema_data: message_definition,
+            metadata,
+        },
+    );
     Ok(())
 }
 
@@ -150,17 +165,28 @@ fn process_message<W: std::io::Write + Seek>(
     let Some(conn_info) = state.connections.get(&conn_id) else {
         bail!("message references unknown connection id {conn_id}");
     };
+    let schema = mcap::Schema {
+        id: conn_info.schema_id,
+        name: conn_info.schema_name.clone(),
+        encoding: "ros1msg".to_string(),
+        data: Cow::Borrowed(&conn_info.schema_data),
+    };
+    let channel = mcap::Channel {
+        id: conn_info.channel_id,
+        topic: conn_info.topic.clone(),
+        schema: Some(Arc::new(schema)),
+        message_encoding: "ros1".to_string(),
+        metadata: conn_info.metadata.clone(),
+    };
 
     writer
-        .write_to_known_channel(
-            &mcap::records::MessageHeader {
-                channel_id: conn_info.channel_id,
-                sequence: state.sequence,
-                log_time,
-                publish_time: log_time,
-            },
-            data,
-        )
+        .write(&mcap::Message {
+            channel: Arc::new(channel),
+            sequence: state.sequence,
+            log_time,
+            publish_time: log_time,
+            data: Cow::Borrowed(data),
+        })
         .context("failed to write converted ROS1 message")?;
     state.sequence = state.sequence.wrapping_add(1);
     Ok(())
@@ -329,6 +355,10 @@ fn ros_time_to_nanos(raw: &[u8]) -> u64 {
     let secs = u32::from_le_bytes(raw[0..4].try_into().expect("len checked by caller"));
     let nsecs = u32::from_le_bytes(raw[4..8].try_into().expect("len checked by caller"));
     u64::from(secs) * 1_000_000_000 + u64::from(nsecs)
+}
+
+fn conn_id_to_channel_id(conn_id: u32) -> Result<u16> {
+    u16::try_from(conn_id).with_context(|| format!("connection id {conn_id} exceeds u16 range"))
 }
 
 fn decompress_chunk(compression: &str, compressed: &[u8]) -> Result<Vec<u8>> {
@@ -559,6 +589,8 @@ mod tests {
         let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
         assert_eq!(summary.schemas.len(), 1);
         assert_eq!(summary.channels.len(), 2);
+        assert!(summary.channels.contains_key(&0));
+        assert!(summary.channels.contains_key(&1));
         let channel = summary
             .channels
             .values()
