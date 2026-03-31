@@ -9,6 +9,9 @@ use binrw::prelude::*;
 use mcap::records::{self, op, Record};
 
 const FOOTER_RECORD_LEN: u64 = 1 + 8 + 20;
+// NOTE: this assumes the current MCAP spec shape for DataEnd
+// (opcode + u64 length + u32 crc payload). If DataEnd ever gains fields,
+// offset math in parse_existing_layout must be updated.
 const DATA_END_RECORD_LEN: u64 = 1 + 8 + 4;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -423,6 +426,10 @@ fn collect_existing_summary(input: &[u8]) -> Result<ExistingSummaryData> {
     }
 
     let mut data = ExistingSummaryData::default();
+    // Summaryless files do not contain summary index records in practice.
+    // This linear scan can recover schema/channel definitions from data
+    // records, but cannot synthesize attachment/metadata/chunk index offsets
+    // for pre-existing records without offset-aware parsing.
     for record in mcap::read::LinearReader::new(input).context("failed to scan MCAP records")? {
         let record = record.context("failed to parse MCAP record")?;
         if let Record::Chunk {
