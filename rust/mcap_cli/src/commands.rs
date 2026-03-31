@@ -104,7 +104,7 @@ mod tests {
     }
 
     #[test]
-    fn add_subcommands_require_existing_mcap_file() {
+    fn add_attachment_requires_existing_attachment_source() {
         let err = dispatch(
             &CommandContext::default(),
             Command::Add(AddCommand {
@@ -120,7 +120,10 @@ mod tests {
         )
         .expect_err("add attachment should fail on missing file");
         assert!(err.to_string().contains("failed to read attachment source"));
+    }
 
+    #[test]
+    fn add_metadata_requires_existing_mcap_file() {
         let err = dispatch(
             &CommandContext::default(),
             Command::Add(AddCommand {
