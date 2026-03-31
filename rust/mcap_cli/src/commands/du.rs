@@ -65,7 +65,7 @@ fn collect_usage_exact(mcap: &[u8]) -> Result<Usage> {
             return Ok(());
         };
 
-        let record_size = data.len() as u64;
+        let record_size = (RECORD_ENVELOPE_SIZE + data.len()) as u64;
         usage.total_size += record_size;
         *usage.record_kind_size.entry(kind.to_string()).or_default() += record_size;
 
