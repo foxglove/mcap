@@ -583,7 +583,9 @@ fn record_kind_name(opcode: u8) -> Option<&'static str> {
         op::METADATA_INDEX => Some("metadata index"),
         op::SUMMARY_OFFSET => Some("summary offset"),
         op::DATA_END => Some("data end"),
-        _ => None,
+        // Keep unknown opcodes in size accounting so totals stay accurate if
+        // newer MCAP versions introduce record types this CLI doesn't yet name.
+        _ => Some("unknown"),
     }
 }
 
