@@ -35,8 +35,8 @@ mod tests {
     use clap::Parser;
 
     use crate::cli::{
-        AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, Command,
-        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
+        AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
+        Command, GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
         ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
         ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
     };
@@ -59,6 +59,23 @@ mod tests {
             args.command,
             Command::Version(VersionCommand { library: false })
         );
+    }
+
+    #[test]
+    fn parses_cat_subcommand_with_files() {
+        let args =
+            Args::try_parse_from(["mcap", "cat", "a.mcap", "b.mcap"]).expect("cat should parse");
+        assert_eq!(
+            args.command,
+            Command::Cat(CatCommand {
+                files: vec!["a.mcap".into(), "b.mcap".into()],
+            })
+        );
+    }
+
+    #[test]
+    fn cat_requires_at_least_one_file() {
+        Args::try_parse_from(["mcap", "cat"]).expect_err("cat requires at least one file");
     }
 
     #[test]

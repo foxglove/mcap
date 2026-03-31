@@ -37,7 +37,7 @@ pub enum Command {
     /// Add records to an existing MCAP file
     Add(AddCommand),
     /// Concatenate the messages in one or more MCAP files to stdout
-    Cat,
+    Cat(CatCommand),
     /// Create a compressed copy of an MCAP file
     Compress,
     /// Convert a bag file to an MCAP file
@@ -71,6 +71,13 @@ pub enum Command {
 pub struct AddCommand {
     #[command(subcommand)]
     pub command: AddSubcommand,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+#[command(arg_required_else_help = true)]
+pub struct CatCommand {
+    /// One or more local paths to MCAP files
+    pub files: Vec<PathBuf>,
 }
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
