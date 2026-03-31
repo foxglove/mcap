@@ -35,10 +35,10 @@ mod tests {
     use clap::Parser;
 
     use crate::cli::{
-        AddCommand, AddSubcommand, Args, Command, GetAttachmentCommand, GetCommand,
-        GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
-        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
-        ListSchemasCommand, ListSubcommand, VersionCommand,
+        AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, Command,
+        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
+        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
     };
 
     #[test]
@@ -187,12 +187,59 @@ mod tests {
 
     #[test]
     fn parses_nested_add_subcommands() {
-        let args =
-            Args::try_parse_from(["mcap", "add", "metadata"]).expect("add metadata should parse");
+        let args = Args::try_parse_from([
+            "mcap",
+            "add",
+            "metadata",
+            "demo.mcap",
+            "--name",
+            "robot",
+            "-k",
+            "foo=bar",
+        ])
+        .expect("add metadata should parse");
         assert_eq!(
             args.command,
             Command::Add(AddCommand {
-                command: AddSubcommand::Metadata,
+                command: AddSubcommand::Metadata(AddMetadataCommand {
+                    file: "demo.mcap".into(),
+                    name: "robot".to_string(),
+                    key_values: vec!["foo=bar".to_string()],
+                }),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_add_attachment_subcommand() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "add",
+            "attachment",
+            "demo.mcap",
+            "-f",
+            "payload.bin",
+            "-n",
+            "payload",
+            "--content-type",
+            "application/octet-stream",
+            "--log-time",
+            "100",
+            "--creation-time",
+            "99",
+        ])
+        .expect("add attachment should parse");
+        assert_eq!(
+            args.command,
+            Command::Add(AddCommand {
+                command: AddSubcommand::Attachment(AddAttachmentCommand {
+                    file: "demo.mcap".into(),
+                    attachment_file: "payload.bin".into(),
+                    name: Some("payload".to_string()),
+                    content_type: "application/octet-stream".to_string(),
+                    log_time: Some("100".to_string()),
+                    creation_time: Some("99".to_string()),
+                }),
             })
         );
     }

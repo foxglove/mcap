@@ -76,9 +76,57 @@ pub struct AddCommand {
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum AddSubcommand {
     /// Add an attachment to an MCAP file
-    Attachment,
+    Attachment(AddAttachmentCommand),
     /// Add metadata to an MCAP file
-    Metadata,
+    Metadata(AddMetadataCommand),
+}
+
+/// Add an attachment to an MCAP file.
+///
+/// WARNING: this command rewrites the MCAP file in place and can leave it
+/// corrupted if interrupted (for example process kill or disk full).
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct AddAttachmentCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+
+    /// Filename of attachment to add
+    #[arg(short = 'f', long = "file")]
+    pub attachment_file: PathBuf,
+
+    /// Name of attachment to add (defaults to attachment file path)
+    #[arg(short = 'n', long = "name")]
+    pub name: Option<String>,
+
+    /// Content type of attachment
+    #[arg(long = "content-type", default_value = "application/octet-stream")]
+    pub content_type: String,
+
+    /// Attachment log time in nanoseconds or RFC3339 format
+    #[arg(long = "log-time")]
+    pub log_time: Option<String>,
+
+    /// Attachment creation time in nanoseconds or RFC3339 format
+    #[arg(long = "creation-time")]
+    pub creation_time: Option<String>,
+}
+
+/// Add metadata to an MCAP file.
+///
+/// WARNING: this command rewrites the MCAP file in place and can leave it
+/// corrupted if interrupted (for example process kill or disk full).
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct AddMetadataCommand {
+    /// Local path to the MCAP file
+    pub file: PathBuf,
+
+    /// Name of metadata record to add
+    #[arg(short = 'n', long = "name")]
+    pub name: String,
+
+    /// Key-value pair in key=value format
+    #[arg(short = 'k', long = "key")]
+    pub key_values: Vec<String>,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

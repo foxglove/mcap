@@ -817,8 +817,10 @@ name = "mcap_cli"
 version = "0.0.1"
 dependencies = [
  "anyhow",
+ "binrw",
  "chrono",
  "clap 4.6.0",
+ "crc32fast",
  "log",
  "mcap",
  "memmap2",

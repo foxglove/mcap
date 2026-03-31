@@ -1,4 +1,5 @@
 mod add_attachment;
+mod add_common;
 mod add_metadata;
 mod cat;
 mod common;
@@ -36,8 +37,8 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
         Command::Version(args) => version::run(ctx, args),
 
         Command::Add(args) => match args.command {
-            AddSubcommand::Attachment => add_attachment::run(ctx),
-            AddSubcommand::Metadata => add_metadata::run(ctx),
+            AddSubcommand::Attachment(args) => add_attachment::run(ctx, args),
+            AddSubcommand::Metadata(args) => add_metadata::run(ctx, args),
         },
         Command::Get(args) => match args.command {
             GetSubcommand::Attachment(args) => get_attachment::run(ctx, args),
@@ -70,9 +71,10 @@ mod tests {
 
     use super::dispatch;
     use crate::cli::{
-        AddCommand, AddSubcommand, Command, GetAttachmentCommand, GetMetadataCommand, InfoCommand,
-        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand,
+        AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
+        GetAttachmentCommand, GetMetadataCommand, InfoCommand, ListAttachmentsCommand,
+        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
+        ListSchemasCommand, ListSubcommand,
     };
     use crate::context::CommandContext;
 
@@ -103,15 +105,38 @@ mod tests {
     }
 
     #[test]
-    fn add_subcommands_stub_with_specific_names() {
+    fn add_attachment_requires_existing_attachment_source() {
         let err = dispatch(
             &CommandContext::default(),
             Command::Add(AddCommand {
-                command: AddSubcommand::Attachment,
+                command: AddSubcommand::Attachment(AddAttachmentCommand {
+                    file: PathBuf::from("does-not-exist.mcap"),
+                    attachment_file: PathBuf::from("attachment.bin"),
+                    name: None,
+                    content_type: "application/octet-stream".to_string(),
+                    log_time: None,
+                    creation_time: None,
+                }),
             }),
         )
-        .expect_err("add attachment should be a stub");
-        assert_eq!(err.to_string(), "'add attachment' is not implemented yet");
+        .expect_err("add attachment should fail on missing file");
+        assert!(err.to_string().contains("failed to read attachment source"));
+    }
+
+    #[test]
+    fn add_metadata_requires_existing_mcap_file() {
+        let err = dispatch(
+            &CommandContext::default(),
+            Command::Add(AddCommand {
+                command: AddSubcommand::Metadata(AddMetadataCommand {
+                    file: PathBuf::from("does-not-exist.mcap"),
+                    name: "demo".to_string(),
+                    key_values: vec!["k=v".to_string()],
+                }),
+            }),
+        )
+        .expect_err("add metadata should fail on missing file");
+        assert!(err.to_string().contains("failed to add metadata"));
     }
 
     #[test]
