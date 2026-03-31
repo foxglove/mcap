@@ -120,7 +120,8 @@ fn write_message_fields(
     data: &[u8],
     max_preview_bytes: usize,
 ) -> Result<bool> {
-    if let Err(err) = write!(writer, "{} {} [{}] ", log_time, topic, schema_name) {
+    let raw_log_time = common::raw_time(log_time);
+    if let Err(err) = write!(writer, "{} {} [{}] ", raw_log_time, topic, schema_name) {
         if err.kind() == std::io::ErrorKind::BrokenPipe {
             return Ok(true);
         }
@@ -276,6 +277,52 @@ mod tests {
         cursor.into_inner()
     }
 
+    fn build_out_of_order_linear_mcap_without_summary() -> Vec<u8> {
+        let mut cursor = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(None)
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .create(&mut cursor)
+                .expect("writer");
+
+            let schema_id = writer
+                .add_schema("Example", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 30,
+                        publish_time: 30,
+                    },
+                    &[1],
+                )
+                .expect("write message 1");
+
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id,
+                        sequence: 2,
+                        log_time: 10,
+                        publish_time: 10,
+                    },
+                    &[2],
+                )
+                .expect("write message 2");
+
+            writer.finish().expect("finish");
+        }
+        cursor.into_inner()
+    }
+
     #[test]
     fn payload_preview_includes_full_message_when_short() {
         assert_eq!(payload_preview_string(&[1, 2, 3], 10), "[1 2 3]");
@@ -320,6 +367,21 @@ mod tests {
         assert_eq!(
             lines,
             vec!["10 /demo [Example] [2]", "30 /demo [Example] [1]"]
+        );
+    }
+
+    #[test]
+    fn cat_falls_back_to_linear_order_without_index() {
+        let mcap = build_out_of_order_linear_mcap_without_summary();
+        let mut out = Vec::new();
+        let broken_pipe = cat_mcap(&mut out, &mcap).expect("cat should succeed");
+        assert!(!broken_pipe);
+
+        let output = String::from_utf8(out).expect("valid utf8 output");
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(
+            lines,
+            vec!["30 /demo [Example] [1]", "10 /demo [Example] [2]"]
         );
     }
 }
