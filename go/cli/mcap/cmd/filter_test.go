@@ -542,9 +542,9 @@ func TestRenameTopic(t *testing.T) {
 				}
 				// camera_a should be renamed, camera_b and radar_a unchanged
 				assert.Equal(t, 0, topics["camera_a"], "original topic should not appear")
-				assert.Greater(t, topics["camera_a_renamed"], 0, "renamed topic should appear")
-				assert.Greater(t, topics["camera_b"], 0)
-				assert.Greater(t, topics["radar_a"], 0)
+				assert.Positive(t, topics["camera_a_renamed"], "renamed topic should appear")
+				assert.Positive(t, topics["camera_b"])
+				assert.Positive(t, topics["radar_a"])
 				assert.Equal(t, 300, messageCount, "all messages should be preserved")
 			})
 		}

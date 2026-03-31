@@ -51,6 +51,7 @@ type filterOpts struct {
 	unchunked                   bool
 	renameFrom                  string
 	renameTo                    string
+	renameApplied               bool
 }
 
 // parseDateOrNanos parses a string containing either an RFC3339-formatted date with timezone
@@ -249,8 +250,9 @@ func includeTopic(topic string, opts *filterOpts) bool {
 }
 
 // applyTopicRename returns a shallow copy of the channel with the topic renamed
-// if it matches opts.renameFrom. It returns an error if the channel's topic
-// matches opts.renameTo (collision).
+// if it matches opts.renameFrom. It sets opts.renameApplied to true when a
+// rename is performed. It returns an error if the channel's topic matches
+// opts.renameTo (collision).
 func applyTopicRename(channel *mcap.Channel, opts *filterOpts) (*mcap.Channel, error) {
 	if opts.renameFrom == "" {
 		return channel, nil
@@ -261,6 +263,7 @@ func applyTopicRename(channel *mcap.Channel, opts *filterOpts) (*mcap.Channel, e
 	if channel.Topic == opts.renameFrom {
 		renamed := *channel
 		renamed.Topic = opts.renameTo
+		opts.renameApplied = true
 		return &renamed, nil
 	}
 	return channel, nil
@@ -321,6 +324,9 @@ func filter(
 	}
 	if filterError != nil {
 		return fmt.Errorf("filter failed: %w", filterError)
+	}
+	if opts.renameFrom != "" && !opts.renameApplied {
+		fmt.Fprintf(os.Stderr, "warning: topic %q not found in input file, no channels renamed\n", opts.renameFrom)
 	}
 	err = mcapWriter.Close()
 	if err != nil {
