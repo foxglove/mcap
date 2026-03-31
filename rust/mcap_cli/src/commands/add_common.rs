@@ -211,9 +211,12 @@ pub(crate) fn amend_mcap_file(
 
     match write_result {
         Ok(()) => {
-            fs::remove_file(&backup_path).with_context(|| {
-                format!("failed to remove tail backup '{}'", backup_path.display())
-            })?;
+            if let Err(err) = fs::remove_file(&backup_path) {
+                eprintln!(
+                    "Warning: amendment succeeded but failed to remove tail backup '{}': {err:#}",
+                    backup_path.display()
+                );
+            }
             Ok(())
         }
         Err(err) => Err(err).with_context(|| {
