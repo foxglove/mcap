@@ -153,15 +153,12 @@ fn compile_matchers(regex_strings: &[String]) -> Result<Vec<Regex>> {
     regex_strings
         .iter()
         .map(|pattern| {
-            let anchored_start = if pattern.starts_with('^') {
+            let anchored = if pattern.starts_with('^') && pattern.ends_with('$') {
                 pattern.to_string()
             } else {
-                format!("^{pattern}")
-            };
-            let anchored = if anchored_start.ends_with('$') {
-                anchored_start
-            } else {
-                format!("{anchored_start}$")
+                // Wrap in a non-capturing group so alternation behaves as users expect.
+                // For example, "foo|bar" becomes "^(?:foo|bar)$" rather than "^foo|bar$".
+                format!("^(?:{pattern})$")
             };
             Regex::new(&anchored).with_context(|| format!("{anchored} is not a valid regex"))
         })
@@ -403,7 +400,7 @@ fn filter_linear<W: Write + Seek>(
     opts: &FilterOptions,
 ) -> Result<()> {
     if !opts.last_per_channel_topics.is_empty() {
-        bail!("including last-per-channel topics is not supported for streaming input");
+        bail!("including last-per-channel topics is not supported for non-indexed input");
     }
 
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
@@ -703,6 +700,18 @@ mod tests {
     }
 
     #[test]
+    fn compile_matchers_wraps_alternation_with_grouping() {
+        let matcher = super::compile_matchers(&["camera_a|camera_b".to_string()])
+            .expect("regex")
+            .pop()
+            .expect("matcher");
+        assert!(matcher.is_match("camera_a"));
+        assert!(matcher.is_match("camera_b"));
+        assert!(!matcher.is_match("camera_a_extra"));
+        assert!(!matcher.is_match("extra_camera_b"));
+    }
+
+    #[test]
     fn indexed_passthrough_includes_messages_metadata_and_attachments() {
         let input = write_filter_test_input(true, false);
         let opts = FilterOptions {
@@ -724,6 +733,28 @@ mod tests {
         assert_eq!(stats.topic_counts["radar_a"], 100);
         assert_eq!(stats.metadata_count, 1);
         assert_eq!(stats.attachment_count, 1);
+    }
+
+    #[test]
+    fn indexed_filtering_respects_exclude_topic_and_time() {
+        let input = write_filter_test_input(true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: vec![Regex::new("^radar_a$").expect("regex")],
+            last_per_channel_topics: Vec::new(),
+            start: 10,
+            end: 20,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: 4 * 1024 * 1024,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 10);
+        assert_eq!(stats.topic_counts["camera_b"], 10);
+        assert!(!stats.topic_counts.contains_key("radar_a"));
     }
 
     #[test]
@@ -795,6 +826,28 @@ mod tests {
             .expect_err("last-per should be rejected");
         assert!(err
             .to_string()
-            .contains("including last-per-channel topics is not supported for streaming input"));
+            .contains("including last-per-channel topics is not supported for non-indexed input"));
+    }
+
+    #[test]
+    fn chunked_summaryless_input_falls_back_to_linear_filtering() {
+        let input = write_filter_test_input(true, true);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 20,
+            end: 25,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: 4 * 1024 * 1024,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 5);
+        assert_eq!(stats.topic_counts["camera_b"], 5);
+        assert!(!stats.topic_counts.contains_key("radar_a"));
     }
 }
