@@ -50,17 +50,16 @@ fn collect_usage_exact(mcap: &[u8]) -> Result<Usage> {
         ..Usage::default()
     };
     let mut channels = BTreeMap::<u16, String>::new();
-
-    for (opcode, data) in iter_top_level_records(mcap)? {
+    scan_top_level_records(mcap, |opcode, data| {
         let Some(kind) = record_kind_name(opcode) else {
-            continue;
+            return Ok(());
         };
 
         let record_size = data.len() as u64;
         usage.total_size += record_size;
         *usage.record_kind_size.entry(kind.to_string()).or_default() += record_size;
 
-        match mcap::parse_record(opcode, &data)? {
+        match mcap::parse_record(opcode, data)? {
             Record::Channel(channel) => {
                 channels.insert(channel.id, channel.topic);
             }
@@ -72,7 +71,8 @@ fn collect_usage_exact(mcap: &[u8]) -> Result<Usage> {
             }
             _ => {}
         }
-    }
+        Ok(())
+    })?;
 
     Ok(usage)
 }
@@ -155,8 +155,10 @@ fn collect_usage_approximate(mcap: &[u8]) -> Result<Option<Usage>> {
     Ok(Some(usage))
 }
 
-fn iter_top_level_records(mcap: &[u8]) -> Result<Vec<(u8, Vec<u8>)>> {
-    let mut out = Vec::new();
+fn scan_top_level_records<F>(mcap: &[u8], mut process: F) -> Result<()>
+where
+    F: FnMut(u8, &[u8]) -> Result<()>,
+{
     let mut reader = LinearReader::new_with_options(
         LinearReaderOptions::default()
             .with_emit_chunks(true)
@@ -175,12 +177,12 @@ fn iter_top_level_records(mcap: &[u8]) -> Result<Vec<(u8, Vec<u8>)>> {
                 remaining = &remaining[read..];
             }
             LinearReadEvent::Record { opcode, data } => {
-                out.push((opcode, data.to_vec()));
+                process(opcode, data)?;
             }
         }
     }
 
-    Ok(out)
+    Ok(())
 }
 
 fn process_chunk(
@@ -435,7 +437,7 @@ fn print_topic_table(topic_message_size: &BTreeMap<String, u64>, total_message_s
         };
         rows.push(vec![
             topic.to_string(),
-            human_bytes(size),
+            common::human_bytes(size),
             format!("{pct:.6}"),
         ]);
     }
@@ -463,26 +465,13 @@ fn record_kind_name(opcode: u8) -> Option<&'static str> {
     }
 }
 
-fn human_bytes(num_bytes: u64) -> String {
-    let prefixes = ["B", "KiB", "MiB", "GiB"];
-    for (index, prefix) in prefixes.iter().enumerate() {
-        let displayed = num_bytes as f64 / 1024f64.powi(index as i32);
-        if displayed <= 1024.0 {
-            return format!("{displayed:.2} {prefix}");
-        }
-    }
-    let last = prefixes.len() - 1;
-    let displayed = num_bytes as f64 / 1024f64.powi(last as i32);
-    format!("{displayed:.2} {}", prefixes[last])
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
 
     use super::{
         collect_usage_approximate, collect_usage_exact, parse_chunk_message_indexes,
-        print_record_table, print_topic_table, record_kind_name, Usage,
+        print_record_table, print_topic_table, record_kind_name, Usage, MCAP_MAGIC_SIZE,
     };
     use mcap::records::{op, MessageHeader};
 
@@ -697,5 +686,18 @@ mod tests {
     #[test]
     fn usage_default_is_empty() {
         assert_eq!(Usage::default(), Usage::default());
+    }
+
+    #[test]
+    fn human_bytes_matches_expected_units() {
+        assert_eq!(crate::commands::common::human_bytes(2), "2.00 B");
+        assert_eq!(crate::commands::common::human_bytes(2 * 1024), "2.00 KiB");
+    }
+
+    #[test]
+    fn exact_usage_includes_magic_bytes_baseline() {
+        let mcap = write_test_file(false, None, &[(1, 0, 10)], &[(1, "/data")]);
+        let usage = collect_usage_exact(&mcap).expect("collect exact usage");
+        assert!(usage.total_size >= 2 * MCAP_MAGIC_SIZE);
     }
 }

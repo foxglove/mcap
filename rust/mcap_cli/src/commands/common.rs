@@ -175,6 +175,20 @@ pub fn formatted_time(t: u64) -> String {
     }
 }
 
+pub fn human_bytes(num_bytes: u64) -> String {
+    let prefixes = ["B", "KiB", "MiB", "GiB"];
+    for (index, prefix) in prefixes.iter().enumerate() {
+        let displayed = num_bytes as f64 / 1024f64.powi(index as i32);
+        if displayed <= 1024.0 {
+            return format!("{displayed:.2} {prefix}");
+        }
+    }
+
+    let last = prefixes.len() - 1;
+    let displayed = num_bytes as f64 / 1024f64.powi(last as i32);
+    format!("{displayed:.2} {}", prefixes[last])
+}
+
 fn format_rfc3339_trimmed(dt: chrono::DateTime<chrono::Utc>) -> String {
     let rendered = dt.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
     let Some(without_z) = rendered.strip_suffix('Z') else {
@@ -238,8 +252,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        decimal_time, format_table, formatted_time, parse_mcap, parse_mcap_from_summary,
-        print_table,
+        decimal_time, format_table, formatted_time, human_bytes, parse_mcap,
+        parse_mcap_from_summary, print_table,
     };
     use mcap::records;
 
@@ -288,6 +302,12 @@ mod tests {
             assert!(!line.ends_with(' '));
             assert!(!line.ends_with('\t'));
         }
+    }
+
+    #[test]
+    fn human_bytes_scales_units() {
+        assert_eq!(human_bytes(2), "2.00 B");
+        assert_eq!(human_bytes(2 * 1024), "2.00 KiB");
     }
 
     #[test]
