@@ -62,7 +62,9 @@ fn select_attachment_index<'a>(
             matches
                 .into_iter()
                 .find(|index| index.offset == offset)
-                .ok_or_else(|| anyhow::anyhow!("failed to find attachment {name} at offset {offset}"))
+                .ok_or_else(|| {
+                    anyhow::anyhow!("failed to find attachment {name} at offset {offset}")
+                })
         }
     }
 }
