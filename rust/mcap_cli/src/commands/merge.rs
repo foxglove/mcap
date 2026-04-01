@@ -702,7 +702,7 @@ mod tests {
         };
         let input_refs = inputs
             .iter()
-            .map(|(name, data)| InputRef { name, data: *data })
+            .map(|(name, data)| InputRef { name, data })
             .collect::<Vec<_>>();
 
         let mut output = Cursor::new(Vec::<u8>::new());
