@@ -53,9 +53,9 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
         },
 
         Command::Cat(args) => cat::run(ctx, args),
-        Command::Compress => compress::run(ctx),
+        Command::Compress(args) => compress::run(ctx, args),
         Command::Convert(args) => convert::run(ctx, args),
-        Command::Decompress => decompress::run(ctx),
+        Command::Decompress(args) => decompress::run(ctx, args),
         Command::Doctor(args) => doctor::run(ctx, args),
         Command::Du(args) => du::run(ctx, args),
         Command::Filter(args) => filter::run(ctx, args),
@@ -72,6 +72,7 @@ mod tests {
     use super::dispatch;
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
+        CompressCommand,
         DoctorCommand, DuCommand, GetAttachmentCommand, GetMetadataCommand, InfoCommand,
         ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
         ListMetadataCommand, ListSchemasCommand, ListSubcommand, RecoverCommand, SortCommand,
@@ -234,6 +235,22 @@ mod tests {
         )
         .expect_err("recover should fail on missing file");
         assert!(err.to_string().contains("couldn't open"));
+    }
+
+    #[test]
+    fn compress_rejects_invalid_compression() {
+        let err = dispatch(
+            &CommandContext::default(),
+            Command::Compress(CompressCommand {
+                file: None,
+                output: None,
+                chunk_size: 4 * 1024 * 1024,
+                compression: "invalid".to_string(),
+                unchunked: false,
+            }),
+        )
+        .expect_err("compress should reject invalid compression");
+        assert!(err.to_string().contains("unrecognized compression format"));
     }
 
     #[test]

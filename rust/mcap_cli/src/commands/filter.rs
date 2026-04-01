@@ -24,6 +24,93 @@ struct FilterOptions {
     include_attachments: bool,
     compression: Option<mcap::Compression>,
     chunk_size: u64,
+    use_chunks: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TranscodeCommandOptions {
+    pub(crate) file: Option<PathBuf>,
+    pub(crate) output: Option<PathBuf>,
+    pub(crate) include_topic_regex: Vec<String>,
+    pub(crate) exclude_topic_regex: Vec<String>,
+    pub(crate) last_per_channel_topic_regex: Vec<String>,
+    pub(crate) start: Option<String>,
+    pub(crate) start_secs: u64,
+    pub(crate) start_nsecs: u64,
+    pub(crate) end: Option<String>,
+    pub(crate) end_secs: u64,
+    pub(crate) end_nsecs: u64,
+    pub(crate) include_metadata: bool,
+    pub(crate) include_attachments: bool,
+    pub(crate) output_compression: String,
+    pub(crate) chunk_size: u64,
+    pub(crate) use_chunks: bool,
+}
+
+impl From<&FilterCommand> for TranscodeCommandOptions {
+    fn from(args: &FilterCommand) -> Self {
+        Self {
+            file: args.file.clone(),
+            output: args.output.clone(),
+            include_topic_regex: args.include_topic_regex.clone(),
+            exclude_topic_regex: args.exclude_topic_regex.clone(),
+            last_per_channel_topic_regex: args.last_per_channel_topic_regex.clone(),
+            start: args.start.clone(),
+            start_secs: args.start_secs,
+            start_nsecs: args.start_nsecs,
+            end: args.end.clone(),
+            end_secs: args.end_secs,
+            end_nsecs: args.end_nsecs,
+            include_metadata: args.include_metadata,
+            include_attachments: args.include_attachments,
+            output_compression: args.output_compression.clone(),
+            chunk_size: args.chunk_size,
+            use_chunks: true,
+        }
+    }
+}
+
+impl TranscodeCommandOptions {
+    pub(crate) fn new(file: Option<PathBuf>, output: Option<PathBuf>, chunk_size: u64) -> Self {
+        Self {
+            file,
+            output,
+            include_topic_regex: Vec::new(),
+            exclude_topic_regex: Vec::new(),
+            last_per_channel_topic_regex: Vec::new(),
+            start: None,
+            start_secs: 0,
+            start_nsecs: 0,
+            end: None,
+            end_secs: 0,
+            end_nsecs: 0,
+            include_metadata: false,
+            include_attachments: false,
+            output_compression: "zstd".to_string(),
+            chunk_size,
+            use_chunks: true,
+        }
+    }
+
+    pub(crate) fn compression(mut self, value: impl Into<String>) -> Self {
+        self.output_compression = value.into();
+        self
+    }
+
+    pub(crate) fn use_chunks(mut self, value: bool) -> Self {
+        self.use_chunks = value;
+        self
+    }
+
+    pub(crate) fn include_metadata(mut self, value: bool) -> Self {
+        self.include_metadata = value;
+        self
+    }
+
+    pub(crate) fn include_attachments(mut self, value: bool) -> Self {
+        self.include_attachments = value;
+        self
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -36,7 +123,11 @@ struct PreStartMessage {
 }
 
 pub fn run(_ctx: &CommandContext, args: FilterCommand) -> Result<()> {
-    let opts = build_filter_options(&args)?;
+    run_transcode(TranscodeCommandOptions::from(&args))
+}
+
+pub(crate) fn run_transcode(args: TranscodeCommandOptions) -> Result<()> {
+    let opts = build_filter_options_from_transcode_options(&args)?;
     let input = common::load_input(args.file.as_deref())?;
 
     if let Some(output) = &opts.output {
@@ -54,6 +145,12 @@ pub fn run(_ctx: &CommandContext, args: FilterCommand) -> Result<()> {
 }
 
 fn build_filter_options(args: &FilterCommand) -> Result<FilterOptions> {
+    build_filter_options_from_transcode_options(&TranscodeCommandOptions::from(args))
+}
+
+fn build_filter_options_from_transcode_options(
+    args: &TranscodeCommandOptions,
+) -> Result<FilterOptions> {
     let start = parse_timestamp_args(args.start.as_deref(), args.start_nsecs, args.start_secs)
         .context("invalid start")?;
     let mut end = parse_timestamp_args(args.end.as_deref(), args.end_nsecs, args.end_secs)
@@ -83,6 +180,7 @@ fn build_filter_options(args: &FilterCommand) -> Result<FilterOptions> {
         include_attachments: args.include_attachments,
         compression: common::parse_output_compression(&args.output_compression)?,
         chunk_size: args.chunk_size,
+        use_chunks: args.use_chunks,
     })
 }
 
@@ -143,6 +241,7 @@ fn filter_to_writer<W: Write + Seek>(
     disable_seeking: bool,
 ) -> Result<()> {
     let mut write_options = mcap::WriteOptions::new()
+        .use_chunks(opts.use_chunks)
         .chunk_size(Some(opts.chunk_size))
         .compression(opts.compression)
         .disable_seeking(disable_seeking);
@@ -649,6 +748,7 @@ mod tests {
             include_attachments: false,
             compression: Some(mcap::Compression::Zstd),
             chunk_size: 4 * 1024 * 1024,
+            use_chunks: true,
         };
         assert!(include_topic("camera_a", &opts));
         assert!(!include_topic("radar_a", &opts));
@@ -692,6 +792,7 @@ mod tests {
             include_attachments: true,
             compression: Some(mcap::Compression::Lz4),
             chunk_size: 4 * 1024 * 1024,
+            use_chunks: true,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -716,6 +817,7 @@ mod tests {
             include_attachments: false,
             compression: Some(mcap::Compression::Lz4),
             chunk_size: 4 * 1024 * 1024,
+            use_chunks: true,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -738,6 +840,7 @@ mod tests {
             include_attachments: true,
             compression: Some(mcap::Compression::Lz4),
             chunk_size: 4 * 1024 * 1024,
+            use_chunks: true,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -762,6 +865,7 @@ mod tests {
             include_attachments: false,
             compression: Some(mcap::Compression::Zstd),
             chunk_size: 4 * 1024 * 1024,
+            use_chunks: true,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -787,6 +891,7 @@ mod tests {
             include_attachments: false,
             compression: Some(mcap::Compression::Zstd),
             chunk_size: 4 * 1024 * 1024,
+            use_chunks: true,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -810,11 +915,66 @@ mod tests {
             include_attachments: false,
             compression: Some(mcap::Compression::Lz4),
             chunk_size: 4 * 1024 * 1024,
+            use_chunks: true,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
         assert_eq!(stats.topic_counts["camera_a"], 5);
         assert_eq!(stats.topic_counts["camera_b"], 5);
         assert!(!stats.topic_counts.contains_key("radar_a"));
+    }
+
+    #[test]
+    fn transcode_options_support_unchunked_output() {
+        let input = write_filter_test_input(true, false);
+        let mut input_path = std::env::temp_dir();
+        input_path.push(format!(
+            "mcap-cli-filter-unchunked-input-{pid}-{nonce}.mcap",
+            pid = std::process::id(),
+            nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        std::fs::write(&input_path, &input).expect("write input");
+
+        let mut output_path = std::env::temp_dir();
+        output_path.push(format!(
+            "mcap-cli-filter-unchunked-output-{pid}-{nonce}.mcap",
+            pid = std::process::id(),
+            nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+
+        let mut options = super::TranscodeCommandOptions::new(
+            Some(input_path.clone()),
+            Some(output_path.clone()),
+            1024,
+        );
+        options.include_metadata = true;
+        options.include_attachments = true;
+        options.use_chunks = false;
+        options.output_compression = "none".to_string();
+
+        super::run_transcode(options).expect("transcode should succeed");
+        let output = std::fs::read(&output_path).expect("read output");
+        let summary = mcap::Summary::read(&output)
+            .expect("summary read should succeed")
+            .expect("summary should exist");
+        assert!(
+            summary.chunk_indexes.is_empty(),
+            "unchunked output should not contain chunk indexes"
+        );
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 100);
+        assert_eq!(stats.topic_counts["camera_b"], 100);
+        assert_eq!(stats.topic_counts["radar_a"], 100);
+        assert_eq!(stats.metadata_count, 1);
+        assert_eq!(stats.attachment_count, 1);
+
+        let _ = std::fs::remove_file(input_path);
+        let _ = std::fs::remove_file(output_path);
     }
 }

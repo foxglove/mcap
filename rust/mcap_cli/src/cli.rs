@@ -39,11 +39,11 @@ pub enum Command {
     /// Concatenate the messages in one or more MCAP files to stdout
     Cat(CatCommand),
     /// Create a compressed copy of an MCAP file
-    Compress,
+    Compress(CompressCommand),
     /// Convert a bag file to an MCAP file
     Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file
-    Decompress,
+    Decompress(DecompressCommand),
     /// Check an MCAP file structure
     Doctor(DoctorCommand),
     /// Compute byte usage statistics for MCAP records
@@ -64,6 +64,42 @@ pub enum Command {
     Sort(SortCommand),
     /// Output version information
     Version(VersionCommand),
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct CompressCommand {
+    /// Input MCAP file path. If omitted, reads from stdin.
+    pub file: Option<PathBuf>,
+
+    /// Output file path. If omitted, writes to stdout.
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+
+    /// Target uncompressed chunk size for output
+    #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
+    pub chunk_size: u64,
+
+    /// Compression algorithm for output file: zstd, lz4, or none
+    #[arg(long = "compression", default_value = "zstd")]
+    pub compression: String,
+
+    /// Do not chunk the output file
+    #[arg(long = "unchunked", default_value_t = false)]
+    pub unchunked: bool,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct DecompressCommand {
+    /// Input MCAP file path. If omitted, reads from stdin.
+    pub file: Option<PathBuf>,
+
+    /// Output file path. If omitted, writes to stdout.
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+
+    /// Target uncompressed chunk size for output
+    #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
+    pub chunk_size: u64,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
