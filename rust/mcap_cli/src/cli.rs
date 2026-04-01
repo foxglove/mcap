@@ -49,7 +49,7 @@ pub enum Command {
     /// Compute byte usage statistics for MCAP records
     Du(DuCommand),
     /// Copy filtered MCAP data to a new file
-    Filter,
+    Filter(FilterCommand),
     /// Get a record from an MCAP file
     Get(GetCommand),
     /// Report statistics about an MCAP file
@@ -253,6 +253,78 @@ pub struct DuCommand {
 
     /// Local path to the MCAP file
     pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct FilterCommand {
+    /// Input MCAP file path. If omitted, reads from stdin.
+    pub file: Option<PathBuf>,
+
+    /// Output file path. If omitted, writes to stdout.
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+
+    /// Include topics matching this regex (repeatable)
+    #[arg(short = 'y', long = "include-topic-regex")]
+    pub include_topic_regex: Vec<String>,
+
+    /// Exclude topics matching this regex (repeatable)
+    #[arg(short = 'n', long = "exclude-topic-regex")]
+    pub exclude_topic_regex: Vec<String>,
+
+    /// Include the last pre-start message for matching topics (repeatable)
+    #[arg(short = 'l', long = "last-per-channel-topic-regex")]
+    pub last_per_channel_topic_regex: Vec<String>,
+
+    /// Include messages at or after this time (nanos or RFC3339)
+    #[arg(short = 'S', long = "start")]
+    pub start: Option<String>,
+
+    /// Include messages at or after this time (seconds)
+    #[arg(
+        short = 's',
+        long = "start-secs",
+        default_value_t = 0,
+        conflicts_with = "start_nsecs"
+    )]
+    pub start_secs: u64,
+
+    /// Deprecated: include messages at or after this time (nanoseconds)
+    #[arg(long = "start-nsecs", default_value_t = 0)]
+    pub start_nsecs: u64,
+
+    /// Include messages before this time (nanos or RFC3339)
+    #[arg(short = 'E', long = "end")]
+    pub end: Option<String>,
+
+    /// Include messages before this time (seconds)
+    #[arg(
+        short = 'e',
+        long = "end-secs",
+        default_value_t = 0,
+        conflicts_with = "end_nsecs"
+    )]
+    pub end_secs: u64,
+
+    /// Deprecated: include messages before this time (nanoseconds)
+    #[arg(long = "end-nsecs", default_value_t = 0)]
+    pub end_nsecs: u64,
+
+    /// Include metadata records in output
+    #[arg(long = "include-metadata", default_value_t = false)]
+    pub include_metadata: bool,
+
+    /// Include attachments in output
+    #[arg(long = "include-attachments", default_value_t = false)]
+    pub include_attachments: bool,
+
+    /// Compression algorithm for output file: zstd, lz4, or none
+    #[arg(long = "output-compression", default_value = "zstd")]
+    pub output_compression: String,
+
+    /// Target uncompressed chunk size for output
+    #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
+    pub chunk_size: u64,
 }
 
 pub type InfoCommand = FileCommand;

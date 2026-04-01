@@ -58,7 +58,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
         Command::Decompress => decompress::run(ctx),
         Command::Doctor => doctor::run(ctx),
         Command::Du(args) => du::run(ctx, args),
-        Command::Filter => filter::run(ctx),
+        Command::Filter(args) => filter::run(ctx, args),
         Command::Merge => merge::run(ctx),
         Command::Recover => recover::run(ctx),
         Command::Sort => sort::run(ctx),
