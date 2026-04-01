@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
-use std::io::{IsTerminal as _, Read as _, Seek, Write};
+use std::io::{IsTerminal as _, Seek, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -11,10 +11,6 @@ use crate::cli::FilterCommand;
 use crate::commands::add_attachment::parse_timestamp_or_nanos;
 use crate::commands::common;
 use crate::context::CommandContext;
-
-const PLEASE_REDIRECT: &str =
-    "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
-const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
 
 #[derive(Debug, Clone)]
 struct FilterOptions {
@@ -117,20 +113,6 @@ impl TranscodeCommandOptions {
     }
 }
 
-enum InputData {
-    Mapped(memmap2::Mmap),
-    Buffered(Vec<u8>),
-}
-
-impl InputData {
-    fn as_slice(&self) -> &[u8] {
-        match self {
-            InputData::Mapped(mmap) => mmap.as_ref(),
-            InputData::Buffered(buf) => buf.as_slice(),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 struct PreStartMessage {
     channel_id: u16,
@@ -146,7 +128,7 @@ pub fn run(_ctx: &CommandContext, args: FilterCommand) -> Result<()> {
 
 pub(crate) fn run_transcode(args: TranscodeCommandOptions) -> Result<()> {
     let opts = build_filter_options_from_transcode_options(&args)?;
-    let input = load_input(args.file.as_deref())?;
+    let input = common::load_input(args.file.as_deref())?;
 
     if let Some(output) = &opts.output {
         let writer = std::fs::File::create(output)
@@ -154,30 +136,12 @@ pub(crate) fn run_transcode(args: TranscodeCommandOptions) -> Result<()> {
         filter_to_writer(input.as_slice(), writer, &opts, false)
     } else {
         if std::io::stdout().is_terminal() {
-            bail!("{PLEASE_REDIRECT}");
+            bail!("{}", common::PLEASE_REDIRECT);
         }
         let stdout = std::io::stdout();
         let writer = mcap::write::NoSeek::new(stdout.lock());
         filter_to_writer(input.as_slice(), writer, &opts, true)
     }
-}
-
-fn load_input(file: Option<&std::path::Path>) -> Result<InputData> {
-    if let Some(path) = file {
-        return Ok(InputData::Mapped(common::map_file(path)?));
-    }
-
-    let stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        bail!("{PLEASE_SUPPLY_FILE}");
-    }
-
-    let mut buf = Vec::new();
-    stdin
-        .lock()
-        .read_to_end(&mut buf)
-        .context("failed to read input from stdin")?;
-    Ok(InputData::Buffered(buf))
 }
 
 #[cfg(test)]
@@ -215,21 +179,10 @@ fn build_filter_options_from_transcode_options(
         end,
         include_metadata: args.include_metadata,
         include_attachments: args.include_attachments,
-        compression: parse_output_compression(&args.output_compression)?,
+        compression: common::parse_output_compression(&args.output_compression)?,
         chunk_size: args.chunk_size,
         use_chunks: args.use_chunks,
     })
-}
-
-pub(crate) fn parse_output_compression(value: &str) -> Result<Option<mcap::Compression>> {
-    match value {
-        "zstd" => Ok(Some(mcap::Compression::Zstd)),
-        "lz4" => Ok(Some(mcap::Compression::Lz4)),
-        "none" | "" => Ok(None),
-        _ => bail!(
-            "unrecognized compression format '{value}': valid options are 'lz4', 'zstd', or 'none'"
-        ),
-    }
 }
 
 fn parse_timestamp_args(
