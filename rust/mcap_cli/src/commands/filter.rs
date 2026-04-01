@@ -51,6 +51,29 @@ pub(crate) struct TranscodeCommandOptions {
     pub(crate) use_chunks: bool,
 }
 
+impl From<&FilterCommand> for TranscodeCommandOptions {
+    fn from(args: &FilterCommand) -> Self {
+        Self {
+            file: args.file.clone(),
+            output: args.output.clone(),
+            include_topic_regex: args.include_topic_regex.clone(),
+            exclude_topic_regex: args.exclude_topic_regex.clone(),
+            last_per_channel_topic_regex: args.last_per_channel_topic_regex.clone(),
+            start: args.start.clone(),
+            start_secs: args.start_secs,
+            start_nsecs: args.start_nsecs,
+            end: args.end.clone(),
+            end_secs: args.end_secs,
+            end_nsecs: args.end_nsecs,
+            include_metadata: args.include_metadata,
+            include_attachments: args.include_attachments,
+            output_compression: args.output_compression.clone(),
+            chunk_size: args.chunk_size,
+            use_chunks: true,
+        }
+    }
+}
+
 impl TranscodeCommandOptions {
     pub(crate) fn new(file: Option<PathBuf>, output: Option<PathBuf>, chunk_size: u64) -> Self {
         Self {
@@ -108,24 +131,7 @@ struct PreStartMessage {
 }
 
 pub fn run(_ctx: &CommandContext, args: FilterCommand) -> Result<()> {
-    run_transcode(TranscodeCommandOptions {
-        file: args.file,
-        output: args.output,
-        include_topic_regex: args.include_topic_regex,
-        exclude_topic_regex: args.exclude_topic_regex,
-        last_per_channel_topic_regex: args.last_per_channel_topic_regex,
-        start: args.start,
-        start_secs: args.start_secs,
-        start_nsecs: args.start_nsecs,
-        end: args.end,
-        end_secs: args.end_secs,
-        end_nsecs: args.end_nsecs,
-        include_metadata: args.include_metadata,
-        include_attachments: args.include_attachments,
-        output_compression: args.output_compression,
-        chunk_size: args.chunk_size,
-        use_chunks: true,
-    })
+    run_transcode(TranscodeCommandOptions::from(&args))
 }
 
 pub(crate) fn run_transcode(args: TranscodeCommandOptions) -> Result<()> {
@@ -165,24 +171,7 @@ fn load_input(file: Option<&std::path::Path>) -> Result<InputData> {
 }
 
 fn build_filter_options(args: &FilterCommand) -> Result<FilterOptions> {
-    build_filter_options_from_transcode_options(&TranscodeCommandOptions {
-        file: args.file.clone(),
-        output: args.output.clone(),
-        include_topic_regex: args.include_topic_regex.clone(),
-        exclude_topic_regex: args.exclude_topic_regex.clone(),
-        last_per_channel_topic_regex: args.last_per_channel_topic_regex.clone(),
-        start: args.start.clone(),
-        start_secs: args.start_secs,
-        start_nsecs: args.start_nsecs,
-        end: args.end.clone(),
-        end_secs: args.end_secs,
-        end_nsecs: args.end_nsecs,
-        include_metadata: args.include_metadata,
-        include_attachments: args.include_attachments,
-        output_compression: args.output_compression.clone(),
-        chunk_size: args.chunk_size,
-        use_chunks: true,
-    })
+    build_filter_options_from_transcode_options(&TranscodeCommandOptions::from(args))
 }
 
 fn build_filter_options_from_transcode_options(
