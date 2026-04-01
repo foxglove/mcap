@@ -36,11 +36,12 @@ mod tests {
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        CoalesceChannels, Command, ConvertCommand, ConvertCompression, DoctorCommand, DuCommand,
-        FilterCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand,
-        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, MergeCompression,
-        SortCommand, VersionCommand,
+        CoalesceChannels, Command, CompressCommand, ConvertCommand, ConvertCompression,
+        DecompressCommand, DoctorCommand, DuCommand, FilterCommand, GetAttachmentCommand,
+        GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
+        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
+        ListSchemasCommand, ListSubcommand, MergeCommand, MergeCompression, SortCommand,
+        VersionCommand,
     };
 
     #[test]
@@ -355,6 +356,85 @@ mod tests {
             Command::Doctor(DoctorCommand {
                 strict_message_order: true,
                 file: "demo.mcap".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_compress_with_defaults() {
+        let args =
+            Args::try_parse_from(["mcap", "compress", "in.mcap"]).expect("compress should parse");
+        assert_eq!(
+            args.command,
+            Command::Compress(CompressCommand {
+                file: Some("in.mcap".into()),
+                output: None,
+                chunk_size: 4 * 1024 * 1024,
+                compression: "zstd".to_string(),
+                unchunked: false,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_compress_with_all_flags() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "compress",
+            "in.mcap",
+            "--output",
+            "out.mcap",
+            "--chunk-size",
+            "1024",
+            "--compression",
+            "lz4",
+            "--unchunked",
+        ])
+        .expect("compress with flags should parse");
+        assert_eq!(
+            args.command,
+            Command::Compress(CompressCommand {
+                file: Some("in.mcap".into()),
+                output: Some("out.mcap".into()),
+                chunk_size: 1024,
+                compression: "lz4".to_string(),
+                unchunked: true,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_decompress_with_defaults() {
+        let args = Args::try_parse_from(["mcap", "decompress", "in.mcap"])
+            .expect("decompress should parse");
+        assert_eq!(
+            args.command,
+            Command::Decompress(DecompressCommand {
+                file: Some("in.mcap".into()),
+                output: None,
+                chunk_size: 4 * 1024 * 1024,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_decompress_with_flags() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "decompress",
+            "in.mcap",
+            "--output",
+            "out.mcap",
+            "--chunk-size",
+            "2048",
+        ])
+        .expect("decompress with flags should parse");
+        assert_eq!(
+            args.command,
+            Command::Decompress(DecompressCommand {
+                file: Some("in.mcap".into()),
+                output: Some("out.mcap".into()),
+                chunk_size: 2048,
             })
         );
     }
