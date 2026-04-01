@@ -158,13 +158,10 @@ fn compile_matchers(regex_strings: &[String]) -> Result<Vec<Regex>> {
     regex_strings
         .iter()
         .map(|pattern| {
-            let anchored = if pattern.starts_with('^') && pattern.ends_with('$') {
-                pattern.to_string()
-            } else {
-                // Wrap in a non-capturing group so alternation behaves as users expect.
-                // For example, "foo|bar" becomes "^(?:foo|bar)$" rather than "^foo|bar$".
-                format!("^(?:{pattern})$")
-            };
+            // Always wrap in a non-capturing group so alternation behaves as users expect.
+            // This also fixes partially-anchored patterns like "^foo|bar$":
+            // "^(?:^foo|bar$)$" preserves full-string matching for each branch.
+            let anchored = format!("^(?:{pattern})$");
             Regex::new(&anchored).with_context(|| format!("{anchored} is not a valid regex"))
         })
         .collect()
@@ -707,6 +704,18 @@ mod tests {
     #[test]
     fn compile_matchers_wraps_alternation_with_grouping() {
         let matcher = super::compile_matchers(&["camera_a|camera_b".to_string()])
+            .expect("regex")
+            .pop()
+            .expect("matcher");
+        assert!(matcher.is_match("camera_a"));
+        assert!(matcher.is_match("camera_b"));
+        assert!(!matcher.is_match("camera_a_extra"));
+        assert!(!matcher.is_match("extra_camera_b"));
+    }
+
+    #[test]
+    fn compile_matchers_rewraps_partially_anchored_alternation() {
+        let matcher = super::compile_matchers(&["^camera_a|camera_b$".to_string()])
             .expect("regex")
             .pop()
             .expect("matcher");
