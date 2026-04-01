@@ -354,16 +354,12 @@ mod tests {
             super::parse_output_compression("lz4").expect("lz4 should parse"),
             Some(mcap::Compression::Lz4)
         ));
-        assert!(
-            super::parse_output_compression("none")
-                .expect("none should parse")
-                .is_none()
-        );
-        assert!(
-            super::parse_output_compression("")
-                .expect("empty should parse")
-                .is_none()
-        );
+        assert!(super::parse_output_compression("none")
+            .expect("none should parse")
+            .is_none());
+        assert!(super::parse_output_compression("")
+            .expect("empty should parse")
+            .is_none());
     }
 
     #[test]
