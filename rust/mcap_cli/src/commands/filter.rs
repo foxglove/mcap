@@ -105,6 +105,16 @@ impl TranscodeCommandOptions {
         self.use_chunks = value;
         self
     }
+
+    pub(crate) fn include_metadata(mut self, value: bool) -> Self {
+        self.include_metadata = value;
+        self
+    }
+
+    pub(crate) fn include_attachments(mut self, value: bool) -> Self {
+        self.include_attachments = value;
+        self
+    }
 }
 
 enum InputData {
