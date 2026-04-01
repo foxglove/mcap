@@ -144,6 +144,7 @@ pub(crate) fn run_transcode(args: TranscodeCommandOptions) -> Result<()> {
     }
 }
 
+#[cfg(test)]
 fn build_filter_options(args: &FilterCommand) -> Result<FilterOptions> {
     build_filter_options_from_transcode_options(&TranscodeCommandOptions::from(args))
 }
