@@ -159,12 +159,8 @@ fn sniff_header(input: &[u8]) -> Option<records::Header> {
         return None;
     };
     let body_start = offset + 9;
-    let Some(body_end) = body_start.checked_add(length) else {
-        return None;
-    };
-    let Some(body) = input.get(body_start..body_end) else {
-        return None;
-    };
+    let body_end = body_start.checked_add(length)?;
+    let body = input.get(body_start..body_end)?;
     match mcap::parse_record(op::HEADER, body) {
         Ok(Record::Header(header)) => Some(header),
         Ok(_) | Err(_) => None,
