@@ -443,10 +443,7 @@ mod tests {
 
     #[test]
     fn convert_compression_maps_variants() {
-        assert!(matches!(
-            super::convert_compression(ConvertCompression::None),
-            None
-        ));
+        assert!(super::convert_compression(ConvertCompression::None).is_none());
         assert!(matches!(
             super::convert_compression(ConvertCompression::Lz4),
             Some(mcap::Compression::Lz4)
