@@ -33,12 +33,7 @@ struct SchemaKey {
 
 #[derive(Debug, Clone)]
 struct ConnectionInfo {
-    channel_id: u16,
-    topic: String,
-    schema_id: u16,
-    schema_name: String,
-    schema_data: Vec<u8>,
-    metadata: BTreeMap<String, String>,
+    channel: Arc<mcap::Channel<'static>>,
 }
 
 #[derive(Debug, Clone)]
@@ -153,15 +148,23 @@ fn process_connection<W: std::io::Write + Seek>(
 
     let metadata = to_string_map(conn_data)?;
     let channel_id = conn_id_to_channel_id(conn_id)?;
+    let schema = mcap::Schema {
+        id: schema_id,
+        name: msg_type,
+        encoding: "ros1msg".to_string(),
+        data: Cow::Owned(message_definition),
+    };
+    let channel = mcap::Channel {
+        id: channel_id,
+        topic: topic.to_string(),
+        schema: Some(Arc::new(schema)),
+        message_encoding: "ros1".to_string(),
+        metadata,
+    };
     state.connections.insert(
         conn_id,
         ConnectionInfo {
-            channel_id,
-            topic: topic.to_string(),
-            schema_id,
-            schema_name: msg_type,
-            schema_data: message_definition,
-            metadata,
+            channel: Arc::new(channel),
         },
     );
     Ok(())
@@ -187,26 +190,13 @@ fn process_message<W: std::io::Write + Seek>(
     // We intentionally write via the high-level `Writer::write()` path (instead of
     // `write_to_known_channel`) so we can preserve ROS `conn` IDs as MCAP channel IDs.
     // `add_channel()` auto-assigns channel IDs, and `write_to_known_channel()` requires
-    // those writer-assigned IDs. Reconstructing a channel with the explicit ID here keeps
-    // Go parity for conn->channel mapping, while `Writer::write()` deduplicates channel and
-    // schema records after first use.
-    let schema = mcap::Schema {
-        id: conn_info.schema_id,
-        name: conn_info.schema_name.clone(),
-        encoding: "ros1msg".to_string(),
-        data: Cow::Borrowed(&conn_info.schema_data),
-    };
-    let channel = mcap::Channel {
-        id: conn_info.channel_id,
-        topic: conn_info.topic.clone(),
-        schema: Some(Arc::new(schema)),
-        message_encoding: "ros1".to_string(),
-        metadata: conn_info.metadata.clone(),
-    };
+    // those writer-assigned IDs. We build the explicit channel once per ROS connection
+    // and Arc-clone it here, avoiding per-message topic/schema/metadata allocations
+    // while still keeping Go parity for conn->channel mapping.
 
     writer
         .write(&mcap::Message {
-            channel: Arc::new(channel),
+            channel: Arc::clone(&conn_info.channel),
             sequence: state.sequence,
             log_time,
             publish_time: log_time,
