@@ -40,7 +40,7 @@ struct ParsedSchema {
     data: Vec<u8>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 struct Doctor {
     strict_message_order: bool,
     diagnosis: Diagnosis,
@@ -61,6 +61,8 @@ struct Doctor {
     max_log_time: Option<u64>,
     message_count: u64,
     statistics: Option<mcap::records::Statistics>,
+    duplicate_schema_warning_ids: BTreeSet<u16>,
+    duplicate_channel_warning_ids: BTreeSet<u16>,
 }
 
 fn diagnose_mcap(mcap: &[u8], strict_message_order: bool) -> Diagnosis {
@@ -94,6 +96,8 @@ impl Doctor {
             max_log_time: None,
             message_count: 0,
             statistics: None,
+            duplicate_schema_warning_ids: BTreeSet::new(),
+            duplicate_channel_warning_ids: BTreeSet::new(),
         }
     }
 
@@ -303,7 +307,9 @@ impl Doctor {
             }
             self.schema_ids_in_summary_section.insert(header.id);
         } else {
-            if self.schemas_in_data_section.contains_key(&header.id) {
+            if self.schemas_in_data_section.contains_key(&header.id)
+                && self.duplicate_schema_warning_ids.insert(header.id)
+            {
                 self.warn(format!(
                     "Duplicate schema records in data section with ID {}",
                     header.id
@@ -350,7 +356,9 @@ impl Doctor {
             }
             self.channel_ids_in_summary_section.insert(channel.id);
         } else {
-            if self.channels_in_data_section.contains_key(&channel.id) {
+            if self.channels_in_data_section.contains_key(&channel.id)
+                && self.duplicate_channel_warning_ids.insert(channel.id)
+            {
                 self.warn(format!(
                     "Duplicate channel records in data section with ID {}",
                     channel.id
@@ -385,6 +393,8 @@ impl Doctor {
         }
 
         if let Some(previous) = self.last_top_level_message_time {
+            // Top-level messages are required to be ordered by log time.
+            // `--strict-message-order` only governs ordering checks across chunked messages.
             if header.log_time < previous {
                 let topic = channel_topic.as_deref().unwrap_or("<unknown>");
                 self.error(format!(
@@ -705,6 +715,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::diagnose_mcap;
+    use mcap::records::op;
 
     fn write_chunked_mcap(
         configure: impl FnOnce(mcap::WriteOptions) -> mcap::WriteOptions,
@@ -817,5 +828,87 @@ mod tests {
             "{:?}",
             strict.errors
         );
+    }
+
+    #[test]
+    fn continues_scanning_after_corrupt_top_level_record() {
+        let mut mcap = write_chunked_mcap(
+            |opts| {
+                opts.use_chunks(false)
+                    .repeat_channels(false)
+                    .repeat_schemas(false)
+            },
+            None,
+            &[10],
+        );
+
+        corrupt_first_schema_data_length(&mut mcap);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        assert!(
+            diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("Failed to parse top-level record")),
+            "{:?}",
+            diagnosis.errors
+        );
+        assert!(
+            diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("unknown Schema")),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    fn corrupt_first_schema_data_length(mcap: &mut [u8]) {
+        let schema_record_offset =
+            first_record_offset(mcap, op::SCHEMA).expect("schema record should exist");
+        let body_offset = schema_record_offset + 9;
+        let body_len = read_record_len(mcap, schema_record_offset) as usize;
+        let body = &mut mcap[body_offset..body_offset + body_len];
+
+        let mut cursor = 0usize;
+        cursor += 2; // schema id
+
+        let name_len = u32::from_le_bytes(
+            body[cursor..cursor + 4]
+                .try_into()
+                .expect("name len slice should exist"),
+        ) as usize;
+        cursor += 4 + name_len;
+
+        let encoding_len = u32::from_le_bytes(
+            body[cursor..cursor + 4]
+                .try_into()
+                .expect("encoding len slice should exist"),
+        ) as usize;
+        cursor += 4 + encoding_len;
+
+        body[cursor..cursor + 4].copy_from_slice(&u32::MAX.to_le_bytes());
+    }
+
+    fn first_record_offset(mcap: &[u8], opcode: u8) -> Option<usize> {
+        let mut offset = mcap::MAGIC.len();
+        let end_magic_start = mcap.len().saturating_sub(mcap::MAGIC.len());
+        while offset + 9 <= end_magic_start {
+            let record_opcode = mcap[offset];
+            if record_opcode == opcode {
+                return Some(offset);
+            }
+            let len = read_record_len(mcap, offset) as usize;
+            offset += 9 + len;
+        }
+        None
+    }
+
+    fn read_record_len(mcap: &[u8], offset: usize) -> u64 {
+        u64::from_le_bytes(
+            mcap[offset + 1..offset + 9]
+                .try_into()
+                .expect("record length slice should exist"),
+        )
     }
 }
