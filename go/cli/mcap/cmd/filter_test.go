@@ -620,7 +620,7 @@ func TestRenameTopic(t *testing.T) {
 						}
 					}
 					assert.Equal(t, 0, topics["camera_a"])
-					assert.Greater(t, topics["camera_front"], 0)
+					assert.Positive(t, topics["camera_front"])
 					assert.Equal(t, 0, topics["camera_b"], "camera_b should be excluded by filter")
 					assert.Equal(t, 0, topics["radar_a"], "radar_a should be excluded by filter")
 				})
