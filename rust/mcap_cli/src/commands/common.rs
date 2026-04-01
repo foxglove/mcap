@@ -1,9 +1,28 @@
 use std::fmt::Write as _;
+use std::io::{IsTerminal as _, Read as _};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use mcap::records::{self, Record};
 use memmap2::Mmap;
+
+pub const PLEASE_REDIRECT: &str =
+    "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
+pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
+
+pub enum InputData {
+    Mapped(Mmap),
+    Buffered(Vec<u8>),
+}
+
+impl InputData {
+    pub fn as_slice(&self) -> &[u8] {
+        match self {
+            InputData::Mapped(mmap) => mmap.as_ref(),
+            InputData::Buffered(buf) => buf.as_slice(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedSchema {
@@ -26,6 +45,24 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     let file =
         std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
     unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
+}
+
+pub fn load_input(file: Option<&Path>) -> Result<InputData> {
+    if let Some(path) = file {
+        return Ok(InputData::Mapped(map_file(path)?));
+    }
+
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        bail!("{PLEASE_SUPPLY_FILE}");
+    }
+
+    let mut buf = Vec::new();
+    stdin
+        .lock()
+        .read_to_end(&mut buf)
+        .context("failed to read input from stdin")?;
+    Ok(InputData::Buffered(buf))
 }
 
 pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
@@ -197,6 +234,17 @@ pub fn human_bytes(num_bytes: u64) -> String {
     format!("{displayed:.2} {}", prefixes[last])
 }
 
+pub fn parse_output_compression(value: &str) -> Result<Option<mcap::Compression>> {
+    match value {
+        "zstd" => Ok(Some(mcap::Compression::Zstd)),
+        "lz4" => Ok(Some(mcap::Compression::Lz4)),
+        "none" | "" => Ok(None),
+        _ => bail!(
+            "unrecognized compression format '{value}': valid options are 'lz4', 'zstd', or 'none'"
+        ),
+    }
+}
+
 fn format_rfc3339_trimmed(dt: chrono::DateTime<chrono::Utc>) -> String {
     let rendered = dt.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
     let Some(without_z) = rendered.strip_suffix('Z') else {
@@ -331,6 +379,33 @@ mod tests {
     fn human_bytes_scales_units() {
         assert_eq!(human_bytes(2), "2.00 B");
         assert_eq!(human_bytes(2 * 1024), "2.00 KiB");
+    }
+
+    #[test]
+    fn parse_output_compression_supports_known_values() {
+        assert!(matches!(
+            super::parse_output_compression("zstd").expect("zstd should parse"),
+            Some(mcap::Compression::Zstd)
+        ));
+        assert!(matches!(
+            super::parse_output_compression("lz4").expect("lz4 should parse"),
+            Some(mcap::Compression::Lz4)
+        ));
+        assert!(super::parse_output_compression("none")
+            .expect("none should parse")
+            .is_none());
+        assert!(super::parse_output_compression("")
+            .expect("empty should parse")
+            .is_none());
+    }
+
+    #[test]
+    fn parse_output_compression_rejects_unknown_values() {
+        let err =
+            super::parse_output_compression("snappy").expect_err("unknown compression should fail");
+        assert!(err
+            .to_string()
+            .contains("unrecognized compression format 'snappy'"));
     }
 
     #[test]

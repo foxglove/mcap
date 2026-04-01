@@ -59,7 +59,7 @@ pub enum Command {
     /// Merge a selection of MCAP files by record timestamp
     Merge,
     /// Recover data from a potentially corrupt MCAP file
-    Recover,
+    Recover(RecoverCommand),
     /// Read an MCAP file and write messages sorted by log time
     Sort(SortCommand),
     /// Output version information
@@ -371,6 +371,30 @@ pub struct DoctorCommand {
 
     /// Local path to the MCAP file
     pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct RecoverCommand {
+    /// Input MCAP file path. If omitted, reads from stdin.
+    pub file: Option<PathBuf>,
+
+    /// Output MCAP file path. If omitted, writes to stdout.
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+
+    /// Always decode chunks, even for chunked input.
+    ///
+    /// This flag is accepted for compatibility with the Go CLI.
+    #[arg(short = 'a', long = "always-decode-chunk", default_value_t = false)]
+    pub always_decode_chunk: bool,
+
+    /// Target uncompressed chunk size for output MCAP
+    #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
+    pub chunk_size: u64,
+
+    /// Compression algorithm for output file: zstd, lz4, or none
+    #[arg(long = "compression", default_value = "zstd")]
+    pub compression: String,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
