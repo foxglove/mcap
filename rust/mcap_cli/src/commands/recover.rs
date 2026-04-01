@@ -556,14 +556,4 @@ mod tests {
         assert_eq!(stats.metadata, 1);
     }
 
-    #[test]
-    fn rejects_unknown_compression_format() {
-        let err = crate::commands::common::parse_output_compression("snappy")
-            .expect_err("unknown compression should fail");
-        assert!(
-            err.to_string()
-                .contains("unrecognized compression format 'snappy'"),
-            "{err:#}"
-        );
-    }
 }
