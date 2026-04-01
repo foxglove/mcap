@@ -39,7 +39,8 @@ mod tests {
         Command, ConvertCommand, ConvertCompression, DoctorCommand, DuCommand, FilterCommand,
         GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
         ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, RecoverCommand, VersionCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, RecoverCommand, SortCommand,
+        VersionCommand,
     };
 
     #[test]
@@ -421,6 +422,23 @@ mod tests {
     }
 
     #[test]
+    fn parses_sort_with_defaults() {
+        let args = Args::try_parse_from(["mcap", "sort", "in.mcap", "-o", "out.mcap"])
+            .expect("sort should parse");
+        assert_eq!(
+            args.command,
+            Command::Sort(SortCommand {
+                file: "in.mcap".into(),
+                output_file: "out.mcap".into(),
+                chunk_size: 4 * 1024 * 1024,
+                compression: ConvertCompression::Zstd,
+                include_crc: true,
+                chunked: true,
+            })
+        );
+    }
+
+    #[test]
     fn parses_recover_with_all_flags() {
         let args = Args::try_parse_from([
             "mcap",
@@ -445,5 +463,39 @@ mod tests {
                 compression: "none".to_string(),
             })
         );
+    }
+
+    #[test]
+    fn parses_sort_with_all_flags() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "sort",
+            "in.mcap",
+            "-o",
+            "out.mcap",
+            "--compression",
+            "none",
+            "--chunk-size",
+            "1024",
+            "--include-crc=false",
+            "--chunked=false",
+        ])
+        .expect("sort with flags should parse");
+        assert_eq!(
+            args.command,
+            Command::Sort(SortCommand {
+                file: "in.mcap".into(),
+                output_file: "out.mcap".into(),
+                chunk_size: 1024,
+                compression: ConvertCompression::None,
+                include_crc: false,
+                chunked: false,
+            })
+        );
+    }
+
+    #[test]
+    fn sort_requires_output_file() {
+        Args::try_parse_from(["mcap", "sort", "in.mcap"]).expect_err("sort requires --output-file");
     }
 }
