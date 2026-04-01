@@ -61,7 +61,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
         Command::Filter(args) => filter::run(ctx, args),
         Command::Merge(args) => merge::run(ctx, args),
         Command::Recover => recover::run(ctx),
-        Command::Sort => sort::run(ctx),
+        Command::Sort(args) => sort::run(ctx, args),
     }
 }
 
@@ -74,7 +74,7 @@ mod tests {
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
         DoctorCommand, DuCommand, GetAttachmentCommand, GetMetadataCommand, InfoCommand,
         ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, SortCommand,
     };
     use crate::context::CommandContext;
 
@@ -218,5 +218,25 @@ mod tests {
                 .expect_err("list command should fail on missing file");
             assert!(err.to_string().contains("couldn't open"));
         }
+    }
+
+    #[test]
+    fn sort_requires_existing_file() {
+        let err = dispatch(
+            &CommandContext::default(),
+            Command::Sort(SortCommand {
+                file: PathBuf::from("does-not-exist.mcap"),
+                output_file: PathBuf::from("sorted.mcap"),
+                chunk_size: 4 * 1024 * 1024,
+                compression: crate::cli::ConvertCompression::Zstd,
+                include_crc: true,
+                chunked: true,
+            }),
+        )
+        .expect_err("sort should fail on missing input file");
+        assert!(
+            err.to_string().contains("couldn't open")
+                || err.to_string().contains("failed to canonicalize input")
+        );
     }
 }
