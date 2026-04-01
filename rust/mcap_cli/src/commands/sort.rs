@@ -3,7 +3,7 @@ use std::io::{Seek, Write};
 
 use anyhow::{bail, Context, Result};
 
-use crate::cli::SortCommand;
+use crate::cli::{ConvertCompression, SortCommand};
 use crate::commands::common;
 use crate::context::CommandContext;
 
@@ -18,6 +18,7 @@ struct SortOptions {
 pub fn run(_ctx: &CommandContext, args: SortCommand) -> Result<()> {
     let opts = build_sort_options(&args)?;
     let input = common::map_file(&args.file)?;
+    validate_sort_input(input.as_ref())?;
     let output = std::fs::File::create(&args.output_file)
         .with_context(|| format!("failed to open output '{}'", args.output_file.display()))?;
     sort_to_writer(input.as_ref(), output, &opts)
@@ -25,41 +26,23 @@ pub fn run(_ctx: &CommandContext, args: SortCommand) -> Result<()> {
 
 fn build_sort_options(args: &SortCommand) -> Result<SortOptions> {
     Ok(SortOptions {
-        compression: parse_output_compression(&args.compression)?,
+        compression: convert_compression(args.compression),
         chunk_size: args.chunk_size,
         include_crc: args.include_crc,
         chunked: args.chunked,
     })
 }
 
-fn parse_output_compression(value: &str) -> Result<Option<mcap::Compression>> {
+fn convert_compression(value: ConvertCompression) -> Option<mcap::Compression> {
     match value {
-        "zstd" => Ok(Some(mcap::Compression::Zstd)),
-        "lz4" => Ok(Some(mcap::Compression::Lz4)),
-        "none" | "" => Ok(None),
-        _ => bail!(
-            "unrecognized compression format '{value}': valid options are 'lz4', 'zstd', or 'none'"
-        ),
+        ConvertCompression::Zstd => Some(mcap::Compression::Zstd),
+        ConvertCompression::Lz4 => Some(mcap::Compression::Lz4),
+        ConvertCompression::None => None,
     }
 }
 
 fn sort_to_writer<W: Write + Seek>(input: &[u8], sink: W, opts: &SortOptions) -> Result<()> {
-    let header = read_header(input)?;
-    let summary = mcap::Summary::read(input).context("failed to read file index")?;
-    let has_chunk_indexes = summary
-        .as_ref()
-        .is_some_and(|summary| !summary.chunk_indexes.is_empty());
-    if !has_chunk_indexes && file_has_messages(input)? {
-        let reason = if summary.is_none() {
-            "summary section not available"
-        } else {
-            "no chunk index records"
-        };
-        bail!(
-            "Error reading file index: {reason}. You may need to run `mcap recover` if the file is corrupt or not chunk indexed."
-        );
-    }
-
+    let header = common::read_header(input)?;
     let mut write_options = mcap::WriteOptions::new()
         .use_chunks(opts.chunked)
         .chunk_size(Some(opts.chunk_size))
@@ -69,13 +52,16 @@ fn sort_to_writer<W: Write + Seek>(input: &[u8], sink: W, opts: &SortOptions) ->
         .calculate_summary_section_crc(opts.include_crc)
         .calculate_attachment_crcs(opts.include_crc);
     if let Some(header) = header {
-        write_options = write_options.profile(header.profile).library(header.library);
+        write_options = write_options
+            .profile(header.profile)
+            .library(header.library);
     }
 
     let mut writer = write_options
         .create(sink)
         .context("failed to create mcap writer")?;
 
+    let summary = mcap::Summary::read(input).context("failed to read file index")?;
     if let Some(summary) = &summary {
         copy_attachments_from_summary(input, summary, &mut writer)?;
         copy_metadata_from_summary(input, summary, &mut writer)?;
@@ -90,13 +76,22 @@ fn sort_to_writer<W: Write + Seek>(input: &[u8], sink: W, opts: &SortOptions) ->
     Ok(())
 }
 
-fn read_header(input: &[u8]) -> Result<Option<mcap::records::Header>> {
-    let mut reader = mcap::read::LinearReader::new(input)?;
-    match reader.next() {
-        Some(Ok(mcap::records::Record::Header(header))) => Ok(Some(header)),
-        Some(Ok(_)) | None => Ok(None),
-        Some(Err(err)) => Err(err.into()),
+fn validate_sort_input(input: &[u8]) -> Result<()> {
+    let summary = mcap::Summary::read(input).context("failed to read file index")?;
+    let has_chunk_indexes = summary
+        .as_ref()
+        .is_some_and(|summary| !summary.chunk_indexes.is_empty());
+    if !has_chunk_indexes && file_has_messages(input)? {
+        let reason = if summary.is_none() {
+            "summary section not available"
+        } else {
+            "no chunk index records"
+        };
+        bail!(
+            "Error reading file index: {reason}. You may need to run `mcap recover` if the file is corrupt or not chunk indexed."
+        );
     }
+    Ok(())
 }
 
 fn file_has_messages(input: &[u8]) -> Result<bool> {
@@ -215,8 +210,12 @@ fn checked_slice(input: &[u8], offset: u64, length: usize) -> Result<&[u8]> {
 mod tests {
     use std::collections::BTreeMap;
     use std::io::Cursor;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{parse_output_compression, sort_to_writer, SortOptions};
+    use crate::cli::SortCommand;
+    use crate::context::CommandContext;
+    use super::{sort_to_writer, validate_sort_input, SortOptions};
+    use crate::cli::ConvertCompression;
 
     fn default_sort_options() -> SortOptions {
         SortOptions {
@@ -379,14 +378,35 @@ mod tests {
     }
 
     #[test]
-    fn fails_for_unindexed_input_with_messages() {
+    fn run_rejects_unindexed_input_without_truncating_existing_output() {
         let input = build_summaryless_message_input();
-        let mut output = Cursor::new(Vec::new());
-        let err = sort_to_writer(&input, &mut output, &default_sort_options())
-            .expect_err("unindexed input with messages should fail");
+        let input_path = unique_temp_path("input");
+        let output_path = unique_temp_path("output");
+        std::fs::write(&input_path, input).expect("write input fixture");
+        std::fs::write(&output_path, b"do-not-truncate").expect("write output sentinel");
+
+        let err = super::run(
+            &CommandContext::default(),
+            SortCommand {
+                file: input_path.clone(),
+                output_file: output_path.clone(),
+                compression: ConvertCompression::Zstd,
+                chunk_size: 4 * 1024 * 1024,
+                include_crc: true,
+                chunked: true,
+            },
+        )
+        .expect_err("unindexed input with messages should fail");
         let text = err.to_string();
         assert!(text.contains("Error reading file index"));
         assert!(text.contains("mcap recover"));
+        assert_eq!(
+            std::fs::read(&output_path).expect("read output sentinel"),
+            b"do-not-truncate"
+        );
+
+        let _ = std::fs::remove_file(input_path);
+        let _ = std::fs::remove_file(output_path);
     }
 
     #[test]
@@ -411,9 +431,41 @@ mod tests {
 
     #[test]
     fn rejects_invalid_output_compression() {
-        let err = parse_output_compression("snappy").expect_err("compression should fail");
-        assert!(err
-            .to_string()
-            .contains("valid options are 'lz4', 'zstd', or 'none'"));
+        assert!(matches!(
+            super::convert_compression(ConvertCompression::None),
+            None
+        ));
+        assert!(matches!(
+            super::convert_compression(ConvertCompression::Lz4),
+            Some(mcap::Compression::Lz4)
+        ));
+        assert!(matches!(
+            super::convert_compression(ConvertCompression::Zstd),
+            Some(mcap::Compression::Zstd)
+        ));
+    }
+
+    #[test]
+    fn validate_sort_input_rejects_unindexed_messages() {
+        let input = build_summaryless_message_input();
+        let err =
+            validate_sort_input(&input).expect_err("unindexed input with messages should fail");
+        let text = err.to_string();
+        assert!(text.contains("Error reading file index"));
+        assert!(text.contains("mcap recover"));
+    }
+
+    fn unique_temp_path(stem: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock should be after epoch")
+            .as_nanos();
+        path.push(format!(
+            "mcap_cli_sort_test_{stem}_{}_{}",
+            std::process::id(),
+            timestamp
+        ));
+        path
     }
 }

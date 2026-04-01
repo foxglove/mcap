@@ -228,7 +228,7 @@ mod tests {
                 file: PathBuf::from("does-not-exist.mcap"),
                 output_file: PathBuf::from("sorted.mcap"),
                 chunk_size: 4 * 1024 * 1024,
-                compression: "zstd".to_string(),
+                compression: crate::cli::ConvertCompression::Zstd,
                 include_crc: true,
                 chunked: true,
             }),

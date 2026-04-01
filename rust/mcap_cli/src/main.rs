@@ -38,8 +38,8 @@ mod tests {
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
         Command, ConvertCommand, ConvertCompression, DoctorCommand, DuCommand, FilterCommand,
         GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
-        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
-        ListSchemasCommand, ListSubcommand, SortCommand, VersionCommand,
+        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, SortCommand, VersionCommand,
     };
 
     #[test]
@@ -414,7 +414,7 @@ mod tests {
                 file: "in.mcap".into(),
                 output_file: "out.mcap".into(),
                 chunk_size: 4 * 1024 * 1024,
-                compression: "zstd".to_string(),
+                compression: ConvertCompression::Zstd,
                 include_crc: true,
                 chunked: true,
             })
@@ -443,7 +443,7 @@ mod tests {
                 file: "in.mcap".into(),
                 output_file: "out.mcap".into(),
                 chunk_size: 1024,
-                compression: "none".to_string(),
+                compression: ConvertCompression::None,
                 include_crc: false,
                 chunked: false,
             })
@@ -452,7 +452,6 @@ mod tests {
 
     #[test]
     fn sort_requires_output_file() {
-        Args::try_parse_from(["mcap", "sort", "in.mcap"])
-            .expect_err("sort requires --output-file");
+        Args::try_parse_from(["mcap", "sort", "in.mcap"]).expect_err("sort requires --output-file");
     }
 }

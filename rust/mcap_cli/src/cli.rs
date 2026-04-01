@@ -347,8 +347,8 @@ pub struct SortCommand {
     pub output_file: PathBuf,
 
     /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
-    #[arg(long, default_value = "zstd")]
-    pub compression: String,
+    #[arg(long, value_enum, default_value = "zstd")]
+    pub compression: ConvertCompression,
 
     /// Target uncompressed chunk size in bytes
     #[arg(long, default_value_t = 4 * 1024 * 1024)]
