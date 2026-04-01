@@ -37,10 +37,10 @@ mod tests {
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
         Command, CompressCommand, ConvertCommand, ConvertCompression, DecompressCommand,
-        DuCommand, FilterCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand,
-        GetSubcommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand,
-        ListChunksCommand, ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand,
-        VersionCommand,
+        DoctorCommand, DuCommand, FilterCommand, GetAttachmentCommand, GetCommand,
+        GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
+        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
+        ListSchemasCommand, ListSubcommand, VersionCommand,
     };
 
     #[test]
@@ -329,6 +329,32 @@ mod tests {
                 chunk_size: 1024,
                 include_crc: false,
                 chunked: false,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_doctor_subcommand() {
+        let args =
+            Args::try_parse_from(["mcap", "doctor", "demo.mcap"]).expect("doctor should parse");
+        assert_eq!(
+            args.command,
+            Command::Doctor(DoctorCommand {
+                strict_message_order: false,
+                file: "demo.mcap".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_doctor_with_strict_message_order_flag() {
+        let args = Args::try_parse_from(["mcap", "doctor", "--strict-message-order", "demo.mcap"])
+            .expect("doctor --strict-message-order should parse");
+        assert_eq!(
+            args.command,
+            Command::Doctor(DoctorCommand {
+                strict_message_order: true,
+                file: "demo.mcap".into(),
             })
         );
     }

@@ -45,7 +45,7 @@ pub enum Command {
     /// Create an uncompressed copy of an MCAP file
     Decompress(DecompressCommand),
     /// Check an MCAP file structure
-    Doctor,
+    Doctor(DoctorCommand),
     /// Compute byte usage statistics for MCAP records
     Du(DuCommand),
     /// Copy filtered MCAP data to a new file
@@ -361,6 +361,16 @@ pub struct FilterCommand {
     /// Target uncompressed chunk size for output
     #[arg(long = "chunk-size", default_value_t = 4 * 1024 * 1024)]
     pub chunk_size: u64,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct DoctorCommand {
+    /// Require that messages have a monotonic log time
+    #[arg(long, default_value_t = false)]
+    pub strict_message_order: bool,
+
+    /// Local path to the MCAP file
+    pub file: PathBuf,
 }
 
 pub type InfoCommand = FileCommand;

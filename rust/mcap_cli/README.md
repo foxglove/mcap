@@ -15,7 +15,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | `compress`   | 🟢     |                                                                                                                                        |
 | `convert`    | 🟡     | ROS1 bag → MCAP conversion is implemented (including `none`/`lz4`/`bz2` bag chunk decompression); ROS2 db3 input is not yet supported. |
 | `decompress` | 🟢     |                                                                                                                                        |
-| `doctor`     | 🔴     |                                                                                                                                        |
+| `doctor`     | 🟢     |                                                                                                                                        |
 | `du`         | 🟢     |                                                                                                                                        |
 | `filter`     | 🟢     |                                                                                                                                        |
 | `get`        | 🟢     |                                                                                                                                        |
