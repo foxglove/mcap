@@ -16,21 +16,21 @@ struct SortOptions {
 }
 
 pub fn run(_ctx: &CommandContext, args: SortCommand) -> Result<()> {
-    let opts = build_sort_options(&args)?;
+    let opts = build_sort_options(&args);
     let input = common::map_file(&args.file)?;
-    validate_sort_input(input.as_ref())?;
+    let summary = validate_sort_input(input.as_ref())?;
     let output = std::fs::File::create(&args.output_file)
         .with_context(|| format!("failed to open output '{}'", args.output_file.display()))?;
-    sort_to_writer(input.as_ref(), output, &opts)
+    sort_to_writer(input.as_ref(), output, summary, &opts)
 }
 
-fn build_sort_options(args: &SortCommand) -> Result<SortOptions> {
-    Ok(SortOptions {
+fn build_sort_options(args: &SortCommand) -> SortOptions {
+    SortOptions {
         compression: convert_compression(args.compression),
         chunk_size: args.chunk_size,
         include_crc: args.include_crc,
         chunked: args.chunked,
-    })
+    }
 }
 
 fn convert_compression(value: ConvertCompression) -> Option<mcap::Compression> {
@@ -41,7 +41,12 @@ fn convert_compression(value: ConvertCompression) -> Option<mcap::Compression> {
     }
 }
 
-fn sort_to_writer<W: Write + Seek>(input: &[u8], sink: W, opts: &SortOptions) -> Result<()> {
+fn sort_to_writer<W: Write + Seek>(
+    input: &[u8],
+    sink: W,
+    summary: Option<mcap::Summary>,
+    opts: &SortOptions,
+) -> Result<()> {
     let header = common::read_header(input)?;
     let mut write_options = mcap::WriteOptions::new()
         .use_chunks(opts.chunked)
@@ -61,7 +66,6 @@ fn sort_to_writer<W: Write + Seek>(input: &[u8], sink: W, opts: &SortOptions) ->
         .create(sink)
         .context("failed to create mcap writer")?;
 
-    let summary = mcap::Summary::read(input).context("failed to read file index")?;
     if let Some(summary) = &summary {
         copy_attachments_from_summary(input, summary, &mut writer)?;
         copy_metadata_from_summary(input, summary, &mut writer)?;
@@ -76,7 +80,7 @@ fn sort_to_writer<W: Write + Seek>(input: &[u8], sink: W, opts: &SortOptions) ->
     Ok(())
 }
 
-fn validate_sort_input(input: &[u8]) -> Result<()> {
+fn validate_sort_input(input: &[u8]) -> Result<Option<mcap::Summary>> {
     let summary = mcap::Summary::read(input).context("failed to read file index")?;
     let has_chunk_indexes = summary
         .as_ref()
@@ -91,7 +95,7 @@ fn validate_sort_input(input: &[u8]) -> Result<()> {
             "Error reading file index: {reason}. You may need to run `mcap recover` if the file is corrupt or not chunk indexed."
         );
     }
-    Ok(())
+    Ok(summary)
 }
 
 fn file_has_messages(input: &[u8]) -> Result<bool> {
@@ -212,10 +216,10 @@ mod tests {
     use std::io::Cursor;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use crate::cli::SortCommand;
-    use crate::context::CommandContext;
     use super::{sort_to_writer, validate_sort_input, SortOptions};
     use crate::cli::ConvertCompression;
+    use crate::cli::SortCommand;
+    use crate::context::CommandContext;
 
     fn default_sort_options() -> SortOptions {
         SortOptions {
@@ -343,7 +347,11 @@ mod tests {
     fn sorts_messages_in_log_time_order() {
         let input = build_out_of_order_chunked_input(false);
         let mut output = Cursor::new(Vec::new());
-        sort_to_writer(&input, &mut output, &default_sort_options()).expect("sort should succeed");
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary should exist");
+        sort_to_writer(&input, &mut output, Some(summary), &default_sort_options())
+            .expect("sort should succeed");
         let output = output.into_inner();
 
         let log_times: Vec<u64> = mcap::MessageStream::new(&output)
@@ -357,7 +365,11 @@ mod tests {
     fn copies_attachments_and_metadata() {
         let input = build_out_of_order_chunked_input(true);
         let mut output = Cursor::new(Vec::new());
-        sort_to_writer(&input, &mut output, &default_sort_options()).expect("sort should succeed");
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary should exist");
+        sort_to_writer(&input, &mut output, Some(summary), &default_sort_options())
+            .expect("sort should succeed");
         let output = output.into_inner();
 
         let summary = mcap::Summary::read(&output)
@@ -413,7 +425,7 @@ mod tests {
     fn allows_summaryless_inputs_without_messages() {
         let input = build_summaryless_metadata_only_input();
         let mut output = Cursor::new(Vec::new());
-        sort_to_writer(&input, &mut output, &default_sort_options())
+        sort_to_writer(&input, &mut output, None, &default_sort_options())
             .expect("summaryless metadata-only file should sort");
         let output = output.into_inner();
 
@@ -430,7 +442,7 @@ mod tests {
     }
 
     #[test]
-    fn rejects_invalid_output_compression() {
+    fn convert_compression_maps_variants() {
         assert!(matches!(
             super::convert_compression(ConvertCompression::None),
             None
