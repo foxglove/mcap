@@ -271,6 +271,7 @@ pub enum CoalesceChannels {
 #[command(arg_required_else_help = true)]
 pub struct MergeCommand {
     /// One or more local paths to MCAP files
+    #[arg(required = true)]
     pub files: Vec<PathBuf>,
 
     /// Output file path. If omitted, writes to stdout.

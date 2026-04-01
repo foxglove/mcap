@@ -489,4 +489,10 @@ mod tests {
     fn merge_requires_at_least_one_file() {
         Args::try_parse_from(["mcap", "merge"]).expect_err("merge requires at least one file");
     }
+
+    #[test]
+    fn merge_requires_file_even_when_flags_are_present() {
+        Args::try_parse_from(["mcap", "merge", "--compression", "zstd"])
+            .expect_err("merge should require at least one file");
+    }
 }

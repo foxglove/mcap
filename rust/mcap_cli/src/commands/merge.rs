@@ -881,6 +881,50 @@ mod tests {
     }
 
     #[test]
+    fn merge_auto_keeps_channels_distinct_when_metadata_differs() {
+        let left = build_mcap(
+            "profile",
+            &[TestMessage {
+                channel_id: 1,
+                topic: "/topic".to_string(),
+                metadata: BTreeMap::from([(String::from("host"), String::from("left"))]),
+                log_time: 0,
+                payload: vec![1],
+            }],
+            &[],
+            &[],
+            true,
+            true,
+        );
+        let right = build_mcap(
+            "profile",
+            &[TestMessage {
+                channel_id: 1,
+                topic: "/topic".to_string(),
+                metadata: BTreeMap::from([(String::from("host"), String::from("right"))]),
+                log_time: 1,
+                payload: vec![2],
+            }],
+            &[],
+            &[],
+            true,
+            true,
+        );
+
+        let merged = merge_bytes(
+            &[("left", left.as_slice()), ("right", right.as_slice())],
+            CoalesceChannels::Auto,
+            false,
+        )
+        .expect("merge");
+
+        let summary = mcap::Summary::read(&merged)
+            .expect("summary")
+            .expect("present");
+        assert_eq!(summary.channels.len(), 2);
+    }
+
+    #[test]
     fn merge_none_does_not_coalesce_channels() {
         let left = build_mcap(
             "profile",
