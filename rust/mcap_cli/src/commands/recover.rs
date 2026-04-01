@@ -555,5 +555,4 @@ mod tests {
         assert_eq!(stats.attachments, 1);
         assert_eq!(stats.metadata, 1);
     }
-
 }
