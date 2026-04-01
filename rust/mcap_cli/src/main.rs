@@ -544,7 +544,6 @@ mod tests {
 
     #[test]
     fn sort_requires_output_file() {
-        Args::try_parse_from(["mcap", "sort", "in.mcap"])
-            .expect_err("sort requires --output-file");
+        Args::try_parse_from(["mcap", "sort", "in.mcap"]).expect_err("sort requires --output-file");
     }
 }
