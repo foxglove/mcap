@@ -39,7 +39,7 @@ mod tests {
         Command, ConvertCommand, ConvertCompression, DoctorCommand, DuCommand, FilterCommand,
         GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
         ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, RecoverCommand, VersionCommand,
     };
 
     #[test]
@@ -400,6 +400,49 @@ mod tests {
                 include_attachments: true,
                 output_compression: "lz4".to_string(),
                 chunk_size: 2048,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_recover_with_defaults() {
+        let args =
+            Args::try_parse_from(["mcap", "recover", "input.mcap"]).expect("recover should parse");
+        assert_eq!(
+            args.command,
+            Command::Recover(RecoverCommand {
+                file: Some("input.mcap".into()),
+                output: None,
+                always_decode_chunk: false,
+                chunk_size: 4 * 1024 * 1024,
+                compression: "zstd".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn parses_recover_with_all_flags() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "recover",
+            "input.mcap",
+            "-o",
+            "out.mcap",
+            "-a",
+            "--chunk-size",
+            "2048",
+            "--compression",
+            "none",
+        ])
+        .expect("recover with flags should parse");
+        assert_eq!(
+            args.command,
+            Command::Recover(RecoverCommand {
+                file: Some("input.mcap".into()),
+                output: Some("out.mcap".into()),
+                always_decode_chunk: true,
+                chunk_size: 2048,
+                compression: "none".to_string(),
             })
         );
     }

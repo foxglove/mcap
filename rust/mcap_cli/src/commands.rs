@@ -60,7 +60,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
         Command::Du(args) => du::run(ctx, args),
         Command::Filter(args) => filter::run(ctx, args),
         Command::Merge => merge::run(ctx),
-        Command::Recover => recover::run(ctx),
+        Command::Recover(args) => recover::run(ctx, args),
         Command::Sort => sort::run(ctx),
     }
 }
@@ -74,7 +74,7 @@ mod tests {
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
         DoctorCommand, DuCommand, GetAttachmentCommand, GetMetadataCommand, InfoCommand,
         ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, RecoverCommand,
     };
     use crate::context::CommandContext;
 
@@ -218,5 +218,21 @@ mod tests {
                 .expect_err("list command should fail on missing file");
             assert!(err.to_string().contains("couldn't open"));
         }
+    }
+
+    #[test]
+    fn recover_requires_existing_file_when_input_is_provided() {
+        let err = dispatch(
+            &CommandContext::default(),
+            Command::Recover(RecoverCommand {
+                file: Some(PathBuf::from("does-not-exist.mcap")),
+                output: Some(PathBuf::from("recovered.mcap")),
+                always_decode_chunk: false,
+                chunk_size: 4 * 1024 * 1024,
+                compression: "zstd".to_string(),
+            }),
+        )
+        .expect_err("recover should fail on missing file");
+        assert!(err.to_string().contains("couldn't open"));
     }
 }
