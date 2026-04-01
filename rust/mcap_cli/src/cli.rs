@@ -231,11 +231,23 @@ pub struct ConvertCommand {
     pub chunk_size: u64,
 
     /// Include chunk CRC checksums in output MCAP
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub include_crc: bool,
 
     /// Enable chunked output MCAP writing
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub chunked: bool,
 }
 
@@ -280,7 +292,6 @@ pub struct MergeCommand {
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
-        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]
@@ -294,7 +305,6 @@ pub struct MergeCommand {
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
-        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]
@@ -305,7 +315,8 @@ pub struct MergeCommand {
     pub allow_duplicate_metadata: bool,
 
     /// Channel coalescing behavior:
-    /// - auto: coalesce channels with matching topic, schema, and metadata
+    /// - auto: coalesce channels with matching topic, schema, encoding, and
+    ///   metadata
     /// - force: same as auto but ignores metadata
     /// - none: do not coalesce channels
     #[arg(long, value_enum, default_value = "auto")]
@@ -428,11 +439,23 @@ pub struct SortCommand {
     pub chunk_size: u64,
 
     /// Include chunk CRC checksums in output MCAP
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub include_crc: bool,
 
     /// Enable chunked output MCAP writing
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub chunked: bool,
 }
 
