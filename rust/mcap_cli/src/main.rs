@@ -361,8 +361,8 @@ mod tests {
 
     #[test]
     fn parses_compress_with_defaults() {
-        let args = Args::try_parse_from(["mcap", "compress", "in.mcap"])
-            .expect("compress should parse");
+        let args =
+            Args::try_parse_from(["mcap", "compress", "in.mcap"]).expect("compress should parse");
         assert_eq!(
             args.command,
             Command::Compress(CompressCommand {

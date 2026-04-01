@@ -996,8 +996,11 @@ mod tests {
                 .as_nanos()
         ));
 
-        let mut options =
-            super::TranscodeCommandOptions::new(Some(input_path.clone()), Some(output_path.clone()), 1024);
+        let mut options = super::TranscodeCommandOptions::new(
+            Some(input_path.clone()),
+            Some(output_path.clone()),
+            1024,
+        );
         options.include_metadata = true;
         options.include_attachments = true;
         options.use_chunks = false;
