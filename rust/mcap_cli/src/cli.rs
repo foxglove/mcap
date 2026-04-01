@@ -272,7 +272,10 @@ pub struct MergeCommand {
     #[arg(long, default_value_t = 8 * 1024 * 1024)]
     pub chunk_size: u64,
 
-    /// Include chunk CRC checksums in output MCAP
+    /// Include chunk CRC checksums in output MCAP.
+    ///
+    /// Explicit values use the `--include-crc=<true|false>` form so this
+    /// optional bool never consumes the first positional input file.
     #[arg(
         long,
         action = ArgAction::Set,
@@ -283,7 +286,10 @@ pub struct MergeCommand {
     )]
     pub include_crc: bool,
 
-    /// Enable chunked output MCAP writing
+    /// Enable chunked output MCAP writing.
+    ///
+    /// Explicit values use the `--chunked=<true|false>` form so this optional
+    /// bool never consumes the first positional input file.
     #[arg(
         long,
         action = ArgAction::Set,
