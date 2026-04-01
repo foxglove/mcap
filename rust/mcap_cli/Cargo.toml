@@ -12,6 +12,8 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+bzip2 = "0.5"
+lz4 = "1"
 binrw = "0.12"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap = { version = "4", features = ["derive"] }

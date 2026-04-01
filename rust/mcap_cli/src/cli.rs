@@ -41,7 +41,7 @@ pub enum Command {
     /// Create a compressed copy of an MCAP file
     Compress,
     /// Convert a bag file to an MCAP file
-    Convert,
+    Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file
     Decompress,
     /// Check an MCAP file structure
@@ -205,6 +205,38 @@ pub struct VersionCommand {
     /// Print MCAP library version instead of CLI version
     #[arg(short = 'l', long = "library", default_value_t = false)]
     pub library: bool,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConvertCompression {
+    Zstd,
+    Lz4,
+    None,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct ConvertCommand {
+    /// Local path to the source ROS1 bag file
+    pub input: PathBuf,
+
+    /// Local path for the destination MCAP file
+    pub output: PathBuf,
+
+    /// Chunk compression algorithm for output MCAP
+    #[arg(long, value_enum, default_value = "zstd")]
+    pub compression: ConvertCompression,
+
+    /// Target uncompressed chunk size in bytes
+    #[arg(long, default_value_t = 8 * 1024 * 1024)]
+    pub chunk_size: u64,
+
+    /// Include chunk CRC checksums in output MCAP
+    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    pub include_crc: bool,
+
+    /// Enable chunked output MCAP writing
+    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    pub chunked: bool,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

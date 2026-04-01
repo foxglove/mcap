@@ -54,7 +54,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
 
         Command::Cat(args) => cat::run(ctx, args),
         Command::Compress => compress::run(ctx),
-        Command::Convert => convert::run(ctx),
+        Command::Convert(args) => convert::run(ctx, args),
         Command::Decompress => decompress::run(ctx),
         Command::Doctor(args) => doctor::run(ctx, args),
         Command::Du(args) => du::run(ctx, args),
