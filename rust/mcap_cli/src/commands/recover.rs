@@ -59,7 +59,7 @@ struct RecoveryState {
 
 pub fn run(_ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     let opts = RecoverOptions {
-        compression: parse_output_compression(&args.compression)?,
+        compression: crate::commands::common::parse_output_compression(&args.compression)?,
         chunk_size: args.chunk_size,
         always_decode_chunk: args.always_decode_chunk,
     };
@@ -175,7 +175,9 @@ fn recover_records<W: Write + Seek>(
     opts: &RecoverOptions,
 ) -> Result<RecoverStats> {
     if opts.always_decode_chunk {
-        // Chunk decoding is always used in the current Rust implementation.
+        eprintln!(
+            "Note: --always-decode-chunk has no effect; the Rust recover implementation always decodes chunks."
+        );
     }
 
     let mut reader = LinearReader::new_with_options(
@@ -246,10 +248,17 @@ fn recover_record<W: Write + Seek>(
         Record::Message { header, data } => {
             let Some(&channel_id) = state.channel_map.get(&header.channel_id) else {
                 if state.warned_missing_channels.insert(header.channel_id) {
-                    eprintln!(
-                        "Warning: skipping messages for unknown channel id {}",
-                        header.channel_id
-                    );
+                    if let Some(pending_channel) = state.pending_channels.get(&header.channel_id) {
+                        eprintln!(
+                            "Warning: skipping messages for channel id {} (schema id {} not found)",
+                            header.channel_id, pending_channel.schema_id
+                        );
+                    } else {
+                        eprintln!(
+                            "Warning: skipping messages for unknown channel id {}",
+                            header.channel_id
+                        );
+                    }
                 }
                 return Ok(());
             };
@@ -386,23 +395,12 @@ fn write_channel_mapping<W: Write + Seek>(
     Ok(())
 }
 
-fn parse_output_compression(value: &str) -> Result<Option<mcap::Compression>> {
-    match value {
-        "zstd" => Ok(Some(mcap::Compression::Zstd)),
-        "lz4" => Ok(Some(mcap::Compression::Lz4)),
-        "none" | "" => Ok(None),
-        _ => bail!(
-            "unrecognized compression format '{value}': valid options are 'lz4', 'zstd', or 'none'"
-        ),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
     use std::io::Cursor;
 
-    use super::{parse_output_compression, recover_to_sink, RecoverOptions};
+    use super::{recover_to_sink, RecoverOptions};
     use mcap::records::{op, MessageHeader, Record};
 
     fn write_test_input() -> Vec<u8> {
@@ -562,7 +560,8 @@ mod tests {
 
     #[test]
     fn rejects_unknown_compression_format() {
-        let err = parse_output_compression("snappy").expect_err("unknown compression should fail");
+        let err = crate::commands::common::parse_output_compression("snappy")
+            .expect_err("unknown compression should fail");
         assert!(
             err.to_string()
                 .contains("unrecognized compression format 'snappy'"),

@@ -117,20 +117,9 @@ fn build_filter_options(args: &FilterCommand) -> Result<FilterOptions> {
         end,
         include_metadata: args.include_metadata,
         include_attachments: args.include_attachments,
-        compression: parse_output_compression(&args.output_compression)?,
+        compression: common::parse_output_compression(&args.output_compression)?,
         chunk_size: args.chunk_size,
     })
-}
-
-fn parse_output_compression(value: &str) -> Result<Option<mcap::Compression>> {
-    match value {
-        "zstd" => Ok(Some(mcap::Compression::Zstd)),
-        "lz4" => Ok(Some(mcap::Compression::Lz4)),
-        "none" | "" => Ok(None),
-        _ => bail!(
-            "unrecognized compression format '{value}': valid options are 'lz4', 'zstd', or 'none'"
-        ),
-    }
 }
 
 fn parse_timestamp_args(
