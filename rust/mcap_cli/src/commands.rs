@@ -72,9 +72,8 @@ mod tests {
     use super::dispatch;
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
-        CompressCommand,
-        DoctorCommand, DuCommand, GetAttachmentCommand, GetMetadataCommand, InfoCommand,
-        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        CompressCommand, DoctorCommand, DuCommand, GetAttachmentCommand, GetMetadataCommand,
+        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
         ListMetadataCommand, ListSchemasCommand, ListSubcommand, RecoverCommand, SortCommand,
     };
     use crate::context::CommandContext;

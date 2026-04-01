@@ -36,11 +36,11 @@ mod tests {
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        Command, ConvertCommand, ConvertCompression, DoctorCommand, DuCommand, FilterCommand,
-        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
-        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, RecoverCommand, SortCommand,
-        VersionCommand,
+        Command, CompressCommand, ConvertCommand, ConvertCompression, DecompressCommand,
+        DoctorCommand, DuCommand, FilterCommand, GetAttachmentCommand, GetCommand,
+        GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
+        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
+        ListSchemasCommand, ListSubcommand, RecoverCommand, SortCommand, VersionCommand,
     };
 
     #[test]
