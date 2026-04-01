@@ -170,6 +170,7 @@ fn load_input(file: Option<&std::path::Path>) -> Result<InputData> {
     Ok(InputData::Buffered(buf))
 }
 
+#[cfg(test)]
 fn build_filter_options(args: &FilterCommand) -> Result<FilterOptions> {
     build_filter_options_from_transcode_options(&TranscodeCommandOptions::from(args))
 }
