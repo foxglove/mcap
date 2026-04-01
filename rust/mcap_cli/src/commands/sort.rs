@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::io::{Seek, Write};
+use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 
@@ -18,10 +19,29 @@ struct SortOptions {
 pub fn run(_ctx: &CommandContext, args: SortCommand) -> Result<()> {
     let opts = build_sort_options(&args);
     let input = common::map_file(&args.file)?;
+    ensure_distinct_input_output(&args.file, &args.output_file)?;
     let summary = validate_sort_input(input.as_ref())?;
     let output = std::fs::File::create(&args.output_file)
         .with_context(|| format!("failed to open output '{}'", args.output_file.display()))?;
     sort_to_writer(input.as_ref(), output, summary, &opts)
+}
+
+fn ensure_distinct_input_output(input: &Path, output: &Path) -> Result<()> {
+    let input_path = std::fs::canonicalize(input)
+        .with_context(|| format!("failed to canonicalize input '{}'", input.display()))?;
+
+    if !output.exists() {
+        return Ok(());
+    }
+
+    let output_path = std::fs::canonicalize(output)
+        .with_context(|| format!("failed to canonicalize output '{}'", output.display()))?;
+
+    if input_path == output_path {
+        bail!("input and output paths resolve to the same file");
+    }
+
+    Ok(())
 }
 
 fn build_sort_options(args: &SortCommand) -> SortOptions {
@@ -419,6 +439,31 @@ mod tests {
 
         let _ = std::fs::remove_file(input_path);
         let _ = std::fs::remove_file(output_path);
+    }
+
+    #[test]
+    fn run_rejects_same_input_and_output_file() {
+        let input = build_out_of_order_chunked_input(false);
+        let file_path = unique_temp_path("same-file");
+        std::fs::write(&file_path, input).expect("write input fixture");
+
+        let err = super::run(
+            &CommandContext::default(),
+            SortCommand {
+                file: file_path.clone(),
+                output_file: file_path.clone(),
+                compression: ConvertCompression::Zstd,
+                chunk_size: 4 * 1024 * 1024,
+                include_crc: true,
+                chunked: true,
+            },
+        )
+        .expect_err("same input/output path should fail");
+        assert!(err
+            .to_string()
+            .contains("input and output paths resolve to the same file"));
+
+        let _ = std::fs::remove_file(file_path);
     }
 
     #[test]
