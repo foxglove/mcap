@@ -182,6 +182,7 @@ fn recover_records<W: Write + Seek>(
         LinearReaderOptions::default()
             .with_skip_end_magic(true)
             .with_emit_chunks(false)
+            // Recover should ignore chunk CRC mismatches and continue decoding payload data.
             .with_validate_chunk_crcs(false)
             .with_record_length_limit(input.len()),
     );
@@ -217,6 +218,9 @@ fn recover_records<W: Write + Seek>(
                 if !saw_any_record {
                     return Err(err.into());
                 }
+                // LinearReader does not provide a resync primitive after stream-level decode
+                // failures (e.g. corrupt compressed chunk payload), so stop and keep recovered
+                // records written so far.
                 eprintln!("Warning: {err:#} -- stopping recovery scan");
                 break;
             }
@@ -542,10 +546,12 @@ mod tests {
     }
 
     #[test]
-    fn ignores_invalid_chunk_crc_and_recovers_all_records() {
+    fn ignores_invalid_chunk_crc_and_recovers_all_records_from_intact_chunk_data() {
         let mut input = write_test_input();
         corrupt_first_chunk_crc(&mut input);
 
+        // This validates that disabled chunk CRC validation does not drop otherwise readable
+        // data. It intentionally does not cover corrupted compressed payload bytes.
         let (output, stats) = recover_to_vec(&input, &default_options());
         let (messages, attachments, metadata) = count_output_records(&output);
         assert_eq!(messages, 300);
