@@ -23,7 +23,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | `list`       | 🟢     |                                                                                                                                        |
 | `merge`      | 🔴     |                                                                                                                                        |
 | `recover`    | 🔴     |                                                                                                                                        |
-| `sort`       | 🔴     |                                                                                                                                        |
+| `sort`       | 🟢     |                                                                                                                                        |
 | `version`    | 🟢     |                                                                                                                                        |
 
 ## Intentional divergences from Go CLI

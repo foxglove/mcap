@@ -61,7 +61,7 @@ pub enum Command {
     /// Recover data from a potentially corrupt MCAP file
     Recover,
     /// Read an MCAP file and write messages sorted by log time
-    Sort,
+    Sort(SortCommand),
     /// Output version information
     Version(VersionCommand),
 }
@@ -335,6 +335,32 @@ pub struct DoctorCommand {
 
     /// Local path to the MCAP file
     pub file: PathBuf,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct SortCommand {
+    /// Local path to the source MCAP file
+    pub file: PathBuf,
+
+    /// Local path for the destination sorted MCAP file
+    #[arg(short = 'o', long = "output-file")]
+    pub output_file: PathBuf,
+
+    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
+    #[arg(long, value_enum, default_value = "zstd")]
+    pub compression: ConvertCompression,
+
+    /// Target uncompressed chunk size in bytes
+    #[arg(long, default_value_t = 4 * 1024 * 1024)]
+    pub chunk_size: u64,
+
+    /// Include chunk CRC checksums in output MCAP
+    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    pub include_crc: bool,
+
+    /// Enable chunked output MCAP writing
+    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    pub chunked: bool,
 }
 
 pub type InfoCommand = FileCommand;

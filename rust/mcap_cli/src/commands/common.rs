@@ -40,7 +40,7 @@ pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
     parse_mcap_linear(mcap, header)
 }
 
-fn read_header(mcap: &[u8]) -> Result<Option<records::Header>> {
+pub(crate) fn read_header(mcap: &[u8]) -> Result<Option<records::Header>> {
     let mut reader = mcap::read::LinearReader::new(mcap)?;
     match reader.next() {
         Some(Ok(Record::Header(header))) => Ok(Some(header)),
