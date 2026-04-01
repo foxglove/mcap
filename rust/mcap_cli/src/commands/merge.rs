@@ -91,7 +91,7 @@ impl Ord for PendingMessage {
 #[derive(Default)]
 struct MetadataState {
     seen_metadata: HashSet<MetadataKey>,
-    metadata_by_name: HashMap<String, MetadataKey>,
+    metadata_names: HashSet<String>,
 }
 
 #[derive(Default)]
@@ -290,23 +290,18 @@ fn write_merged_metadata<W: Write + Seek>(
     metadata_record: mcap::records::Metadata,
     allow_duplicate_metadata: bool,
 ) -> Result<()> {
-    let key = metadata_key(&metadata_record);
-    if let Some(existing) = state.metadata_by_name.get(&metadata_record.name) {
-        if existing != &key && !allow_duplicate_metadata {
-            bail!(
-                "metadata name '{}' was previously encountered. Supply --allow-duplicate-metadata to override.",
-                metadata_record.name
-            );
-        }
+    if state.metadata_names.contains(&metadata_record.name) && !allow_duplicate_metadata {
+        bail!(
+            "metadata name '{}' was previously encountered. Supply --allow-duplicate-metadata to override.",
+            metadata_record.name
+        );
     }
 
+    let key = metadata_key(&metadata_record);
     if state.seen_metadata.insert(key.clone()) {
         writer.write_metadata(&metadata_record)?;
     }
-    state
-        .metadata_by_name
-        .entry(metadata_record.name.clone())
-        .or_insert(key);
+    state.metadata_names.insert(metadata_record.name.clone());
     Ok(())
 }
 

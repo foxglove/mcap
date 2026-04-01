@@ -635,21 +635,13 @@ impl<W: Write + Seek> Writer<W> {
             return Ok(id);
         }
 
-        if let Some(canonical_id) = self.canonical_channels.get_by_left(&content).copied() {
-            self.all_channel_ids.insert(id, canonical_id);
+        // Compute next channel ID before mutating internal maps so there is no
+        // early-return error path that leaves partially-updated state.
+        let next_channel_id = if id >= self.next_channel_id {
+            id.saturating_add(1)
         } else {
-            self.canonical_channels
-                .insert_no_overwrite(content.into_owned(), id)
-                .expect("neither content nor new ID should be present in canonical_channels");
-            self.all_channel_ids.insert(id, id);
-        }
-
-        if id >= self.next_channel_id {
-            if id == u16::MAX {
-                return Err(McapError::TooManyChannels);
-            }
-            self.next_channel_id = id + 1;
-        }
+            self.next_channel_id
+        };
 
         self.write_channel(records::Channel {
             id,
@@ -658,6 +650,16 @@ impl<W: Write + Seek> Writer<W> {
             message_encoding: message_encoding.into(),
             metadata: metadata.clone(),
         })?;
+
+        if let Some(canonical_id) = self.canonical_channels.get_by_left(&content).copied() {
+            self.all_channel_ids.insert(id, canonical_id);
+        } else {
+            self.canonical_channels
+                .insert_no_overwrite(content.into_owned(), id)
+                .expect("neither content nor new ID should be present in canonical_channels");
+            self.all_channel_ids.insert(id, id);
+        }
+        self.next_channel_id = next_channel_id;
 
         Ok(id)
     }

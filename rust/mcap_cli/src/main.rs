@@ -460,6 +460,32 @@ mod tests {
     }
 
     #[test]
+    fn parses_merge_bool_flags_without_explicit_values() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "merge",
+            "a.mcap",
+            "b.mcap",
+            "--include-crc",
+            "--chunked",
+        ])
+        .expect("merge bool flags should parse without explicit values");
+        assert_eq!(
+            args.command,
+            Command::Merge(MergeCommand {
+                files: vec!["a.mcap".into(), "b.mcap".into()],
+                output_file: None,
+                compression: MergeCompression::Zstd,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: true,
+                chunked: true,
+                allow_duplicate_metadata: false,
+                coalesce_channels: CoalesceChannels::Auto,
+            })
+        );
+    }
+
+    #[test]
     fn merge_requires_at_least_one_file() {
         Args::try_parse_from(["mcap", "merge"]).expect_err("merge requires at least one file");
     }
