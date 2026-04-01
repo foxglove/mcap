@@ -8,23 +8,23 @@ It is not ready for production use yet.
 
 Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 
-| Command      | Status | Notes                                                                                                                                  |
-| ------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| `add`        | 🟢     |                                                                                                                                        |
-| `cat`        | 🟡     | Core `cat` output is implemented; Go-parity gaps remain (`--topic`/time-range filters, `--json`, stdin input, remote URI input).       |
-| `compress`   | 🔴     |                                                                                                                                        |
-| `convert`    | 🟡     | ROS1 bag → MCAP conversion is implemented (including `none`/`lz4`/`bz2` bag chunk decompression); ROS2 db3 input is not yet supported. |
-| `decompress` | 🔴     |                                                                                                                                        |
-| `doctor`     | 🟢     |                                                                                                                                        |
-| `du`         | 🟢     |                                                                                                                                        |
-| `filter`     | 🟢     |                                                                                                                                        |
-| `get`        | 🟢     |                                                                                                                                        |
-| `info`       | 🟢     |                                                                                                                                        |
-| `list`       | 🟢     |                                                                                                                                        |
-| `merge`      | 🔴     |                                                                                                                                        |
+| Command      | Status | Notes                                                                                                                                     |
+| ------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `add`        | 🟢     |                                                                                                                                           |
+| `cat`        | 🟡     | Core `cat` output is implemented; Go-parity gaps remain (`--topic`/time-range filters, `--json`, stdin input, remote URI input).          |
+| `compress`   | 🔴     |                                                                                                                                           |
+| `convert`    | 🟡     | ROS1 bag → MCAP conversion is implemented (including `none`/`lz4`/`bz2` bag chunk decompression); ROS2 db3 input is not yet supported.    |
+| `decompress` | 🔴     |                                                                                                                                           |
+| `doctor`     | 🟢     |                                                                                                                                           |
+| `du`         | 🟢     |                                                                                                                                           |
+| `filter`     | 🟢     |                                                                                                                                           |
+| `get`        | 🟢     |                                                                                                                                           |
+| `info`       | 🟢     |                                                                                                                                           |
+| `list`       | 🟢     |                                                                                                                                           |
+| `merge`      | 🔴     |                                                                                                                                           |
 | `recover`    | 🟡     | Best-effort recovery is implemented for messages, attachments, and metadata; Go-parity gaps remain around raw chunk passthrough behavior. |
-| `sort`       | 🔴     |                                                                                                                                        |
-| `version`    | 🟢     |                                                                                                                                        |
+| `sort`       | 🔴     |                                                                                                                                           |
+| `version`    | 🟢     |                                                                                                                                           |
 
 ## Intentional divergences from Go CLI
 
