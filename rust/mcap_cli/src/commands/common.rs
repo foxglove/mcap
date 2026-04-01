@@ -1,9 +1,28 @@
 use std::fmt::Write as _;
+use std::io::{IsTerminal as _, Read as _};
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use mcap::records::{self, Record};
 use memmap2::Mmap;
+
+pub const PLEASE_REDIRECT: &str =
+    "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
+pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
+
+pub enum InputData {
+    Mapped(Mmap),
+    Buffered(Vec<u8>),
+}
+
+impl InputData {
+    pub fn as_slice(&self) -> &[u8] {
+        match self {
+            InputData::Mapped(mmap) => mmap.as_ref(),
+            InputData::Buffered(buf) => buf.as_slice(),
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedSchema {
@@ -26,6 +45,24 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     let file =
         std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
     unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
+}
+
+pub fn load_input(file: Option<&Path>) -> Result<InputData> {
+    if let Some(path) = file {
+        return Ok(InputData::Mapped(map_file(path)?));
+    }
+
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        bail!("{PLEASE_SUPPLY_FILE}");
+    }
+
+    let mut buf = Vec::new();
+    stdin
+        .lock()
+        .read_to_end(&mut buf)
+        .context("failed to read input from stdin")?;
+    Ok(InputData::Buffered(buf))
 }
 
 pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {

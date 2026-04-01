@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::{IsTerminal as _, Read as _, Seek, Write};
+use std::io::{IsTerminal as _, Seek, Write};
 
 use anyhow::{bail, Context, Result};
 use mcap::records::{self, op, Record};
@@ -7,24 +7,6 @@ use mcap::sans_io::{LinearReadEvent, LinearReader, LinearReaderOptions};
 
 use crate::cli::RecoverCommand;
 use crate::context::CommandContext;
-
-const PLEASE_REDIRECT: &str =
-    "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
-const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
-
-enum InputData {
-    Mapped(memmap2::Mmap),
-    Buffered(Vec<u8>),
-}
-
-impl InputData {
-    fn as_slice(&self) -> &[u8] {
-        match self {
-            InputData::Mapped(mmap) => mmap.as_ref(),
-            InputData::Buffered(buf) => buf.as_slice(),
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 struct RecoverOptions {
@@ -63,18 +45,19 @@ pub fn run(_ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
         chunk_size: args.chunk_size,
         always_decode_chunk: args.always_decode_chunk,
     };
-    let input = load_input(args.file.as_deref())?;
+    let input = crate::commands::common::load_input(args.file.as_deref())?;
 
     let stats = if let Some(output) = &args.output {
-        let writer = std::io::BufWriter::new(
-            std::fs::File::create(output)
-                .with_context(|| format!("failed to open '{}' for writing", output.display()))?,
-        );
-        let (stats, _) = recover_to_sink(input.as_slice(), writer, &opts, false)?;
+        let writer = std::fs::File::create(output)
+            .with_context(|| format!("failed to open '{}' for writing", output.display()))?;
+        let (stats, writer) = recover_to_sink(input.as_slice(), writer, &opts, false)?;
+        writer
+            .sync_all()
+            .context("failed to flush output file contents")?;
         stats
     } else {
         if std::io::stdout().is_terminal() {
-            bail!("{PLEASE_REDIRECT}");
+            bail!("{}", crate::commands::common::PLEASE_REDIRECT);
         }
         let stdout = std::io::stdout();
         let writer = mcap::write::NoSeek::new(stdout.lock());
@@ -88,25 +71,6 @@ pub fn run(_ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     );
     Ok(())
 }
-
-fn load_input(file: Option<&std::path::Path>) -> Result<InputData> {
-    if let Some(path) = file {
-        return Ok(InputData::Mapped(crate::commands::common::map_file(path)?));
-    }
-
-    let stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        bail!("{PLEASE_SUPPLY_FILE}");
-    }
-
-    let mut buf = Vec::new();
-    stdin
-        .lock()
-        .read_to_end(&mut buf)
-        .context("failed to read input from stdin")?;
-    Ok(InputData::Buffered(buf))
-}
-
 fn recover_to_sink<W: Write + Seek>(
     input: &[u8],
     sink: W,
