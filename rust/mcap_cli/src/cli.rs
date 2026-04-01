@@ -231,23 +231,11 @@ pub struct ConvertCommand {
     pub chunk_size: u64,
 
     /// Include chunk CRC checksums in output MCAP
-    #[arg(
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        default_missing_value = "true",
-        default_value_t = true
-    )]
+    #[arg(long, action = ArgAction::Set, default_value_t = true)]
     pub include_crc: bool,
 
     /// Enable chunked output MCAP writing
-    #[arg(
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        default_missing_value = "true",
-        default_value_t = true
-    )]
+    #[arg(long, action = ArgAction::Set, default_value_t = true)]
     pub chunked: bool,
 }
 
@@ -286,12 +274,16 @@ pub struct MergeCommand {
 
     /// Include chunk CRC checksums in output MCAP.
     ///
-    /// Explicit values use the `--include-crc=<true|false>` form so this
-    /// optional bool never consumes the first positional input file.
+    /// Supports bare `--include-crc` (true) and explicit values via
+    /// `--include-crc=<true|false>`.
+    ///
+    /// Requiring `=` for explicit values avoids an optional bool from consuming
+    /// the first positional input file.
     #[arg(
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
+        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]
@@ -299,12 +291,16 @@ pub struct MergeCommand {
 
     /// Enable chunked output MCAP writing.
     ///
-    /// Explicit values use the `--chunked=<true|false>` form so this optional
-    /// bool never consumes the first positional input file.
+    /// Supports bare `--chunked` (true) and explicit values via
+    /// `--chunked=<true|false>`.
+    ///
+    /// Requiring `=` for explicit values avoids an optional bool from consuming
+    /// the first positional input file.
     #[arg(
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
+        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]
@@ -439,23 +435,11 @@ pub struct SortCommand {
     pub chunk_size: u64,
 
     /// Include chunk CRC checksums in output MCAP
-    #[arg(
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        default_missing_value = "true",
-        default_value_t = true
-    )]
+    #[arg(long, action = ArgAction::Set, default_value_t = true)]
     pub include_crc: bool,
 
     /// Enable chunked output MCAP writing
-    #[arg(
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        default_missing_value = "true",
-        default_value_t = true
-    )]
+    #[arg(long, action = ArgAction::Set, default_value_t = true)]
     pub chunked: bool,
 }
 
