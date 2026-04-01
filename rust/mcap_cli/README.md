@@ -12,9 +12,9 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | ------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `add`        | 🟢     |                                                                                                                                        |
 | `cat`        | 🟡     | Core `cat` output is implemented; Go-parity gaps remain (`--topic`/time-range filters, `--json`, stdin input, remote URI input).       |
-| `compress`   | 🔴     |                                                                                                                                        |
+| `compress`   | 🟢     |                                                                                                                                        |
 | `convert`    | 🟡     | ROS1 bag → MCAP conversion is implemented (including `none`/`lz4`/`bz2` bag chunk decompression); ROS2 db3 input is not yet supported. |
-| `decompress` | 🔴     |                                                                                                                                        |
+| `decompress` | 🟢     |                                                                                                                                        |
 | `doctor`     | 🔴     |                                                                                                                                        |
 | `du`         | 🟢     |                                                                                                                                        |
 | `filter`     | 🟢     |                                                                                                                                        |
