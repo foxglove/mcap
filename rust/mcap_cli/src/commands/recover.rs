@@ -120,7 +120,7 @@ fn recover_to_sink<W: Write + Seek>(
         .compression(opts.compression)
         .disable_seeking(disable_seeking);
 
-    if let Some(header) = sniff_header(input)? {
+    if let Some(header) = sniff_header(input) {
         write_options = write_options
             .profile(header.profile)
             .library(header.library);
@@ -142,30 +142,32 @@ fn validate_start_magic(input: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn sniff_header(input: &[u8]) -> Result<Option<records::Header>> {
+fn sniff_header(input: &[u8]) -> Option<records::Header> {
     let offset = mcap::MAGIC.len();
     if input.len() < offset + 9 {
-        return Ok(None);
+        return None;
     }
     if input[offset] != op::HEADER {
-        return Ok(None);
+        return None;
     }
     let length = u64::from_le_bytes(
         input[offset + 1..offset + 9]
             .try_into()
             .expect("record header len slice"),
     );
+    let Ok(length) = usize::try_from(length) else {
+        return None;
+    };
     let body_start = offset + 9;
-    let body_end = body_start
-        .checked_add(usize::try_from(length).unwrap_or(usize::MAX))
-        .context("header length overflows usize")?;
+    let Some(body_end) = body_start.checked_add(length) else {
+        return None;
+    };
     let Some(body) = input.get(body_start..body_end) else {
-        return Ok(None);
+        return None;
     };
     match mcap::parse_record(op::HEADER, body) {
-        Ok(Record::Header(header)) => Ok(Some(header)),
-        Ok(_) => Ok(None),
-        Err(_) => Ok(None),
+        Ok(Record::Header(header)) => Some(header),
+        Ok(_) | Err(_) => None,
     }
 }
 
