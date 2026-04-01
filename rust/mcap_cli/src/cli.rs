@@ -57,7 +57,7 @@ pub enum Command {
     /// List records of an MCAP file
     List(ListCommand),
     /// Merge a selection of MCAP files by record timestamp
-    Merge,
+    Merge(MergeCommand),
     /// Recover data from a potentially corrupt MCAP file
     Recover,
     /// Read an MCAP file and write messages sorted by log time
@@ -237,6 +237,55 @@ pub struct ConvertCommand {
     /// Enable chunked output MCAP writing
     #[arg(long, action = ArgAction::Set, default_value_t = true)]
     pub chunked: bool,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MergeCompression {
+    Zstd,
+    Lz4,
+    None,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoalesceChannels {
+    Auto,
+    Force,
+    None,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+#[command(arg_required_else_help = true)]
+pub struct MergeCommand {
+    /// One or more local paths to MCAP files
+    pub files: Vec<PathBuf>,
+
+    /// Output file path. If omitted, writes to stdout.
+    #[arg(short = 'o', long = "output-file")]
+    pub output_file: Option<PathBuf>,
+
+    /// Chunk compression algorithm for output MCAP
+    #[arg(long, value_enum, default_value = "zstd")]
+    pub compression: MergeCompression,
+
+    /// Target uncompressed chunk size in bytes
+    #[arg(long, default_value_t = 8 * 1024 * 1024)]
+    pub chunk_size: u64,
+
+    /// Include chunk CRC checksums in output MCAP
+    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    pub include_crc: bool,
+
+    /// Enable chunked output MCAP writing
+    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    pub chunked: bool,
+
+    /// Allow duplicate-named metadata records in output
+    #[arg(long, default_value_t = false)]
+    pub allow_duplicate_metadata: bool,
+
+    /// Channel coalescing behavior
+    #[arg(long, value_enum, default_value = "auto")]
+    pub coalesce_channels: CoalesceChannels,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

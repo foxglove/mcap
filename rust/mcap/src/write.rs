@@ -596,6 +596,72 @@ impl<W: Write + Seek> Writer<W> {
         Ok(id)
     }
 
+    /// Adds a channel with an explicit ID.
+    ///
+    /// Unlike [`Self::add_channel`], this method does not coalesce away channel records with
+    /// duplicate content. This is useful when preserving distinct channel IDs from an input file
+    /// is required, even if multiple channels share identical topic/schema/encoding/metadata.
+    ///
+    /// If a channel with the same ID is already known:
+    /// - returns `Ok(id)` if its content matches
+    /// - returns [`McapError::ConflictingChannels`] if its content differs
+    pub fn add_channel_with_id(
+        &mut self,
+        id: u16,
+        schema_id: u16,
+        topic: &str,
+        message_encoding: &str,
+        metadata: &BTreeMap<String, String>,
+    ) -> McapResult<u16> {
+        if schema_id != 0 && !self.all_schema_ids.contains_key(&schema_id) {
+            return Err(McapError::UnknownSchema(topic.into(), schema_id));
+        }
+
+        let content = ChannelContent {
+            topic: Cow::Borrowed(topic),
+            schema_id,
+            message_encoding: Cow::Borrowed(message_encoding),
+            metadata: Cow::Borrowed(metadata),
+        };
+
+        if let Some(existing_canonical_id) = self.all_channel_ids.get(&id).copied() {
+            let Some(current_canonical_id) = self.canonical_channels.get_by_left(&content).copied()
+            else {
+                return Err(McapError::ConflictingChannels(topic.into()));
+            };
+            if existing_canonical_id != current_canonical_id {
+                return Err(McapError::ConflictingChannels(topic.into()));
+            }
+            return Ok(id);
+        }
+
+        if let Some(canonical_id) = self.canonical_channels.get_by_left(&content).copied() {
+            self.all_channel_ids.insert(id, canonical_id);
+        } else {
+            self.canonical_channels
+                .insert_no_overwrite(content.into_owned(), id)
+                .expect("neither content nor new ID should be present in canonical_channels");
+            self.all_channel_ids.insert(id, id);
+        }
+
+        if id >= self.next_channel_id {
+            if id == u16::MAX {
+                return Err(McapError::TooManyChannels);
+            }
+            self.next_channel_id = id + 1;
+        }
+
+        self.write_channel(records::Channel {
+            id,
+            schema_id,
+            topic: topic.into(),
+            message_encoding: message_encoding.into(),
+            metadata: metadata.clone(),
+        })?;
+
+        Ok(id)
+    }
+
     /// Write a channel record into the MCAP.
     fn write_channel(&mut self, channel: records::Channel) -> McapResult<()> {
         let record = Record::Channel(channel);
@@ -2090,6 +2156,72 @@ mod tests {
             .expect("summary should be present");
         assert_eq!(summary.channels.len(), 2);
         assert_eq!(summary.schemas.len(), 2);
+    }
+
+    #[test]
+    fn add_channel_with_id_preserves_duplicate_content_channels() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let schema_id = writer
+            .add_schema("schema", "jsonschema", br#"{}"#)
+            .expect("failed to add schema");
+
+        let channel_one = writer
+            .add_channel_with_id(schema_id, schema_id, "/topic", "json", &BTreeMap::new())
+            .expect("failed to add channel one");
+        let channel_two = writer
+            .add_channel_with_id(schema_id + 1, schema_id, "/topic", "json", &BTreeMap::new())
+            .expect("failed to add channel two");
+
+        assert_ne!(channel_one, channel_two);
+
+        writer
+            .write_to_known_channel(
+                &MessageHeader {
+                    channel_id: channel_one,
+                    sequence: 0,
+                    log_time: 1,
+                    publish_time: 1,
+                },
+                &[1],
+            )
+            .expect("failed to write first message");
+        writer
+            .write_to_known_channel(
+                &MessageHeader {
+                    channel_id: channel_two,
+                    sequence: 0,
+                    log_time: 2,
+                    publish_time: 2,
+                },
+                &[2],
+            )
+            .expect("failed to write second message");
+
+        writer.finish().expect("failed to finish");
+        let mcap = writer.into_inner().into_inner();
+        let summary = crate::Summary::read(&mcap)
+            .expect("failed to read summary")
+            .expect("summary should be present");
+        assert_eq!(summary.channels.len(), 2);
+    }
+
+    #[test]
+    fn add_channel_with_id_rejects_conflicting_existing_id() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let schema_id = writer
+            .add_schema("schema", "jsonschema", br#"{}"#)
+            .expect("failed to add schema");
+
+        writer
+            .add_channel_with_id(7, schema_id, "/topic", "json", &BTreeMap::new())
+            .expect("failed to add channel");
+
+        let err = writer
+            .add_channel_with_id(7, schema_id, "/other", "json", &BTreeMap::new())
+            .expect_err("conflicting channel id should fail");
+        assert_matches!(err, McapError::ConflictingChannels(_));
     }
 
     #[test]

@@ -21,7 +21,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | `get`        | 🟢     |                                                                                                                                        |
 | `info`       | 🟢     |                                                                                                                                        |
 | `list`       | 🟢     |                                                                                                                                        |
-| `merge`      | 🔴     |                                                                                                                                        |
+| `merge`      | 🟢     |                                                                                                                                        |
 | `recover`    | 🔴     |                                                                                                                                        |
 | `sort`       | 🔴     |                                                                                                                                        |
 | `version`    | 🟢     |                                                                                                                                        |

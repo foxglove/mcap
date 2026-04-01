@@ -59,7 +59,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
         Command::Doctor(args) => doctor::run(ctx, args),
         Command::Du(args) => du::run(ctx, args),
         Command::Filter(args) => filter::run(ctx, args),
-        Command::Merge => merge::run(ctx),
+        Command::Merge(args) => merge::run(ctx, args),
         Command::Recover => recover::run(ctx),
         Command::Sort => sort::run(ctx),
     }

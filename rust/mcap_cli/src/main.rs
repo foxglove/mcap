@@ -36,10 +36,11 @@ mod tests {
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        Command, ConvertCommand, ConvertCompression, DoctorCommand, DuCommand, FilterCommand,
-        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
-        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, VersionCommand,
+        CoalesceChannels, Command, ConvertCommand, ConvertCompression, DoctorCommand, DuCommand,
+        FilterCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand,
+        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, MergeCompression,
+        VersionCommand,
     };
 
     #[test]
@@ -402,5 +403,64 @@ mod tests {
                 chunk_size: 2048,
             })
         );
+    }
+
+    #[test]
+    fn parses_merge_with_defaults() {
+        let args = Args::try_parse_from(["mcap", "merge", "a.mcap", "b.mcap"])
+            .expect("merge should parse");
+        assert_eq!(
+            args.command,
+            Command::Merge(MergeCommand {
+                files: vec!["a.mcap".into(), "b.mcap".into()],
+                output_file: None,
+                compression: MergeCompression::Zstd,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: true,
+                chunked: true,
+                allow_duplicate_metadata: false,
+                coalesce_channels: CoalesceChannels::Auto,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_merge_with_all_flags() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "merge",
+            "a.mcap",
+            "b.mcap",
+            "-o",
+            "out.mcap",
+            "--compression",
+            "none",
+            "--chunk-size",
+            "2048",
+            "--include-crc=false",
+            "--chunked=false",
+            "--allow-duplicate-metadata",
+            "--coalesce-channels",
+            "force",
+        ])
+        .expect("merge with flags should parse");
+        assert_eq!(
+            args.command,
+            Command::Merge(MergeCommand {
+                files: vec!["a.mcap".into(), "b.mcap".into()],
+                output_file: Some("out.mcap".into()),
+                compression: MergeCompression::None,
+                chunk_size: 2048,
+                include_crc: false,
+                chunked: false,
+                allow_duplicate_metadata: true,
+                coalesce_channels: CoalesceChannels::Force,
+            })
+        );
+    }
+
+    #[test]
+    fn merge_requires_at_least_one_file() {
+        Args::try_parse_from(["mcap", "merge"]).expect_err("merge requires at least one file");
     }
 }
