@@ -189,7 +189,7 @@ This can be combined with other filter options like time range or topic selectio
 
 <!-- cspell: enable -->
 
-The command will fail if the target topic already exists in the file.
+The command will fail if the target topic already exists in the file. Only one topic can be renamed per invocation; to rename multiple topics, run the command multiple times.
 
 ### File Diagnostics
 

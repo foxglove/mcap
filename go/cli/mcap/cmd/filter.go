@@ -341,6 +341,16 @@ func filterSeekable(
 	mcapWriter *mcap.Writer,
 	opts *filterOpts,
 ) error {
+	// Check for rename collisions upfront before writing anything, since we
+	// have the full channel list available via the index.
+	if opts.renameFrom != "" {
+		for _, ch := range info.Channels {
+			if ch.Topic == opts.renameTo {
+				return fmt.Errorf("target topic %q already exists in the file", opts.renameTo)
+			}
+		}
+	}
+
 	// Write header from source
 	if err := mcapWriter.WriteHeader(reader.Header()); err != nil {
 		return err
@@ -759,12 +769,12 @@ usage:
 		renameFrom := filterCmd.PersistentFlags().String(
 			"rename-from",
 			"",
-			"existing topic name to rename (requires --rename-to)",
+			"existing topic name to rename. Only one topic can be renamed per invocation (requires --rename-to)",
 		)
 		renameTo := filterCmd.PersistentFlags().String(
 			"rename-to",
 			"",
-			"new topic name (requires --rename-from)",
+			"new topic name. Only one topic can be renamed per invocation (requires --rename-from)",
 		)
 		filterCmd.Run = func(_ *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(&filterFlags{
