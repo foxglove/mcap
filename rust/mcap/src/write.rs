@@ -602,6 +602,10 @@ impl<W: Write + Seek> Writer<W> {
     /// duplicate content. This is useful when preserving distinct channel IDs from an input file
     /// is required, even if multiple channels share identical topic/schema/encoding/metadata.
     ///
+    /// Adding an explicit ID does not advance the internal allocator used by
+    /// [`Self::add_channel`]. Automatically allocated IDs continue to use the first available
+    /// channel ID.
+    ///
     /// If a channel with the same ID is already known:
     /// - returns `Ok(id)` if its content matches
     /// - returns [`McapError::ConflictingChannels`] if its content differs
@@ -635,14 +639,6 @@ impl<W: Write + Seek> Writer<W> {
             return Ok(id);
         }
 
-        // Compute next channel ID before mutating internal maps so there is no
-        // early-return error path that leaves partially-updated state.
-        let next_channel_id = if id >= self.next_channel_id {
-            id.saturating_add(1)
-        } else {
-            self.next_channel_id
-        };
-
         self.write_channel(records::Channel {
             id,
             schema_id,
@@ -659,7 +655,6 @@ impl<W: Write + Seek> Writer<W> {
                 .expect("neither content nor new ID should be present in canonical_channels");
             self.all_channel_ids.insert(id, id);
         }
-        self.next_channel_id = next_channel_id;
 
         Ok(id)
     }
@@ -2224,6 +2219,122 @@ mod tests {
             .add_channel_with_id(7, schema_id, "/other", "json", &BTreeMap::new())
             .expect_err("conflicting channel id should fail");
         assert_matches!(err, McapError::ConflictingChannels(_));
+    }
+
+    #[test]
+    fn add_channel_with_id_is_idempotent_for_same_id_and_content() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let schema_id = writer
+            .add_schema("schema", "jsonschema", br#"{}"#)
+            .expect("failed to add schema");
+
+        let first = writer
+            .add_channel_with_id(7, schema_id, "/topic", "json", &BTreeMap::new())
+            .expect("failed to add channel");
+        let second = writer
+            .add_channel_with_id(7, schema_id, "/topic", "json", &BTreeMap::new())
+            .expect("failed to re-add identical channel");
+        assert_eq!(first, second);
+
+        writer.finish().expect("failed to finish");
+        let mcap = writer.into_inner().into_inner();
+        let summary = crate::Summary::read(&mcap)
+            .expect("failed to read summary")
+            .expect("summary should be present");
+        assert_eq!(summary.channels.len(), 1);
+    }
+
+    #[test]
+    fn add_channel_with_id_does_not_advance_allocator() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let schema_id = writer
+            .add_schema("schema", "jsonschema", br#"{}"#)
+            .expect("failed to add schema");
+
+        let explicit_id = writer
+            .add_channel_with_id(9000, schema_id, "/explicit", "json", &BTreeMap::new())
+            .expect("failed to add explicit channel");
+        assert_eq!(explicit_id, 9000);
+
+        let first_auto = writer
+            .add_channel(schema_id, "/auto1", "json", &BTreeMap::new())
+            .expect("failed to add first automatic channel");
+        let second_auto = writer
+            .add_channel(schema_id, "/auto2", "json", &BTreeMap::new())
+            .expect("failed to add second automatic channel");
+
+        assert_eq!(first_auto, 1);
+        assert_eq!(second_auto, 2);
+    }
+
+    #[test]
+    fn add_channel_with_id_max_keeps_allocator_progress() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let schema_id = writer
+            .add_schema("schema", "jsonschema", br#"{}"#)
+            .expect("failed to add schema");
+
+        writer
+            .add_channel_with_id(u16::MAX, schema_id, "/max", "json", &BTreeMap::new())
+            .expect("failed to add max-id channel");
+        let auto_id = writer
+            .add_channel(schema_id, "/auto", "json", &BTreeMap::new())
+            .expect("failed to add automatic channel after max-id channel");
+        assert_eq!(auto_id, 1);
+    }
+
+    #[test]
+    fn add_channel_with_id_is_idempotent_for_matching_existing_id() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let schema_id = writer
+            .add_schema("schema", "jsonschema", br#"{}"#)
+            .expect("failed to add schema");
+
+        let first = writer
+            .add_channel_with_id(7, schema_id, "/topic", "json", &BTreeMap::new())
+            .expect("failed to add channel");
+        let second = writer
+            .add_channel_with_id(7, schema_id, "/topic", "json", &BTreeMap::new())
+            .expect("re-adding same id/content should be ok");
+
+        assert_eq!(first, 7);
+        assert_eq!(second, 7);
+
+        writer.finish().expect("failed to finish");
+        let mcap = writer.into_inner().into_inner();
+        let summary = crate::Summary::read(&mcap)
+            .expect("failed to read summary")
+            .expect("summary should be present");
+        assert_eq!(summary.channels.len(), 1);
+    }
+
+    #[test]
+    fn add_channel_with_id_keeps_auto_allocator_at_lowest_free_id() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let schema_id = writer
+            .add_schema("schema", "jsonschema", br#"{}"#)
+            .expect("failed to add schema");
+
+        writer
+            .add_channel_with_id(9000, schema_id, "/topic", "json", &BTreeMap::new())
+            .expect("failed to add explicit channel");
+        let auto_id = writer
+            .add_channel(schema_id, "/auto", "json", &BTreeMap::new())
+            .expect("failed to add auto channel");
+        assert_eq!(auto_id, 1);
+
+        writer
+            .add_channel_with_id(u16::MAX, schema_id, "/max", "json", &BTreeMap::new())
+            .expect("failed to add explicit max id");
+        let next_auto_id = writer
+            .add_channel(schema_id, "/next-auto", "json", &BTreeMap::new())
+            .expect("failed to add next auto channel");
+        assert_eq!(next_auto_id, 2);
     }
 
     #[test]
