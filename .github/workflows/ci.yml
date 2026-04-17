@@ -92,7 +92,7 @@ jobs:
         with:
           node-version: 24.x
           cache: yarn
-      - uses: astral-sh/setup-uv@v8.0.0
+      - uses: astral-sh/setup-uv@v8.1.0
       - run: uv sync --frozen --directory python
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
@@ -297,7 +297,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           lfs: true
-      - uses: astral-sh/setup-uv@v8.0.0
+      - uses: astral-sh/setup-uv@v8.1.0
       - run: make lint
       - run: make test
       - run: make examples
