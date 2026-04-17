@@ -508,10 +508,8 @@ fn filter_linear<W: Write + Seek>(
                     data: Cow::Borrowed(data.as_ref()),
                 })?;
             }
-            mcap::records::Record::Metadata(metadata) => {
-                if opts.include_metadata {
-                    writer.write_metadata(&metadata)?;
-                }
+            mcap::records::Record::Metadata(metadata) if opts.include_metadata => {
+                writer.write_metadata(&metadata)?;
             }
             mcap::records::Record::Attachment { header, data, .. } => {
                 if !opts.include_attachments {
