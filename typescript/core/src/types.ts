@@ -139,4 +139,25 @@ export type DecompressHandlers = {
 export interface IReadable {
   size(): Promise<bigint>;
   read(offset: bigint, size: bigint): Promise<Uint8Array>;
+
+  /**
+   * Optional capability flag advertised by implementations whose `read()` is safe to invoke
+   * concurrently (e.g. via `Promise.all`).
+   *
+   * When `true`, consumers may:
+   * - Issue multiple `read()` calls without awaiting each one sequentially.
+   * - Retain the returned `Uint8Array` across subsequent `read()` calls; the bytes will not be
+   *   mutated or aliased by any later read.
+   *
+   * When omitted or `false`, consumers MUST:
+   * - Serialize `read()` calls (await each one before issuing the next).
+   * - Treat the returned `Uint8Array` as valid only until the next `read()` call — copy the bytes
+   *   out before the next read if they need to outlive it.
+   *
+   * Only used by McapIndexedReader to optimize prefetched message index reads when `prefetchMessageIndexes` is `true`.
+   *
+   * Defaults to `false` (i.e. omitted) for safety; existing implementations that reuse an internal
+   * buffer do not need to opt in.
+   */
+  readonly supportsConcurrentReads?: boolean;
 }

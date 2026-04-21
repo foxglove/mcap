@@ -10,6 +10,7 @@ type ChunkCursorParams = {
   startTime: bigint | undefined;
   endTime: bigint | undefined;
   reverse: boolean;
+  messageIndexCache?: ReadonlyMap<bigint, Uint8Array>;
 };
 
 /**
@@ -26,6 +27,7 @@ export class ChunkCursor {
   #startTime: bigint | undefined;
   #endTime: bigint | undefined;
   #reverse: boolean;
+  #messageIndexCache?: ReadonlyMap<bigint, Uint8Array>;
 
   // List of message offsets (across all channels) sorted by logTime.
   #orderedMessageOffsets?: [logTime: bigint, offset: bigint][];
@@ -38,6 +40,7 @@ export class ChunkCursor {
     this.#startTime = params.startTime;
     this.#endTime = params.endTime;
     this.#reverse = params.reverse;
+    this.#messageIndexCache = params.messageIndexCache;
 
     if (this.chunkIndex.messageIndexLength === 0n) {
       // Chunk has no message indexes.
@@ -134,10 +137,15 @@ export class ChunkCursor {
 
     // Future optimization: read only message indexes for given channelIds, not all message indexes for the chunk
     const messageIndexEndOffset = messageIndexStartOffset + this.chunkIndex.messageIndexLength;
-    const messageIndexes = await readable.read(
-      relevantMessageIndexStartOffset,
-      messageIndexEndOffset - relevantMessageIndexStartOffset,
-    );
+    const cachedMessageIndexes = this.#messageIndexCache?.get(this.chunkIndex.chunkStartOffset);
+    const messageIndexes = cachedMessageIndexes
+      ? cachedMessageIndexes.subarray(
+          Number(relevantMessageIndexStartOffset - messageIndexStartOffset),
+        )
+      : await readable.read(
+          relevantMessageIndexStartOffset,
+          messageIndexEndOffset - relevantMessageIndexStartOffset,
+        );
     const messageIndexesView = new DataView(
       messageIndexes.buffer,
       messageIndexes.byteOffset,

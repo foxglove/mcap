@@ -21,6 +21,7 @@ type McapIndexedReaderArgs = {
   footer: TypedMcapRecords["Footer"];
   dataEndOffset: bigint;
   dataSectionCrc?: number;
+  messageIndexCache?: ReadonlyMap<bigint, Uint8Array>;
 };
 
 export class McapIndexedReader {
@@ -39,6 +40,7 @@ export class McapIndexedReader {
 
   #readable: IReadable;
   #decompressHandlers?: DecompressHandlers;
+  #messageIndexCache?: ReadonlyMap<bigint, Uint8Array>;
 
   #messageStartTime: bigint | undefined;
   #messageEndTime: bigint | undefined;
@@ -59,6 +61,7 @@ export class McapIndexedReader {
     this.footer = args.footer;
     this.dataEndOffset = args.dataEndOffset;
     this.dataSectionCrc = args.dataSectionCrc;
+    this.#messageIndexCache = args.messageIndexCache;
 
     for (const chunk of args.chunkIndexes) {
       if (this.#messageStartTime == undefined || chunk.messageStartTime < this.#messageStartTime) {
@@ -89,6 +92,7 @@ export class McapIndexedReader {
   static async Initialize({
     readable,
     decompressHandlers,
+    prefetchMessageIndexes = false,
   }: {
     readable: IReadable;
 
@@ -97,6 +101,30 @@ export class McapIndexedReader {
      * compression will be called to decompress the chunk data.
      */
     decompressHandlers?: DecompressHandlers;
+
+    /**
+     * When `true`, every chunk's MessageIndex records are read and cached in memory during
+     * `Initialize`. Subsequent calls to `readMessages` reuse the cache instead of issuing one
+     * network/disk read per chunk to load message indexes.
+     *
+     * Use this when:
+     * - Message reads are latency-bound (e.g. a remote `IReadable` over HTTP, S3, or similar) and
+     *   you want to parallelize the many small message-index reads up front instead of serializing
+     *   them inside `readMessages`.
+     * - You will call `readMessages` multiple times on the same reader (e.g. seeking, topic
+     *   filtering, playback UIs) and want consistently low per-call latency.
+     *
+     * Avoid this when:
+     * - The file is very large and memory is constrained. The cache holds the entirety of every
+     *   chunk's MessageIndex bytes until the reader is discarded.
+     * - You only need to read a small, known slice of the file once. The prefetch will read
+     *   message indexes for chunks you never iterate, which can be wasteful.
+     * - The underlying `IReadable` is already low-latency (e.g. a local mmapped file) where the
+     *   per-chunk await cost is negligible.
+     *
+     * Defaults to `false`.
+     */
+    prefetchMessageIndexes?: boolean;
   }): Promise<McapIndexedReader> {
     const size = await readable.size();
 
@@ -318,6 +346,71 @@ export class McapIndexedReader {
       throw errorWithLibrary(`${indexReader.bytesRemaining()} bytes remaining in index section`);
     }
 
+    let messageIndexCache: Map<bigint, Uint8Array> | undefined;
+    if (prefetchMessageIndexes && chunkIndexes.length > 0) {
+      messageIndexCache = new Map<bigint, Uint8Array>();
+
+      // Resolve each chunk's message-index byte range up front so we can either fan out reads in
+      // parallel or iterate them sequentially based on the readable's advertised capability.
+      const indexRequests: { chunkStartOffset: bigint; offset: bigint; length: bigint }[] = [];
+      for (const chunkIndex of chunkIndexes) {
+        if (chunkIndex.messageIndexLength === 0n) {
+          messageIndexCache.set(chunkIndex.chunkStartOffset, new Uint8Array());
+          continue;
+        }
+        let messageIndexStartOffset: bigint | undefined;
+        for (const offset of chunkIndex.messageIndexOffsets.values()) {
+          if (messageIndexStartOffset == undefined || offset < messageIndexStartOffset) {
+            messageIndexStartOffset = offset;
+          }
+        }
+        if (messageIndexStartOffset == undefined) {
+          messageIndexCache.set(chunkIndex.chunkStartOffset, new Uint8Array());
+          continue;
+        }
+        indexRequests.push({
+          chunkStartOffset: chunkIndex.chunkStartOffset,
+          offset: messageIndexStartOffset,
+          length: chunkIndex.messageIndexLength,
+        });
+      }
+
+      if (readable.supportsConcurrentReads) {
+        // Fan out reads with a bounded worker pool. Concurrency-safe readables guarantee the
+        // returned Uint8Arrays won't be mutated or aliased by any subsequent read. We cap the
+        // in-flight count so that files with many chunks don't overwhelm the underlying transport
+        // (e.g. HTTP connection limits) when reading from a remote IReadable.
+        const MAX_CONCURRENT_READS = 6;
+        const indexResults = new Array<Uint8Array>(indexRequests.length);
+        let nextIndex = 0;
+        const workers = Array.from(
+          { length: Math.min(MAX_CONCURRENT_READS, indexRequests.length) }, // iterable
+          async () => {
+            // map function
+            for (;;) {
+              const i = nextIndex++;
+              if (i >= indexRequests.length) {
+                return;
+              }
+              const { offset, length } = indexRequests[i]!;
+              indexResults[i] = await readable.read(offset, length);
+            }
+          },
+        );
+        await Promise.all(workers);
+        for (let i = 0; i < indexRequests.length; i++) {
+          messageIndexCache.set(indexRequests[i]!.chunkStartOffset, indexResults[i]!);
+        }
+      } else {
+        // Readable may reuse an internal buffer across read() calls; serialize reads and copy each
+        // result into a fresh Uint8Array before the next read starts.
+        for (const { chunkStartOffset, offset, length } of indexRequests) {
+          const bytes = await readable.read(offset, length);
+          messageIndexCache.set(chunkStartOffset, new Uint8Array(bytes));
+        }
+      }
+    }
+
     return new McapIndexedReader({
       readable,
       chunkIndexes,
@@ -332,6 +425,7 @@ export class McapIndexedReader {
       footer,
       dataEndOffset,
       dataSectionCrc,
+      messageIndexCache,
     });
   }
 
@@ -372,7 +466,14 @@ export class McapIndexedReader {
     for (const chunkIndex of this.chunkIndexes) {
       if (chunkIndex.messageStartTime <= endTime && chunkIndex.messageEndTime >= startTime) {
         chunkCursors.push(
-          new ChunkCursor({ chunkIndex, relevantChannels, startTime, endTime, reverse }),
+          new ChunkCursor({
+            chunkIndex,
+            relevantChannels,
+            startTime,
+            endTime,
+            reverse,
+            messageIndexCache: this.#messageIndexCache,
+          }),
         );
         if (chunksOrdered && prevChunkEndTime != undefined) {
           chunksOrdered = chunkIndex.messageStartTime >= prevChunkEndTime;

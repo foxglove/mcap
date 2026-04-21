@@ -6,6 +6,8 @@ import type { IReadable } from "@mcap/core";
 export class BlobReadable implements IReadable {
   #blob: Blob;
 
+  public readonly supportsConcurrentReads = true;
+
   public constructor(blob: Blob) {
     this.#blob = blob;
   }

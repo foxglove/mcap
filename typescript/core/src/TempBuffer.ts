@@ -9,6 +9,11 @@ export class TempBuffer implements IReadable, IWritable, ISeekableWriter {
   #buffer = new ArrayBuffer(0);
   #position = 0;
 
+  /** Concurrent read() calls are safe: reads only return views and never mutate state. Note that
+   * this guarantee only holds when no write() / seek() / truncate() is interleaved with the reads.
+   */
+  readonly supportsConcurrentReads = true;
+
   constructor(source?: ArrayBufferView | ArrayBuffer) {
     if (source instanceof ArrayBuffer) {
       this.#buffer = source;
