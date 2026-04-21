@@ -122,6 +122,15 @@ export class McapIndexedReader {
      * - The underlying `IReadable` is already low-latency (e.g. a local mmapped file) where the
      *   per-chunk await cost is negligible.
      *
+     * Memory cost: roughly 16 bytes per message in the file, held for the reader's lifetime
+     * (each MessageIndex entry is a `(logTime, offset)` pair of `uint64`s).
+     *
+     * Parallelism: if the provided `IReadable` advertises `supportsConcurrentReads`, the prefetch
+     * issues reads with a small bounded concurrency. Otherwise the reads are serialized so that
+     * implementations reusing an internal buffer (e.g. `FileHandleReadable`) remain correct; in
+     * that case the main benefit is that the cost is amortized once at init time and reused
+     * across every `readMessages` call.
+     *
      * Defaults to `false`.
      */
     prefetchMessageIndexes?: boolean;

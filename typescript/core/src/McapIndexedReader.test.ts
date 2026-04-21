@@ -1180,4 +1180,118 @@ describe("McapIndexedReader", () => {
     const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
     await expect(collect(reader.readMessages())).resolves.toEqual([message1, message2]);
   });
+
+  describe("prefetchMessageIndexes", () => {
+    // Tracking readable that allocates a fresh Uint8Array per call so it is safe to call
+    // concurrently. The module-level `makeReadable` above reuses a single buffer across reads and
+    // cannot stand in for a concurrency-safe readable.
+    function makeTrackingReadable(
+      data: Uint8Array,
+      opts: { supportsConcurrentReads: boolean },
+    ) {
+      let readCalls = 0;
+      return {
+        get readCalls() {
+          return readCalls;
+        },
+        supportsConcurrentReads: opts.supportsConcurrentReads,
+        size: async () => BigInt(data.length),
+        read: async (offset: bigint, size: bigint) => {
+          ++readCalls;
+          const out = new Uint8Array(Number(size));
+          out.set(new Uint8Array(data.buffer, data.byteOffset + Number(offset), Number(size)));
+          return out;
+        },
+      };
+    }
+
+    // Build a minimal two-chunk MCAP with a single channel and one message per chunk. This is
+    // shared by all prefetch tests and keeps the read-count assertions easy to reason about.
+    function buildTwoChunkFile() {
+      const channel: TypedMcapRecord = {
+        type: "Channel",
+        id: 1,
+        schemaId: 0,
+        topic: "a",
+        messageEncoding: "utf12",
+        metadata: new Map(),
+      };
+      const message1: TypedMcapRecords["Message"] = {
+        type: "Message",
+        channelId: channel.id,
+        sequence: 1,
+        logTime: 1n,
+        publishTime: 0n,
+        data: new Uint8Array(),
+      };
+      const message2: TypedMcapRecords["Message"] = {
+        type: "Message",
+        channelId: channel.id,
+        sequence: 2,
+        logTime: 2n,
+        publishTime: 0n,
+        data: new Uint8Array(),
+      };
+
+      const chunk1 = new ChunkBuilder({ useMessageIndex: true });
+      chunk1.addChannel(channel);
+      chunk1.addMessage(message1);
+
+      const chunk2 = new ChunkBuilder({ useMessageIndex: true });
+      chunk2.addChannel(channel);
+      chunk2.addMessage(message2);
+
+      const builder = new McapRecordBuilder();
+      builder.writeMagic();
+      builder.writeHeader({ profile: "", library: "" });
+
+      const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
+      chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk1));
+      chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk2));
+
+      builder.writeDataEnd({ dataSectionCrc: 0 });
+      const summaryStart = BigInt(builder.length);
+      builder.writeChannel(channel);
+      for (const index of chunkIndexes) {
+        builder.writeChunkIndex(index);
+      }
+      builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+      builder.writeMagic();
+
+      return { buffer: builder.buffer, messages: [message1, message2] };
+    }
+
+    it("yields the same messages as the default path", async () => {
+      const { buffer, messages } = buildTwoChunkFile();
+      const reader = await McapIndexedReader.Initialize({
+        readable: makeReadable(buffer),
+        prefetchMessageIndexes: true,
+      });
+      await expect(collect(reader.readMessages())).resolves.toEqual(messages);
+    });
+
+    it.each([
+      { label: "sequential readable", concurrent: false },
+      { label: "concurrent readable", concurrent: true },
+    ])(
+      "loads all message indexes during Initialize and issues no message-index reads during readMessages ($label)",
+      async ({ concurrent }) => {
+        const { buffer, messages } = buildTwoChunkFile();
+        const readable = makeTrackingReadable(buffer, { supportsConcurrentReads: concurrent });
+
+        const reader = await McapIndexedReader.Initialize({
+          readable,
+          prefetchMessageIndexes: true,
+        });
+        const readsAfterInit = readable.readCalls;
+
+        await expect(collect(reader.readMessages())).resolves.toEqual(messages);
+
+        // With prefetch enabled, readMessages must only issue one chunk-data read per chunk (2)
+        // — no message-index reads should happen after Initialize. Without prefetch the same
+        // iteration would additionally issue one message-index read per chunk (4 reads total).
+        expect(readable.readCalls - readsAfterInit).toEqual(2);
+      },
+    );
+  });
 });
