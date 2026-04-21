@@ -397,6 +397,8 @@ export class McapIndexedReader {
           async () => {
             // map function
             for (;;) {
+              // Safe: JS is single-threaded; each worker awaits between iterations,
+              // so nextIndex++ never races.
               const i = nextIndex++;
               if (i >= indexRequests.length) {
                 return;

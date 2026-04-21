@@ -141,6 +141,7 @@ export class ChunkCursor {
     const messageIndexes = cachedMessageIndexes
       ? cachedMessageIndexes.subarray(
           Number(relevantMessageIndexStartOffset - messageIndexStartOffset),
+          Number(messageIndexEndOffset - messageIndexStartOffset),
         )
       : await readable.read(
           relevantMessageIndexStartOffset,

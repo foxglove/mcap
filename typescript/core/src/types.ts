@@ -154,8 +154,6 @@ export interface IReadable {
    * - Treat the returned `Uint8Array` as valid only until the next `read()` call — copy the bytes
    *   out before the next read if they need to outlive it.
    *
-   * Only used by McapIndexedReader to optimize prefetched message index reads when `prefetchMessageIndexes` is `true`.
-   *
    * Defaults to `false` (i.e. omitted) for safety; existing implementations that reuse an internal
    * buffer do not need to opt in.
    */
