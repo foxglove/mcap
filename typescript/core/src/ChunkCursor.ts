@@ -110,7 +110,6 @@ export class ChunkCursor {
   }
 
   async loadMessageIndexes(readable: IReadable): Promise<void> {
-    const reverse = this.#reverse;
     let messageIndexStartOffset: bigint | undefined;
     let relevantMessageIndexStartOffset: bigint | undefined;
 
@@ -138,6 +137,17 @@ export class ChunkCursor {
       relevantMessageIndexStartOffset,
       messageIndexEndOffset - relevantMessageIndexStartOffset,
     );
+    this.loadMessageIndexesFromBytes(messageIndexes);
+  }
+
+  /**
+   * Populate this cursor's ordered message offsets from a pre-fetched buffer covering
+   * (at least a contiguous suffix of) this chunk's message index block. Callers using
+   * this method are responsible for ensuring the buffer contains complete `MessageIndex`
+   * records; partial records at the end will cause parsing to fail.
+   */
+  loadMessageIndexesFromBytes(messageIndexes: Uint8Array): void {
+    const reverse = this.#reverse;
     const messageIndexesView = new DataView(
       messageIndexes.buffer,
       messageIndexes.byteOffset,

@@ -21,6 +21,7 @@ type McapIndexedReaderArgs = {
   footer: TypedMcapRecords["Footer"];
   dataEndOffset: bigint;
   dataSectionCrc?: number;
+  combineChunkAndIndexReads: boolean;
 };
 
 export class McapIndexedReader {
@@ -39,6 +40,7 @@ export class McapIndexedReader {
 
   #readable: IReadable;
   #decompressHandlers?: DecompressHandlers;
+  #combineChunkAndIndexReads: boolean;
 
   #messageStartTime: bigint | undefined;
   #messageEndTime: bigint | undefined;
@@ -59,6 +61,7 @@ export class McapIndexedReader {
     this.footer = args.footer;
     this.dataEndOffset = args.dataEndOffset;
     this.dataSectionCrc = args.dataSectionCrc;
+    this.#combineChunkAndIndexReads = args.combineChunkAndIndexReads;
 
     for (const chunk of args.chunkIndexes) {
       if (this.#messageStartTime == undefined || chunk.messageStartTime < this.#messageStartTime) {
@@ -89,6 +92,7 @@ export class McapIndexedReader {
   static async Initialize({
     readable,
     decompressHandlers,
+    combineChunkAndIndexReads = false,
   }: {
     readable: IReadable;
 
@@ -97,6 +101,25 @@ export class McapIndexedReader {
      * compression will be called to decompress the chunk data.
      */
     decompressHandlers?: DecompressHandlers;
+
+    /**
+     * When true, `readMessages()` fetches each chunk record together with its trailing
+     * `MessageIndex` block in a single `IReadable.read` call, halving the number of reads
+     * per chunk.
+     *
+     * Tradeoffs to be aware of:
+     *  - The full message-index block is always fetched, so the leading-bytes trim that
+     *    the two-read path does when topic filtering is active is lost.
+     *  - If a chunk's cursor turns out to have no matching messages after parsing the
+     *    indexes, the chunk bytes were fetched for nothing.
+     *
+     * Defaults to `false` to preserve existing behavior.
+     *
+     * TODO:
+     *  - explain when enabling this is useful and rename to intent rather than what action it takes
+     *  - consider doing this per-chunk rather than globally
+     */
+    combineChunkAndIndexReads?: boolean;
   }): Promise<McapIndexedReader> {
     const size = await readable.size();
 
@@ -332,6 +355,7 @@ export class McapIndexedReader {
       footer,
       dataEndOffset,
       dataSectionCrc,
+      combineChunkAndIndexReads,
     });
   }
 
@@ -389,11 +413,21 @@ export class McapIndexedReader {
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
-        await cursor.loadMessageIndexes(this.#readable);
+        if (this.#combineChunkAndIndexReads && cursor.chunkIndex.messageIndexLength > 0n) {
+          const chunkView = await this.#loadChunkAndMessageIndexes(cursor.chunkIndex, cursor, {
+            validateCrcs: validateCrcs ?? true,
+          });
+          chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
+        } else {
+          await cursor.loadMessageIndexes(this.#readable);
+        }
         if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);
         } else {
           chunkCursors.pop();
+          // In combined mode, we may have cached a chunk whose cursor turned out
+          // to have no matching messages; drop it to free memory.
+          chunkViewCache.delete(cursor.chunkIndex.chunkStartOffset);
         }
         continue;
       }
@@ -529,6 +563,38 @@ export class McapIndexedReader {
       chunkIndex.chunkStartOffset,
       chunkIndex.chunkLength,
     );
+    return this.#parseChunkBytes(chunkData, chunkIndex, options);
+  }
+
+  /**
+   * Fetch the chunk record and its trailing message-index block in a single read,
+   * populating the cursor's message indexes from the fetched bytes and returning a
+   * DataView over the decoded chunk records.
+   */
+  async #loadChunkAndMessageIndexes(
+    chunkIndex: TypedMcapRecords["ChunkIndex"],
+    cursor: ChunkCursor,
+    options: { validateCrcs: boolean },
+  ): Promise<DataView> {
+    const combined = await this.#readable.read(
+      chunkIndex.chunkStartOffset,
+      chunkIndex.chunkLength + chunkIndex.messageIndexLength,
+    );
+    const chunkByteLength = Number(chunkIndex.chunkLength);
+    const chunkBytes = combined.subarray(0, chunkByteLength);
+    const messageIndexBytes = combined.subarray(chunkByteLength);
+    const chunkView = this.#parseChunkBytes(chunkBytes, chunkIndex, options);
+    // Message-index parsing copies data out of the buffer into plain JS arrays,
+    // so aliasing the readable's reusable buffer is safe here.
+    cursor.loadMessageIndexesFromBytes(messageIndexBytes);
+    return chunkView;
+  }
+
+  #parseChunkBytes(
+    chunkData: Uint8Array,
+    chunkIndex: TypedMcapRecords["ChunkIndex"],
+    options?: { validateCrcs: boolean },
+  ): DataView {
     const chunkReader = new Reader(
       new DataView(chunkData.buffer, chunkData.byteOffset, chunkData.byteLength),
     );
@@ -549,6 +615,12 @@ export class McapIndexedReader {
         throw this.#errorWithLibrary(`Unsupported compression ${chunk.compression}`);
       }
       buffer = decompress(buffer, chunk.uncompressedSize);
+    } else {
+      // For uncompressed chunks, `chunk.records` aliases the buffer returned by
+      // `readable.read`. Some IReadable implementations (e.g. FileHandleReadable)
+      // reuse their internal buffer across reads, which would corrupt this view
+      // once the next read happens. Copy so the returned DataView is stable.
+      buffer = new Uint8Array(buffer);
     }
     if (chunk.uncompressedCrc !== 0 && options?.validateCrcs !== false) {
       const chunkCrc = crc32(buffer);

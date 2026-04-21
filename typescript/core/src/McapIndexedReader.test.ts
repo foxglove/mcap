@@ -1180,4 +1180,166 @@ describe("McapIndexedReader", () => {
     const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
     await expect(collect(reader.readMessages())).resolves.toEqual([message1, message2]);
   });
+
+  describe("combineChunkAndIndexReads option", () => {
+    const channel: TypedMcapRecords["Channel"] = {
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "a",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const makeMessage = (idx: number): TypedMcapRecords["Message"] => ({
+      type: "Message",
+      channelId: channel.id,
+      sequence: idx,
+      logTime: BigInt(idx),
+      publishTime: 0n,
+      data: new Uint8Array(),
+    });
+
+    function buildTwoChunkUncompressedFile(): {
+      buffer: Uint8Array;
+      chunkIndexes: TypedMcapRecords["ChunkIndex"][];
+      messages: TypedMcapRecords["Message"][];
+    } {
+      const message1 = makeMessage(1);
+      const message2 = makeMessage(2);
+      const message3 = makeMessage(3);
+      const message4 = makeMessage(4);
+
+      const chunk1 = new ChunkBuilder({ useMessageIndex: true });
+      chunk1.addChannel(channel);
+      chunk1.addMessage(message1);
+      chunk1.addMessage(message2);
+
+      const chunk2 = new ChunkBuilder({ useMessageIndex: true });
+      chunk2.addChannel(channel);
+      chunk2.addMessage(message3);
+      chunk2.addMessage(message4);
+
+      const builder = new McapRecordBuilder();
+      builder.writeMagic();
+      builder.writeHeader({ profile: "", library: "" });
+
+      const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
+      chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk1));
+      chunkIndexes.push(writeChunkWithMessageIndexes(builder, chunk2));
+
+      builder.writeDataEnd({ dataSectionCrc: 0 });
+      const summaryStart = BigInt(builder.length);
+      for (const index of chunkIndexes) {
+        builder.writeChunkIndex(index);
+      }
+      builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+      builder.writeMagic();
+
+      return {
+        buffer: builder.buffer,
+        chunkIndexes,
+        messages: [message1, message2, message3, message4],
+      };
+    }
+
+    it.each([false, true])(
+      "returns identical messages with combineChunkAndIndexReads=%s",
+      async (combineChunkAndIndexReads) => {
+        const { buffer, messages } = buildTwoChunkUncompressedFile();
+        const reader = await McapIndexedReader.Initialize({
+          readable: makeReadable(buffer),
+          combineChunkAndIndexReads,
+        });
+        await expect(collect(reader.readMessages())).resolves.toEqual(messages);
+        await expect(collect(reader.readMessages({ reverse: true }))).resolves.toEqual(
+          [...messages].reverse(),
+        );
+      },
+    );
+
+    it("issues one read per chunk instead of two when combineChunkAndIndexReads is true", async () => {
+      const { buffer, chunkIndexes, messages } = buildTwoChunkUncompressedFile();
+
+      // Capture reads so we can assert the combined call shape.
+      const baseReadable = makeReadable(buffer);
+      const readCalls: { offset: bigint; size: bigint }[] = [];
+      const trackingReadable = {
+        size: async () => await baseReadable.size(),
+        read: async (offset: bigint, size: bigint) => {
+          readCalls.push({ offset, size });
+          return await baseReadable.read(offset, size);
+        },
+      };
+
+      const reader = await McapIndexedReader.Initialize({
+        readable: trackingReadable,
+        combineChunkAndIndexReads: true,
+      });
+      const initCallCount = readCalls.length;
+
+      const collected = await collect(reader.readMessages());
+      expect(collected).toEqual(messages);
+
+      const readMessagesCalls = readCalls.slice(initCallCount);
+      // Exactly one read per chunk, covering both the chunk and its message-index block.
+      expect(readMessagesCalls).toHaveLength(chunkIndexes.length);
+      for (let i = 0; i < chunkIndexes.length; i++) {
+        const idx = chunkIndexes[i]!;
+        expect(readMessagesCalls[i]).toEqual({
+          offset: idx.chunkStartOffset,
+          size: idx.chunkLength + idx.messageIndexLength,
+        });
+      }
+    });
+
+    it("defaults to two reads per chunk when combineChunkAndIndexReads is not set", async () => {
+      const { buffer, chunkIndexes, messages } = buildTwoChunkUncompressedFile();
+      const readable = makeReadable(buffer);
+
+      const reader = await McapIndexedReader.Initialize({ readable });
+      const initCallCount = readable.readCalls;
+
+      await expect(collect(reader.readMessages())).resolves.toEqual(messages);
+
+      expect(readable.readCalls - initCallCount).toBe(2 * chunkIndexes.length);
+    });
+
+    it("falls back to separate reads when a chunk has no message indexes", async () => {
+      // Build a file whose only chunk has no message indexes at all so
+      // messageIndexLength === 0n and the combined path is skipped.
+      const emptyChunk = new ChunkBuilder({ useMessageIndex: false });
+      const builder = new McapRecordBuilder();
+      builder.writeMagic();
+      builder.writeHeader({ profile: "", library: "" });
+      const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [];
+      chunkIndexes.push(writeChunkWithMessageIndexes(builder, emptyChunk));
+      builder.writeDataEnd({ dataSectionCrc: 0 });
+      const summaryStart = BigInt(builder.length);
+      for (const index of chunkIndexes) {
+        builder.writeChunkIndex(index);
+      }
+      builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+      builder.writeMagic();
+
+      const reader = await McapIndexedReader.Initialize({
+        readable: makeReadable(builder.buffer),
+        combineChunkAndIndexReads: true,
+      });
+      await expect(collect(reader.readMessages())).resolves.toEqual([]);
+    });
+
+    it("does not corrupt cached uncompressed chunk views across subsequent reads", async () => {
+      // Regression test: the readable used by makeReadable reuses its internal
+      // buffer across reads. Uncompressed chunk DataViews cached in readMessages
+      // must not alias that buffer.
+      const { buffer, messages } = buildTwoChunkUncompressedFile();
+      for (const combineChunkAndIndexReads of [false, true]) {
+        const reader = await McapIndexedReader.Initialize({
+          readable: makeReadable(buffer),
+          combineChunkAndIndexReads,
+        });
+        await expect(collect(reader.readMessages())).resolves.toEqual(messages);
+      }
+    });
+  });
 });
