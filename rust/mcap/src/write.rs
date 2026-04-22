@@ -525,6 +525,73 @@ impl<W: Write + Seek> Writer<W> {
         Ok(id)
     }
 
+    /// Adds a schema with an explicit ID.
+    ///
+    /// Unlike [`Self::add_schema`], this method does not coalesce away schema records with
+    /// duplicate content. This is useful when preserving distinct schema IDs from an input file
+    /// is required, even if multiple schemas share identical name/encoding/data.
+    ///
+    /// Adding an explicit ID does not advance the internal allocator used by
+    /// [`Self::add_schema`]. Automatically allocated IDs continue to use the first available
+    /// schema ID.
+    ///
+    /// If a schema with the same ID is already known:
+    /// - returns `Ok(id)` if its content matches
+    /// - returns [`McapError::ConflictingSchemas`] if its content differs
+    ///
+    /// Schema ID 0 is not valid and returns [`McapError::InvalidSchemaId`].
+    ///
+    /// When mixing this API with [`Self::add_schema`], whichever ID is canonical for a given
+    /// schema content tuple is returned by `add_schema`. So if a schema content is first
+    /// registered via `add_schema_with_id(9000, ...)`, a later `add_schema(...)` with the same
+    /// content returns `9000`.
+    pub fn add_schema_with_id(
+        &mut self,
+        id: u16,
+        name: &str,
+        encoding: &str,
+        data: &[u8],
+    ) -> McapResult<u16> {
+        if id == 0 {
+            return Err(McapError::InvalidSchemaId);
+        }
+
+        let content = SchemaContent {
+            name: Cow::Borrowed(name),
+            encoding: Cow::Borrowed(encoding),
+            data: Cow::Borrowed(data),
+        };
+
+        if let Some(existing_canonical_id) = self.all_schema_ids.get(&id).copied() {
+            let Some(current_canonical_id) = self.canonical_schemas.get_by_left(&content).copied()
+            else {
+                return Err(McapError::ConflictingSchemas(name.into()));
+            };
+            if existing_canonical_id != current_canonical_id {
+                return Err(McapError::ConflictingSchemas(name.into()));
+            }
+            return Ok(id);
+        }
+
+        self.write_schema(Schema {
+            id,
+            name: name.into(),
+            encoding: encoding.into(),
+            data: Cow::Owned(data.into()),
+        })?;
+
+        if let Some(canonical_id) = self.canonical_schemas.get_by_left(&content).copied() {
+            self.all_schema_ids.insert(id, canonical_id);
+        } else {
+            self.canonical_schemas
+                .insert_no_overwrite(content.into_owned(), id)
+                .expect("neither content nor new ID should be present in canonical_schemas");
+            self.all_schema_ids.insert(id, id);
+        }
+
+        Ok(id)
+    }
+
     /// Write a schema record into the MCAP.
     fn write_schema(&mut self, schema: Schema) -> McapResult<()> {
         let record = Record::Schema {
@@ -2161,6 +2228,164 @@ mod tests {
             .expect("summary should be present");
         assert_eq!(summary.channels.len(), 2);
         assert_eq!(summary.schemas.len(), 2);
+    }
+
+    #[test]
+    fn add_schema_with_id_preserves_duplicate_content_schemas() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+
+        let schema_one = writer
+            .add_schema_with_id(10, "schema", "jsonschema", br#"{}"#)
+            .expect("failed to add first schema");
+        let schema_two = writer
+            .add_schema_with_id(20, "schema", "jsonschema", br#"{}"#)
+            .expect("failed to add second schema");
+
+        assert_eq!(schema_one, 10);
+        assert_eq!(schema_two, 20);
+        assert_ne!(schema_one, schema_two);
+
+        writer.finish().expect("failed to finish");
+        let mcap = writer.into_inner().into_inner();
+        let summary = crate::Summary::read(&mcap)
+            .expect("failed to read summary")
+            .expect("summary should be present");
+        assert_eq!(summary.schemas.len(), 2);
+    }
+
+    #[test]
+    fn add_schema_with_id_rejects_conflicting_existing_id() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+
+        writer
+            .add_schema_with_id(7, "schema", "jsonschema", br#"{}"#)
+            .expect("failed to add schema");
+
+        let err = writer
+            .add_schema_with_id(7, "schema", "jsonschema", br#"{"type":"object"}"#)
+            .expect_err("conflicting schema id should fail");
+        assert_matches!(err, McapError::ConflictingSchemas(_));
+    }
+
+    #[test]
+    fn add_schema_with_id_is_idempotent_for_same_id_and_content() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+
+        let first = writer
+            .add_schema_with_id(7, "schema", "jsonschema", br#"{}"#)
+            .expect("failed to add schema");
+        let second = writer
+            .add_schema_with_id(7, "schema", "jsonschema", br#"{}"#)
+            .expect("failed to re-add identical schema");
+        assert_eq!(first, second);
+
+        writer.finish().expect("failed to finish");
+        let mcap = writer.into_inner().into_inner();
+        let summary = crate::Summary::read(&mcap)
+            .expect("failed to read summary")
+            .expect("summary should be present");
+        assert_eq!(summary.schemas.len(), 1);
+    }
+
+    #[test]
+    fn add_schema_with_id_rejects_zero_schema_id() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+
+        let err = writer
+            .add_schema_with_id(0, "schema", "jsonschema", br#"{}"#)
+            .expect_err("schema id 0 should fail");
+        assert_matches!(err, McapError::InvalidSchemaId);
+    }
+
+    #[test]
+    fn add_schema_with_id_sets_canonical_id_for_add_schema() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+
+        let explicit = writer
+            .add_schema_with_id(9000, "schema", "jsonschema", br#"{}"#)
+            .expect("failed to add explicit schema");
+        let auto = writer
+            .add_schema("schema", "jsonschema", br#"{}"#)
+            .expect("failed to add automatic schema");
+
+        assert_eq!(explicit, 9000);
+        assert_eq!(auto, 9000);
+    }
+
+    #[test]
+    fn add_schema_with_id_does_not_advance_allocator() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+
+        let explicit_id = writer
+            .add_schema_with_id(9000, "explicit", "jsonschema", br#"{}"#)
+            .expect("failed to add explicit schema");
+        assert_eq!(explicit_id, 9000);
+
+        let first_auto = writer
+            .add_schema("auto1", "jsonschema", br#"{}"#)
+            .expect("failed to add first automatic schema");
+        let second_auto = writer
+            .add_schema("auto2", "jsonschema", br#"{}"#)
+            .expect("failed to add second automatic schema");
+
+        assert_eq!(first_auto, 1);
+        assert_eq!(second_auto, 2);
+    }
+
+    #[test]
+    fn add_schema_with_id_keeps_allocator_at_lowest_free_id_with_interleaving() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+
+        let auto_1 = writer
+            .add_schema("auto1", "jsonschema", br#"{}"#)
+            .expect("failed to add first auto schema");
+        let auto_2 = writer
+            .add_schema("auto2", "jsonschema", br#"{}"#)
+            .expect("failed to add second auto schema");
+        let explicit_9000 = writer
+            .add_schema_with_id(9000, "explicit9000", "jsonschema", br#"{}"#)
+            .expect("failed to add explicit 9000 schema");
+        let auto_3 = writer
+            .add_schema("auto3", "jsonschema", br#"{}"#)
+            .expect("failed to add third auto schema");
+        let explicit_5 = writer
+            .add_schema_with_id(5, "explicit5", "jsonschema", br#"{}"#)
+            .expect("failed to add explicit 5 schema");
+        let auto_4 = writer
+            .add_schema("auto4", "jsonschema", br#"{}"#)
+            .expect("failed to add fourth auto schema");
+        let auto_6 = writer
+            .add_schema("auto6", "jsonschema", br#"{}"#)
+            .expect("failed to add fifth auto schema");
+
+        assert_eq!(auto_1, 1);
+        assert_eq!(auto_2, 2);
+        assert_eq!(explicit_9000, 9000);
+        assert_eq!(auto_3, 3);
+        assert_eq!(explicit_5, 5);
+        assert_eq!(auto_4, 4);
+        assert_eq!(auto_6, 6);
+    }
+
+    #[test]
+    fn add_schema_with_id_max_keeps_allocator_progress() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+
+        writer
+            .add_schema_with_id(u16::MAX, "max", "jsonschema", br#"{}"#)
+            .expect("failed to add max-id schema");
+        let auto_id = writer
+            .add_schema("auto", "jsonschema", br#"{}"#)
+            .expect("failed to add automatic schema after max-id schema");
+        assert_eq!(auto_id, 1);
     }
 
     #[test]
