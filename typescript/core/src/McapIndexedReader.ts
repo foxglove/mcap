@@ -1,7 +1,7 @@
 import { crc32, crc32Final, crc32Init, crc32Update } from "@foxglove/crc";
 import { Heap } from "heap-js";
 
-import { ChunkCursor } from "./ChunkCursor.ts";
+import { ChunkCursor, type MessageIndexCache } from "./ChunkCursor.ts";
 import Reader from "./Reader.ts";
 import { MCAP_MAGIC } from "./constants.ts";
 import { parseMagic, parseRecord } from "./parse.ts";
@@ -21,6 +21,7 @@ type McapIndexedReaderArgs = {
   footer: TypedMcapRecords["Footer"];
   dataEndOffset: bigint;
   dataSectionCrc?: number;
+  cacheMessageIndexes?: boolean;
 };
 
 export class McapIndexedReader {
@@ -39,6 +40,7 @@ export class McapIndexedReader {
 
   #readable: IReadable;
   #decompressHandlers?: DecompressHandlers;
+  #messageIndexCache?: MessageIndexCache;
 
   #messageStartTime: bigint | undefined;
   #messageEndTime: bigint | undefined;
@@ -59,6 +61,9 @@ export class McapIndexedReader {
     this.footer = args.footer;
     this.dataEndOffset = args.dataEndOffset;
     this.dataSectionCrc = args.dataSectionCrc;
+    if (args.cacheMessageIndexes === true) {
+      this.#messageIndexCache = new Map();
+    }
 
     for (const chunk of args.chunkIndexes) {
       if (this.#messageStartTime == undefined || chunk.messageStartTime < this.#messageStartTime) {
@@ -89,6 +94,7 @@ export class McapIndexedReader {
   static async Initialize({
     readable,
     decompressHandlers,
+    cacheMessageIndexes,
   }: {
     readable: IReadable;
 
@@ -97,6 +103,12 @@ export class McapIndexedReader {
      * compression will be called to decompress the chunk data.
      */
     decompressHandlers?: DecompressHandlers;
+
+    /**
+     * When true, message indexes loaded on demand by `readMessages()` are cached on the reader so
+     * subsequent calls do not need to re-read them from the underlying readable.
+     */
+    cacheMessageIndexes?: boolean;
   }): Promise<McapIndexedReader> {
     const size = await readable.size();
 
@@ -332,6 +344,7 @@ export class McapIndexedReader {
       footer,
       dataEndOffset,
       dataSectionCrc,
+      cacheMessageIndexes,
     });
   }
 
@@ -372,7 +385,14 @@ export class McapIndexedReader {
     for (const chunkIndex of this.chunkIndexes) {
       if (chunkIndex.messageStartTime <= endTime && chunkIndex.messageEndTime >= startTime) {
         chunkCursors.push(
-          new ChunkCursor({ chunkIndex, relevantChannels, startTime, endTime, reverse }),
+          new ChunkCursor({
+            chunkIndex,
+            relevantChannels,
+            startTime,
+            endTime,
+            reverse,
+            messageIndexCache: this.#messageIndexCache,
+          }),
         );
         if (chunksOrdered && prevChunkEndTime != undefined) {
           chunksOrdered = chunkIndex.messageStartTime >= prevChunkEndTime;
