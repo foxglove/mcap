@@ -861,7 +861,7 @@ describe("McapIndexedReader", () => {
     }
   });
 
-  it("caches message indexes across readMessages() calls when cacheMessageIndexes is enabled", async () => {
+  it("caches message indexes across readMessages() calls when messageIndexCacheSizeBytes > 0", async () => {
     const channelA: TypedMcapRecord = {
       type: "Channel",
       id: 1,
@@ -944,7 +944,7 @@ describe("McapIndexedReader", () => {
 
     const reader = await McapIndexedReader.Initialize({
       readable: recordingReadable,
-      cacheMessageIndexes: true,
+      messageIndexCacheSizeBytes: 1024 * 1024,
     });
 
     reads.length = 0;
@@ -964,7 +964,7 @@ describe("McapIndexedReader", () => {
     expect(reads.some(overlapsMessageIndex)).toBe(false);
   });
 
-  it("re-reads message indexes across readMessages() calls when cacheMessageIndexes is not enabled", async () => {
+  it("re-reads message indexes across readMessages() calls when messageIndexCacheSizeBytes is not set", async () => {
     const channel: TypedMcapRecord = {
       type: "Channel",
       id: 1,

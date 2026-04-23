@@ -4,20 +4,18 @@ import { sortedIndexBy } from "./sortedIndexBy.ts";
 import { sortedLastIndexBy } from "./sortedLastIndex.ts";
 import type { IReadable, TypedMcapRecords } from "./types.ts";
 
-/**
- * Cache of parsed message index entries for chunks. Keyed by chunk start offset, with an inner
- * map keyed by channel id. Shared across ChunkCursor instances so repeated readMessages() calls
- * can reuse previously fetched message indexes.
- */
-export type MessageIndexCache = Map<bigint, Map<number, [logTime: bigint, offset: bigint][]>>;
-
 type ChunkCursorParams = {
   chunkIndex: TypedMcapRecords["ChunkIndex"];
   relevantChannels: Set<number> | undefined;
   startTime: bigint | undefined;
   endTime: bigint | undefined;
   reverse: boolean;
-  messageIndexCache?: MessageIndexCache;
+  /**
+   * When true, `loadMessageIndexes()` reads the full message index region for the chunk (not just
+   * the portion containing `relevantChannels`). This is useful when the underlying readable caches
+   * reads, since it keeps the read offset/size stable across calls with different topic filters.
+   */
+  readFullMessageIndexRange?: boolean;
 };
 
 /**
@@ -34,7 +32,7 @@ export class ChunkCursor {
   #startTime: bigint | undefined;
   #endTime: bigint | undefined;
   #reverse: boolean;
-  #messageIndexCache?: MessageIndexCache;
+  #readFullMessageIndexRange: boolean;
 
   // List of message offsets (across all channels) sorted by logTime.
   #orderedMessageOffsets?: [logTime: bigint, offset: bigint][];
@@ -47,7 +45,7 @@ export class ChunkCursor {
     this.#startTime = params.startTime;
     this.#endTime = params.endTime;
     this.#reverse = params.reverse;
-    this.#messageIndexCache = params.messageIndexCache;
+    this.#readFullMessageIndexRange = params.readFullMessageIndexRange ?? false;
 
     if (this.chunkIndex.messageIndexLength === 0n) {
       // Chunk has no message indexes.
@@ -121,84 +119,59 @@ export class ChunkCursor {
 
   async loadMessageIndexes(readable: IReadable): Promise<void> {
     const reverse = this.#reverse;
+    let messageIndexStartOffset: bigint | undefined;
+    let relevantMessageIndexStartOffset: bigint | undefined;
+    const readFullRange = this.#readFullMessageIndexRange;
+
+    for (const [channelId, offset] of this.chunkIndex.messageIndexOffsets) {
+      if (messageIndexStartOffset == undefined || offset < messageIndexStartOffset) {
+        messageIndexStartOffset = offset;
+      }
+      if (readFullRange || !this.#relevantChannels || this.#relevantChannels.has(channelId)) {
+        if (
+          relevantMessageIndexStartOffset == undefined ||
+          offset < relevantMessageIndexStartOffset
+        ) {
+          relevantMessageIndexStartOffset = offset;
+        }
+      }
+    }
+    if (messageIndexStartOffset == undefined || relevantMessageIndexStartOffset == undefined) {
+      this.#orderedMessageOffsets = [];
+      return;
+    }
+
+    // Future optimization: read only message indexes for given channelIds, not all message indexes for the chunk
+    const messageIndexEndOffset = messageIndexStartOffset + this.chunkIndex.messageIndexLength;
+    const messageIndexes = await readable.read(
+      relevantMessageIndexStartOffset,
+      messageIndexEndOffset - relevantMessageIndexStartOffset,
+    );
+    const messageIndexesView = new DataView(
+      messageIndexes.buffer,
+      messageIndexes.byteOffset,
+      messageIndexes.byteLength,
+    );
+
+    const reader = new Reader(messageIndexesView);
     const arrayOfMessageOffsets: [logTime: bigint, offset: bigint][][] = [];
-
-    const cachedChannelOffsets = this.#messageIndexCache?.get(this.chunkIndex.chunkStartOffset);
-    if (cachedChannelOffsets) {
-      for (const [channelId, offsets] of cachedChannelOffsets) {
-        if (
-          offsets.length === 0 ||
-          (this.#relevantChannels && !this.#relevantChannels.has(channelId))
-        ) {
-          continue;
-        }
-        arrayOfMessageOffsets.push(offsets);
+    let record;
+    while ((record = parseRecord(reader, true))) {
+      if (record.type !== "MessageIndex") {
+        continue;
       }
-    } else {
-      let messageIndexStartOffset: bigint | undefined;
-      let relevantMessageIndexStartOffset: bigint | undefined;
-      // When populating the cache we read the full message index region so all channels are cached.
-      const readFullRange = this.#messageIndexCache != undefined;
-
-      for (const [channelId, offset] of this.chunkIndex.messageIndexOffsets) {
-        if (messageIndexStartOffset == undefined || offset < messageIndexStartOffset) {
-          messageIndexStartOffset = offset;
-        }
-        if (readFullRange || !this.#relevantChannels || this.#relevantChannels.has(channelId)) {
-          if (
-            relevantMessageIndexStartOffset == undefined ||
-            offset < relevantMessageIndexStartOffset
-          ) {
-            relevantMessageIndexStartOffset = offset;
-          }
-        }
-      }
-      if (messageIndexStartOffset == undefined || relevantMessageIndexStartOffset == undefined) {
-        this.#orderedMessageOffsets = [];
-        this.#messageIndexCache?.set(this.chunkIndex.chunkStartOffset, new Map());
-        return;
+      if (
+        record.records.length === 0 ||
+        (this.#relevantChannels && !this.#relevantChannels.has(record.channelId))
+      ) {
+        continue;
       }
 
-      // Future optimization: read only message indexes for given channelIds, not all message indexes for the chunk
-      const messageIndexEndOffset = messageIndexStartOffset + this.chunkIndex.messageIndexLength;
-      const messageIndexes = await readable.read(
-        relevantMessageIndexStartOffset,
-        messageIndexEndOffset - relevantMessageIndexStartOffset,
-      );
-      const messageIndexesView = new DataView(
-        messageIndexes.buffer,
-        messageIndexes.byteOffset,
-        messageIndexes.byteLength,
-      );
+      arrayOfMessageOffsets.push(record.records);
+    }
 
-      const reader = new Reader(messageIndexesView);
-      const channelOffsetsToCache = this.#messageIndexCache
-        ? new Map<number, [logTime: bigint, offset: bigint][]>()
-        : undefined;
-      let record;
-      while ((record = parseRecord(reader, true))) {
-        if (record.type !== "MessageIndex") {
-          continue;
-        }
-        channelOffsetsToCache?.set(record.channelId, record.records);
-        if (
-          record.records.length === 0 ||
-          (this.#relevantChannels && !this.#relevantChannels.has(record.channelId))
-        ) {
-          continue;
-        }
-
-        arrayOfMessageOffsets.push(record.records);
-      }
-
-      if (reader.bytesRemaining() !== 0) {
-        throw new Error(`${reader.bytesRemaining()} bytes remaining in message index section`);
-      }
-
-      if (channelOffsetsToCache) {
-        // should exist since `channelOffsetsToCache` is only undefined if `this.#messageIndexCache` is undefined
-        this.#messageIndexCache?.set(this.chunkIndex.chunkStartOffset, channelOffsetsToCache);
-      }
+    if (reader.bytesRemaining() !== 0) {
+      throw new Error(`${reader.bytesRemaining()} bytes remaining in message index section`);
     }
 
     this.#orderedMessageOffsets = arrayOfMessageOffsets

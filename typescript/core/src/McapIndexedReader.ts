@@ -1,7 +1,8 @@
 import { crc32, crc32Final, crc32Init, crc32Update } from "@foxglove/crc";
 import { Heap } from "heap-js";
 
-import { ChunkCursor, type MessageIndexCache } from "./ChunkCursor.ts";
+import { CachedReadable } from "./CachedReadable.ts";
+import { ChunkCursor } from "./ChunkCursor.ts";
 import Reader from "./Reader.ts";
 import { MCAP_MAGIC } from "./constants.ts";
 import { parseMagic, parseRecord } from "./parse.ts";
@@ -22,13 +23,14 @@ type McapIndexedReaderArgs = {
   dataEndOffset: bigint;
   dataSectionCrc?: number;
   /**
-   * When true, message indexes loaded on demand by `readMessages()` are cached on the reader so
-   * subsequent calls do not need to re-read them from the underlying readable. This trades
-   * memory for reduced I/O — cached indexes are held for the lifetime of the reader. The first
-   * read of each chunk fetches indexes for all channels (not just the queried subset) so that
-   * future queries against different channels also benefit from the cache.
+   * Maximum number of bytes of message index data to cache in memory across calls to
+   * `readMessages()`. When > 0, message indexes read on demand are cached so subsequent calls do
+   * not re-read them from the underlying readable. Defaults to 0 (no caching).
+   *
+   * When caching is enabled, each chunk's full message index region is read on first access so
+   * that later queries against different channels can be served from the cache.
    */
-  cacheMessageIndexes?: boolean;
+  messageIndexCacheSizeBytes?: number;
 };
 
 export class McapIndexedReader {
@@ -46,8 +48,8 @@ export class McapIndexedReader {
   readonly dataSectionCrc?: number;
 
   #readable: IReadable;
+  #messageIndexReadable: IReadable;
   #decompressHandlers?: DecompressHandlers;
-  #messageIndexCache?: MessageIndexCache;
 
   #messageStartTime: bigint | undefined;
   #messageEndTime: bigint | undefined;
@@ -68,9 +70,12 @@ export class McapIndexedReader {
     this.footer = args.footer;
     this.dataEndOffset = args.dataEndOffset;
     this.dataSectionCrc = args.dataSectionCrc;
-    if (args.cacheMessageIndexes === true) {
-      this.#messageIndexCache = new Map();
-    }
+
+    const messageIndexCacheSizeBytes = args.messageIndexCacheSizeBytes ?? 0;
+    this.#messageIndexReadable =
+      messageIndexCacheSizeBytes > 0
+        ? new CachedReadable(this.#readable, messageIndexCacheSizeBytes)
+        : this.#readable;
 
     for (const chunk of args.chunkIndexes) {
       if (this.#messageStartTime == undefined || chunk.messageStartTime < this.#messageStartTime) {
@@ -101,7 +106,7 @@ export class McapIndexedReader {
   static async Initialize({
     readable,
     decompressHandlers,
-    cacheMessageIndexes,
+    messageIndexCacheSizeBytes,
   }: {
     readable: IReadable;
 
@@ -112,10 +117,11 @@ export class McapIndexedReader {
     decompressHandlers?: DecompressHandlers;
 
     /**
-     * When true, message indexes loaded on demand by `readMessages()` are cached on the reader so
-     * subsequent calls do not need to re-read them from the underlying readable.
+     * Maximum number of bytes of message index data to cache in memory across calls to
+     * `readMessages()`. When > 0, message indexes read on demand are cached so subsequent calls do
+     * not re-read them from the underlying readable. Defaults to 0 (no caching).
      */
-    cacheMessageIndexes?: boolean;
+    messageIndexCacheSizeBytes?: number;
   }): Promise<McapIndexedReader> {
     const size = await readable.size();
 
@@ -351,7 +357,7 @@ export class McapIndexedReader {
       footer,
       dataEndOffset,
       dataSectionCrc,
-      cacheMessageIndexes,
+      messageIndexCacheSizeBytes,
     });
   }
 
@@ -389,6 +395,7 @@ export class McapIndexedReader {
     const chunkCursors = new Heap<ChunkCursor>((a, b) => a.compare(b));
     let chunksOrdered = true;
     let prevChunkEndTime: bigint | undefined;
+    const readFullMessageIndexRange = this.#messageIndexReadable !== this.#readable;
     for (const chunkIndex of this.chunkIndexes) {
       if (chunkIndex.messageStartTime <= endTime && chunkIndex.messageEndTime >= startTime) {
         chunkCursors.push(
@@ -398,7 +405,7 @@ export class McapIndexedReader {
             startTime,
             endTime,
             reverse,
-            messageIndexCache: this.#messageIndexCache,
+            readFullMessageIndexRange,
           }),
         );
         if (chunksOrdered && prevChunkEndTime != undefined) {
@@ -416,7 +423,7 @@ export class McapIndexedReader {
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
-        await cursor.loadMessageIndexes(this.#readable);
+        await cursor.loadMessageIndexes(this.#messageIndexReadable);
         if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);
         } else {
