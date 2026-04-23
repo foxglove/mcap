@@ -21,6 +21,13 @@ type McapIndexedReaderArgs = {
   footer: TypedMcapRecords["Footer"];
   dataEndOffset: bigint;
   dataSectionCrc?: number;
+  /**
+   * When true, message indexes loaded on demand by `readMessages()` are cached on the reader so
+   * subsequent calls do not need to re-read them from the underlying readable. This trades
+   * memory for reduced I/O — cached indexes are held for the lifetime of the reader. The first
+   * read of each chunk fetches indexes for all channels (not just the queried subset) so that
+   * future queries against different channels also benefit from the cache.
+   */
   cacheMessageIndexes?: boolean;
 };
 

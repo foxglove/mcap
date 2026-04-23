@@ -196,6 +196,7 @@ export class ChunkCursor {
       }
 
       if (channelOffsetsToCache) {
+        // should exist since `channelOffsetsToCache` is only undefined if `this.#messageIndexCache` is undefined
         this.#messageIndexCache?.set(this.chunkIndex.chunkStartOffset, channelOffsetsToCache);
       }
     }
