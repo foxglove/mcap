@@ -109,6 +109,27 @@ describe("CachedReadable", () => {
     expect(readable.reads).toHaveLength(2);
   });
 
+  it("re-reading the same offset with a larger size does not block caching other offsets", async () => {
+    const data = new Uint8Array(16);
+    for (let i = 0; i < 16; i++) {
+      data[i] = i;
+    }
+    const readable = makeReadable(data);
+    const cached = new CachedReadable(readable, 12);
+
+    await cached.read(0n, 4n);
+    expect(readable.reads).toHaveLength(1);
+
+    await cached.read(0n, 8n);
+    expect(readable.reads).toHaveLength(2);
+
+    await cached.read(4n, 4n);
+    expect(readable.reads).toHaveLength(3);
+
+    await cached.read(4n, 4n);
+    expect(readable.reads).toHaveLength(3);
+  });
+
   it("cleans up pending entry on read failure so retries can succeed", async () => {
     const data = new Uint8Array([0, 1, 2, 3]);
     let failNext = true;

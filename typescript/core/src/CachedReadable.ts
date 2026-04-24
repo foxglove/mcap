@@ -76,9 +76,12 @@ export class CachedReadable implements IReadable {
         // Always copy to produce a stable buffer for concurrent waiters and to prevent
         // corruption if the underlying readable reuses its backing buffer.
         const copy = new Uint8Array(data);
-        if (this.#currentCacheSizeBytes + copy.byteLength <= this.#maxCacheSizeBytes) {
+        const existing = this.#cache.get(offset);
+        const existingSize = existing?.byteLength ?? 0;
+        const newTotalSize = this.#currentCacheSizeBytes - existingSize + copy.byteLength;
+        if (newTotalSize <= this.#maxCacheSizeBytes) {
           this.#cache.set(offset, copy);
-          this.#currentCacheSizeBytes += copy.byteLength;
+          this.#currentCacheSizeBytes = newTotalSize;
         }
         return copy;
       } finally {
