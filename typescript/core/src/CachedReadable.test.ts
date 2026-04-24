@@ -84,6 +84,57 @@ describe("CachedReadable", () => {
     expect(readable.reads).toHaveLength(3);
   });
 
+  it("concurrent reads for the same offset issue only one underlying read", async () => {
+    const data = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
+    const readable = makeReadable(data);
+    const cached = new CachedReadable(readable, 1024);
+
+    const [a, b] = await Promise.all([cached.read(0n, 4n), cached.read(0n, 4n)]);
+    expect(Array.from(a)).toEqual([0, 1, 2, 3]);
+    expect(Array.from(b)).toEqual([0, 1, 2, 3]);
+    expect(readable.reads).toHaveLength(1);
+  });
+
+  it("concurrent reads for the same offset do not double-count cache size", async () => {
+    const data = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
+    const readable = makeReadable(data);
+    // Cache fits exactly one 4-byte read.
+    const cached = new CachedReadable(readable, 4);
+
+    await Promise.all([cached.read(0n, 4n), cached.read(0n, 4n)]);
+    expect(readable.reads).toHaveLength(1);
+
+    // Cache should now be exactly full; a different offset should still be readable on-demand.
+    await cached.read(4n, 4n);
+    expect(readable.reads).toHaveLength(2);
+  });
+
+  it("cleans up pending entry on read failure so retries can succeed", async () => {
+    const data = new Uint8Array([0, 1, 2, 3]);
+    let failNext = true;
+    const readable: IReadable & { reads: number } = {
+      reads: 0,
+      size: async () => BigInt(data.byteLength),
+      read: async (offset, size) => {
+        readable.reads++;
+        if (failNext) {
+          failNext = false;
+          throw new Error("transient error");
+        }
+        return new Uint8Array(data.buffer, Number(offset), Number(size));
+      },
+    };
+    const cached = new CachedReadable(readable, 1024);
+
+    await expect(cached.read(0n, 4n)).rejects.toThrow("transient error");
+    expect(readable.reads).toBe(1);
+
+    // After the failure the pending entry is gone; the next read retries the underlying readable.
+    const result = await cached.read(0n, 4n);
+    expect(Array.from(result)).toEqual([0, 1, 2, 3]);
+    expect(readable.reads).toBe(2);
+  });
+
   it("memoizes size()", async () => {
     const readable = makeReadable(new Uint8Array(16));
     let sizeCalls = 0;

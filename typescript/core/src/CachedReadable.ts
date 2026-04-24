@@ -8,6 +8,9 @@ import type { IReadable } from "./types.ts";
  * The cache is capped by `maxCacheSizeBytes`; once the cache is full, new reads pass through
  * without being cached. No eviction is performed.
  *
+ * Concurrent reads for the same offset are deduplicated: the second caller joins the first
+ * in-flight read rather than issuing a redundant underlying read.
+ *
  * Note: reads are cached by *exact* offset. A read that partially overlaps a cached range but
  * starts at a different offset will miss.
  */
@@ -23,6 +26,10 @@ export class CachedReadable implements IReadable {
    */
   #cache = new Map<bigint, Uint8Array>();
   /**
+   * In-flight reads keyed by offset so concurrent callers can await the same promise.
+   */
+  #pending = new Map<bigint, Promise<Uint8Array>>();
+  /**
    * The maximum size of the cache in bytes.
    */
   #maxCacheSizeBytes: number;
@@ -34,6 +41,7 @@ export class CachedReadable implements IReadable {
    * The size of the underlying readable.
    */
   #size: bigint | undefined;
+  supportsConcurrentReads = true;
 
   constructor(readable: IReadable, maxCacheSizeBytes: number) {
     this.#readable = readable;
@@ -41,30 +49,44 @@ export class CachedReadable implements IReadable {
   }
 
   async size(): Promise<bigint> {
-    if (this.#size == undefined) {
-      this.#size = await this.#readable.size();
-    }
-    return this.#size;
+    return (this.#size ??= await this.#readable.size());
   }
 
   async read(offset: bigint, size: bigint): Promise<Uint8Array> {
     const requestedSize = Number(size);
+
     const cached = this.#cache.get(offset);
     if (cached != undefined && cached.byteLength >= requestedSize) {
       return cached.byteLength === requestedSize ? cached : cached.subarray(0, requestedSize);
     }
 
-    const data = await this.#readable.read(offset, size);
-
-    // The underlying readable is allowed to reuse its backing buffer across reads, so we must copy
-    // the bytes before storing them in the cache.
-    if (this.#currentCacheSizeBytes + data.byteLength <= this.#maxCacheSizeBytes) {
-      const copy = new Uint8Array(data);
-      this.#cache.set(offset, copy);
-      this.#currentCacheSizeBytes += copy.byteLength;
-      return copy;
+    // Join an in-flight read for this offset if one is already pending.
+    const pending = this.#pending.get(offset);
+    if (pending != undefined) {
+      const data = await pending;
+      if (data.byteLength >= requestedSize) {
+        return data.byteLength === requestedSize ? data : data.subarray(0, requestedSize);
+      }
+      // The pending read was for fewer bytes; fall through to issue a new read.
     }
 
-    return data;
+    const readPromise = (async () => {
+      try {
+        const data = await this.#readable.read(offset, size);
+        // Always copy to produce a stable buffer for concurrent waiters and to prevent
+        // corruption if the underlying readable reuses its backing buffer.
+        const copy = new Uint8Array(data);
+        if (this.#currentCacheSizeBytes + copy.byteLength <= this.#maxCacheSizeBytes) {
+          this.#cache.set(offset, copy);
+          this.#currentCacheSizeBytes += copy.byteLength;
+        }
+        return copy;
+      } finally {
+        this.#pending.delete(offset);
+      }
+    })();
+
+    this.#pending.set(offset, readPromise);
+    return await readPromise;
   }
 }
