@@ -38,6 +38,9 @@ type McapIndexedReaderArgs = {
    * When true, message indexes are prefetched in parallel (up to `MAX_PREFETCH_CONCURRENCY`
    * concurrent reads) during reader construction. Requires the readable to support concurrent
    * reads (see {@link IReadable.supportsConcurrentReads}).
+   *
+   * If messageIndexCacheSizeBytes is set, it will set the cache size to that number if it is lower
+   * than the total message index size.
    */
   prefetchMessageIndexes?: boolean;
 };
@@ -456,10 +459,13 @@ export class McapIndexedReader {
       for (const ci of chunkIndexes) {
         totalMessageIndexBytes += Number(ci.messageIndexLength);
       }
-      const targetCacheSizeBytes = Math.min(totalMessageIndexBytes, MAX_PREFETCH_CACHE_BYTES);
-      if (effectiveCacheSizeBytes < targetCacheSizeBytes) {
-        effectiveCacheSizeBytes = targetCacheSizeBytes;
-      }
+      const derivedCacheSizeBytes = Math.min(totalMessageIndexBytes, MAX_PREFETCH_CACHE_BYTES);
+      // When the caller specified an explicit cache size, respect it as an upper bound; otherwise
+      // size the cache to fit all message indexes (capped at MAX_PREFETCH_CACHE_BYTES).
+      effectiveCacheSizeBytes =
+        messageIndexCacheSizeBytes != undefined
+          ? Math.min(messageIndexCacheSizeBytes, derivedCacheSizeBytes)
+          : derivedCacheSizeBytes;
     }
 
     return new McapIndexedReader({
