@@ -512,16 +512,16 @@ impl<W: Write + Seek> Writer<W> {
         }
         let id = self.next_schema_id;
         self.next_schema_id += 1;
-        self.canonical_schemas
-            .insert_no_overwrite(content.into_owned(), id)
-            .expect("neither schema ID or content should be present in canonical_schemas");
-        assert!(self.all_schema_ids.insert(id, id).is_none());
         self.write_schema(Schema {
             id,
             name: name.into(),
             encoding: encoding.into(),
             data: Cow::Owned(data.into()),
         })?;
+        self.canonical_schemas
+            .insert_no_overwrite(content.into_owned(), id)
+            .expect("neither schema ID or content should be present in canonical_schemas");
+        assert!(self.all_schema_ids.insert(id, id).is_none());
         Ok(id)
     }
 
@@ -648,11 +648,6 @@ impl<W: Write + Seek> Writer<W> {
         }
         let id = self.next_channel_id;
         self.next_channel_id += 1;
-        self.canonical_channels
-            .insert_no_overwrite(content.into_owned(), id)
-            .expect("neither content nor new ID should be present in canonical_channels");
-        assert!(self.all_channel_ids.insert(id, id).is_none());
-
         self.write_channel(records::Channel {
             id,
             schema_id,
@@ -660,6 +655,10 @@ impl<W: Write + Seek> Writer<W> {
             message_encoding: message_encoding.into(),
             metadata: metadata.clone(),
         })?;
+        self.canonical_channels
+            .insert_no_overwrite(content.into_owned(), id)
+            .expect("neither content nor new ID should be present in canonical_channels");
+        assert!(self.all_channel_ids.insert(id, id).is_none());
         Ok(id)
     }
 
@@ -677,8 +676,7 @@ impl<W: Write + Seek> Writer<W> {
     /// - returns `Ok(id)` if its content matches
     /// - returns [`McapError::ConflictingChannels`] if its content differs
     ///
-    /// Channel ID 0 is accepted. The MCAP spec requires schema IDs to be non-zero, but does not
-    /// reserve channel ID 0.
+    /// Channel ID 0 is accepted.
     ///
     /// When mixing this API with [`Self::add_channel`], whichever ID is canonical for a given
     /// channel content tuple is returned by `add_channel`. So if a channel content is first
