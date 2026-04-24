@@ -446,14 +446,11 @@ export class McapIndexedReader {
     }
 
     let effectiveCacheSizeBytes = messageIndexCacheSizeBytes ?? 0;
-    let effectivePrefetch = false;
     if (prefetchMessageIndexes === true) {
       if (readable.supportsConcurrentReads !== true) {
-        console.warn(
-          "McapIndexedReader: prefetchMessageIndexes was requested but the readable does not declare supportsConcurrentReads; falling back to on-demand loading with message index caching.",
+        throw errorWithLibrary(
+          "prefetchMessageIndexes requires the readable to declare supportsConcurrentReads",
         );
-      } else {
-        effectivePrefetch = true;
       }
       let totalMessageIndexBytes = 0;
       for (const ci of chunkIndexes) {
