@@ -115,11 +115,13 @@ export class McapIndexedReader {
      * compression will be called to decompress the chunk data.
      */
     decompressHandlers?: DecompressHandlers;
-
     /**
      * Maximum number of bytes of message index data to cache in memory across calls to
      * `readMessages()`. When > 0, message indexes read on demand are cached so subsequent calls do
      * not re-read them from the underlying readable. Defaults to 0 (no caching).
+     *
+     * When caching is enabled, each chunk's full message index region is read on first access so
+     * that later queries against different channels can be served from the cache.
      */
     messageIndexCacheSizeBytes?: number;
   }): Promise<McapIndexedReader> {

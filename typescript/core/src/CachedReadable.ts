@@ -12,10 +12,27 @@ import type { IReadable } from "./types.ts";
  * starts at a different offset will miss.
  */
 export class CachedReadable implements IReadable {
+  /**
+   * The underlying source of the data to be cached.
+   */
   #readable: IReadable;
+  /**
+   * Cached data. Indexed by offset request and stored as a Uint8Array.
+   * If the requested size is less than the cached data, the cached data is returned as a subarray.
+   * If the requested size is greater than the cached data, the a new request is made to the underlying readable.
+   */
   #cache = new Map<bigint, Uint8Array>();
+  /**
+   * The maximum size of the cache in bytes.
+   */
   #maxCacheSizeBytes: number;
+  /**
+   * The current size of the cache in bytes.
+   */
   #currentCacheSizeBytes = 0;
+  /**
+   * The size of the underlying readable.
+   */
   #size: bigint | undefined;
 
   constructor(readable: IReadable, maxCacheSizeBytes: number) {
@@ -24,7 +41,10 @@ export class CachedReadable implements IReadable {
   }
 
   async size(): Promise<bigint> {
-    return (this.#size ??= await this.#readable.size());
+    if (this.#size == undefined) {
+      this.#size = await this.#readable.size();
+    }
+    return this.#size;
   }
 
   async read(offset: bigint, size: bigint): Promise<Uint8Array> {

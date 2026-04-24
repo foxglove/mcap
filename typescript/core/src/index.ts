@@ -1,4 +1,3 @@
-export { CachedReadable } from "./CachedReadable.ts";
 export { McapIndexedReader } from "./McapIndexedReader.ts";
 export { default as McapStreamReader } from "./McapStreamReader.ts";
 export { McapWriter } from "./McapWriter.ts";
