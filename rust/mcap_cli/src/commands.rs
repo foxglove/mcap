@@ -27,10 +27,6 @@ use anyhow::Result;
 use crate::cli::{AddSubcommand, Command, GetSubcommand, ListSubcommand};
 use crate::context::CommandContext;
 
-pub fn not_implemented(command_name: &str) -> anyhow::Error {
-    anyhow::anyhow!("'{command_name}' is not implemented yet")
-}
-
 pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
     match command {
         Command::Info(args) => info::run(ctx, args),
@@ -59,7 +55,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
         Command::Doctor(args) => doctor::run(ctx, args),
         Command::Du(args) => du::run(ctx, args),
         Command::Filter(args) => filter::run(ctx, args),
-        Command::Merge => merge::run(ctx),
+        Command::Merge(args) => merge::run(ctx, args),
         Command::Recover(args) => recover::run(ctx, args),
         Command::Sort(args) => sort::run(ctx, args),
     }
