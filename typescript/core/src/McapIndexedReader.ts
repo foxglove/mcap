@@ -121,9 +121,10 @@ export class McapIndexedReader {
   }
 
   /**
-   * Kick off parallel reads (up to `MAX_PREFETCH_CONCURRENCY`) of every chunk's message index
-   * region through the cached readable. Successful reads populate the byte cache so that later
-   * `readMessages()` calls hit cache.
+   * Kick off parallel reads (up to `MAX_PREFETCH_CONCURRENCY`) of message index regions through
+   * the cached readable, in chunk order, stopping once the next chunk's index would exceed the
+   * cache budget. Successful reads populate the byte cache so that later `readMessages()` calls
+   * hit cache.
    *
    * The first failure is captured on the instance and surfaced once from the next
    * `readMessages()` call; subsequent calls fall back to on-demand loading via
@@ -133,6 +134,7 @@ export class McapIndexedReader {
   #startMessageIndexPrefetch(cachedReadable: CachedReadable): void {
     type Request = { readStart: bigint; readLength: bigint };
     const indexRequests: Request[] = [];
+    let cumulativeBytes = 0;
     for (const chunk of this.chunkIndexes) {
       if (chunk.messageIndexLength === 0n) {
         continue;
@@ -145,6 +147,12 @@ export class McapIndexedReader {
       }
       if (readStart == undefined) {
         continue;
+      }
+      // Stop once the next chunk's index would exceed the cache budget; reads beyond the cap
+      // would consume bandwidth without being cached.
+      cumulativeBytes += Number(chunk.messageIndexLength);
+      if (cumulativeBytes > cachedReadable.maxCacheSizeBytes) {
+        break;
       }
       indexRequests.push({ readStart, readLength: chunk.messageIndexLength });
     }
@@ -198,6 +206,27 @@ export class McapIndexedReader {
     return new Error(`${message} [library=${this.header.library}]`);
   }
 
+  /**
+   * Returns true if the message index region for `chunkIndex` is already present in the cached
+   * readable. Uses the same offset/length that {@link ChunkCursor.loadMessageIndexes} would read
+   * (and that {@link #startMessageIndexPrefetch} prefetches).
+   */
+  #isMessageIndexCached(chunkIndex: TypedMcapRecords["ChunkIndex"]): boolean {
+    if (!(this.#messageIndexReadable instanceof CachedReadable)) {
+      return false;
+    }
+    let readStart: bigint | undefined;
+    for (const offset of chunkIndex.messageIndexOffsets.values()) {
+      if (readStart == undefined || offset < readStart) {
+        readStart = offset;
+      }
+    }
+    if (readStart == undefined) {
+      return false;
+    }
+    return this.#messageIndexReadable.has(readStart, chunkIndex.messageIndexLength);
+  }
+
   static async Initialize({
     readable,
     decompressHandlers,
@@ -221,10 +250,11 @@ export class McapIndexedReader {
 
     /**
      * When true, message indexes are prefetched in parallel (up to 6 concurrent reads) during
-     * reader construction. Requires `readable.supportsConcurrentReads === true`; otherwise a
-     * warning is logged and the option is downgraded to on-demand loading with message index
-     * caching. Implies message index caching; the cache is sized to fit all message indexes,
-     * capped at 256 MB.
+     * reader construction. Requires `readable.supportsConcurrentReads === true`; otherwise an
+     * error is thrown. Implies message index caching: when `messageIndexCacheSizeBytes` is not
+     * set, the cache is sized to fit all message indexes, capped at 256 MB. When
+     * `messageIndexCacheSizeBytes` is set, the smaller of the two values is used and prefetch
+     * stops once it would exceed that budget.
      */
     prefetchMessageIndexes?: boolean;
   }): Promise<McapIndexedReader> {
@@ -483,7 +513,7 @@ export class McapIndexedReader {
       dataEndOffset,
       dataSectionCrc,
       messageIndexCacheSizeBytes: effectiveCacheSizeBytes,
-      prefetchMessageIndexes: effectivePrefetch,
+      prefetchMessageIndexes,
     });
   }
 
@@ -506,19 +536,6 @@ export class McapIndexedReader {
 
     if (startTime == undefined || endTime == undefined) {
       return;
-    }
-
-    // If a prefetch is in flight, wait for it to complete so any captured error can be surfaced
-    // and all successfully prefetched indexes are in the cache before we start reading.
-    if (this.#messageIndexPrefetchPromise) {
-      const promise = this.#messageIndexPrefetchPromise;
-      this.#messageIndexPrefetchPromise = undefined;
-      await promise;
-      const err = this.#messageIndexPrefetchError;
-      this.#messageIndexPrefetchError = undefined;
-      if (err) {
-        throw err;
-      }
     }
 
     let relevantChannels: Set<number> | undefined;
@@ -562,6 +579,18 @@ export class McapIndexedReader {
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
+        // Only block on the prefetch when this chunk's index is not already cached, so callers
+        // requesting time ranges covered by already-cached chunks proceed without waiting.
+        if (this.#messageIndexPrefetchPromise && !this.#isMessageIndexCached(cursor.chunkIndex)) {
+          const promise = this.#messageIndexPrefetchPromise;
+          this.#messageIndexPrefetchPromise = undefined;
+          await promise;
+          const err = this.#messageIndexPrefetchError;
+          this.#messageIndexPrefetchError = undefined;
+          if (err) {
+            throw err;
+          }
+        }
         await cursor.loadMessageIndexes(this.#messageIndexReadable);
         if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);

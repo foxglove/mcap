@@ -48,6 +48,23 @@ export class CachedReadable implements IReadable {
     this.#maxCacheSizeBytes = maxCacheSizeBytes;
   }
 
+  /**
+   * The maximum number of bytes the cache can hold. New reads beyond this size pass through
+   * without being cached.
+   */
+  get maxCacheSizeBytes(): number {
+    return this.#maxCacheSizeBytes;
+  }
+
+  /**
+   * Returns true if a read at `offset` of `size` bytes can be served from the cache without
+   * issuing an underlying read.
+   */
+  has(offset: bigint, size: bigint): boolean {
+    const cached = this.#cache.get(offset);
+    return cached != undefined && cached.byteLength >= Number(size);
+  }
+
   async size(): Promise<bigint> {
     return (this.#size ??= await this.#readable.size());
   }
