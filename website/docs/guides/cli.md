@@ -172,6 +172,25 @@ AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
 
 Remote reads will use the index at the end of the file to minimize latency and data transfer.
 
+### Renaming channel topics
+
+The `mcap filter` command supports renaming a channel's topic via `--rename-from` and `--rename-to`:
+
+    $ mcap filter demo.mcap -o demo-out.mcap --rename-from /tf --rename-to /tf_renamed
+
+This can be combined with other filter options like time range or topic selection. Verify the result:
+
+<!-- cspell: disable -->
+
+    $ mcap info demo-out.mcap
+    ...
+    channels:
+      	(2) /tf_renamed  774 msgs (99.48 Hz)   : tf2_msgs/TFMessage [ros1msg]
+
+<!-- cspell: enable -->
+
+The command will fail if the target topic already exists in the file. Only one topic can be renamed per invocation; to rename multiple topics, run the command multiple times.
+
 ### File Diagnostics
 
 #### List chunks in a file

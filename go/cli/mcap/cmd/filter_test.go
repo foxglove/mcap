@@ -498,6 +498,155 @@ func TestParseDateOrNanos(t *testing.T) {
 	assert.Equal(t, expected, withTimezone)
 }
 
+func TestRenameTopic(t *testing.T) {
+	for _, seekable := range []bool{false, true} {
+		for _, chunked := range []bool{false, true} {
+			t.Run(fmt.Sprintf("basic rename seekable=%v chunked=%v", seekable, chunked), func(t *testing.T) {
+				readBuf := bytes.Buffer{}
+				writeFilterTestInput(t, &readBuf, chunked)
+				var src io.Reader = &readBuf
+				if seekable {
+					src = bytes.NewReader(readBuf.Bytes())
+				}
+				opts := &filterOpts{
+					compressionFormat: mcap.CompressionLZ4,
+					start:             0,
+					end:               1000,
+					includeMetadata:   true,
+					renameFrom:        "camera_a",
+					renameTo:          "camera_a_renamed",
+				}
+				writeBuf := bytes.Buffer{}
+				require.NoError(t, filter(src, &writeBuf, opts))
+
+				// Verify topics in output
+				topics := map[string]int{}
+				lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{})
+				require.NoError(t, err)
+				defer lexer.Close()
+				messageCount := 0
+				for {
+					token, record, err := lexer.Next(nil)
+					if err != nil {
+						require.ErrorIs(t, err, io.EOF)
+						break
+					}
+					switch token {
+					case mcap.TokenChannel:
+						ch, err := mcap.ParseChannel(record)
+						require.NoError(t, err)
+						topics[ch.Topic]++
+					case mcap.TokenMessage:
+						messageCount++
+					}
+				}
+				// camera_a should be renamed, camera_b and radar_a unchanged
+				assert.Equal(t, 0, topics["camera_a"], "original topic should not appear")
+				assert.Positive(t, topics["camera_a_renamed"], "renamed topic should appear")
+				assert.Positive(t, topics["camera_b"])
+				assert.Positive(t, topics["radar_a"])
+				assert.Equal(t, 300, messageCount, "all messages should be preserved")
+			})
+		}
+	}
+
+	t.Run("collision detection", func(t *testing.T) {
+		readBuf := bytes.Buffer{}
+		writeFilterTestInput(t, &readBuf, true)
+		opts := &filterOpts{
+			compressionFormat: mcap.CompressionLZ4,
+			start:             0,
+			end:               1000,
+			renameFrom:        "camera_a",
+			renameTo:          "camera_b", // already exists
+		}
+		writeBuf := bytes.Buffer{}
+		err := filter(bytes.NewReader(readBuf.Bytes()), &writeBuf, opts)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "already exists")
+	})
+
+	t.Run("collision detection streaming", func(t *testing.T) {
+		readBuf := bytes.Buffer{}
+		writeFilterTestInput(t, &readBuf, false)
+		opts := &filterOpts{
+			compressionFormat: mcap.CompressionLZ4,
+			start:             0,
+			end:               1000,
+			renameFrom:        "camera_a",
+			renameTo:          "camera_b",
+		}
+		writeBuf := bytes.Buffer{}
+		err := filter(&readBuf, &writeBuf, opts)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "already exists")
+	})
+
+	t.Run("rename combined with topic filter", func(t *testing.T) {
+		for _, seekable := range []bool{false, true} {
+			for _, chunked := range []bool{false, true} {
+				t.Run(fmt.Sprintf("seekable=%v chunked=%v", seekable, chunked), func(t *testing.T) {
+					readBuf := bytes.Buffer{}
+					writeFilterTestInput(t, &readBuf, chunked)
+					var src io.Reader = &readBuf
+					if seekable {
+						src = bytes.NewReader(readBuf.Bytes())
+					}
+					opts := &filterOpts{
+						compressionFormat: mcap.CompressionLZ4,
+						start:             0,
+						end:               1000,
+						includeTopics:     []regexp.Regexp{*regexp.MustCompile("^camera_a$")},
+						renameFrom:        "camera_a",
+						renameTo:          "camera_front",
+					}
+					writeBuf := bytes.Buffer{}
+					require.NoError(t, filter(src, &writeBuf, opts))
+
+					topics := map[string]int{}
+					lexer, err := mcap.NewLexer(&writeBuf, &mcap.LexerOptions{})
+					require.NoError(t, err)
+					defer lexer.Close()
+					for {
+						token, record, err := lexer.Next(nil)
+						if err != nil {
+							require.ErrorIs(t, err, io.EOF)
+							break
+						}
+						if token == mcap.TokenChannel {
+							ch, err := mcap.ParseChannel(record)
+							require.NoError(t, err)
+							topics[ch.Topic]++
+						}
+					}
+					assert.Equal(t, 0, topics["camera_a"])
+					assert.Positive(t, topics["camera_front"])
+					assert.Equal(t, 0, topics["camera_b"], "camera_b should be excluded by filter")
+					assert.Equal(t, 0, topics["radar_a"], "radar_a should be excluded by filter")
+				})
+			}
+		}
+	})
+}
+
+func TestBuildFilterOptionsRename(t *testing.T) {
+	t.Run("rename-from without rename-to is an error", func(t *testing.T) {
+		_, err := buildFilterOptions(&filterFlags{renameFrom: "/foo"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be used together")
+	})
+	t.Run("rename-to without rename-from is an error", func(t *testing.T) {
+		_, err := buildFilterOptions(&filterFlags{renameTo: "/bar"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be used together")
+	})
+	t.Run("rename-from equals rename-to is an error", func(t *testing.T) {
+		_, err := buildFilterOptions(&filterFlags{renameFrom: "/foo", renameTo: "/foo"})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be different")
+	})
+}
+
 func TestBuildFilterOptions(t *testing.T) {
 	cases := []struct {
 		name  string
