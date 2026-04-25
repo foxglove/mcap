@@ -5,3 +5,4 @@ tests/conformance/data/**/*.json
 typescript/examples/flatbuffer/output/**/*.ts
 website/.docusaurus
 rust/target
+benchmarking/rust_bench/target
