@@ -266,11 +266,17 @@ pub struct ConvertCommand {
     #[arg(long, default_value_t = 8 * 1024 * 1024)]
     pub chunk_size: u64,
 
-    /// Include chunk CRC checksums in output MCAP
+    /// Include chunk CRC checksums in output MCAP.
+    ///
+    /// Uses existing convert command parsing semantics to remain compatible
+    /// with scripts that pass values as `--include-crc false`.
     #[arg(long, action = ArgAction::Set, default_value_t = true)]
     pub include_crc: bool,
 
-    /// Enable chunked output MCAP writing
+    /// Enable chunked output MCAP writing.
+    ///
+    /// Uses existing convert command parsing semantics to remain compatible
+    /// with scripts that pass values as `--chunked false`.
     #[arg(long, action = ArgAction::Set, default_value_t = true)]
     pub chunked: bool,
 }
@@ -494,11 +500,17 @@ pub struct SortCommand {
     #[arg(long, default_value_t = 4 * 1024 * 1024)]
     pub chunk_size: u64,
 
-    /// Include chunk CRC checksums in output MCAP
+    /// Include chunk CRC checksums in output MCAP.
+    ///
+    /// Uses existing sort command parsing semantics to remain compatible with
+    /// scripts that pass values as `--include-crc false`.
     #[arg(long, action = ArgAction::Set, default_value_t = true)]
     pub include_crc: bool,
 
-    /// Enable chunked output MCAP writing
+    /// Enable chunked output MCAP writing.
+    ///
+    /// Uses existing sort command parsing semantics to remain compatible with
+    /// scripts that pass values as `--chunked false`.
     #[arg(long, action = ArgAction::Set, default_value_t = true)]
     pub chunked: bool,
 }

@@ -10,9 +10,6 @@ use mcap::records::{MessageHeader, Record};
 use crate::cli::{CoalesceChannels, MergeCommand, MergeCompression};
 use crate::context::CommandContext;
 
-const PLEASE_REDIRECT: &str =
-    "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
-
 #[derive(Debug, Clone)]
 struct MergeOptions {
     files: Vec<PathBuf>,
@@ -38,12 +35,6 @@ struct ChannelKey {
     topic: String,
     message_encoding: String,
     metadata: Vec<(String, String)>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct MetadataKey {
-    name: String,
-    entries: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -90,7 +81,6 @@ impl Ord for PendingMessage {
 
 #[derive(Default)]
 struct MetadataState {
-    seen_metadata: HashSet<MetadataKey>,
     metadata_names: HashSet<String>,
 }
 
@@ -129,7 +119,7 @@ pub fn run(_ctx: &CommandContext, args: MergeCommand) -> Result<()> {
         merge_inputs(&input_refs, output, &opts, false)
     } else {
         if std::io::stdout().is_terminal() {
-            bail!("{PLEASE_REDIRECT}");
+            bail!("{}", crate::commands::common::PLEASE_REDIRECT);
         }
         let stdout = std::io::stdout();
         let output = mcap::write::NoSeek::new(stdout.lock());
@@ -179,7 +169,6 @@ fn merge_inputs<W: Write + Seek>(
         .calculate_attachment_crcs(opts.include_crc)
         .disable_seeking(disable_seeking);
 
-    // Keep writer's default library field.
     if !opts.chunked {
         write_options = write_options.emit_message_indexes(false);
     }
@@ -190,11 +179,10 @@ fn merge_inputs<W: Write + Seek>(
 
     let summaries = inputs
         .iter()
-        .map(|input| {
-            mcap::Summary::read(input.data)
-                .with_context(|| format!("failed to read summary from '{}'", input.name))
-        })
-        .collect::<Result<Vec<_>>>()?;
+        // Match Go CLI behavior by treating summary lookup as best effort and
+        // falling back to linear scans when summary parsing fails.
+        .map(|input| mcap::Summary::read(input.data).unwrap_or_default())
+        .collect::<Vec<_>>();
 
     let mut metadata_state = MetadataState::default();
     for (idx, input) in inputs.iter().enumerate() {
@@ -297,23 +285,9 @@ fn write_merged_metadata<W: Write + Seek>(
         );
     }
 
-    let key = metadata_key(&metadata_record);
-    if state.seen_metadata.insert(key.clone()) {
-        writer.write_metadata(&metadata_record)?;
-    }
+    writer.write_metadata(&metadata_record)?;
     state.metadata_names.insert(metadata_record.name.clone());
     Ok(())
-}
-
-fn metadata_key(metadata_record: &mcap::records::Metadata) -> MetadataKey {
-    MetadataKey {
-        name: metadata_record.name.clone(),
-        entries: metadata_record
-            .metadata
-            .iter()
-            .map(|(key, value)| (key.clone(), value.clone()))
-            .collect(),
-    }
 }
 
 fn collect_attachments(
@@ -834,6 +808,45 @@ mod tests {
         assert!(err
             .to_string()
             .contains("metadata name 'robot' was previously encountered"));
+    }
+
+    #[test]
+    fn merge_allow_duplicate_metadata_writes_identical_records() {
+        let first = build_mcap(
+            "p",
+            &[],
+            &[mcap::records::Metadata {
+                name: "robot".to_string(),
+                metadata: BTreeMap::from([(String::from("a"), String::from("1"))]),
+            }],
+            &[],
+            true,
+            true,
+        );
+        let second = build_mcap(
+            "p",
+            &[],
+            &[mcap::records::Metadata {
+                name: "robot".to_string(),
+                metadata: BTreeMap::from([(String::from("a"), String::from("1"))]),
+            }],
+            &[],
+            true,
+            true,
+        );
+
+        let merged = merge_bytes(
+            &[("a", first.as_slice()), ("b", second.as_slice())],
+            CoalesceChannels::Auto,
+            true,
+        )
+        .expect("merge");
+
+        let summary = mcap::Summary::read(&merged)
+            .expect("summary")
+            .expect("present");
+        assert_eq!(summary.stats.as_ref().expect("stats").metadata_count, 2);
+        assert_eq!(summary.metadata_indexes.len(), 2);
     }
 
     #[test]
