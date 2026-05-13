@@ -34,7 +34,7 @@
     "eslint-plugin-import": "2.29.0",
     "eslint-plugin-prettier": "5.0.1",
     "prettier": "3.1.0",
-    "protobufjs": "7.2.5",
+    "protobufjs": "7.5.5",
     "tsx": "4.21.0",
     "typescript": "5.9.3"
   }

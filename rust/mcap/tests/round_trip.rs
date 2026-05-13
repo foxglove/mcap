@@ -114,7 +114,7 @@ fn demo_round_trip_for_opts(opts: WriteOptions) -> Result<()> {
         }
     }
 
-    for (streamed, seeked) in mcap::MessageStream::new(&ours)?.zip_eq(messages.into_iter()) {
+    for (streamed, seeked) in mcap::MessageStream::new(&ours)?.zip_eq(messages) {
         assert_eq!(streamed?, seeked);
     }
 
