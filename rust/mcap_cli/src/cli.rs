@@ -268,16 +268,28 @@ pub struct ConvertCommand {
 
     /// Include chunk CRC checksums in output MCAP.
     ///
-    /// Uses existing convert command parsing semantics to remain compatible
-    /// with scripts that pass values as `--include-crc false`.
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    /// Accepts `--include-crc`, `--include-crc=false`, and
+    /// `--include-crc false` to match Go CLI ergonomics.
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub include_crc: bool,
 
     /// Enable chunked output MCAP writing.
     ///
-    /// Uses existing convert command parsing semantics to remain compatible
-    /// with scripts that pass values as `--chunked false`.
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    /// Accepts `--chunked`, `--chunked=false`, and `--chunked false` to
+    /// match Go CLI ergonomics.
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub chunked: bool,
 }
 
@@ -316,16 +328,12 @@ pub struct MergeCommand {
 
     /// Include chunk CRC checksums in output MCAP.
     ///
-    /// Supports bare `--include-crc` (true) and explicit values via
-    /// `--include-crc=<true|false>`.
-    ///
-    /// Requiring `=` for explicit values avoids an optional bool from consuming
-    /// the first positional input file.
+    /// Accepts `--include-crc`, `--include-crc=false`, and
+    /// `--include-crc false` to match Go CLI ergonomics.
     #[arg(
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
-        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]
@@ -333,16 +341,12 @@ pub struct MergeCommand {
 
     /// Enable chunked output MCAP writing.
     ///
-    /// Supports bare `--chunked` (true) and explicit values via
-    /// `--chunked=<true|false>`.
-    ///
-    /// Requiring `=` for explicit values avoids an optional bool from consuming
-    /// the first positional input file.
+    /// Accepts `--chunked`, `--chunked=false`, and `--chunked false` to match
+    /// Go CLI ergonomics.
     #[arg(
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
-        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]
@@ -502,16 +506,28 @@ pub struct SortCommand {
 
     /// Include chunk CRC checksums in output MCAP.
     ///
-    /// Uses existing sort command parsing semantics to remain compatible with
-    /// scripts that pass values as `--include-crc false`.
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    /// Accepts `--include-crc`, `--include-crc=false`, and
+    /// `--include-crc false` to match Go CLI ergonomics.
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub include_crc: bool,
 
     /// Enable chunked output MCAP writing.
     ///
-    /// Uses existing sort command parsing semantics to remain compatible with
-    /// scripts that pass values as `--chunked false`.
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    /// Accepts `--chunked`, `--chunked=false`, and `--chunked false` to match
+    /// Go CLI ergonomics.
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub chunked: bool,
 }
 
