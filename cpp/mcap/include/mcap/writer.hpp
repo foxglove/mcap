@@ -252,6 +252,8 @@ protected:
  */
 class MCAP_PUBLIC BufferWriter final : public IChunkWriter {
 public:
+  explicit BufferWriter(uint64_t chunkSize = 0);
+
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
   uint64_t size() const override;
