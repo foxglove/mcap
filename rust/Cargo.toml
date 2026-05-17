@@ -1,5 +1,5 @@
 [workspace]
-members = ["mcap", "mcap_cli"]
+members = ["mcap", "cli"]
 resolver = "2"
 
 [profile.bench]

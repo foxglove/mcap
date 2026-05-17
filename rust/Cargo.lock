@@ -832,7 +832,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mcap_cli"
+name = "mcap-cli"
 version = "0.0.1"
 dependencies = [
  "anyhow",
