@@ -79,8 +79,9 @@ yarn workspace @foxglove/mcap-cli-conformance run-tests \
   --keep-work-dir
 ```
 
-When `--work-dir` is provided, it must point to an empty or nonexistent
-directory. The runner never deletes a non-empty user-supplied directory.
+When `--work-dir` is provided, it must point to a truly empty or nonexistent
+directory, including no OS metadata files such as `.DS_Store`. The runner never
+deletes a non-empty user-supplied directory.
 
 ## Performance checks
 
@@ -144,7 +145,8 @@ Every known difference must include:
 - Use `ignore` only when an output stream is intentionally outside the case's
   scope.
 - Use `mcap` with `mode: "messages"` when writer metadata, chunking, compression,
-  or summary offsets may differ but message content must match.
+  or summary offsets may differ but message content must match. This mode ignores
+  attachments and metadata by design.
 - Use `mcap` with `mode: "records"` only when all records are expected to be
   semantically equivalent.
 - Use `json` for JSON stdout.

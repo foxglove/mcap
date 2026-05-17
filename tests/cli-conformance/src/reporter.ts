@@ -1,5 +1,6 @@
 import colors from "colors";
 import fs from "node:fs/promises";
+import path from "node:path";
 
 import type { CaseRunResult, CliConformanceOptions, CliProcessResult } from "./types.ts";
 
@@ -46,6 +47,7 @@ export async function writeJsonReport(
     go: processReport(result.go),
     rust: processReport(result.rust),
   }));
+  await fs.mkdir(path.dirname(options.reportJson), { recursive: true });
   await fs.writeFile(options.reportJson, JSON.stringify(report, undefined, 2) + "\n");
 }
 

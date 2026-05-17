@@ -104,6 +104,12 @@ export async function compareExpectedBehavior(
     if (expected.exitCode === "nonzero") {
       if (result.exitCode === 0) {
         messages.push(`${implementation} expected nonzero exit code, got 0`);
+      } else if (result.exitCode == undefined) {
+        messages.push(
+          `${implementation} expected nonzero exit code, got ${
+            result.signal == undefined ? "unknown exit status" : `signal ${result.signal}`
+          }`,
+        );
       }
     } else if (result.exitCode !== expected.exitCode) {
       messages.push(
