@@ -79,6 +79,31 @@ yarn workspace @foxglove/mcap-cli-conformance run-tests \
   --keep-work-dir
 ```
 
+## Performance checks
+
+Performance checks are intentionally opt-in and report-only by default because
+CI environments are noisy. They provide an early Rust/Go timing ratio for a
+small set of representative commands.
+
+Build release binaries before using performance checks:
+
+```bash
+make -C go/cli/mcap build
+cd rust && cargo build -p mcap-cli --release
+```
+
+Run the performance checks:
+
+```bash
+yarn workspace @foxglove/mcap-cli-conformance perf \
+  --data-dir "$(pwd)/tests/conformance/data" \
+  --go-bin "$(pwd)/go/cli/mcap/bin/mcap" \
+  --rust-bin "$(pwd)/rust/target/release/mcap"
+```
+
+Pass `--fail-on-regression` only when you intentionally want the command to exit
+nonzero if Rust exceeds a case's configured margin.
+
 ## Adding cases
 
 Add cases in `src/cases.ts`.
