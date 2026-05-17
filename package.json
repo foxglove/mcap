@@ -2,6 +2,7 @@
   "private": true,
   "workspaces": {
     "packages": [
+      "tests/cli-conformance",
       "tests/conformance",
       "typescript/benchmarks",
       "typescript/core",
@@ -25,7 +26,8 @@
     "typescript:build": "yarn workspace @mcap/core build && yarn workspace @mcap/support build && yarn workspace @mcap/nodejs build && yarn workspace @mcap/browser build",
     "typescript:clean": "yarn workspace @mcap/core build --clean && yarn workspace @mcap/support build --clean && yarn workspace @mcap/nodejs build --clean && yarn workspace @mcap/browser build --clean",
     "test:conformance:generate-inputs": "yarn workspace @foxglove/mcap-conformance generate-inputs --data-dir \"$(pwd)/tests/conformance/data\"",
-    "test:conformance": "yarn workspace @foxglove/mcap-conformance run-tests --data-dir \"$(pwd)/tests/conformance/data\""
+    "test:conformance": "yarn workspace @foxglove/mcap-conformance run-tests --data-dir \"$(pwd)/tests/conformance/data\"",
+    "test:cli-conformance": "yarn workspace @foxglove/mcap-cli-conformance run --data-dir \"$(pwd)/tests/conformance/data\""
   },
   "packageManager": "yarn@4.12.0",
   "devDependencies": {

@@ -168,6 +168,34 @@ jobs:
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner rust-
 
+  cli-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - run: corepack enable
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: yarn
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go/go.work
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          default: true
+      - run: yarn install --immutable
+      - run: make -C go/cli/mcap build
+      - run: cargo build -p mcap-cli
+        working-directory: rust
+      - run: yarn test:conformance:generate-inputs --verify
+      - run: >
+          yarn test:cli-conformance
+          --go-bin "${{ github.workspace }}/go/cli/mcap/bin/mcap"
+          --rust-bin "${{ github.workspace }}/rust/target/debug/mcap"
+
   cpp:
     runs-on: ubuntu-latest
     strategy:
