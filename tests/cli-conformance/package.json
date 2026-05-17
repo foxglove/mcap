@@ -6,6 +6,7 @@
     "build": "tsc -b",
     "lint:ci": "tsc -b && eslint --report-unused-disable-directives .",
     "run": "tsc -b && tsx src/index.ts",
+    "run-tests": "tsc -b && tsx src/index.ts",
     "perf": "tsc -b && tsx src/perf.ts"
   },
   "dependencies": {

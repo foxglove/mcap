@@ -62,7 +62,7 @@ yarn test:cli-conformance \
 Run a subset:
 
 ```bash
-yarn workspace @foxglove/mcap-cli-conformance run \
+yarn workspace @foxglove/mcap-cli-conformance run-tests \
   --data-dir "$(pwd)/tests/conformance/data" \
   --go-bin "$(pwd)/go/cli/mcap/bin/mcap" \
   --rust-bin "$(pwd)/rust/target/debug/mcap" \
@@ -72,7 +72,7 @@ yarn workspace @foxglove/mcap-cli-conformance run \
 Keep temporary work directories for debugging:
 
 ```bash
-yarn workspace @foxglove/mcap-cli-conformance run \
+yarn workspace @foxglove/mcap-cli-conformance run-tests \
   --data-dir "$(pwd)/tests/conformance/data" \
   --go-bin "$(pwd)/go/cli/mcap/bin/mcap" \
   --rust-bin "$(pwd)/rust/target/debug/mcap" \
