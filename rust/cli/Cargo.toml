@@ -1,5 +1,5 @@
 [package]
-name = "mcap_cli"
+name = "mcap-cli"
 description = "MCAP CLI"
 version = "0.0.1"
 edition = "2021"
