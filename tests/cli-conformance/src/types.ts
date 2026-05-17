@@ -67,6 +67,11 @@ export type KnownDifference = {
 export type TextComparatorSpec = {
   kind: "text";
   collapseWhitespace?: boolean;
+  /**
+   * Controls final surrounding whitespace trimming after per-line trailing
+   * whitespace has already been normalized away. Use `bytes` for exact stdout
+   * comparisons that must preserve trailing spaces.
+   */
   trim?: boolean;
   ignoreAnsi?: boolean;
 };

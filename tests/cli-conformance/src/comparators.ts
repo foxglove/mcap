@@ -95,6 +95,10 @@ export async function compareExpectedBehavior(
   result: CliProcessResult,
   expected: ExpectedImplementationBehavior,
 ): Promise<string[]> {
+  if (result.spawnError != undefined) {
+    return [`${implementation} spawn failed: ${result.spawnError}`];
+  }
+
   const messages: string[] = [];
   if (expected.exitCode != undefined) {
     if (expected.exitCode === "nonzero") {
