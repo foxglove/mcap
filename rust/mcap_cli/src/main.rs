@@ -359,8 +359,8 @@ mod tests {
     }
 
     #[test]
-    fn parses_convert_bool_flags_with_space_separated_values() {
-        let args = Args::try_parse_from([
+    fn convert_rejects_space_separated_bool_values() {
+        Args::try_parse_from([
             "mcap",
             "convert",
             "input.bag",
@@ -370,18 +370,7 @@ mod tests {
             "--chunked",
             "false",
         ])
-        .expect("convert bool flags should parse with space-separated values");
-        assert_eq!(
-            args.command,
-            Command::Convert(ConvertCommand {
-                input: "input.bag".into(),
-                output: "output.mcap".into(),
-                compression: ConvertCompression::Zstd,
-                chunk_size: 8 * 1024 * 1024,
-                include_crc: false,
-                chunked: false,
-            })
-        );
+        .expect_err("convert bool flags should require --flag=<value> when explicit");
     }
 
     #[test]
@@ -650,8 +639,8 @@ mod tests {
     }
 
     #[test]
-    fn parses_sort_bool_flags_with_space_separated_values() {
-        let args = Args::try_parse_from([
+    fn sort_rejects_space_separated_bool_values() {
+        Args::try_parse_from([
             "mcap",
             "sort",
             "in.mcap",
@@ -662,18 +651,7 @@ mod tests {
             "--chunked",
             "false",
         ])
-        .expect("sort bool flags should parse with space-separated values");
-        assert_eq!(
-            args.command,
-            Command::Sort(SortCommand {
-                file: "in.mcap".into(),
-                output_file: "out.mcap".into(),
-                chunk_size: 4 * 1024 * 1024,
-                compression: ConvertCompression::Zstd,
-                include_crc: false,
-                chunked: false,
-            })
-        );
+        .expect_err("sort bool flags should require --flag=<value> when explicit");
     }
 
     #[test]
@@ -757,7 +735,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_merge_bool_flags_with_space_separated_values() {
+    fn merge_treats_space_separated_bool_values_as_positional_files() {
         let args = Args::try_parse_from([
             "mcap",
             "merge",
@@ -768,16 +746,21 @@ mod tests {
             "--chunked",
             "false",
         ])
-        .expect("merge bool flags should parse with space-separated values");
+        .expect("merge should parse and treat trailing bool-like tokens as files");
         assert_eq!(
             args.command,
             Command::Merge(MergeCommand {
-                files: vec!["a.mcap".into(), "b.mcap".into()],
+                files: vec![
+                    "a.mcap".into(),
+                    "b.mcap".into(),
+                    "false".into(),
+                    "false".into()
+                ],
                 output_file: None,
                 compression: MergeCompression::Zstd,
                 chunk_size: 8 * 1024 * 1024,
-                include_crc: false,
-                chunked: false,
+                include_crc: true,
+                chunked: true,
                 allow_duplicate_metadata: false,
                 coalesce_channels: CoalesceChannels::Auto,
             })

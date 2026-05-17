@@ -268,12 +268,12 @@ pub struct ConvertCommand {
 
     /// Include chunk CRC checksums in output MCAP.
     ///
-    /// Accepts `--include-crc`, `--include-crc=false`, and
-    /// `--include-crc false` to match Go CLI ergonomics.
+    /// Accepts bare `--include-crc` and explicit `--include-crc=<bool>`.
     #[arg(
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
+        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]
@@ -281,12 +281,12 @@ pub struct ConvertCommand {
 
     /// Enable chunked output MCAP writing.
     ///
-    /// Accepts `--chunked`, `--chunked=false`, and `--chunked false` to
-    /// match Go CLI ergonomics.
+    /// Accepts bare `--chunked` and explicit `--chunked=<bool>`.
     #[arg(
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
+        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]
@@ -328,12 +328,12 @@ pub struct MergeCommand {
 
     /// Include chunk CRC checksums in output MCAP.
     ///
-    /// Accepts `--include-crc`, `--include-crc=false`, and
-    /// `--include-crc false` to match Go CLI ergonomics.
+    /// Accepts bare `--include-crc` and explicit `--include-crc=<bool>`.
     #[arg(
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
+        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]
@@ -341,12 +341,12 @@ pub struct MergeCommand {
 
     /// Enable chunked output MCAP writing.
     ///
-    /// Accepts `--chunked`, `--chunked=false`, and `--chunked false` to match
-    /// Go CLI ergonomics.
+    /// Accepts bare `--chunked` and explicit `--chunked=<bool>`.
     #[arg(
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
+        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]
@@ -506,12 +506,12 @@ pub struct SortCommand {
 
     /// Include chunk CRC checksums in output MCAP.
     ///
-    /// Accepts `--include-crc`, `--include-crc=false`, and
-    /// `--include-crc false` to match Go CLI ergonomics.
+    /// Accepts bare `--include-crc` and explicit `--include-crc=<bool>`.
     #[arg(
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
+        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]
@@ -519,12 +519,12 @@ pub struct SortCommand {
 
     /// Enable chunked output MCAP writing.
     ///
-    /// Accepts `--chunked`, `--chunked=false`, and `--chunked false` to match
-    /// Go CLI ergonomics.
+    /// Accepts bare `--chunked` and explicit `--chunked=<bool>`.
     #[arg(
         long,
         action = ArgAction::Set,
         num_args = 0..=1,
+        require_equals = true,
         default_missing_value = "true",
         default_value_t = true
     )]

@@ -37,16 +37,32 @@ struct ChannelKey {
     metadata: Vec<(String, String)>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct MetadataKey {
+    name: String,
+    entries: Vec<(String, String)>,
+}
+
 #[derive(Debug, Clone)]
 struct InputRef<'a> {
     name: &'a str,
     data: &'a [u8],
 }
 
+struct InputMessageReader<'a> {
+    name: &'a str,
+    records: mcap::read::ChunkFlattener<'a>,
+    schemas: HashMap<u16, Arc<mcap::Schema<'static>>>,
+    channels: HashMap<u16, Arc<mcap::Channel<'static>>>,
+}
+
+type InputMessage = (Arc<mcap::Channel<'static>>, MessageHeader, Vec<u8>);
+
 #[derive(Debug, Clone)]
 struct PendingMessage {
     input_idx: usize,
     input_channel_id: u16,
+    channel: Arc<mcap::Channel<'static>>,
     sequence: u32,
     log_time: u64,
     publish_time: u64,
@@ -81,6 +97,7 @@ impl Ord for PendingMessage {
 
 #[derive(Default)]
 struct MetadataState {
+    seen_metadata: HashSet<MetadataKey>,
     metadata_names: HashSet<String>,
 }
 
@@ -184,20 +201,12 @@ fn merge_inputs<W: Write + Seek>(
         .map(|input| mcap::Summary::read(input.data).unwrap_or_default())
         .collect::<Vec<_>>();
 
-    let mut metadata_state = MetadataState::default();
-    for (idx, input) in inputs.iter().enumerate() {
-        let metadata = collect_metadata_records(input, summaries[idx].as_ref())?;
-        for metadata_record in metadata {
-            write_merged_metadata(
-                &mut writer,
-                &mut metadata_state,
-                metadata_record,
-                opts.allow_duplicate_metadata,
-            )?;
-        }
-    }
-
-    merge_messages(inputs, &mut writer, opts.coalesce_channels)?;
+    merge_messages(
+        inputs,
+        &mut writer,
+        opts.coalesce_channels,
+        opts.allow_duplicate_metadata,
+    )?;
 
     for (idx, input) in inputs.iter().enumerate() {
         let attachments = collect_attachments(input, summaries[idx].as_ref())?;
@@ -232,46 +241,6 @@ fn output_profile(profiles: &[String]) -> String {
     }
 }
 
-fn collect_metadata_records(
-    input: &InputRef<'_>,
-    summary: Option<&mcap::Summary>,
-) -> Result<Vec<mcap::records::Metadata>> {
-    if let Some(summary) = summary {
-        let metadata_count = summary
-            .stats
-            .as_ref()
-            .map(|stats| stats.metadata_count)
-            .unwrap_or(0);
-        if metadata_count == summary.metadata_indexes.len() as u32 {
-            let mut indexes = summary.metadata_indexes.clone();
-            indexes.sort_by_key(|index| index.offset);
-            return indexes
-                .into_iter()
-                .map(|index| {
-                    mcap::read::metadata(input.data, &index).with_context(|| {
-                        format!(
-                            "failed to read metadata '{}' at offset {} from '{}'",
-                            index.name, index.offset, input.name
-                        )
-                    })
-                })
-                .collect();
-        }
-    }
-
-    let mut metadata = Vec::new();
-    for record in mcap::read::LinearReader::new(input.data)
-        .with_context(|| format!("failed to read '{}'", input.name))?
-    {
-        if let Record::Metadata(record) =
-            record.with_context(|| format!("failed to parse '{}'", input.name))?
-        {
-            metadata.push(record);
-        }
-    }
-    Ok(metadata)
-}
-
 fn write_merged_metadata<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     state: &mut MetadataState,
@@ -285,9 +254,23 @@ fn write_merged_metadata<W: Write + Seek>(
         );
     }
 
-    writer.write_metadata(&metadata_record)?;
-    state.metadata_names.insert(metadata_record.name.clone());
+    let key = metadata_key(&metadata_record);
+    if state.seen_metadata.insert(key) {
+        writer.write_metadata(&metadata_record)?;
+        state.metadata_names.insert(metadata_record.name.clone());
+    }
     Ok(())
+}
+
+fn metadata_key(metadata_record: &mcap::records::Metadata) -> MetadataKey {
+    MetadataKey {
+        name: metadata_record.name.clone(),
+        entries: metadata_record
+            .metadata
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect(),
+    }
 }
 
 fn collect_attachments(
@@ -349,27 +332,134 @@ fn owned_attachment(input: mcap::Attachment<'_>) -> mcap::Attachment<'static> {
     }
 }
 
+impl<'a> InputMessageReader<'a> {
+    fn new(input: &InputRef<'a>) -> Result<Self> {
+        Ok(Self {
+            name: input.name,
+            records: mcap::read::ChunkFlattener::new(input.data)
+                .with_context(|| format!("failed to stream records from '{}'", input.name))?,
+            schemas: HashMap::new(),
+            channels: HashMap::new(),
+        })
+    }
+}
+
+fn next_message_from_input<W: Write + Seek>(
+    input: &mut InputMessageReader<'_>,
+    writer: &mut mcap::Writer<W>,
+    metadata_state: &mut MetadataState,
+    allow_duplicate_metadata: bool,
+) -> Result<Option<InputMessage>> {
+    for record in input.records.by_ref() {
+        let record = record.with_context(|| format!("failed to parse '{}'", input.name))?;
+        match record {
+            Record::Schema { header, data } => {
+                let schema = Arc::new(mcap::Schema {
+                    id: header.id,
+                    name: header.name.clone(),
+                    encoding: header.encoding.clone(),
+                    data: std::borrow::Cow::Owned(data.into_owned()),
+                });
+                if let Some(existing) = input.schemas.get(&header.id) {
+                    if existing.name != schema.name
+                        || existing.encoding != schema.encoding
+                        || existing.data.as_ref() != schema.data.as_ref()
+                    {
+                        return Err(mcap::McapError::ConflictingSchemas(header.name).into());
+                    }
+                } else {
+                    input.schemas.insert(header.id, schema);
+                }
+            }
+            Record::Channel(channel) => {
+                let schema = if channel.schema_id == 0 {
+                    None
+                } else {
+                    Some(
+                        input
+                            .schemas
+                            .get(&channel.schema_id)
+                            .cloned()
+                            .ok_or_else(|| {
+                                anyhow::anyhow!(
+                                    "encountered channel '{}' with unknown schema {} in '{}'",
+                                    channel.topic,
+                                    channel.schema_id,
+                                    input.name
+                                )
+                            })?,
+                    )
+                };
+                let parsed_channel = Arc::new(mcap::Channel {
+                    id: channel.id,
+                    topic: channel.topic.clone(),
+                    schema: schema.clone(),
+                    message_encoding: channel.message_encoding.clone(),
+                    metadata: channel.metadata.clone(),
+                });
+
+                if let Some(existing) = input.channels.get(&channel.id) {
+                    if existing.topic != parsed_channel.topic
+                        || existing.schema.as_ref().map(|schema| schema.id)
+                            != parsed_channel.schema.as_ref().map(|schema| schema.id)
+                        || existing.message_encoding != parsed_channel.message_encoding
+                        || existing.metadata != parsed_channel.metadata
+                    {
+                        return Err(mcap::McapError::ConflictingChannels(channel.topic).into());
+                    }
+                } else {
+                    input.channels.insert(channel.id, parsed_channel);
+                }
+            }
+            Record::Metadata(metadata) => {
+                write_merged_metadata(writer, metadata_state, metadata, allow_duplicate_metadata)?;
+            }
+            Record::Message { header, data } => {
+                let channel = input
+                    .channels
+                    .get(&header.channel_id)
+                    .cloned()
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "encountered message referencing unknown channel {} in '{}'",
+                            header.channel_id,
+                            input.name
+                        )
+                    })?;
+                return Ok(Some((channel, header, data.into_owned())));
+            }
+            _ => {}
+        }
+    }
+    Ok(None)
+}
+
 fn merge_messages<W: Write + Seek>(
     inputs: &[InputRef<'_>],
     writer: &mut mcap::Writer<W>,
     coalesce_channels: CoalesceChannels,
+    allow_duplicate_metadata: bool,
 ) -> Result<()> {
     let mut streams = inputs
         .iter()
-        .map(|input| {
-            mcap::read::RawMessageStream::new(input.data)
-                .with_context(|| format!("failed to stream messages from '{}'", input.name))
-        })
+        .map(InputMessageReader::new)
         .collect::<Result<Vec<_>>>()?;
 
     let mut id_maps = IdMaps {
         next_output_channel_id: 1,
         ..IdMaps::default()
     };
+    let mut metadata_state = MetadataState::default();
 
     let mut heap = BinaryHeap::<PendingMessage>::new();
     for (input_idx, stream) in streams.iter_mut().enumerate() {
-        if let Some(message) = next_message(stream).with_context(|| {
+        if let Some((channel, header, data)) = next_message_from_input(
+            stream,
+            writer,
+            &mut metadata_state,
+            allow_duplicate_metadata,
+        )
+        .with_context(|| {
             format!(
                 "failed reading initial message from '{}'",
                 inputs[input_idx].name
@@ -377,11 +467,12 @@ fn merge_messages<W: Write + Seek>(
         })? {
             heap.push(PendingMessage {
                 input_idx,
-                input_channel_id: message.header.channel_id,
-                sequence: message.header.sequence,
-                log_time: message.header.log_time,
-                publish_time: message.header.publish_time,
-                data: message.data.into_owned(),
+                input_channel_id: header.channel_id,
+                channel,
+                sequence: header.sequence,
+                log_time: header.log_time,
+                publish_time: header.publish_time,
+                data,
             });
         }
     }
@@ -390,9 +481,9 @@ fn merge_messages<W: Write + Seek>(
         let output_channel_id = ensure_output_channel_id(
             &mut id_maps,
             writer,
-            &streams[message.input_idx],
             message.input_idx,
             message.input_channel_id,
+            &message.channel,
             coalesce_channels,
         )?;
 
@@ -406,21 +497,26 @@ fn merge_messages<W: Write + Seek>(
             &message.data,
         )?;
 
-        if let Some(next_message) =
-            next_message(&mut streams[message.input_idx]).with_context(|| {
-                format!(
-                    "failed reading next message from '{}'",
-                    inputs[message.input_idx].name
-                )
-            })?
-        {
+        if let Some((channel, header, data)) = next_message_from_input(
+            &mut streams[message.input_idx],
+            writer,
+            &mut metadata_state,
+            allow_duplicate_metadata,
+        )
+        .with_context(|| {
+            format!(
+                "failed reading next message from '{}'",
+                inputs[message.input_idx].name
+            )
+        })? {
             heap.push(PendingMessage {
                 input_idx: message.input_idx,
-                input_channel_id: next_message.header.channel_id,
-                sequence: next_message.header.sequence,
-                log_time: next_message.header.log_time,
-                publish_time: next_message.header.publish_time,
-                data: next_message.data.into_owned(),
+                input_channel_id: header.channel_id,
+                channel,
+                sequence: header.sequence,
+                log_time: header.log_time,
+                publish_time: header.publish_time,
+                data,
             });
         }
     }
@@ -428,38 +524,17 @@ fn merge_messages<W: Write + Seek>(
     Ok(())
 }
 
-fn next_message(
-    stream: &mut mcap::read::RawMessageStream<'_>,
-) -> Result<Option<mcap::read::RawMessage<'static>>> {
-    match stream.next() {
-        Some(Ok(message)) => Ok(Some(mcap::read::RawMessage {
-            header: message.header,
-            data: std::borrow::Cow::Owned(message.data.into_owned()),
-        })),
-        Some(Err(err)) => Err(err.into()),
-        None => Ok(None),
-    }
-}
-
 fn ensure_output_channel_id<W: Write + Seek>(
     id_maps: &mut IdMaps,
     writer: &mut mcap::Writer<W>,
-    stream: &mcap::read::RawMessageStream<'_>,
     input_idx: usize,
     input_channel_id: u16,
+    channel: &Arc<mcap::Channel<'_>>,
     coalesce_channels: CoalesceChannels,
 ) -> Result<u16> {
     if let Some(output_channel_id) = id_maps.channel_ids.get(&(input_idx, input_channel_id)) {
         return Ok(*output_channel_id);
     }
-
-    let channel = stream.get_channel(input_channel_id).ok_or_else(|| {
-        anyhow::anyhow!(
-            "encountered message referencing unknown channel {} in input {}",
-            input_channel_id,
-            input_idx
-        )
-    })?;
 
     let output_schema_id = if let Some(schema) = channel.schema.as_ref() {
         ensure_output_schema_id(id_maps, writer, input_idx, schema)?
@@ -805,13 +880,14 @@ mod tests {
             false,
         )
         .expect_err("merge should fail");
-        assert!(err
-            .to_string()
-            .contains("metadata name 'robot' was previously encountered"));
+        assert!(
+            format!("{err:#}").contains("metadata name 'robot' was previously encountered"),
+            "unexpected error: {err:#}"
+        );
     }
 
     #[test]
-    fn merge_allow_duplicate_metadata_writes_identical_records() {
+    fn merge_allow_duplicate_metadata_deduplicates_identical_records() {
         let first = build_mcap(
             "p",
             &[],
@@ -845,8 +921,8 @@ mod tests {
         let summary = mcap::Summary::read(&merged)
             .expect("summary")
             .expect("present");
-        assert_eq!(summary.stats.as_ref().expect("stats").metadata_count, 2);
-        assert_eq!(summary.metadata_indexes.len(), 2);
+        assert_eq!(summary.stats.as_ref().expect("stats").metadata_count, 1);
+        assert_eq!(summary.metadata_indexes.len(), 1);
     }
 
     #[test]
