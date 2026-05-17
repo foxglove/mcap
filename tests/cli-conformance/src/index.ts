@@ -80,7 +80,9 @@ async function main(options: ProgramOptions): Promise<void> {
       process.exitCode = 1;
     }
   } finally {
-    await cleanupManagedWorkDirectory(workDirectory, { keepWorkDir: runOptions.keepWorkDir });
+    await cleanupManagedWorkDirectory(workDirectory, {
+      cleanup: runOptions.keepWorkDir ? "keep" : "remove",
+    });
   }
 }
 

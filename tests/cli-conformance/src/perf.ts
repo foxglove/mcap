@@ -89,7 +89,7 @@ async function main(options: ProgramOptions): Promise<void> {
       }
     }
   } finally {
-    await cleanupManagedWorkDirectory(workDirectory, { keepWorkDir: false });
+    await cleanupManagedWorkDirectory(workDirectory, { cleanup: "remove" });
   }
 
   if (failed && options.failOnRegression) {
