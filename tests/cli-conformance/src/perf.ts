@@ -54,24 +54,22 @@ async function main(options: ProgramOptions): Promise<void> {
   try {
     for (const testCase of selectedCases) {
       try {
-        const [go, rust] = await Promise.all([
-          measureImplementation(
-            "go",
-            path.resolve(options.goBin),
-            testCase,
-            options,
-            root,
-            workDirectory.path,
-          ),
-          measureImplementation(
-            "rust",
-            path.resolve(options.rustBin),
-            testCase,
-            options,
-            root,
-            workDirectory.path,
-          ),
-        ]);
+        const go = await measureImplementation(
+          "go",
+          path.resolve(options.goBin),
+          testCase,
+          options,
+          root,
+          workDirectory.path,
+        );
+        const rust = await measureImplementation(
+          "rust",
+          path.resolve(options.rustBin),
+          testCase,
+          options,
+          root,
+          workDirectory.path,
+        );
         if (go.medianMs <= 0) {
           throw new Error(`go median duration must be positive, got ${go.medianMs}`);
         }

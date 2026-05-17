@@ -216,13 +216,11 @@ export const cases: CliTestCase[] = [
       files: [
         {
           path: "filtered.mcap",
-          comparator: { kind: "mcap", mode: "messages", allowSemanticFallback: true },
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
         },
       ],
     },
   },
-  // These MCAP-rewriting cases intentionally use message-only conformance fixtures.
-  // If a future case uses metadata or attachments, prefer mode: "content".
   {
     id: "compress-none-output-messages",
     description: "Rewriting an MCAP with no output compression preserves the same message stream.",
@@ -237,7 +235,7 @@ export const cases: CliTestCase[] = [
       files: [
         {
           path: "compressed.mcap",
-          comparator: { kind: "mcap", mode: "messages", allowSemanticFallback: true },
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
         },
       ],
     },
@@ -256,7 +254,7 @@ export const cases: CliTestCase[] = [
       files: [
         {
           path: "compressed-lz4.mcap",
-          comparator: { kind: "mcap", mode: "messages", allowSemanticFallback: true },
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
         },
       ],
     },
@@ -275,7 +273,7 @@ export const cases: CliTestCase[] = [
       files: [
         {
           path: "compressed-zstd.mcap",
-          comparator: { kind: "mcap", mode: "messages", allowSemanticFallback: true },
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
         },
       ],
     },
@@ -294,7 +292,7 @@ export const cases: CliTestCase[] = [
       files: [
         {
           path: "decompressed.mcap",
-          comparator: { kind: "mcap", mode: "messages", allowSemanticFallback: true },
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
         },
       ],
     },
@@ -313,7 +311,7 @@ export const cases: CliTestCase[] = [
       files: [
         {
           path: "sorted.mcap",
-          comparator: { kind: "mcap", mode: "messages", allowSemanticFallback: true },
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
         },
       ],
     },
@@ -332,7 +330,7 @@ export const cases: CliTestCase[] = [
       files: [
         {
           path: "merged.mcap",
-          comparator: { kind: "mcap", mode: "messages", allowSemanticFallback: true },
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
         },
       ],
     },
@@ -351,7 +349,7 @@ export const cases: CliTestCase[] = [
       files: [
         {
           path: "recovered.mcap",
-          comparator: { kind: "mcap", mode: "messages", allowSemanticFallback: true },
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
         },
       ],
     },

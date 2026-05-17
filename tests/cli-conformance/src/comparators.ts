@@ -137,8 +137,13 @@ async function compareBuffers(
     case "ignore":
       return [];
     case "json": {
-      const expectedJson = canonicalJson(bufferToUtf8(expected));
-      const actualJson = canonicalJson(bufferToUtf8(actual));
+      const expectedJson = parseCanonicalJson("go", bufferToUtf8(expected));
+      const actualJson = parseCanonicalJson("rust", bufferToUtf8(actual));
+      if (typeof expectedJson !== "string" || typeof actualJson !== "string") {
+        return [expectedJson, actualJson]
+          .filter((result): result is { error: string } => typeof result !== "string")
+          .map((result) => `${label} ${result.error}`);
+      }
       return expectedJson === actualJson ? [] : [formatPatch(label, expectedJson, actualJson)];
     }
     case "table": {
@@ -239,8 +244,19 @@ async function compareExpectedFile(
   ];
 }
 
-function canonicalJson(text: string): string {
-  return stableStringify(JSON.parse(text));
+function parseCanonicalJson(
+  implementation: "go" | "rust",
+  text: string,
+): string | { error: string } {
+  try {
+    return stableStringify(JSON.parse(text));
+  } catch (error) {
+    return {
+      error: `${implementation} JSON parse failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
+  }
 }
 
 function normalizeInfo(text: string): string {

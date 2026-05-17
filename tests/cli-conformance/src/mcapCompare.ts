@@ -80,13 +80,21 @@ export async function compareMcapBuffers(
     };
   }
 
-  const [expectedRecords, actualRecords] = await Promise.all([
-    parseRecords(expected),
-    parseRecords(actual),
+  const [expectedParse, actualParse] = await Promise.all([
+    parseRecords("go", expected),
+    parseRecords("rust", actual),
   ]);
+  if ("error" in expectedParse || "error" in actualParse) {
+    return {
+      equal: false,
+      mode: "semantic",
+      expected: "error" in expectedParse ? expectedParse.error : "<parsed>",
+      actual: "error" in actualParse ? actualParse.error : "<parsed>",
+    };
+  }
 
-  const expectedSemantic = canonicalString(semanticValue(expectedRecords, options.mode));
-  const actualSemantic = canonicalString(semanticValue(actualRecords, options.mode));
+  const expectedSemantic = canonicalString(semanticValue(expectedParse.records, options.mode));
+  const actualSemantic = canonicalString(semanticValue(actualParse.records, options.mode));
 
   return {
     equal: expectedSemantic === actualSemantic,
@@ -110,17 +118,28 @@ function semanticValue(
   }
 }
 
-async function parseRecords(data: Uint8Array): Promise<TypedMcapRecord[]> {
-  const reader = new McapStreamReader({
-    decompressHandlers: await getDecompressHandlers(),
-    validateCrcs: true,
-  });
-  reader.append(data);
-  const records: TypedMcapRecord[] = [];
-  for (let record; (record = reader.nextRecord()) != undefined; ) {
-    records.push(record);
+async function parseRecords(
+  implementation: "go" | "rust",
+  data: Uint8Array,
+): Promise<{ records: TypedMcapRecord[] } | { error: string }> {
+  try {
+    const reader = new McapStreamReader({
+      decompressHandlers: await getDecompressHandlers(),
+      validateCrcs: true,
+    });
+    reader.append(data);
+    const records: TypedMcapRecord[] = [];
+    for (let record; (record = reader.nextRecord()) != undefined; ) {
+      records.push(record);
+    }
+    return { records };
+  } catch (error) {
+    return {
+      error: `${implementation} MCAP parse failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    };
   }
-  return records;
 }
 
 function messagesFromRecords(records: TypedMcapRecord[]): MessageRecord[] {
