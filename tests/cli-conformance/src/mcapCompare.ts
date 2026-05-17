@@ -2,7 +2,7 @@ import { McapStreamReader } from "@mcap/core";
 import type { TypedMcapRecord } from "@mcap/core";
 import { loadDecompressHandlers } from "@mcap/support";
 
-import { stableStringify } from "./stableJson.ts";
+import { compareStableStrings, stableStringify } from "./stableJson.ts";
 
 type SerializableValue =
   | string
@@ -71,30 +71,41 @@ export async function compareMcapBuffers(
     return { equal: true, mode: "byte-exact", expected: "", actual: "" };
   }
 
-  if (!options.allowSemanticFallback) {
-    return {
-      equal: false,
-      mode: "byte-exact",
-      expected: `<${expected.length} bytes>`,
-      actual: `<${actual.length} bytes>`,
-    };
-  }
-
   const [expectedParse, actualParse] = await Promise.all([
     parseRecords("go", expected),
     parseRecords("rust", actual),
   ]);
   if ("error" in expectedParse || "error" in actualParse) {
+    const expectedError = "error" in expectedParse ? expectedParse.error : "<parsed>";
+    const actualError = "error" in actualParse ? actualParse.error : "<parsed>";
     return {
       equal: false,
-      mode: "semantic",
-      expected: "error" in expectedParse ? expectedParse.error : "<parsed>",
-      actual: "error" in actualParse ? actualParse.error : "<parsed>",
+      mode: options.allowSemanticFallback ? "semantic" : "byte-exact",
+      expected: byteExactDiagnostic(expected.length, expectedError),
+      actual: byteExactDiagnostic(actual.length, actualError),
     };
   }
 
   const expectedSemantic = canonicalString(semanticValue(expectedParse.records, options.mode));
   const actualSemantic = canonicalString(semanticValue(actualParse.records, options.mode));
+
+  if (!options.allowSemanticFallback) {
+    const semanticStatus =
+      expectedSemantic === actualSemantic
+        ? "semantic comparison matched"
+        : `semantic diff:\n${expectedSemantic}`;
+    return {
+      equal: false,
+      mode: "byte-exact",
+      expected: byteExactDiagnostic(expected.length, semanticStatus),
+      actual: byteExactDiagnostic(
+        actual.length,
+        expectedSemantic === actualSemantic
+          ? "semantic comparison matched"
+          : `semantic diff:\n${actualSemantic}`,
+      ),
+    };
+  }
 
   return {
     equal: expectedSemantic === actualSemantic,
@@ -102,6 +113,10 @@ export async function compareMcapBuffers(
     expected: expectedSemantic,
     actual: actualSemantic,
   };
+}
+
+function byteExactDiagnostic(byteLength: number, details: string): string {
+  return `<${byteLength} bytes>\n${details}`;
 }
 
 function semanticValue(
@@ -215,9 +230,9 @@ function contentFromRecords(records: TypedMcapRecord[]): ContentRecord {
     }
   }
 
-  metadata.sort((left, right) => `${left.name}`.localeCompare(`${right.name}`));
+  metadata.sort((left, right) => compareStableStrings(`${left.name}`, `${right.name}`));
   attachments.sort((left, right) =>
-    `${left.name}:${left.logTime}`.localeCompare(`${right.name}:${right.logTime}`),
+    compareStableStrings(`${left.name}:${left.logTime}`, `${right.name}:${right.logTime}`),
   );
 
   return {
@@ -268,7 +283,7 @@ function toSerializableRecord(record: TypedMcapRecord): SerializableRecord {
       ([key, value]) =>
         [toSnakeCase(key), toSerializableValue(value)] as [string, SerializableValue],
     )
-    .sort(([left], [right]) => left.localeCompare(right));
+    .sort(([left], [right]) => compareStableStrings(left, right));
 
   return { type: record.type, fields: entries };
 }

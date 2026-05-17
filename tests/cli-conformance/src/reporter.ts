@@ -60,7 +60,9 @@ function processReport(result: CliProcessResult) {
     timedOut: result.timedOut,
     spawnError: result.spawnError,
     stdout: result.stdout.toString("utf8"),
+    stdoutBase64: result.stdout.toString("base64"),
     stderr: result.stderr.toString("utf8"),
+    stderrBase64: result.stderr.toString("base64"),
   };
 }
 

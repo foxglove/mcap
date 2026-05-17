@@ -2,6 +2,10 @@ export function stableStringify(value: unknown, space = 2): string {
   return JSON.stringify(sortJsonValue(value), undefined, space);
 }
 
+export function compareStableStrings(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function sortJsonValue(value: unknown): unknown {
   if (value == undefined || typeof value !== "object") {
     return value;
@@ -11,7 +15,7 @@ function sortJsonValue(value: unknown): unknown {
   }
   return Object.fromEntries(
     Object.entries(value)
-      .sort(([left], [right]) => left.localeCompare(right))
+      .sort(([left], [right]) => compareStableStrings(left, right))
       .map(([key, entryValue]) => [key, sortJsonValue(entryValue)]),
   );
 }

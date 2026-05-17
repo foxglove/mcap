@@ -44,6 +44,12 @@ const EXIT_CODE_ONLY = {
   stderr: { kind: "ignore" },
 } as const;
 
+const HELP_EXISTS = {
+  exitCode: 0,
+  stdout: { kind: "nonempty" },
+  stderr: { kind: "ignore" },
+} as const;
+
 export const cases: CliTestCase[] = [
   {
     id: "root-help-command-list",
@@ -62,7 +68,7 @@ export const cases: CliTestCase[] = [
     description: `Both CLIs expose help for '${args.join(" ")}'.`,
     tags: ["surface", "help"],
     invocation: { args: [...args, "--help"] },
-    comparison: EXIT_CODE_ONLY,
+    comparison: HELP_EXISTS,
   })),
   {
     id: "version-command-exits-successfully",
@@ -79,7 +85,7 @@ export const cases: CliTestCase[] = [
     invocation: { args: ["cat", ONE_MESSAGE] },
     comparison: {
       exitCode: 0,
-      stdout: { kind: "text", trim: false },
+      stdout: { kind: "bytes" },
       stderr: { kind: "text" },
     },
   },
@@ -90,7 +96,7 @@ export const cases: CliTestCase[] = [
     invocation: { args: ["cat", ONE_SCHEMALESS] },
     comparison: {
       exitCode: 0,
-      stdout: { kind: "text", trim: false },
+      stdout: { kind: "bytes" },
       stderr: { kind: "text" },
     },
   },

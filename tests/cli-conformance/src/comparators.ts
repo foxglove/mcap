@@ -31,6 +31,9 @@ export async function compareParityResults(
       messages.push(`${result.implementation} spawn failed: ${result.spawnError}`);
     }
   }
+  if (messages.length > 0) {
+    return messages;
+  }
 
   const exitCodeSpec = spec.exitCode ?? "same";
   if (exitCodeSpec === "same") {
@@ -136,6 +139,18 @@ async function compareBuffers(
       return [`${label} byte mismatch: go=${expected.length} bytes rust=${actual.length} bytes`];
     case "ignore":
       return [];
+    case "nonempty": {
+      const expectedText = normalizeText(bufferToUtf8(expected), { trim: true });
+      const actualText = normalizeText(bufferToUtf8(actual), { trim: true });
+      const messages: string[] = [];
+      if (expectedText.length === 0) {
+        messages.push(`${label} go output expected to be nonempty`);
+      }
+      if (actualText.length === 0) {
+        messages.push(`${label} rust output expected to be nonempty`);
+      }
+      return messages;
+    }
     case "json": {
       const expectedJson = parseCanonicalJson("go", bufferToUtf8(expected));
       const actualJson = parseCanonicalJson("rust", bufferToUtf8(actual));
