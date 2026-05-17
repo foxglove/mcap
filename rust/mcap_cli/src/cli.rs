@@ -294,13 +294,6 @@ pub struct ConvertCommand {
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MergeCompression {
-    Zstd,
-    Lz4,
-    None,
-}
-
-#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoalesceChannels {
     Auto,
     Force,
@@ -320,7 +313,7 @@ pub struct MergeCommand {
 
     /// Chunk compression algorithm for output MCAP
     #[arg(long, value_enum, default_value = "zstd")]
-    pub compression: MergeCompression,
+    pub compression: ConvertCompression,
 
     /// Target uncompressed chunk size in bytes
     #[arg(long, default_value_t = 8 * 1024 * 1024)]

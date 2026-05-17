@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 use mcap::records::{MessageHeader, Record};
 
-use crate::cli::{CoalesceChannels, MergeCommand, MergeCompression};
+use crate::cli::{CoalesceChannels, ConvertCompression, MergeCommand};
 use crate::context::CommandContext;
 
 #[derive(Debug, Clone)]
@@ -146,9 +146,9 @@ pub fn run(_ctx: &CommandContext, args: MergeCommand) -> Result<()> {
 
 fn build_merge_options(args: MergeCommand) -> MergeOptions {
     let compression = match args.compression {
-        MergeCompression::Zstd => Some(mcap::Compression::Zstd),
-        MergeCompression::Lz4 => Some(mcap::Compression::Lz4),
-        MergeCompression::None => None,
+        ConvertCompression::Zstd => Some(mcap::Compression::Zstd),
+        ConvertCompression::Lz4 => Some(mcap::Compression::Lz4),
+        ConvertCompression::None => None,
     };
 
     MergeOptions {
@@ -278,27 +278,25 @@ fn collect_attachments(
     summary: Option<&mcap::Summary>,
 ) -> Result<Vec<mcap::Attachment<'static>>> {
     if let Some(summary) = summary {
-        let attachment_count = summary
-            .stats
-            .as_ref()
-            .map(|stats| stats.attachment_count)
-            .unwrap_or(0);
-        if attachment_count == summary.attachment_indexes.len() as u32 {
-            let mut indexes = summary.attachment_indexes.clone();
-            indexes.sort_by_key(|index| index.offset);
-            return indexes
-                .into_iter()
-                .map(|index| {
-                    mcap::read::attachment(input.data, &index)
-                        .map(owned_attachment)
-                        .with_context(|| {
-                            format!(
-                                "failed to read attachment '{}' at offset {} from '{}'",
-                                index.name, index.offset, input.name
-                            )
-                        })
-                })
-                .collect();
+        let attachment_count = summary.stats.as_ref().map(|stats| stats.attachment_count);
+        if let Some(attachment_count) = attachment_count {
+            if attachment_count == summary.attachment_indexes.len() as u32 {
+                let mut indexes = summary.attachment_indexes.clone();
+                indexes.sort_by_key(|index| index.offset);
+                return indexes
+                    .into_iter()
+                    .map(|index| {
+                        mcap::read::attachment(input.data, &index)
+                            .map(owned_attachment)
+                            .with_context(|| {
+                                format!(
+                                    "failed to read attachment '{}' at offset {} from '{}'",
+                                    index.name, index.offset, input.name
+                                )
+                            })
+                    })
+                    .collect();
+            }
         }
     }
 
@@ -676,12 +674,33 @@ mod tests {
         emit_attachment_indexes: bool,
         emit_metadata_indexes: bool,
     ) -> Vec<u8> {
+        build_mcap_with_options(
+            profile,
+            messages,
+            metadata_records,
+            attachments,
+            emit_attachment_indexes,
+            emit_metadata_indexes,
+            true,
+        )
+    }
+
+    fn build_mcap_with_options(
+        profile: &str,
+        messages: &[TestMessage],
+        metadata_records: &[mcap::records::Metadata],
+        attachments: &[mcap::Attachment<'_>],
+        emit_attachment_indexes: bool,
+        emit_metadata_indexes: bool,
+        emit_statistics: bool,
+    ) -> Vec<u8> {
         let mut output = Cursor::new(Vec::<u8>::new());
         {
             let mut writer = mcap::WriteOptions::new()
                 .profile(profile)
                 .emit_attachment_indexes(emit_attachment_indexes)
                 .emit_metadata_indexes(emit_metadata_indexes)
+                .emit_statistics(emit_statistics)
                 .create(&mut output)
                 .expect("writer");
 
@@ -759,7 +778,7 @@ mod tests {
         let options = build_merge_options(MergeCommand {
             files: vec!["a.mcap".into(), "b.mcap".into()],
             output_file: Some("out.mcap".into()),
-            compression: MergeCompression::Lz4,
+            compression: ConvertCompression::Lz4,
             chunk_size: 4096,
             include_crc: false,
             chunked: false,
@@ -1104,5 +1123,37 @@ mod tests {
             .expect("present");
         assert_eq!(summary.stats.as_ref().expect("stats").attachment_count, 2);
         assert_eq!(summary.attachment_indexes.len(), 2);
+    }
+
+    #[test]
+    fn merge_copies_attachments_without_statistics_record() {
+        let no_stats = build_mcap_with_options(
+            "profile",
+            &[],
+            &[],
+            &[mcap::Attachment {
+                log_time: 3,
+                create_time: 3,
+                name: "nostats.bin".to_string(),
+                media_type: "application/octet-stream".to_string(),
+                data: std::borrow::Cow::Borrowed(&[7, 8, 9]),
+            }],
+            true,
+            true,
+            false,
+        );
+
+        let merged = merge_bytes(
+            &[("no-stats", no_stats.as_slice())],
+            CoalesceChannels::Auto,
+            false,
+        )
+        .expect("merge");
+
+        let summary = mcap::Summary::read(&merged)
+            .expect("summary")
+            .expect("present");
+        assert_eq!(summary.stats.as_ref().expect("stats").attachment_count, 1);
+        assert_eq!(summary.attachment_indexes.len(), 1);
     }
 }

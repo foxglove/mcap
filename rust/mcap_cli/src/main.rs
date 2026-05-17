@@ -40,8 +40,8 @@ mod tests {
         DecompressCommand, DoctorCommand, DuCommand, FilterCommand, GetAttachmentCommand,
         GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
         ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
-        ListSchemasCommand, ListSubcommand, MergeCommand, MergeCompression, RecoverCommand,
-        SortCommand, VersionCommand,
+        ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand, SortCommand,
+        VersionCommand,
     };
 
     #[test]
@@ -663,7 +663,7 @@ mod tests {
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
                 output_file: None,
-                compression: MergeCompression::Zstd,
+                compression: ConvertCompression::Zstd,
                 chunk_size: 8 * 1024 * 1024,
                 include_crc: true,
                 chunked: true,
@@ -698,7 +698,7 @@ mod tests {
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
                 output_file: Some("out.mcap".into()),
-                compression: MergeCompression::None,
+                compression: ConvertCompression::None,
                 chunk_size: 2048,
                 include_crc: false,
                 chunked: false,
@@ -724,7 +724,7 @@ mod tests {
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
                 output_file: None,
-                compression: MergeCompression::Zstd,
+                compression: ConvertCompression::Zstd,
                 chunk_size: 8 * 1024 * 1024,
                 include_crc: true,
                 chunked: true,
@@ -757,7 +757,7 @@ mod tests {
                     "false".into()
                 ],
                 output_file: None,
-                compression: MergeCompression::Zstd,
+                compression: ConvertCompression::Zstd,
                 chunk_size: 8 * 1024 * 1024,
                 include_crc: true,
                 chunked: true,
