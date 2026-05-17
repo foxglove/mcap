@@ -183,20 +183,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go/go.work
-          cache-dependency-path: go/cli/mcap/go.sum
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           default: true
-      - uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/git
-            ~/.cargo/registry
-            rust/target
-          key: ${{ runner.os }}-cli-conformance-cargo-${{ hashFiles('rust/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cli-conformance-cargo-
       - run: yarn install --immutable
       - run: make -C go/cli/mcap build
       - run: cargo build -p mcap-cli
