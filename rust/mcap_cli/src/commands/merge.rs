@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 use mcap::records::{MessageHeader, Record};
 
-use crate::cli::{CoalesceChannels, ConvertCompression, MergeCommand};
+use crate::cli::{CoalesceChannels, CompressionFormat, MergeCommand};
 use crate::context::CommandContext;
 
 #[derive(Debug, Clone)]
@@ -146,9 +146,9 @@ pub fn run(_ctx: &CommandContext, args: MergeCommand) -> Result<()> {
 
 fn build_merge_options(args: MergeCommand) -> MergeOptions {
     let compression = match args.compression {
-        ConvertCompression::Zstd => Some(mcap::Compression::Zstd),
-        ConvertCompression::Lz4 => Some(mcap::Compression::Lz4),
-        ConvertCompression::None => None,
+        CompressionFormat::Zstd => Some(mcap::Compression::Zstd),
+        CompressionFormat::Lz4 => Some(mcap::Compression::Lz4),
+        CompressionFormat::None => None,
     };
 
     MergeOptions {
@@ -778,7 +778,7 @@ mod tests {
         let options = build_merge_options(MergeCommand {
             files: vec!["a.mcap".into(), "b.mcap".into()],
             output_file: Some("out.mcap".into()),
-            compression: ConvertCompression::Lz4,
+            compression: CompressionFormat::Lz4,
             chunk_size: 4096,
             include_crc: false,
             chunked: false,
@@ -803,13 +803,22 @@ mod tests {
     fn merge_orders_messages_by_log_time_then_input_index() {
         let left = build_mcap(
             "profile",
-            &[TestMessage {
-                channel_id: 1,
-                topic: "/left".to_string(),
-                metadata: BTreeMap::new(),
-                log_time: 10,
-                payload: vec![1],
-            }],
+            &[
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/left".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 5,
+                    payload: vec![1],
+                },
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/left".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 10,
+                    payload: vec![3],
+                },
+            ],
             &[],
             &[],
             true,
@@ -817,13 +826,22 @@ mod tests {
         );
         let right = build_mcap(
             "profile",
-            &[TestMessage {
-                channel_id: 1,
-                topic: "/right".to_string(),
-                metadata: BTreeMap::new(),
-                log_time: 10,
-                payload: vec![2],
-            }],
+            &[
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/right".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 3,
+                    payload: vec![2],
+                },
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/right".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 10,
+                    payload: vec![4],
+                },
+            ],
             &[],
             &[],
             true,
@@ -836,12 +854,25 @@ mod tests {
             false,
         )
         .expect("merge");
-        let mut topics = Vec::<String>::new();
+        let mut ordered_messages = Vec::<(u64, String, Vec<u8>)>::new();
         for message in mcap::MessageStream::new(&merged).expect("stream") {
             let message = message.expect("message");
-            topics.push(message.channel.topic.clone());
+            ordered_messages.push((
+                message.log_time,
+                message.channel.topic.clone(),
+                message.data.to_vec(),
+            ));
         }
-        assert_eq!(topics, vec!["/left".to_string(), "/right".to_string()]);
+        assert_eq!(
+            ordered_messages,
+            vec![
+                (3, "/right".to_string(), vec![2]),
+                (5, "/left".to_string(), vec![1]),
+                // Tie at log_time=10 resolves by input index: left before right.
+                (10, "/left".to_string(), vec![3]),
+                (10, "/right".to_string(), vec![4]),
+            ]
+        );
     }
 
     #[test]
@@ -1030,6 +1061,51 @@ mod tests {
             .expect("summary")
             .expect("present");
         assert_eq!(summary.channels.len(), 2);
+    }
+
+    #[test]
+    fn merge_auto_coalesces_channels_when_metadata_matches() {
+        let metadata = BTreeMap::from([(String::from("host"), String::from("same"))]);
+        let left = build_mcap(
+            "profile",
+            &[TestMessage {
+                channel_id: 1,
+                topic: "/topic".to_string(),
+                metadata: metadata.clone(),
+                log_time: 0,
+                payload: vec![1],
+            }],
+            &[],
+            &[],
+            true,
+            true,
+        );
+        let right = build_mcap(
+            "profile",
+            &[TestMessage {
+                channel_id: 1,
+                topic: "/topic".to_string(),
+                metadata,
+                log_time: 1,
+                payload: vec![2],
+            }],
+            &[],
+            &[],
+            true,
+            true,
+        );
+
+        let merged = merge_bytes(
+            &[("left", left.as_slice()), ("right", right.as_slice())],
+            CoalesceChannels::Auto,
+            false,
+        )
+        .expect("merge");
+
+        let summary = mcap::Summary::read(&merged)
+            .expect("summary")
+            .expect("present");
+        assert_eq!(summary.channels.len(), 1);
     }
 
     #[test]

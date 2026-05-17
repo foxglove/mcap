@@ -7,7 +7,7 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use mcap::{Compression, WriteOptions};
 
-use crate::cli::{ConvertCommand, ConvertCompression};
+use crate::cli::{CompressionFormat, ConvertCommand};
 use crate::context::CommandContext;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -44,15 +44,15 @@ fn validate_input(file_type: InputFileType, input: &mut File) -> Result<()> {
 }
 
 fn build_write_options(
-    compression: ConvertCompression,
+    compression: CompressionFormat,
     chunk_size: u64,
     include_crc: bool,
     chunked: bool,
 ) -> WriteOptions {
     let compression = match compression {
-        ConvertCompression::Zstd => Some(Compression::Zstd),
-        ConvertCompression::Lz4 => Some(Compression::Lz4),
-        ConvertCompression::None => None,
+        CompressionFormat::Zstd => Some(Compression::Zstd),
+        CompressionFormat::Lz4 => Some(Compression::Lz4),
+        CompressionFormat::None => None,
     };
 
     WriteOptions::new()
@@ -90,11 +90,11 @@ mod tests {
     use std::path::Path;
 
     use super::{build_write_options, detect_file_type, InputFileType};
-    use crate::cli::ConvertCompression;
+    use crate::cli::CompressionFormat;
 
     fn build_sample_mcap(include_crc: bool) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
-        let opts = build_write_options(ConvertCompression::None, 1024, include_crc, true);
+        let opts = build_write_options(CompressionFormat::None, 1024, include_crc, true);
         {
             let mut writer = opts.create(&mut output).expect("writer");
             let schema_id = writer

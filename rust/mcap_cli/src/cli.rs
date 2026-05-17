@@ -244,7 +244,7 @@ pub struct VersionCommand {
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConvertCompression {
+pub enum CompressionFormat {
     Zstd,
     Lz4,
     None,
@@ -260,7 +260,7 @@ pub struct ConvertCommand {
 
     /// Chunk compression algorithm for output MCAP
     #[arg(long, value_enum, default_value = "zstd")]
-    pub compression: ConvertCompression,
+    pub compression: CompressionFormat,
 
     /// Target uncompressed chunk size in bytes
     #[arg(long, default_value_t = 8 * 1024 * 1024)]
@@ -313,7 +313,7 @@ pub struct MergeCommand {
 
     /// Chunk compression algorithm for output MCAP
     #[arg(long, value_enum, default_value = "zstd")]
-    pub compression: ConvertCompression,
+    pub compression: CompressionFormat,
 
     /// Target uncompressed chunk size in bytes
     #[arg(long, default_value_t = 8 * 1024 * 1024)]
@@ -345,7 +345,9 @@ pub struct MergeCommand {
     )]
     pub chunked: bool,
 
-    /// Allow duplicate-named metadata records in output
+    /// Allow duplicate-named metadata records in output.
+    ///
+    /// Identical metadata records are still deduplicated by content.
     #[arg(long, default_value_t = false)]
     pub allow_duplicate_metadata: bool,
 
@@ -354,6 +356,10 @@ pub struct MergeCommand {
     ///   metadata
     /// - force: same as auto but ignores metadata
     /// - none: do not coalesce channels
+    ///
+    /// Note: coalescing channels may produce non-monotonic or colliding
+    /// sequence values within a coalesced output channel (matches Go CLI
+    /// behavior).
     #[arg(long, value_enum, default_value = "auto")]
     pub coalesce_channels: CoalesceChannels,
 }
@@ -491,7 +497,7 @@ pub struct SortCommand {
 
     /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
-    pub compression: ConvertCompression,
+    pub compression: CompressionFormat,
 
     /// Target uncompressed chunk size in bytes
     #[arg(long, default_value_t = 4 * 1024 * 1024)]

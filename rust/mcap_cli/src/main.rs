@@ -36,7 +36,7 @@ mod tests {
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        CoalesceChannels, Command, CompressCommand, ConvertCommand, ConvertCompression,
+        CoalesceChannels, Command, CompressCommand, CompressionFormat, ConvertCommand,
         DecompressCommand, DoctorCommand, DuCommand, FilterCommand, GetAttachmentCommand,
         GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
         ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
@@ -298,7 +298,7 @@ mod tests {
             Command::Convert(ConvertCommand {
                 input: "input.bag".into(),
                 output: "output.mcap".into(),
-                compression: ConvertCompression::Zstd,
+                compression: CompressionFormat::Zstd,
                 chunk_size: 8 * 1024 * 1024,
                 include_crc: true,
                 chunked: true,
@@ -326,7 +326,7 @@ mod tests {
             Command::Convert(ConvertCommand {
                 input: "input.bag".into(),
                 output: "output.mcap".into(),
-                compression: ConvertCompression::None,
+                compression: CompressionFormat::None,
                 chunk_size: 1024,
                 include_crc: false,
                 chunked: false,
@@ -350,7 +350,7 @@ mod tests {
             Command::Convert(ConvertCommand {
                 input: "input.bag".into(),
                 output: "output.mcap".into(),
-                compression: ConvertCompression::Zstd,
+                compression: CompressionFormat::Zstd,
                 chunk_size: 8 * 1024 * 1024,
                 include_crc: true,
                 chunked: true,
@@ -550,7 +550,7 @@ mod tests {
                 file: "in.mcap".into(),
                 output_file: "out.mcap".into(),
                 chunk_size: 4 * 1024 * 1024,
-                compression: ConvertCompression::Zstd,
+                compression: CompressionFormat::Zstd,
                 include_crc: true,
                 chunked: true,
             })
@@ -606,7 +606,7 @@ mod tests {
                 file: "in.mcap".into(),
                 output_file: "out.mcap".into(),
                 chunk_size: 1024,
-                compression: ConvertCompression::None,
+                compression: CompressionFormat::None,
                 include_crc: false,
                 chunked: false,
             })
@@ -631,7 +631,7 @@ mod tests {
                 file: "in.mcap".into(),
                 output_file: "out.mcap".into(),
                 chunk_size: 4 * 1024 * 1024,
-                compression: ConvertCompression::Zstd,
+                compression: CompressionFormat::Zstd,
                 include_crc: true,
                 chunked: true,
             })
@@ -663,7 +663,7 @@ mod tests {
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
                 output_file: None,
-                compression: ConvertCompression::Zstd,
+                compression: CompressionFormat::Zstd,
                 chunk_size: 8 * 1024 * 1024,
                 include_crc: true,
                 chunked: true,
@@ -698,7 +698,7 @@ mod tests {
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
                 output_file: Some("out.mcap".into()),
-                compression: ConvertCompression::None,
+                compression: CompressionFormat::None,
                 chunk_size: 2048,
                 include_crc: false,
                 chunked: false,
@@ -724,7 +724,7 @@ mod tests {
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
                 output_file: None,
-                compression: ConvertCompression::Zstd,
+                compression: CompressionFormat::Zstd,
                 chunk_size: 8 * 1024 * 1024,
                 include_crc: true,
                 chunked: true,
@@ -757,7 +757,7 @@ mod tests {
                     "false".into()
                 ],
                 output_file: None,
-                compression: ConvertCompression::Zstd,
+                compression: CompressionFormat::Zstd,
                 chunk_size: 8 * 1024 * 1024,
                 include_crc: true,
                 chunked: true,
