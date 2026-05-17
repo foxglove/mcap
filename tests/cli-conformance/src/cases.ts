@@ -127,7 +127,7 @@ export const cases: CliTestCase[] = [
     description: "Sorting an indexed MCAP preserves the same message stream.",
     tags: ["sort", "mcap-output"],
     invocation: {
-      args: ["sort", TEN_MESSAGES, "-o", "sorted.mcap", "--compression", "none"],
+      args: ["sort", TEN_MESSAGES, "-o", "sorted.mcap"],
     },
     comparison: {
       exitCode: 0,
@@ -193,7 +193,7 @@ export const cases: CliTestCase[] = [
       },
       rustBehavior: {
         exitCode: "nonzero",
-        stdout: { kind: "contains", value: "Usage:" },
+        stderr: { kind: "contains", value: "Usage:" },
       },
     },
   },
