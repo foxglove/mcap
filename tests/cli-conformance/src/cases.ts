@@ -221,6 +221,8 @@ export const cases: CliTestCase[] = [
       ],
     },
   },
+  // These MCAP-rewriting cases intentionally use message-only conformance fixtures.
+  // If a future case uses metadata or attachments, prefer mode: "content".
   {
     id: "compress-none-output-messages",
     description: "Rewriting an MCAP with no output compression preserves the same message stream.",
@@ -611,6 +613,7 @@ export const cases: CliTestCase[] = [
 export function validateCases(testCases: readonly CliTestCase[]): string[] {
   const errors: string[] = [];
   const ids = new Set<string>();
+  const knownDifferenceIds = new Set<string>();
   for (const testCase of testCases) {
     if (ids.has(testCase.id)) {
       errors.push(`duplicate case id '${testCase.id}'`);
@@ -628,6 +631,10 @@ export function validateCases(testCases: readonly CliTestCase[]): string[] {
     }
     if (testCase.knownDifference != undefined) {
       const known = testCase.knownDifference;
+      if (knownDifferenceIds.has(known.id)) {
+        errors.push(`duplicate known-difference id '${known.id}'`);
+      }
+      knownDifferenceIds.add(known.id);
       for (const [field, value] of Object.entries({
         id: known.id,
         summary: known.summary,

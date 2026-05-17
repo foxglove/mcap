@@ -26,6 +26,11 @@ export async function compareParityResults(
     stderr: { kind: "text" },
   };
   const messages: string[] = [];
+  for (const result of [go, rust]) {
+    if (result.spawnError != undefined) {
+      messages.push(`${result.implementation} spawn failed: ${result.spawnError}`);
+    }
+  }
 
   const exitCodeSpec = spec.exitCode ?? "same";
   if (exitCodeSpec === "same") {
@@ -242,7 +247,7 @@ function normalizeInfo(text: string): string {
   return normalizeText(text, { trim: true })
     .split("\n")
     .map((line) => line.trim().replaceAll(/[ \t]+/g, " "))
-    .filter((line) => !/^(duration|start|end):/.test(line))
+    .filter((line) => !/^(duration|start|end):/i.test(line))
     .map((line) => {
       const channel = /^\((\d+)\) ([^ ]+) (\d+) msgs? .*: (.+)$/.exec(line);
       if (channel) {

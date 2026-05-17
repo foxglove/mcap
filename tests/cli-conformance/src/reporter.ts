@@ -58,6 +58,7 @@ function processReport(result: CliProcessResult) {
     signal: result.signal,
     durationMs: result.durationMs,
     timedOut: result.timedOut,
+    spawnError: result.spawnError,
     stdout: result.stdout.toString("utf8"),
     stderr: result.stderr.toString("utf8"),
   };
@@ -67,9 +68,11 @@ function formatCommand(result: CliProcessResult): string {
   const args = result.args.map((arg) => JSON.stringify(arg)).join(" ");
   const status = result.timedOut
     ? "timed out"
-    : result.signal != undefined
-      ? `signal ${result.signal}`
-      : `exit ${result.exitCode ?? "unknown"}`;
+    : result.spawnError != undefined
+      ? `spawn failed: ${result.spawnError}`
+      : result.signal != undefined
+        ? `signal ${result.signal}`
+        : `exit ${result.exitCode ?? "unknown"}`;
   return `${JSON.stringify(result.command)} ${args} (${status}, ${result.durationMs.toFixed(1)}ms)`;
 }
 

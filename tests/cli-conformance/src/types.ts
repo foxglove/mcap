@@ -153,6 +153,7 @@ export type CliProcessResult = {
   stderr: Buffer;
   durationMs: number;
   timedOut: boolean;
+  spawnError?: string;
 };
 
 export type CaseRunResult = {

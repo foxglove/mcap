@@ -115,6 +115,7 @@ async function runInvocation(
     let exitCode: number | undefined;
     let signal: NodeJS.Signals | undefined;
     let killTimer: NodeJS.Timeout | undefined;
+    let spawnError: string | undefined;
 
     const timer = setTimeout(() => {
       timedOut = true;
@@ -131,6 +132,7 @@ async function runInvocation(
       stderr.push(chunk);
     });
     child.on("error", (error) => {
+      spawnError = error.message;
       stderr.push(Buffer.from(error.stack ?? error.message));
     });
     child.on("exit", (code, exitSignal) => {
@@ -153,6 +155,7 @@ async function runInvocation(
         stderr: Buffer.concat(stderr),
         durationMs: performance.now() - started,
         timedOut,
+        spawnError,
       });
     });
 

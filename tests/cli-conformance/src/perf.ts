@@ -72,6 +72,9 @@ async function main(options: ProgramOptions): Promise<void> {
             workDirectory.path,
           ),
         ]);
+        if (go.medianMs <= 0) {
+          throw new Error(`go median duration must be positive, got ${go.medianMs}`);
+        }
         const ratio = rust.medianMs / go.medianMs;
         const margin = testCase.margin ?? 0.2;
         const passes = ratio <= 1 + margin;
