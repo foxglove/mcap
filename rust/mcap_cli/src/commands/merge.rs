@@ -209,10 +209,7 @@ fn merge_inputs<W: Write + Seek>(
     )?;
 
     for (idx, input) in inputs.iter().enumerate() {
-        let attachments = collect_attachments(input, summaries[idx].as_ref())?;
-        for attachment in attachments {
-            writer.attach(&attachment)?;
-        }
+        write_attachments(&mut writer, input, summaries[idx].as_ref())?;
     }
 
     writer.finish().context("failed to finish mcap writer")?;
@@ -273,61 +270,54 @@ fn metadata_key(metadata_record: &mcap::records::Metadata) -> MetadataKey {
     }
 }
 
-fn collect_attachments(
+fn write_attachments<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
     input: &InputRef<'_>,
     summary: Option<&mcap::Summary>,
-) -> Result<Vec<mcap::Attachment<'static>>> {
+) -> Result<()> {
     if let Some(summary) = summary {
         let attachment_count = summary.stats.as_ref().map(|stats| stats.attachment_count);
         if let Some(attachment_count) = attachment_count {
             if attachment_count == summary.attachment_indexes.len() as u32 {
                 let mut indexes = summary.attachment_indexes.clone();
                 indexes.sort_by_key(|index| index.offset);
-                return indexes
-                    .into_iter()
-                    .map(|index| {
-                        mcap::read::attachment(input.data, &index)
-                            .map(owned_attachment)
-                            .with_context(|| {
-                                format!(
-                                    "failed to read attachment '{}' at offset {} from '{}'",
-                                    index.name, index.offset, input.name
-                                )
-                            })
-                    })
-                    .collect();
+                for index in indexes {
+                    let attachment =
+                        mcap::read::attachment(input.data, &index).with_context(|| {
+                            format!(
+                                "failed to read attachment '{}' at offset {} from '{}'",
+                                index.name, index.offset, input.name
+                            )
+                        })?;
+                    writer.attach(&attachment).with_context(|| {
+                        format!(
+                            "failed to write attachment '{}' from '{}'",
+                            index.name, input.name
+                        )
+                    })?;
+                }
+                return Ok(());
             }
         }
     }
 
-    let mut attachments = Vec::new();
     for record in mcap::read::LinearReader::new(input.data)
         .with_context(|| format!("failed to read '{}'", input.name))?
     {
         if let Record::Attachment { header, data, .. } =
             record.with_context(|| format!("failed to parse '{}'", input.name))?
         {
-            attachments.push(mcap::Attachment {
+            writer.attach(&mcap::Attachment {
                 log_time: header.log_time,
                 create_time: header.create_time,
                 name: header.name,
                 media_type: header.media_type,
-                data: std::borrow::Cow::Owned(data.into_owned()),
-            });
+                data: std::borrow::Cow::Borrowed(data.as_ref()),
+            })?;
         }
     }
 
-    Ok(attachments)
-}
-
-fn owned_attachment(input: mcap::Attachment<'_>) -> mcap::Attachment<'static> {
-    mcap::Attachment {
-        log_time: input.log_time,
-        create_time: input.create_time,
-        name: input.name,
-        media_type: input.media_type,
-        data: std::borrow::Cow::Owned(input.data.into_owned()),
-    }
+    Ok(())
 }
 
 impl<'a> InputMessageReader<'a> {
