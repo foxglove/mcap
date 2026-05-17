@@ -36,11 +36,12 @@ mod tests {
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        Command, CompressCommand, ConvertCommand, ConvertCompression, DecompressCommand,
-        DoctorCommand, DuCommand, FilterCommand, GetAttachmentCommand, GetCommand,
-        GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
+        CoalesceChannels, Command, CompressCommand, CompressionFormat, ConvertCommand,
+        DecompressCommand, DoctorCommand, DuCommand, FilterCommand, GetAttachmentCommand,
+        GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
         ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
-        ListSchemasCommand, ListSubcommand, RecoverCommand, SortCommand, VersionCommand,
+        ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand, SortCommand,
+        VersionCommand,
     };
 
     #[test]
@@ -297,7 +298,7 @@ mod tests {
             Command::Convert(ConvertCommand {
                 input: "input.bag".into(),
                 output: "output.mcap".into(),
-                compression: ConvertCompression::Zstd,
+                compression: CompressionFormat::Zstd,
                 chunk_size: 8 * 1024 * 1024,
                 include_crc: true,
                 chunked: true,
@@ -325,12 +326,51 @@ mod tests {
             Command::Convert(ConvertCommand {
                 input: "input.bag".into(),
                 output: "output.mcap".into(),
-                compression: ConvertCompression::None,
+                compression: CompressionFormat::None,
                 chunk_size: 1024,
                 include_crc: false,
                 chunked: false,
             })
         );
+    }
+
+    #[test]
+    fn parses_convert_bool_flags_without_explicit_values() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "convert",
+            "input.bag",
+            "output.mcap",
+            "--include-crc",
+            "--chunked",
+        ])
+        .expect("convert bool flags should parse without explicit values");
+        assert_eq!(
+            args.command,
+            Command::Convert(ConvertCommand {
+                input: "input.bag".into(),
+                output: "output.mcap".into(),
+                compression: CompressionFormat::Zstd,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: true,
+                chunked: true,
+            })
+        );
+    }
+
+    #[test]
+    fn convert_rejects_space_separated_bool_values() {
+        Args::try_parse_from([
+            "mcap",
+            "convert",
+            "input.bag",
+            "output.mcap",
+            "--include-crc",
+            "false",
+            "--chunked",
+            "false",
+        ])
+        .expect_err("convert bool flags should require --flag=<value> when explicit");
     }
 
     #[test]
@@ -510,7 +550,7 @@ mod tests {
                 file: "in.mcap".into(),
                 output_file: "out.mcap".into(),
                 chunk_size: 4 * 1024 * 1024,
-                compression: ConvertCompression::Zstd,
+                compression: CompressionFormat::Zstd,
                 include_crc: true,
                 chunked: true,
             })
@@ -566,11 +606,176 @@ mod tests {
                 file: "in.mcap".into(),
                 output_file: "out.mcap".into(),
                 chunk_size: 1024,
-                compression: ConvertCompression::None,
+                compression: CompressionFormat::None,
                 include_crc: false,
                 chunked: false,
             })
         );
+    }
+
+    #[test]
+    fn parses_sort_bool_flags_without_explicit_values() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "sort",
+            "in.mcap",
+            "-o",
+            "out.mcap",
+            "--include-crc",
+            "--chunked",
+        ])
+        .expect("sort bool flags should parse without explicit values");
+        assert_eq!(
+            args.command,
+            Command::Sort(SortCommand {
+                file: "in.mcap".into(),
+                output_file: "out.mcap".into(),
+                chunk_size: 4 * 1024 * 1024,
+                compression: CompressionFormat::Zstd,
+                include_crc: true,
+                chunked: true,
+            })
+        );
+    }
+
+    #[test]
+    fn sort_rejects_space_separated_bool_values() {
+        Args::try_parse_from([
+            "mcap",
+            "sort",
+            "in.mcap",
+            "-o",
+            "out.mcap",
+            "--include-crc",
+            "false",
+            "--chunked",
+            "false",
+        ])
+        .expect_err("sort bool flags should require --flag=<value> when explicit");
+    }
+
+    #[test]
+    fn parses_merge_with_defaults() {
+        let args = Args::try_parse_from(["mcap", "merge", "a.mcap", "b.mcap"])
+            .expect("merge should parse");
+        assert_eq!(
+            args.command,
+            Command::Merge(MergeCommand {
+                files: vec!["a.mcap".into(), "b.mcap".into()],
+                output_file: None,
+                compression: CompressionFormat::Zstd,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: true,
+                chunked: true,
+                allow_duplicate_metadata: false,
+                coalesce_channels: CoalesceChannels::Auto,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_merge_with_all_flags() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "merge",
+            "a.mcap",
+            "b.mcap",
+            "-o",
+            "out.mcap",
+            "--compression",
+            "none",
+            "--chunk-size",
+            "2048",
+            "--include-crc=false",
+            "--chunked=false",
+            "--allow-duplicate-metadata",
+            "--coalesce-channels",
+            "force",
+        ])
+        .expect("merge with flags should parse");
+        assert_eq!(
+            args.command,
+            Command::Merge(MergeCommand {
+                files: vec!["a.mcap".into(), "b.mcap".into()],
+                output_file: Some("out.mcap".into()),
+                compression: CompressionFormat::None,
+                chunk_size: 2048,
+                include_crc: false,
+                chunked: false,
+                allow_duplicate_metadata: true,
+                coalesce_channels: CoalesceChannels::Force,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_merge_bool_flags_without_explicit_values() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "merge",
+            "a.mcap",
+            "b.mcap",
+            "--include-crc",
+            "--chunked",
+        ])
+        .expect("merge bool flags should parse without explicit values");
+        assert_eq!(
+            args.command,
+            Command::Merge(MergeCommand {
+                files: vec!["a.mcap".into(), "b.mcap".into()],
+                output_file: None,
+                compression: CompressionFormat::Zstd,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: true,
+                chunked: true,
+                allow_duplicate_metadata: false,
+                coalesce_channels: CoalesceChannels::Auto,
+            })
+        );
+    }
+
+    #[test]
+    fn merge_treats_space_separated_bool_values_as_positional_files() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "merge",
+            "a.mcap",
+            "b.mcap",
+            "--include-crc",
+            "false",
+            "--chunked",
+            "false",
+        ])
+        .expect("merge should parse and treat trailing bool-like tokens as files");
+        assert_eq!(
+            args.command,
+            Command::Merge(MergeCommand {
+                files: vec![
+                    "a.mcap".into(),
+                    "b.mcap".into(),
+                    "false".into(),
+                    "false".into()
+                ],
+                output_file: None,
+                compression: CompressionFormat::Zstd,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: true,
+                chunked: true,
+                allow_duplicate_metadata: false,
+                coalesce_channels: CoalesceChannels::Auto,
+            })
+        );
+    }
+
+    #[test]
+    fn merge_requires_at_least_one_file() {
+        Args::try_parse_from(["mcap", "merge"]).expect_err("merge requires at least one file");
+    }
+
+    #[test]
+    fn merge_requires_file_even_when_flags_are_present() {
+        Args::try_parse_from(["mcap", "merge", "--compression", "zstd"])
+            .expect_err("merge should require at least one file");
     }
 
     #[test]

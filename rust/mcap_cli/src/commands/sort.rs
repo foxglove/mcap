@@ -4,7 +4,7 @@ use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 
-use crate::cli::{ConvertCompression, SortCommand};
+use crate::cli::{CompressionFormat, SortCommand};
 use crate::commands::common;
 use crate::context::CommandContext;
 
@@ -53,11 +53,11 @@ fn build_sort_options(args: &SortCommand) -> SortOptions {
     }
 }
 
-fn convert_compression(value: ConvertCompression) -> Option<mcap::Compression> {
+fn convert_compression(value: CompressionFormat) -> Option<mcap::Compression> {
     match value {
-        ConvertCompression::Zstd => Some(mcap::Compression::Zstd),
-        ConvertCompression::Lz4 => Some(mcap::Compression::Lz4),
-        ConvertCompression::None => None,
+        CompressionFormat::Zstd => Some(mcap::Compression::Zstd),
+        CompressionFormat::Lz4 => Some(mcap::Compression::Lz4),
+        CompressionFormat::None => None,
     }
 }
 
@@ -237,7 +237,7 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{sort_to_writer, validate_sort_input, SortOptions};
-    use crate::cli::ConvertCompression;
+    use crate::cli::CompressionFormat;
     use crate::cli::SortCommand;
     use crate::context::CommandContext;
 
@@ -422,7 +422,7 @@ mod tests {
             SortCommand {
                 file: input_path.clone(),
                 output_file: output_path.clone(),
-                compression: ConvertCompression::Zstd,
+                compression: CompressionFormat::Zstd,
                 chunk_size: 4 * 1024 * 1024,
                 include_crc: true,
                 chunked: true,
@@ -452,7 +452,7 @@ mod tests {
             SortCommand {
                 file: file_path.clone(),
                 output_file: file_path.clone(),
-                compression: ConvertCompression::Zstd,
+                compression: CompressionFormat::Zstd,
                 chunk_size: 4 * 1024 * 1024,
                 include_crc: true,
                 chunked: true,
@@ -488,13 +488,13 @@ mod tests {
 
     #[test]
     fn convert_compression_maps_variants() {
-        assert!(super::convert_compression(ConvertCompression::None).is_none());
+        assert!(super::convert_compression(CompressionFormat::None).is_none());
         assert!(matches!(
-            super::convert_compression(ConvertCompression::Lz4),
+            super::convert_compression(CompressionFormat::Lz4),
             Some(mcap::Compression::Lz4)
         ));
         assert!(matches!(
-            super::convert_compression(ConvertCompression::Zstd),
+            super::convert_compression(CompressionFormat::Zstd),
             Some(mcap::Compression::Zstd)
         ));
     }

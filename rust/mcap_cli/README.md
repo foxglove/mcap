@@ -21,7 +21,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | `get`        | 🟢     |                                                                                                                                           |
 | `info`       | 🟢     |                                                                                                                                           |
 | `list`       | 🟢     |                                                                                                                                           |
-| `merge`      | 🔴     |                                                                                                                                           |
+| `merge`      | 🟢     |                                                                                                                                           |
 | `recover`    | 🟡     | Best-effort recovery is implemented for messages, attachments, and metadata; Go-parity gaps remain around raw chunk passthrough behavior. |
 | `sort`       | 🟢     |                                                                                                                                           |
 | `version`    | 🟢     |                                                                                                                                           |

@@ -57,7 +57,7 @@ pub enum Command {
     /// List records of an MCAP file
     List(ListCommand),
     /// Merge a selection of MCAP files by record timestamp
-    Merge,
+    Merge(MergeCommand),
     /// Recover data from a potentially corrupt MCAP file
     Recover(RecoverCommand),
     /// Read an MCAP file and write messages sorted by log time
@@ -244,7 +244,7 @@ pub struct VersionCommand {
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ConvertCompression {
+pub enum CompressionFormat {
     Zstd,
     Lz4,
     None,
@@ -260,19 +260,108 @@ pub struct ConvertCommand {
 
     /// Chunk compression algorithm for output MCAP
     #[arg(long, value_enum, default_value = "zstd")]
-    pub compression: ConvertCompression,
+    pub compression: CompressionFormat,
 
     /// Target uncompressed chunk size in bytes
     #[arg(long, default_value_t = 8 * 1024 * 1024)]
     pub chunk_size: u64,
 
-    /// Include chunk CRC checksums in output MCAP
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    /// Include chunk CRC checksums in output MCAP.
+    ///
+    /// Accepts bare `--include-crc` and explicit `--include-crc=<bool>`.
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub include_crc: bool,
 
-    /// Enable chunked output MCAP writing
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    /// Enable chunked output MCAP writing.
+    ///
+    /// Accepts bare `--chunked` and explicit `--chunked=<bool>`.
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub chunked: bool,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoalesceChannels {
+    Auto,
+    Force,
+    None,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+#[command(arg_required_else_help = true)]
+pub struct MergeCommand {
+    /// One or more local paths to MCAP files
+    #[arg(required = true)]
+    pub files: Vec<PathBuf>,
+
+    /// Output file path. If omitted, writes to stdout.
+    #[arg(short = 'o', long = "output-file")]
+    pub output_file: Option<PathBuf>,
+
+    /// Chunk compression algorithm for output MCAP
+    #[arg(long, value_enum, default_value = "zstd")]
+    pub compression: CompressionFormat,
+
+    /// Target uncompressed chunk size in bytes
+    #[arg(long, default_value_t = 8 * 1024 * 1024)]
+    pub chunk_size: u64,
+
+    /// Include chunk CRC checksums in output MCAP.
+    ///
+    /// Accepts bare `--include-crc` and explicit `--include-crc=<bool>`.
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
+    pub include_crc: bool,
+
+    /// Enable chunked output MCAP writing.
+    ///
+    /// Accepts bare `--chunked` and explicit `--chunked=<bool>`.
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
+    pub chunked: bool,
+
+    /// Allow duplicate-named metadata records in output.
+    ///
+    /// Identical metadata records are still deduplicated by content.
+    #[arg(long, default_value_t = false)]
+    pub allow_duplicate_metadata: bool,
+
+    /// Channel coalescing behavior:
+    /// - auto: coalesce channels with matching topic, schema, encoding, and
+    ///   metadata
+    /// - force: same as auto but ignores metadata
+    /// - none: do not coalesce channels
+    ///
+    /// Note: coalescing channels may produce non-monotonic or colliding
+    /// sequence values within a coalesced output channel (matches Go CLI
+    /// behavior).
+    #[arg(long, value_enum, default_value = "auto")]
+    pub coalesce_channels: CoalesceChannels,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -408,18 +497,36 @@ pub struct SortCommand {
 
     /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
-    pub compression: ConvertCompression,
+    pub compression: CompressionFormat,
 
     /// Target uncompressed chunk size in bytes
     #[arg(long, default_value_t = 4 * 1024 * 1024)]
     pub chunk_size: u64,
 
-    /// Include chunk CRC checksums in output MCAP
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    /// Include chunk CRC checksums in output MCAP.
+    ///
+    /// Accepts bare `--include-crc` and explicit `--include-crc=<bool>`.
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub include_crc: bool,
 
-    /// Enable chunked output MCAP writing
-    #[arg(long, action = ArgAction::Set, default_value_t = true)]
+    /// Enable chunked output MCAP writing.
+    ///
+    /// Accepts bare `--chunked` and explicit `--chunked=<bool>`.
+    #[arg(
+        long,
+        action = ArgAction::Set,
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "true",
+        default_value_t = true
+    )]
     pub chunked: bool,
 }
 
