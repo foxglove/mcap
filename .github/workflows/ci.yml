@@ -183,6 +183,7 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go/go.work
+          cache: true
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
