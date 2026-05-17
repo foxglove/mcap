@@ -150,8 +150,8 @@ async function compareBuffers(
     case "ignore":
       return [];
     case "nonempty": {
-      const expectedText = normalizeText(bufferToUtf8(expected), { trim: true });
-      const actualText = normalizeText(bufferToUtf8(actual), { trim: true });
+      const expectedText = normalizeText(bufferToUtf8(expected));
+      const actualText = normalizeText(bufferToUtf8(actual));
       const messages: string[] = [];
       if (expectedText.length === 0) {
         messages.push(`${label} go output expected to be nonempty`);
@@ -224,7 +224,7 @@ async function readComparedFile(
 }
 
 function compareExpectedOutput(label: string, buffer: Buffer, expected: ExpectedOutput): string[] {
-  const text = normalizeText(bufferToUtf8(buffer), { trim: true });
+  const text = normalizeText(bufferToUtf8(buffer));
   switch (expected.kind) {
     case "anything":
       return [];
@@ -285,7 +285,7 @@ function parseCanonicalJson(
 }
 
 function normalizeInfo(text: string): string {
-  return normalizeText(text, { trim: true })
+  return normalizeText(text)
     .split("\n")
     .map((line) => line.trim().replaceAll(/[ \t]+/g, " "))
     .filter((line) => !/^(duration|start|end):/i.test(line))
@@ -301,7 +301,7 @@ function normalizeInfo(text: string): string {
 
 function normalizeCommandList(text: string, ignoreCommands: readonly string[] = []): string {
   const ignored = new Set(ignoreCommands);
-  const lines = normalizeText(text, { trim: true }).split("\n");
+  const lines = normalizeText(text).split("\n");
   const commands: string[] = [];
   let inCommandSection = false;
 

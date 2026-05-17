@@ -12,7 +12,6 @@ export function normalizeText(
   value: string,
   options: {
     collapseWhitespace?: boolean;
-    trim?: boolean;
     ignoreAnsi?: boolean;
   } = {},
 ): string {
@@ -28,8 +27,5 @@ export function normalizeText(
       .map((line) => line.trim().replaceAll(/[ \t]+/g, " "))
       .join("\n");
   }
-  if (options.trim !== false) {
-    normalized = normalized.trim();
-  }
-  return normalized;
+  return normalized.trim();
 }

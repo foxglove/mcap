@@ -1,7 +1,7 @@
 import { normalizeText } from "./textNormalize.ts";
 
 export function normalizeTable(value: string): string {
-  const lines = normalizeText(value, { trim: true })
+  const lines = normalizeText(value)
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
