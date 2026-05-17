@@ -129,6 +129,8 @@ async function compareBuffers(
         return [];
       }
       return [`${label} byte mismatch: go=${expected.length} bytes rust=${actual.length} bytes`];
+    case "ignore":
+      return [];
     case "json": {
       const expectedJson = canonicalJson(bufferToUtf8(expected));
       const actualJson = canonicalJson(bufferToUtf8(actual));
@@ -161,7 +163,7 @@ async function compareBuffers(
         : [
             result.mode === "semantic"
               ? formatPatch(label, result.expected, result.actual)
-              : `${label} MCAP byte mismatch and semantic fallback is disabled`,
+              : `${label} MCAP byte mismatch and semantic fallback is disabled: go=${result.expected} rust=${result.actual}`,
           ];
     }
     case "text":

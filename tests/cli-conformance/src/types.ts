@@ -92,6 +92,10 @@ export type BytesComparatorSpec = {
   kind: "bytes";
 };
 
+export type IgnoreComparatorSpec = {
+  kind: "ignore";
+};
+
 export type McapComparatorSpec = {
   kind: "mcap";
   mode: "records" | "messages" | "content";
@@ -105,6 +109,7 @@ export type ComparatorSpec =
   | CommandListComparatorSpec
   | InfoComparatorSpec
   | BytesComparatorSpec
+  | IgnoreComparatorSpec
   | McapComparatorSpec;
 
 export type OutputComparison = {

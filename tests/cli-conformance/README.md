@@ -119,9 +119,10 @@ Use normal parity cases when both CLIs should behave the same:
 
 If a case omits `comparison`, the runner compares exit code, stdout, and stderr.
 If a case sets `comparison`, `exitCode` defaults to `"same"` unless overridden,
-while stdout, stderr, and files are checked only when specified. For example,
-`comparison: { exitCode: 0 }` intentionally compares exit codes only. Specify
-stdout/stderr comparators when terminal output should be part of parity.
+while stdout, stderr, and files are checked only when specified. Use
+`{ kind: "ignore" }` for stdout/stderr when terminal output is intentionally out
+of scope for a case. The manifest validator rejects custom comparisons that do
+not explicitly compare or ignore streams.
 
 Use `knownDifference` when behavior intentionally or temporarily differs. Known
 differences are assertions, not skips: the case must document and verify the Go
@@ -140,6 +141,8 @@ Every known difference must include:
 
 - Use `bytes` for payloads that must match exactly, such as extracted
   attachments.
+- Use `ignore` only when an output stream is intentionally outside the case's
+  scope.
 - Use `mcap` with `mode: "messages"` when writer metadata, chunking, compression,
   or summary offsets may differ but message content must match.
 - Use `mcap` with `mode: "records"` only when all records are expected to be

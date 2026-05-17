@@ -38,6 +38,12 @@ const HELP_PATHS = [
   ["version"],
 ] as const;
 
+const EXIT_CODE_ONLY = {
+  exitCode: 0,
+  stdout: { kind: "ignore" },
+  stderr: { kind: "ignore" },
+} as const;
+
 export const cases: CliTestCase[] = [
   {
     id: "root-help-command-list",
@@ -56,7 +62,7 @@ export const cases: CliTestCase[] = [
     description: `Both CLIs expose help for '${args.join(" ")}'.`,
     tags: ["surface", "help"],
     invocation: { args: [...args, "--help"] },
-    comparison: { exitCode: 0 },
+    comparison: EXIT_CODE_ONLY,
   })),
   {
     id: "version-command-exits-successfully",
@@ -64,7 +70,7 @@ export const cases: CliTestCase[] = [
       "Both CLIs expose a version command. Version strings are not compared while Rust CLI is unreleased.",
     tags: ["surface", "version"],
     invocation: { args: ["version"] },
-    comparison: { exitCode: 0 },
+    comparison: EXIT_CODE_ONLY,
   },
   {
     id: "cat-one-message",
@@ -185,7 +191,7 @@ export const cases: CliTestCase[] = [
       "Doctor accepts a representative valid MCAP; warning stream differences are covered separately.",
     tags: ["doctor"],
     invocation: { args: ["doctor", ONE_MESSAGE] },
-    comparison: { exitCode: 0 },
+    comparison: EXIT_CODE_ONLY,
   },
   {
     id: "filter-topic-output-messages",
@@ -610,6 +616,16 @@ export function validateCases(testCases: readonly CliTestCase[]): string[] {
       errors.push(`duplicate case id '${testCase.id}'`);
     }
     ids.add(testCase.id);
+    if (
+      testCase.comparison != undefined &&
+      testCase.comparison.stdout == undefined &&
+      testCase.comparison.stderr == undefined &&
+      (testCase.comparison.files?.length ?? 0) === 0
+    ) {
+      errors.push(
+        `case '${testCase.id}' must explicitly compare or ignore stdout/stderr when using a custom comparison`,
+      );
+    }
     if (testCase.knownDifference != undefined) {
       const known = testCase.knownDifference;
       for (const [field, value] of Object.entries({
