@@ -79,13 +79,17 @@ export type TableComparatorSpec = {
   kind: "table";
 };
 
+export type InfoComparatorSpec = {
+  kind: "info";
+};
+
 export type BytesComparatorSpec = {
   kind: "bytes";
 };
 
 export type McapComparatorSpec = {
   kind: "mcap";
-  mode: "records" | "messages";
+  mode: "records" | "messages" | "content";
   allowSemanticFallback?: boolean;
 };
 
@@ -93,6 +97,7 @@ export type ComparatorSpec =
   | TextComparatorSpec
   | JsonComparatorSpec
   | TableComparatorSpec
+  | InfoComparatorSpec
   | BytesComparatorSpec
   | McapComparatorSpec;
 

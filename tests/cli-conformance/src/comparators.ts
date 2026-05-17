@@ -127,6 +127,11 @@ async function compareBuffers(
       const actualTable = normalizeTable(bufferToUtf8(actual));
       return expectedTable === actualTable ? [] : [formatPatch(label, expectedTable, actualTable)];
     }
+    case "info": {
+      const expectedInfo = normalizeInfo(bufferToUtf8(expected));
+      const actualInfo = normalizeInfo(bufferToUtf8(actual));
+      return expectedInfo === actualInfo ? [] : [formatPatch(label, expectedInfo, actualInfo)];
+    }
     case "mcap": {
       const result = await compareMcapBuffers(expected, actual, {
         mode: spec.mode,
@@ -197,6 +202,21 @@ async function compareExpectedFile(
 
 function canonicalJson(text: string): string {
   return stableStringify(JSON.parse(text));
+}
+
+function normalizeInfo(text: string): string {
+  return normalizeText(text, { trim: true })
+    .split("\n")
+    .map((line) => line.trim().replaceAll(/[ \t]+/g, " "))
+    .filter((line) => !/^(duration|start|end):/.test(line))
+    .map((line) => {
+      const channel = /^\((\d+)\) ([^ ]+) (\d+) msgs? .*: (.+)$/.exec(line);
+      if (channel) {
+        return `channel ${channel[1]} ${channel[2]} ${channel[3]} : ${channel[4]}`;
+      }
+      return line;
+    })
+    .join("\n");
 }
 
 function formatPatch(label: string, expected: string, actual: string): string {

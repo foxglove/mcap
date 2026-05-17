@@ -39,10 +39,54 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "info-one-message",
+    description: "Info output reports the same stable summary fields for a representative MCAP.",
+    tags: ["info", "stdout"],
+    invocation: { args: ["info", ONE_MESSAGE] },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "info" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
     id: "list-channels",
     description: "Channel listing contains the same table data despite formatter differences.",
     tags: ["list", "table"],
     invocation: { args: ["list", "channels", ONE_MESSAGE] },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "table" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "list-chunks",
+    description: "Chunk listing contains the same table data despite formatter differences.",
+    tags: ["list", "table", "chunks"],
+    invocation: { args: ["list", "chunks", ONE_MESSAGE] },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "table" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "list-schemas",
+    description: "Schema listing contains the same table data despite formatter differences.",
+    tags: ["list", "table", "schemas"],
+    invocation: { args: ["list", "schemas", ONE_MESSAGE] },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "table" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "list-metadata",
+    description: "Metadata listing contains the same table data despite formatter differences.",
+    tags: ["list", "table", "metadata"],
+    invocation: { args: ["list", "metadata", ONE_METADATA] },
     comparison: {
       exitCode: 0,
       stdout: { kind: "table" },
@@ -86,6 +130,14 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "doctor-valid-file-exits-successfully",
+    description:
+      "Doctor accepts a representative valid MCAP; warning stream differences are covered separately.",
+    tags: ["doctor"],
+    invocation: { args: ["doctor", ONE_MESSAGE] },
+    comparison: { exitCode: 0 },
+  },
+  {
     id: "filter-topic-output-messages",
     description: "Filtering by topic preserves the same message stream.",
     tags: ["filter", "mcap-output"],
@@ -123,6 +175,20 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "decompress-output-messages",
+    description: "Decompressing an MCAP preserves the same message stream.",
+    tags: ["decompress", "mcap-output"],
+    invocation: {
+      args: ["decompress", TEN_MESSAGES, "-o", "decompressed.mcap"],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [{ path: "decompressed.mcap", comparator: { kind: "mcap", mode: "messages" } }],
+    },
+  },
+  {
     id: "sort-output-messages",
     description: "Sorting an indexed MCAP preserves the same message stream.",
     tags: ["sort", "mcap-output"],
@@ -134,6 +200,80 @@ export const cases: CliTestCase[] = [
       stdout: { kind: "text" },
       stderr: { kind: "text", collapseWhitespace: true },
       files: [{ path: "sorted.mcap", comparator: { kind: "mcap", mode: "messages" } }],
+    },
+  },
+  {
+    id: "merge-output-messages",
+    description: "Merging multiple MCAP files preserves the same combined message stream.",
+    tags: ["merge", "mcap-output"],
+    invocation: {
+      args: ["merge", ONE_MESSAGE, ONE_SCHEMALESS, "-o", "merged.mcap", "--compression", "none"],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [{ path: "merged.mcap", comparator: { kind: "mcap", mode: "messages" } }],
+    },
+  },
+  {
+    id: "recover-valid-output-messages",
+    description: "Recovering a valid MCAP preserves the same message stream.",
+    tags: ["recover", "mcap-output"],
+    invocation: {
+      args: ["recover", TEN_MESSAGES, "-o", "recovered.mcap", "--compression", "none"],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [{ path: "recovered.mcap", comparator: { kind: "mcap", mode: "messages" } }],
+    },
+  },
+  {
+    id: "add-metadata-mutates-file-content",
+    description: "Adding deterministic metadata produces equivalent message and metadata content.",
+    tags: ["add", "metadata", "mcap-output"],
+    setup: [{ type: "copy", from: TEN_MESSAGES, to: "{caseWorkDir}/input.mcap" }],
+    invocation: {
+      args: ["add", "metadata", "input.mcap", "--name", "cli-conformance", "-k", "key=value"],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [{ path: "input.mcap", comparator: { kind: "mcap", mode: "content" } }],
+    },
+  },
+  {
+    id: "add-attachment-mutates-file-content",
+    description:
+      "Adding a deterministic attachment produces equivalent message and attachment content.",
+    tags: ["add", "attachments", "mcap-output"],
+    setup: [
+      { type: "copy", from: TEN_MESSAGES, to: "{caseWorkDir}/input.mcap" },
+      { type: "writeBytes", to: "{caseWorkDir}/payload.bin", bytes: [1, 1, 2, 3, 5, 8] },
+    ],
+    invocation: {
+      args: [
+        "add",
+        "attachment",
+        "input.mcap",
+        "-f",
+        "payload.bin",
+        "-n",
+        "payload.bin",
+        "--log-time",
+        "42",
+        "--creation-time",
+        "24",
+      ],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [{ path: "input.mcap", comparator: { kind: "mcap", mode: "content" } }],
     },
   },
   {
@@ -154,6 +294,26 @@ export const cases: CliTestCase[] = [
       rustBehavior: {
         exitCode: "nonzero",
         stderr: { kind: "contains", value: "unrecognized" },
+      },
+    },
+  },
+  {
+    id: "known-difference-cat-json-flag",
+    description: "Go CLI parses cat --json; Rust CLI does not yet.",
+    tags: ["known-difference", "cat"],
+    invocation: { args: ["cat", ONE_MESSAGE, "--json"] },
+    knownDifference: {
+      id: "cat-json-flag",
+      summary: "Go cat accepts --json while Rust cat currently rejects it.",
+      reason: "The Rust cat command implementation is still partial.",
+      desiredBehavior: "Rust cat should support Go-compatible JSON output before v1.0.",
+      goBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "JSON output only supported" },
+      },
+      rustBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "unexpected argument" },
       },
     },
   },
@@ -194,6 +354,99 @@ export const cases: CliTestCase[] = [
       rustBehavior: {
         exitCode: "nonzero",
         stderr: { kind: "contains", value: "Usage:" },
+      },
+    },
+  },
+  {
+    id: "known-difference-convert-ros2-ament-help",
+    description:
+      "Go CLI documents ROS2 DB3 conversion support; Rust CLI only supports ROS1 bag input.",
+    tags: ["known-difference", "convert", "surface"],
+    invocation: { args: ["convert", "--help"] },
+    knownDifference: {
+      id: "convert-ros2-ament-help",
+      summary:
+        "Go convert exposes --ament-prefix-path for ROS2 DB3 conversion; Rust convert does not.",
+      reason: "Rust convert currently implements ROS1 bag conversion only.",
+      desiredBehavior:
+        "Rust convert should support ROS2 DB3 conversion or document an intentional replacement.",
+      goBehavior: {
+        exitCode: 0,
+        stdout: { kind: "contains", value: "--ament-prefix-path" },
+      },
+      rustBehavior: {
+        exitCode: 0,
+        stdout: { kind: "matches", pattern: "^(?![\\s\\S]*ament-prefix-path)[\\s\\S]*$" },
+      },
+    },
+  },
+  {
+    id: "known-difference-pprof-profile-global",
+    description:
+      "Go CLI writes pprof profiles; Rust CLI parses --pprof-profile but reports it unimplemented.",
+    tags: ["known-difference", "global-options"],
+    invocation: { args: ["--pprof-profile", "version"] },
+    knownDifference: {
+      id: "global-pprof-profile",
+      summary:
+        "Go CLI implements --pprof-profile while Rust CLI currently bails out as unimplemented.",
+      reason: "Global option support is incomplete in the Rust CLI.",
+      desiredBehavior:
+        "Rust CLI should either implement Go-compatible profiling or remove the flag.",
+      goBehavior: {
+        exitCode: 0,
+        files: [
+          { path: "mcap-cpu.prof", exists: true },
+          { path: "mcap-mem.prof", exists: true },
+          { path: "mcap-block.pprof", exists: true },
+        ],
+      },
+      rustBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "--pprof-profile" },
+      },
+    },
+  },
+  {
+    id: "known-difference-du-record-accounting",
+    description: "Go and Rust currently account for top-level record bytes differently in du.",
+    tags: ["known-difference", "du"],
+    invocation: { args: ["du", ONE_MESSAGE] },
+    knownDifference: {
+      id: "du-record-accounting",
+      summary: "Go and Rust du currently report different top-level record byte counts.",
+      reason:
+        "The Rust CLI includes record envelope bytes consistently; the Go CLI reports smaller top-level record byte counts.",
+      desiredBehavior:
+        "Decide and document the intended accounting model, then make both CLIs report the same values.",
+      goBehavior: {
+        exitCode: 0,
+        stdout: { kind: "contains", value: "chunk         \t155" },
+      },
+      rustBehavior: {
+        exitCode: 0,
+        stdout: { kind: "contains", value: "chunk         \t164" },
+      },
+    },
+  },
+  {
+    id: "known-difference-doctor-warning-stream",
+    description: "Doctor warning output currently goes to different streams.",
+    tags: ["known-difference", "doctor"],
+    invocation: { args: ["doctor", ONE_MESSAGE] },
+    knownDifference: {
+      id: "doctor-warning-stream",
+      summary:
+        "Go doctor prints a header-library warning to stdout; Rust doctor prints it to stderr.",
+      reason: "Doctor output streams have not been aligned between the two CLIs.",
+      desiredBehavior: "Warnings should use the same stream in both CLIs before v1.0.",
+      goBehavior: {
+        exitCode: 0,
+        stdout: { kind: "contains", value: "Header.library" },
+      },
+      rustBehavior: {
+        exitCode: 0,
+        stderr: { kind: "contains", value: "Header.library" },
       },
     },
   },

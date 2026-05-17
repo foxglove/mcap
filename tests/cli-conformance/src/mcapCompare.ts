@@ -34,6 +34,21 @@ type MessageRecord = {
   data: number[];
 };
 
+type ContentRecord = {
+  messages: MessageRecord[];
+  metadata: {
+    name: string;
+    metadata: Record<string, string>;
+  }[];
+  attachments: {
+    name: string;
+    mediaType: string;
+    logTime: string;
+    createTime: string;
+    data: number[];
+  }[];
+};
+
 type CompareResult = {
   equal: boolean;
   mode: "byte-exact" | "semantic";
@@ -50,7 +65,7 @@ async function getDecompressHandlers(): ReturnType<typeof loadDecompressHandlers
 export async function compareMcapBuffers(
   expected: Buffer,
   actual: Buffer,
-  options: { mode: "records" | "messages"; allowSemanticFallback: boolean },
+  options: { mode: "records" | "messages" | "content"; allowSemanticFallback: boolean },
 ): Promise<CompareResult> {
   if (expected.equals(actual)) {
     return { equal: true, mode: "byte-exact", expected: "", actual: "" };
@@ -70,14 +85,8 @@ export async function compareMcapBuffers(
     parseRecords(actual),
   ]);
 
-  const expectedSemantic =
-    options.mode === "messages"
-      ? canonicalString(messagesFromRecords(expectedRecords))
-      : canonicalString(expectedRecords.map(toSerializableRecord));
-  const actualSemantic =
-    options.mode === "messages"
-      ? canonicalString(messagesFromRecords(actualRecords))
-      : canonicalString(actualRecords.map(toSerializableRecord));
+  const expectedSemantic = canonicalString(semanticValue(expectedRecords, options.mode));
+  const actualSemantic = canonicalString(semanticValue(actualRecords, options.mode));
 
   return {
     equal: expectedSemantic === actualSemantic,
@@ -85,6 +94,20 @@ export async function compareMcapBuffers(
     expected: expectedSemantic,
     actual: actualSemantic,
   };
+}
+
+function semanticValue(
+  records: TypedMcapRecord[],
+  mode: "records" | "messages" | "content",
+): unknown {
+  switch (mode) {
+    case "messages":
+      return messagesFromRecords(records);
+    case "content":
+      return contentFromRecords(records);
+    case "records":
+      return records.map(toSerializableRecord);
+  }
 }
 
 async function parseRecords(data: Uint8Array): Promise<TypedMcapRecord[]> {
@@ -146,6 +169,45 @@ function messagesFromRecords(records: TypedMcapRecord[]): MessageRecord[] {
   return messages;
 }
 
+function contentFromRecords(records: TypedMcapRecord[]): ContentRecord {
+  const metadata: ContentRecord["metadata"] = [];
+  const attachments: ContentRecord["attachments"] = [];
+
+  for (const record of records) {
+    const normalizedRecord = record as unknown as Record<string, unknown>;
+    switch (record.type) {
+      case "Metadata":
+        metadata.push({
+          name: stringField(normalizedRecord, "name"),
+          metadata: stringMapField(normalizedRecord, "metadata"),
+        });
+        break;
+      case "Attachment":
+        attachments.push({
+          name: stringField(normalizedRecord, "name"),
+          mediaType: stringField(normalizedRecord, "mediaType"),
+          logTime: stringField(normalizedRecord, "logTime"),
+          createTime: stringField(normalizedRecord, "createTime"),
+          data: bytesField(normalizedRecord, "data"),
+        });
+        break;
+      default:
+        break;
+    }
+  }
+
+  metadata.sort((left, right) => `${left.name}`.localeCompare(`${right.name}`));
+  attachments.sort((left, right) =>
+    `${left.name}:${left.logTime}`.localeCompare(`${right.name}:${right.logTime}`),
+  );
+
+  return {
+    messages: messagesFromRecords(records),
+    metadata,
+    attachments,
+  };
+}
+
 function stringField(record: Record<string, unknown> | undefined, field: string): string {
   if (record == undefined) {
     return "";
@@ -163,6 +225,21 @@ function bytesField(record: Record<string, unknown>, field: string): number[] {
     return Array.from(value);
   }
   return [];
+}
+
+function stringMapField(record: Record<string, unknown>, field: string): Record<string, string> {
+  const value = record[field];
+  if (value instanceof Map) {
+    return Object.fromEntries(
+      Array.from(value.entries()).map(([key, entryValue]) => [String(key), String(entryValue)]),
+    );
+  }
+  if (typeof value === "object" && value != undefined) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entryValue]) => [key, String(entryValue)]),
+    );
+  }
+  return {};
 }
 
 function toSerializableRecord(record: TypedMcapRecord): SerializableRecord {
