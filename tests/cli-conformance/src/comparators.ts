@@ -34,6 +34,9 @@ export async function compareParityResults(
         `exit code mismatch: go=${go.exitCode ?? "signal"} rust=${rust.exitCode ?? "signal"}`,
       );
     }
+    if (go.signal !== rust.signal) {
+      messages.push(`signal mismatch: go=${go.signal ?? "none"} rust=${rust.signal ?? "none"}`);
+    }
   } else {
     if (go.exitCode !== exitCodeSpec) {
       messages.push(

@@ -153,7 +153,9 @@ Every known difference must include:
 For MCAP output, prefer byte-for-byte parity when practical. When byte equality
 is not practical, opt in with `allowSemanticFallback: true`; the test should
 still ensure the message stream is identical unless the difference is explicitly
-documented as a known difference.
+documented as a known difference. Treat `allowSemanticFallback: true` as a
+temporary, case-specific note that byte parity is not currently required; remove
+it from cases once their MCAP bytes are stable enough to gate.
 
 ## Deferred coverage
 

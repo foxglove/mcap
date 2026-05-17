@@ -1,4 +1,5 @@
 import { program } from "commander";
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import { cases, validateCases } from "./cases.ts";
@@ -6,11 +7,18 @@ import { compareExpectedBehavior, compareParityResults } from "./comparators.ts"
 import {
   cleanupManagedWorkDirectory,
   createManagedWorkDirectory,
+  resolvePlaceholders,
   safeCaseDirectoryName,
 } from "./fixtures.ts";
 import { printCaseResult, printSummary, writeJsonReport } from "./reporter.ts";
-import { runCliTestCase } from "./runner.ts";
-import type { CaseRunResult, CliConformanceOptions, CliTestCase } from "./types.ts";
+import { mergeInvocation, runCliTestCase } from "./runner.ts";
+import type {
+  CaseRunResult,
+  CliConformanceOptions,
+  CliInvocation,
+  CliTestCase,
+  PathContext,
+} from "./types.ts";
 
 type ProgramOptions = {
   dataDir: string;
@@ -56,6 +64,7 @@ async function main(options: ProgramOptions): Promise<void> {
     if (selectedCases.length === 0) {
       throw new Error("No CLI conformance cases selected");
     }
+    await verifyReferencedFixtures(selectedCases, runOptions);
 
     const results: CaseRunResult[] = [];
     for (const testCase of selectedCases) {
@@ -83,6 +92,89 @@ async function main(options: ProgramOptions): Promise<void> {
     await cleanupManagedWorkDirectory(workDirectory, {
       cleanup: runOptions.keepWorkDir ? "keep" : "remove",
     });
+  }
+}
+
+async function verifyReferencedFixtures(
+  selectedCases: readonly CliTestCase[],
+  options: CliConformanceOptions,
+): Promise<void> {
+  const context: PathContext = {
+    repoRoot: options.repoRoot,
+    dataDir: options.dataDir,
+    workDir: options.workDir,
+    caseWorkDir: options.workDir,
+  };
+  const references = new Set<string>();
+  for (const testCase of selectedCases) {
+    for (const action of testCase.setup ?? []) {
+      if (action.type === "copy") {
+        collectReference(references, action.from, context);
+      }
+    }
+    collectInvocationReferences(references, testCase.invocation, context);
+    collectInvocationReferences(
+      references,
+      mergeInvocation(testCase.invocation, testCase.goInvocation),
+      context,
+    );
+    collectInvocationReferences(
+      references,
+      mergeInvocation(testCase.invocation, testCase.rustInvocation),
+      context,
+    );
+  }
+
+  const missing: string[] = [];
+  for (const filePath of references) {
+    const error = await fixtureFileError(filePath);
+    if (error != undefined) {
+      missing.push(error);
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(`Invalid CLI conformance fixture files:\n${missing.sort().join("\n")}`);
+  }
+}
+
+async function fixtureFileError(filePath: string): Promise<string | undefined> {
+  const stat = await fs
+    .stat(filePath)
+    .then((result) => result)
+    .catch(() => undefined);
+  if (stat == undefined || !stat.isFile()) {
+    return `missing file: ${filePath}`;
+  }
+
+  const handle = await fs.open(filePath, "r");
+  try {
+    const prefix = Buffer.alloc(8);
+    const { bytesRead } = await handle.read(prefix, 0, prefix.length, 0);
+    if (prefix.subarray(0, bytesRead).toString("utf8").startsWith("version ")) {
+      return `Git LFS pointer instead of fixture data: ${filePath} (run git lfs pull)`;
+    }
+  } finally {
+    await handle.close();
+  }
+  return undefined;
+}
+
+function collectInvocationReferences(
+  references: Set<string>,
+  invocation: CliInvocation,
+  context: PathContext,
+): void {
+  for (const arg of invocation.args) {
+    collectReference(references, arg, context);
+  }
+  if (typeof invocation.stdin === "object") {
+    collectReference(references, invocation.stdin.path, context);
+  }
+}
+
+function collectReference(references: Set<string>, value: string, context: PathContext): void {
+  if (value.includes("{dataDir}") || value.includes("{repoRoot}")) {
+    references.add(resolvePlaceholders(value, context));
   }
 }
 

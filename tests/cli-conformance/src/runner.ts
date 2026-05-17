@@ -67,7 +67,7 @@ async function prepareImplementationDirectory(
   return context;
 }
 
-function mergeInvocation(
+export function mergeInvocation(
   base: CliInvocation,
   override: Partial<CliInvocation> | undefined,
 ): CliInvocation {

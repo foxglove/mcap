@@ -38,6 +38,8 @@ function repoRoot(): string {
 }
 
 async function main(options: ProgramOptions): Promise<void> {
+  validateOptions(options);
+
   const root = repoRoot();
   const selectedCases = performanceCases.filter(
     (testCase) => options.caseRegex == undefined || options.caseRegex.test(testCase.id),
@@ -94,6 +96,18 @@ async function main(options: ProgramOptions): Promise<void> {
 
   if (failed && options.failOnRegression) {
     process.exit(1);
+  }
+}
+
+function validateOptions(options: ProgramOptions): void {
+  if (!Number.isInteger(options.iterations) || options.iterations <= 0) {
+    throw new Error("--iterations must be a positive integer");
+  }
+  if (!Number.isInteger(options.warmups) || options.warmups < 0) {
+    throw new Error("--warmups must be a non-negative integer");
+  }
+  if (!Number.isFinite(options.timeoutMs) || options.timeoutMs <= 0) {
+    throw new Error("--timeout-ms must be a positive number");
   }
 }
 
@@ -180,6 +194,9 @@ async function runOnce(
 }
 
 function formatMeasurement(measurement: Measurement): string {
+  if (measurement.durationsMs.length === 0) {
+    return "no samples";
+  }
   return `${measurement.medianMs.toFixed(2)}ms (min=${Math.min(...measurement.durationsMs).toFixed(
     2,
   )} max=${Math.max(...measurement.durationsMs).toFixed(2)})`;
