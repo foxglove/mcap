@@ -1,3 +1,5 @@
+/* cspell:words pprof */
+
 import type { CliTestCase } from "./types.ts";
 
 const ONE_MESSAGE = "{dataDir}/OneMessage/OneMessage-ch-chx-mx-pad-rch-rsh-st-sum.mcap";
