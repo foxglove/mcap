@@ -1,6 +1,5 @@
-import fs from "node:fs/promises";
-
 import colors from "colors";
+import fs from "node:fs/promises";
 
 import type { CaseRunResult, CliConformanceOptions, CliProcessResult } from "./types.ts";
 

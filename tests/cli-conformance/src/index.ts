@@ -1,8 +1,7 @@
+import { program } from "commander";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-
-import { program } from "commander";
 
 import { cases, validateCases } from "./cases.ts";
 import { compareExpectedBehavior, compareParityResults } from "./comparators.ts";

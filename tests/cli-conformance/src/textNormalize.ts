@@ -1,4 +1,4 @@
-const ANSI_PATTERN = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+const ANSI_PATTERN = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[ -/]*[@-~]`, "g");
 
 export function stripAnsi(value: string): string {
   return value.replace(ANSI_PATTERN, "");

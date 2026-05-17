@@ -50,14 +50,13 @@ async function getDecompressHandlers(): ReturnType<typeof loadDecompressHandlers
 export async function compareMcapBuffers(
   expected: Buffer,
   actual: Buffer,
-  mode: "records" | "messages",
-  allowSemanticFallback = true,
+  options: { mode: "records" | "messages"; allowSemanticFallback: boolean },
 ): Promise<CompareResult> {
   if (expected.equals(actual)) {
     return { equal: true, mode: "byte-exact", expected: "", actual: "" };
   }
 
-  if (!allowSemanticFallback) {
+  if (!options.allowSemanticFallback) {
     return {
       equal: false,
       mode: "byte-exact",
@@ -72,11 +71,11 @@ export async function compareMcapBuffers(
   ]);
 
   const expectedSemantic =
-    mode === "messages"
+    options.mode === "messages"
       ? canonicalString(messagesFromRecords(expectedRecords))
       : canonicalString(expectedRecords.map(toSerializableRecord));
   const actualSemantic =
-    mode === "messages"
+    options.mode === "messages"
       ? canonicalString(messagesFromRecords(actualRecords))
       : canonicalString(actualRecords.map(toSerializableRecord));
 

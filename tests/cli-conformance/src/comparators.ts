@@ -1,7 +1,6 @@
+import * as Diff from "diff";
 import fs from "node:fs/promises";
 import path from "node:path";
-
-import * as Diff from "diff";
 
 import { compareMcapBuffers } from "./mcapCompare.ts";
 import { stableStringify } from "./stableJson.ts";
@@ -129,12 +128,10 @@ async function compareBuffers(
       return expectedTable === actualTable ? [] : [formatPatch(label, expectedTable, actualTable)];
     }
     case "mcap": {
-      const result = await compareMcapBuffers(
-        expected,
-        actual,
-        spec.mode,
-        spec.allowSemanticFallback ?? true,
-      );
+      const result = await compareMcapBuffers(expected, actual, {
+        mode: spec.mode,
+        allowSemanticFallback: spec.allowSemanticFallback ?? true,
+      });
       return result.equal
         ? []
         : [
