@@ -79,6 +79,9 @@ yarn workspace @foxglove/mcap-cli-conformance run-tests \
   --keep-work-dir
 ```
 
+When `--work-dir` is provided, it must point to an empty or nonexistent
+directory. The runner never deletes a non-empty user-supplied directory.
+
 ## Performance checks
 
 Performance checks are intentionally opt-in and report-only by default because
@@ -114,6 +117,10 @@ Use normal parity cases when both CLIs should behave the same:
 - add setup actions when commands mutate files or need temporary inputs;
 - choose comparators for stdout, stderr, and output files.
 
+If a case sets `comparison`, only the fields in that object are checked. For
+example, `comparison: { exitCode: 0 }` intentionally compares exit codes only.
+Specify stdout/stderr comparators when terminal output should be part of parity.
+
 Use `knownDifference` when behavior intentionally or temporarily differs. Known
 differences are assertions, not skips: the case must document and verify the Go
 behavior and the Rust behavior.
@@ -137,11 +144,14 @@ Every known difference must include:
   semantically equivalent.
 - Use `json` for JSON stdout.
 - Use `table` for aligned terminal tables where spacing may differ.
+- Use `command-list` for root or subcommand help where Cobra and Clap format
+  help differently but should advertise the same subcommands.
 - Use `text` for command output where exact normalized text matters.
 
 For MCAP output, prefer byte-for-byte parity when practical. When byte equality
-is not practical, the test should still ensure the message stream is identical
-unless the difference is explicitly documented as a known difference.
+is not practical, opt in with `allowSemanticFallback: true`; the test should
+still ensure the message stream is identical unless the difference is explicitly
+documented as a known difference.
 
 ## Deferred coverage
 

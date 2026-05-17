@@ -1,13 +1,19 @@
 import { program } from "commander";
 import { spawn } from "node:child_process";
-import fs from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 
-import { applyFixtureActions, createCleanDirectory, resolveArgs } from "./fixtures.ts";
+import {
+  applyFixtureActions,
+  cleanupManagedWorkDirectory,
+  createCleanDirectory,
+  createManagedWorkDirectory,
+  resolveArgs,
+} from "./fixtures.ts";
 import { performanceCases } from "./performanceCases.ts";
 import type { CliImplementation, PathContext } from "./types.ts";
+
+const KILL_TIMEOUT_MS = 5_000;
 
 type ProgramOptions = {
   dataDir: string;
@@ -33,11 +39,6 @@ function repoRoot(): string {
 
 async function main(options: ProgramOptions): Promise<void> {
   const root = repoRoot();
-  const workDir = path.resolve(
-    options.workDir ?? (await fs.mkdtemp(path.join(os.tmpdir(), "mcap-cli-perf-"))),
-  );
-  await createCleanDirectory(workDir);
-
   const selectedCases = performanceCases.filter(
     (testCase) => options.caseRegex == undefined || options.caseRegex.test(testCase.id),
   );
@@ -45,32 +46,52 @@ async function main(options: ProgramOptions): Promise<void> {
     throw new Error("No CLI performance cases selected");
   }
 
+  const workDirectory = await createManagedWorkDirectory(options.workDir, "mcap-cli-perf-");
+
   let failed = false;
-  for (const testCase of selectedCases) {
-    const [go, rust] = await Promise.all([
-      measureImplementation("go", path.resolve(options.goBin), testCase, options, root, workDir),
-      measureImplementation(
-        "rust",
-        path.resolve(options.rustBin),
-        testCase,
-        options,
-        root,
-        workDir,
-      ),
-    ]);
-    const ratio = rust.medianMs / go.medianMs;
-    const margin = testCase.margin ?? 0.2;
-    const passes = ratio <= 1 + margin;
-    failed ||= !passes;
-    const status = passes ? "pass" : options.failOnRegression ? "fail" : "report";
-    console.log(
-      `${status} ${testCase.id}: go=${go.medianMs.toFixed(2)}ms rust=${rust.medianMs.toFixed(
-        2,
-      )}ms ratio=${ratio.toFixed(2)} margin=${margin.toFixed(2)} (${testCase.description})`,
-    );
+  try {
+    for (const testCase of selectedCases) {
+      try {
+        const [go, rust] = await Promise.all([
+          measureImplementation(
+            "go",
+            path.resolve(options.goBin),
+            testCase,
+            options,
+            root,
+            workDirectory.path,
+          ),
+          measureImplementation(
+            "rust",
+            path.resolve(options.rustBin),
+            testCase,
+            options,
+            root,
+            workDirectory.path,
+          ),
+        ]);
+        const ratio = rust.medianMs / go.medianMs;
+        const margin = testCase.margin ?? 0.2;
+        const passes = ratio <= 1 + margin;
+        failed ||= !passes;
+        const status = passes ? "pass" : options.failOnRegression ? "fail" : "report";
+        console.log(
+          `${status} ${testCase.id}: go=${formatMeasurement(go)} rust=${formatMeasurement(
+            rust,
+          )} ratio=${ratio.toFixed(2)} margin=${margin.toFixed(2)} (${testCase.description})`,
+        );
+      } catch (error) {
+        failed = true;
+        const status = options.failOnRegression ? "fail" : "report";
+        console.log(
+          `${status} ${testCase.id}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  } finally {
+    await cleanupManagedWorkDirectory(workDirectory, false);
   }
 
-  await fs.rm(workDir, { recursive: true, force: true });
   if (failed && options.failOnRegression) {
     process.exit(1);
   }
@@ -123,16 +144,31 @@ async function runOnce(
   const started = performance.now();
   await new Promise<void>((resolve, reject) => {
     const child = spawn(binary, args, { cwd, stdio: ["ignore", "ignore", "ignore"] });
+    let timedOut = false;
+    let killTimer: NodeJS.Timeout | undefined;
     const timer = setTimeout(() => {
+      timedOut = true;
       child.kill("SIGTERM");
-      reject(new Error(`timed out after ${timeoutMs}ms: ${binary} ${args.join(" ")}`));
+      killTimer = setTimeout(() => {
+        child.kill("SIGKILL");
+      }, KILL_TIMEOUT_MS);
     }, timeoutMs);
     child.on("error", (error) => {
       clearTimeout(timer);
+      if (killTimer != undefined) {
+        clearTimeout(killTimer);
+      }
       reject(error);
     });
     child.on("close", (code, signal) => {
       clearTimeout(timer);
+      if (killTimer != undefined) {
+        clearTimeout(killTimer);
+      }
+      if (timedOut) {
+        reject(new Error(`timed out after ${timeoutMs}ms: ${binary} ${args.join(" ")}`));
+        return;
+      }
       if (code === 0) {
         resolve();
       } else {
@@ -141,6 +177,12 @@ async function runOnce(
     });
   });
   return performance.now() - started;
+}
+
+function formatMeasurement(measurement: Measurement): string {
+  return `${measurement.medianMs.toFixed(2)}ms (min=${Math.min(...measurement.durationsMs).toFixed(
+    2,
+  )} max=${Math.max(...measurement.durationsMs).toFixed(2)})`;
 }
 
 function median(values: number[]): number {

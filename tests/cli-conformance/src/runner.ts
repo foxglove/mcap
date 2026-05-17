@@ -18,6 +18,8 @@ import type {
   PathContext,
 } from "./types.ts";
 
+const KILL_TIMEOUT_MS = 5_000;
+
 export async function runCliTestCase(
   testCase: CliTestCase,
   options: CliConformanceOptions,
@@ -111,10 +113,14 @@ async function runInvocation(
     let timedOut = false;
     let exitCode: number | undefined;
     let signal: NodeJS.Signals | undefined;
+    let killTimer: NodeJS.Timeout | undefined;
 
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill("SIGTERM");
+      killTimer = setTimeout(() => {
+        child.kill("SIGKILL");
+      }, KILL_TIMEOUT_MS);
     }, timeoutMs);
 
     child.stdout.on("data", (chunk: Buffer) => {
@@ -132,6 +138,9 @@ async function runInvocation(
     });
     child.on("close", () => {
       clearTimeout(timer);
+      if (killTimer != undefined) {
+        clearTimeout(killTimer);
+      }
       resolve({
         implementation,
         command,
@@ -146,6 +155,9 @@ async function runInvocation(
       });
     });
 
+    child.stdin.on("error", () => {
+      // Some negative/known-difference cases exit before reading stdin.
+    });
     if (stdin != undefined) {
       child.stdin.end(stdin);
     } else {

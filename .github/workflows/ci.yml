@@ -41,6 +41,7 @@ jobs:
       - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-conformance lint:ci
       - run: yarn workspace @foxglove/mcap-conformance build
+      - run: yarn workspace @foxglove/mcap-cli-conformance lint:ci
 
   conformance-cpp:
     runs-on: ubuntu-latest

@@ -79,6 +79,11 @@ export type TableComparatorSpec = {
   kind: "table";
 };
 
+export type CommandListComparatorSpec = {
+  kind: "command-list";
+  ignoreCommands?: string[];
+};
+
 export type InfoComparatorSpec = {
   kind: "info";
 };
@@ -97,6 +102,7 @@ export type ComparatorSpec =
   | TextComparatorSpec
   | JsonComparatorSpec
   | TableComparatorSpec
+  | CommandListComparatorSpec
   | InfoComparatorSpec
   | BytesComparatorSpec
   | McapComparatorSpec;

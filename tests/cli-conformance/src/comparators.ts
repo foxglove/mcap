@@ -56,12 +56,21 @@ export async function compareParityResults(
   for (const fileComparison of spec.files ?? []) {
     const goFile = path.join(go.cwd, fileComparison.path);
     const rustFile = path.join(rust.cwd, fileComparison.path);
-    const [goBuffer, rustBuffer] = await Promise.all([fs.readFile(goFile), fs.readFile(rustFile)]);
+    const [goRead, rustRead] = await Promise.all([
+      readComparedFile("go", goFile),
+      readComparedFile("rust", rustFile),
+    ]);
+    if (typeof goRead === "string" || typeof rustRead === "string") {
+      messages.push(
+        ...[goRead, rustRead].filter((read): read is string => typeof read === "string"),
+      );
+      continue;
+    }
     messages.push(
       ...(await compareBuffers(
         `file ${fileComparison.path}`,
-        goBuffer,
-        rustBuffer,
+        goRead,
+        rustRead,
         fileComparison.comparator,
       )),
     );
@@ -127,6 +136,13 @@ async function compareBuffers(
       const actualTable = normalizeTable(bufferToUtf8(actual));
       return expectedTable === actualTable ? [] : [formatPatch(label, expectedTable, actualTable)];
     }
+    case "command-list": {
+      const expectedCommands = normalizeCommandList(bufferToUtf8(expected), spec.ignoreCommands);
+      const actualCommands = normalizeCommandList(bufferToUtf8(actual), spec.ignoreCommands);
+      return expectedCommands === actualCommands
+        ? []
+        : [formatPatch(label, expectedCommands, actualCommands)];
+    }
     case "info": {
       const expectedInfo = normalizeInfo(bufferToUtf8(expected));
       const actualInfo = normalizeInfo(bufferToUtf8(actual));
@@ -135,7 +151,7 @@ async function compareBuffers(
     case "mcap": {
       const result = await compareMcapBuffers(expected, actual, {
         mode: spec.mode,
-        allowSemanticFallback: spec.allowSemanticFallback ?? true,
+        allowSemanticFallback: spec.allowSemanticFallback ?? false,
       });
       return result.equal
         ? []
@@ -152,6 +168,19 @@ async function compareBuffers(
   const expectedText = normalizeText(bufferToUtf8(expected), spec);
   const actualText = normalizeText(bufferToUtf8(actual), spec);
   return expectedText === actualText ? [] : [formatPatch(label, expectedText, actualText)];
+}
+
+async function readComparedFile(
+  implementation: "go" | "rust",
+  filePath: string,
+): Promise<Buffer | string> {
+  try {
+    return await fs.readFile(filePath);
+  } catch (error) {
+    return `${implementation} expected output file is not readable: ${filePath}\n${
+      error instanceof Error ? error.message : String(error)
+    }`;
+  }
 }
 
 function compareExpectedOutput(label: string, buffer: Buffer, expected: ExpectedOutput): string[] {
@@ -217,6 +246,34 @@ function normalizeInfo(text: string): string {
       return line;
     })
     .join("\n");
+}
+
+function normalizeCommandList(text: string, ignoreCommands: readonly string[] = []): string {
+  const ignored = new Set(ignoreCommands);
+  const lines = normalizeText(text, { trim: true }).split("\n");
+  const commands: string[] = [];
+  let inCommandSection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^(available )?commands:/iu.test(trimmed)) {
+      inCommandSection = true;
+      continue;
+    }
+    if (!inCommandSection) {
+      continue;
+    }
+    if (trimmed.length === 0 || /^[A-Z][A-Za-z ]+:/u.test(trimmed)) {
+      break;
+    }
+
+    const command = /^([a-z][a-z0-9-]*)\b/u.exec(trimmed)?.[1];
+    if (command != undefined && !ignored.has(command)) {
+      commands.push(command);
+    }
+  }
+
+  return [...new Set(commands)].sort().join("\n");
 }
 
 function formatPatch(label: string, expected: string, actual: string): string {
