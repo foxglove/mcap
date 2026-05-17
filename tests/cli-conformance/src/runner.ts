@@ -95,6 +95,7 @@ async function runInvocation(
       : resolvePlaceholders(invocation.cwd, context);
   const env = {
     ...process.env,
+    // Marker for subprocess diagnostics; neither CLI currently changes behavior based on it.
     MCAP_CLI_CONFORMANCE: "1",
     ...(invocation.env ?? {}),
   };

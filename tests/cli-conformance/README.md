@@ -117,9 +117,11 @@ Use normal parity cases when both CLIs should behave the same:
 - add setup actions when commands mutate files or need temporary inputs;
 - choose comparators for stdout, stderr, and output files.
 
-If a case sets `comparison`, only the fields in that object are checked. For
-example, `comparison: { exitCode: 0 }` intentionally compares exit codes only.
-Specify stdout/stderr comparators when terminal output should be part of parity.
+If a case omits `comparison`, the runner compares exit code, stdout, and stderr.
+If a case sets `comparison`, `exitCode` defaults to `"same"` unless overridden,
+while stdout, stderr, and files are checked only when specified. For example,
+`comparison: { exitCode: 0 }` intentionally compares exit codes only. Specify
+stdout/stderr comparators when terminal output should be part of parity.
 
 Use `knownDifference` when behavior intentionally or temporarily differs. Known
 differences are assertions, not skips: the case must document and verify the Go
