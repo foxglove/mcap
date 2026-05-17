@@ -976,6 +976,45 @@ mod tests {
     }
 
     #[test]
+    fn merge_allow_duplicate_metadata_keeps_same_name_with_different_content() {
+        let first = build_mcap(
+            "p",
+            &[],
+            &[mcap::records::Metadata {
+                name: "robot".to_string(),
+                metadata: BTreeMap::from([(String::from("a"), String::from("1"))]),
+            }],
+            &[],
+            true,
+            true,
+        );
+        let second = build_mcap(
+            "p",
+            &[],
+            &[mcap::records::Metadata {
+                name: "robot".to_string(),
+                metadata: BTreeMap::from([(String::from("a"), String::from("2"))]),
+            }],
+            &[],
+            true,
+            true,
+        );
+
+        let merged = merge_bytes(
+            &[("a", first.as_slice()), ("b", second.as_slice())],
+            CoalesceChannels::Auto,
+            true,
+        )
+        .expect("merge");
+
+        let summary = mcap::Summary::read(&merged)
+            .expect("summary")
+            .expect("present");
+        assert_eq!(summary.stats.as_ref().expect("stats").metadata_count, 2);
+        assert_eq!(summary.metadata_indexes.len(), 2);
+    }
+
+    #[test]
     fn merge_force_coalesces_channels_ignoring_metadata() {
         let left = build_mcap(
             "profile",
