@@ -503,8 +503,6 @@ jobs:
           draft: false
 
   cli:
-    needs:
-      - rust
     strategy:
       fail-fast: false
       matrix:
