@@ -21,7 +21,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | `get`        | 🟢     |                                                                                                                                           |
 | `info`       | 🟢     |                                                                                                                                           |
 | `list`       | 🟢     |                                                                                                                                           |
-| `merge`      | 🟢     | Channel coalescing may produce non-monotonic or colliding message sequence values within a coalesced output channel (same as Go CLI).     |
+| `merge`      | 🟢     |                                                                                                                                           |
 | `recover`    | 🟡     | Best-effort recovery is implemented for messages, attachments, and metadata; Go-parity gaps remain around raw chunk passthrough behavior. |
 | `sort`       | 🟢     |                                                                                                                                           |
 | `version`    | 🟢     |                                                                                                                                           |
