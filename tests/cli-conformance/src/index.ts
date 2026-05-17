@@ -36,10 +36,7 @@ async function main(options: ProgramOptions): Promise<void> {
     throw new Error(`Invalid CLI conformance case manifest:\n${validationErrors.join("\n")}`);
   }
 
-  const workDirectory = await createManagedWorkDirectory(
-    options.workDir,
-    "mcap-cli-conformance-",
-  );
+  const workDirectory = await createManagedWorkDirectory(options.workDir, "mcap-cli-conformance-");
   const runOptions: CliConformanceOptions = {
     repoRoot: root,
     dataDir: path.resolve(options.dataDir),
@@ -83,7 +80,7 @@ async function main(options: ProgramOptions): Promise<void> {
       process.exitCode = 1;
     }
   } finally {
-    await cleanupManagedWorkDirectory(workDirectory, runOptions.keepWorkDir);
+    await cleanupManagedWorkDirectory(workDirectory, { keepWorkDir: runOptions.keepWorkDir });
   }
 }
 

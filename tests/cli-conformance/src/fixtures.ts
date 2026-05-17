@@ -100,9 +100,9 @@ export async function createManagedWorkDirectory(
 
 export async function cleanupManagedWorkDirectory(
   workDirectory: ManagedWorkDirectory,
-  keepWorkDir: boolean,
+  options: { keepWorkDir: boolean },
 ): Promise<void> {
-  if (keepWorkDir) {
+  if (options.keepWorkDir) {
     return;
   }
   if (workDirectory.removeRootOnCleanup) {
