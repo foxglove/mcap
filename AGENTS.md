@@ -72,7 +72,7 @@ The Go workspace (`go/go.work`) includes the core library (`go/mcap`), ROS tools
 | Lint   | `cd rust && cargo clippy -p mcap --all-targets -- --no-deps -D warnings` |
 | Format | `cd rust && cargo fmt --all -- --check`                                  |
 
-The workspace includes the `mcap` library crate and `mcap-cli`.
+The workspace includes the `mcap` and `mcap_cli` crates.
 
 ## C++
 
