@@ -502,7 +502,7 @@ jobs:
           body_path: ${{ github.workspace }}-CHANGELOG.txt
           draft: false
 
-  cli:
+  rust-cli:
     strategy:
       fail-fast: false
       matrix:
@@ -563,7 +563,7 @@ jobs:
             exe: ".exe"
             env: {}
 
-    name: cli (${{ matrix.os }}/${{ matrix.arch }})
+    name: rust-cli (${{ matrix.os }}/${{ matrix.arch }})
     runs-on: ${{ matrix.image }}
     env: ${{ matrix.env }}
     defaults:
