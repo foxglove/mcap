@@ -41,6 +41,7 @@ jobs:
       - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-conformance lint:ci
       - run: yarn workspace @foxglove/mcap-conformance build
+      - run: yarn workspace @foxglove/mcap-cli-conformance lint:ci
 
   conformance-cpp:
     runs-on: ubuntu-latest
@@ -167,6 +168,35 @@ jobs:
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner rust-
+
+  cli-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - run: corepack enable
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: yarn
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go/go.work
+          cache: true
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          default: true
+      - run: yarn install --immutable
+      - run: make -C go/cli/mcap build
+      - run: cargo build -p mcap-cli
+        working-directory: rust
+      - run: yarn test:conformance:generate-inputs --verify
+      - run: >
+          yarn test:cli-conformance
+          --go-bin "${{ github.workspace }}/go/cli/mcap/bin/mcap"
+          --rust-bin "${{ github.workspace }}/rust/target/debug/mcap"
 
   cpp:
     runs-on: ubuntu-latest
@@ -472,6 +502,100 @@ jobs:
           body_path: ${{ github.workspace }}-CHANGELOG.txt
           draft: false
 
+  rust-cli:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            image: ubuntu-latest
+            arch: amd64
+            target: x86_64-unknown-linux-gnu
+            setup: ""
+            exe: ""
+            env: {}
+          - os: linux
+            image: ubuntu-latest
+            arch: arm64
+            target: aarch64-unknown-linux-gnu
+            setup: sudo apt-get update && sudo apt-get install -qq gcc-aarch64-linux-gnu
+            exe: ""
+            env:
+              CC: aarch64-linux-gnu-gcc
+              CXX: aarch64-linux-gnu-g++
+              CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          - os: linux
+            image: ubuntu-latest
+            arch: arm
+            target: armv7-unknown-linux-gnueabihf
+            setup: sudo apt-get update && sudo apt-get install -qq gcc-arm-linux-gnueabihf
+            exe: ""
+            env:
+              CC: arm-linux-gnueabihf-gcc
+              CXX: arm-linux-gnueabihf-g++
+              CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+          - os: macos
+            image: macos-latest
+            arch: amd64
+            target: x86_64-apple-darwin
+            setup: ""
+            exe: ""
+            env: {}
+          - os: macos
+            image: macos-latest
+            arch: arm64
+            target: aarch64-apple-darwin
+            setup: ""
+            exe: ""
+            env: {}
+          - os: windows
+            image: windows-latest
+            arch: amd64
+            target: x86_64-pc-windows-msvc
+            setup: ""
+            exe: ".exe"
+            env: {}
+          - os: windows
+            image: windows-latest
+            arch: arm64
+            target: aarch64-pc-windows-msvc
+            setup: ""
+            exe: ".exe"
+            env: {}
+
+    name: rust-cli (${{ matrix.os }}/${{ matrix.arch }})
+    runs-on: ${{ matrix.image }}
+    env: ${{ matrix.env }}
+    defaults:
+      run:
+        working-directory: rust
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          default: true
+      - run: rustup target add ${{ matrix.target }}
+      - name: Setup environment
+        if: matrix.setup != ''
+        run: ${{ matrix.setup }}
+      - name: Build binary
+        run: |
+          cargo build -p mcap-cli --release --target "${{ matrix.target }}"
+          mkdir -p bin
+          cp \
+            "target/${{ matrix.target }}/release/mcap${{ matrix.exe }}" \
+            "bin/mcap-rust-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }}"
+      - if: matrix.arch == 'amd64'
+        run: bin/mcap-rust-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }} --version
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mcap-rust-cli-${{ matrix.os }}-${{ matrix.arch }}
+          path: rust/bin/mcap-rust-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }}
+          retention-days: 7
+
   swift:
     runs-on: ubuntu-latest
     steps:
@@ -502,19 +626,15 @@ jobs:
           components: "rustfmt, clippy"
       - run: rustup target add wasm32-unknown-unknown
       - run: cargo fmt --all -- --check
-      - run: cargo clippy -p mcap --all-targets -- --no-deps -D warnings
+      - run: cargo clippy --workspace --all-targets -- --no-deps -D warnings
       - run: cargo clippy -p mcap --no-default-features -- --no-deps -D warnings
       - run: cargo clippy -p mcap --no-default-features --features lz4 -- --no-deps -D warnings
       - run: cargo clippy -p mcap --no-default-features --features zstd -- --no-deps -D warnings
       - run: cargo clippy -p mcap --no-default-features --features tokio -- --no-deps -D warnings
       - run: cargo clippy -p mcap --no-default-features --features tokio,lz4 -- --no-deps -D warnings
       - run: cargo clippy -p mcap --no-default-features --features tokio,zstd -- --no-deps -D warnings
-      - run: cargo clippy -p mcap-cli --all-targets -- --no-deps -D warnings
-      - run: cargo build -p mcap --all-features
-      - run: cargo test -p mcap --all-features
-      - run: cargo build -p mcap-cli
-      - run: cargo run -p mcap-cli -- --version
-      - run: cargo test -p mcap-cli
+      - run: cargo build --workspace --all-features
+      - run: cargo test --workspace --all-features
       - run: cargo build -p mcap --all-features --target wasm32-unknown-unknown
       - run: cargo check -p mcap --all-features --target wasm32-unknown-unknown
       - run: cargo publish -p mcap --dry-run
