@@ -588,6 +588,28 @@ jobs:
           cp \
             "target/${{ matrix.target }}/release/mcap${{ matrix.exe }}" \
             "bin/mcap-rust-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }}"
+      - name: Run binary when native
+        run: |
+          case "${{ matrix.target }}" in
+            x86_64-unknown-linux-gnu|x86_64-apple-darwin|x86_64-pc-windows-msvc)
+              expected_arch="x86_64"
+              ;;
+            aarch64-apple-darwin|aarch64-pc-windows-msvc|aarch64-unknown-linux-gnu)
+              expected_arch="arm64"
+              ;;
+            *)
+              echo "Skipping --version smoke test for cross-compiled target ${{ matrix.target }}"
+              exit 0
+              ;;
+          esac
+
+          actual_arch="$(uname -m)"
+          if [[ "$actual_arch" != "$expected_arch" ]]; then
+            echo "Skipping --version smoke test for ${{ matrix.target }} on ${actual_arch} runner"
+            exit 0
+          fi
+
+          "bin/mcap-rust-cli-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }}" --version
       - uses: actions/upload-artifact@v7
         with:
           name: mcap-rust-cli-${{ matrix.os }}-${{ matrix.arch }}
@@ -633,7 +655,6 @@ jobs:
       - run: cargo clippy -p mcap --no-default-features --features tokio,zstd -- --no-deps -D warnings
       - run: cargo build --workspace --all-features
       - run: cargo test --workspace --all-features
-      - run: cargo run -p mcap-cli -- --version
       - run: cargo build -p mcap --all-features --target wasm32-unknown-unknown
       - run: cargo check -p mcap --all-features --target wasm32-unknown-unknown
       - run: cargo publish -p mcap --dry-run
