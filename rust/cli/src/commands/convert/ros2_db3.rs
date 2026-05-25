@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::fs::File;
 use std::io::BufWriter;
-use std::io::{Seek, Write};
+use std::io::{Read, Seek, Write};
 use std::path::Path;
 
 use anyhow::{bail, ensure, Context, Result};
@@ -56,8 +56,28 @@ pub fn convert_ros2_db3<W: Write + Seek>(
 }
 
 fn open_db(input_path: &Path) -> Result<Connection> {
+    validate_sqlite_magic(input_path)?;
     Connection::open_with_flags(input_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .with_context(|| format!("failed to open ROS 2 db3 '{}'", input_path.display()))
+}
+
+fn validate_sqlite_magic(input_path: &Path) -> Result<()> {
+    const SQLITE_MAGIC: &[u8] = b"SQLite format 3\0";
+
+    let mut input = File::open(input_path)
+        .with_context(|| format!("failed to open input '{}'", input_path.display()))?;
+    let mut magic = [0u8; SQLITE_MAGIC.len()];
+    let bytes_read = input.read(&mut magic).with_context(|| {
+        format!(
+            "failed to read SQLite magic from '{}'",
+            input_path.display()
+        )
+    })?;
+    ensure!(
+        bytes_read == SQLITE_MAGIC.len() && magic == SQLITE_MAGIC,
+        "invalid ROS 2 db3 magic (expected SQLite format 3)"
+    );
+    Ok(())
 }
 
 fn read_conversion_plan(db: &Connection) -> Result<ConversionPlan> {

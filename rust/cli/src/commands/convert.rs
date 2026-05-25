@@ -3,7 +3,7 @@ mod ros2_db3;
 
 use std::fs::File;
 use std::io::{BufWriter, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{bail, ensure, Context, Result};
 use mcap::{Compression, WriteOptions};
@@ -11,41 +11,75 @@ use mcap::{Compression, WriteOptions};
 use crate::cli::{CompressionFormat, ConvertCommand};
 use crate::context::CommandContext;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum InputFileType {
-    Ros1Bag,
-    Ros2Db3,
-}
-
 pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
-    let file_type = detect_file_type(&args.input)?;
-    ensure_distinct_paths(&args.input, &args.output)?;
+    let input = ConvertInput::detect(args.input)?;
+    ensure_distinct_paths(input.path(), &args.output)?;
     let opts = build_write_options(
         args.compression,
         args.chunk_size,
         args.include_crc,
         args.chunked,
-        file_type.profile(),
+        input.profile(),
     );
 
-    match file_type {
-        InputFileType::Ros1Bag => {
-            let input = File::open(&args.input)
-                .with_context(|| format!("failed to open input '{}'", args.input.display()))?;
-            let output = File::create(&args.output)
-                .with_context(|| format!("failed to open output '{}'", args.output.display()))?;
-            let writer = BufWriter::new(output);
-            ros1_bag::convert_ros1_bag(writer, input, opts)
-        }
-        InputFileType::Ros2Db3 => ros2_db3::convert_ros2_db3_file(&args.input, &args.output, opts),
-    }
+    input.convert(&args.output, opts)
 }
 
-impl InputFileType {
-    fn profile(self) -> &'static str {
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ConvertInput {
+    Ros1Bag(PathBuf),
+    Ros2Db3(PathBuf),
+}
+
+impl ConvertInput {
+    fn detect(path: PathBuf) -> Result<Self> {
+        let extension = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .unwrap_or_default();
+
+        if extension.eq_ignore_ascii_case("bag") {
+            reject_lfs_pointer(&path)?;
+            return Ok(Self::Ros1Bag(path));
+        }
+        if extension.eq_ignore_ascii_case("db3") {
+            reject_lfs_pointer(&path)?;
+            return Ok(Self::Ros2Db3(path));
+        }
+
+        bail!(
+            "unsupported input file extension for '{}' (expected .bag for ROS 1 bag or .db3 for ROS 2 SQLite db3 input)",
+            path.display()
+        );
+    }
+
+    fn path(&self) -> &Path {
         match self {
-            InputFileType::Ros1Bag => "ros1",
-            InputFileType::Ros2Db3 => "ros2",
+            Self::Ros1Bag(path) | Self::Ros2Db3(path) => path,
+        }
+    }
+
+    fn profile(&self) -> &'static str {
+        match self {
+            Self::Ros1Bag(_) => "ros1",
+            Self::Ros2Db3(_) => "ros2",
+        }
+    }
+
+    fn convert(self, output_path: &Path, opts: WriteOptions) -> Result<()> {
+        match self {
+            Self::Ros1Bag(input_path) => {
+                let input = File::open(&input_path)
+                    .with_context(|| format!("failed to open input '{}'", input_path.display()))?;
+                let output = File::create(output_path).with_context(|| {
+                    format!("failed to open output '{}'", output_path.display())
+                })?;
+                let writer = BufWriter::new(output);
+                ros1_bag::convert_ros1_bag(writer, input, opts)
+            }
+            Self::Ros2Db3(input_path) => {
+                ros2_db3::convert_ros2_db3_file(&input_path, output_path, opts)
+            }
         }
     }
 }
@@ -74,9 +108,7 @@ fn build_write_options(
         .calculate_attachment_crcs(include_crc)
 }
 
-fn detect_file_type(path: &Path) -> Result<InputFileType> {
-    const ROS1_BAG_MAGIC: &[u8] = b"#ROSBAG V2.0\n";
-    const SQLITE_MAGIC: &[u8] = b"SQLite format 3\0";
+fn reject_lfs_pointer(path: &Path) -> Result<()> {
     const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
     let mut input =
@@ -87,23 +119,13 @@ fn detect_file_type(path: &Path) -> Result<InputFileType> {
         .with_context(|| format!("failed to read input magic from '{}'", path.display()))?;
     let magic = &magic[..bytes_read];
 
-    if magic.starts_with(ROS1_BAG_MAGIC) {
-        return Ok(InputFileType::Ros1Bag);
-    }
-    if magic.starts_with(SQLITE_MAGIC) {
-        return Ok(InputFileType::Ros2Db3);
-    }
     if magic.starts_with(GIT_LFS_POINTER_PREFIX) {
         bail!(
             "input '{}' appears to be a Git LFS pointer, not a bag file; run `git lfs pull` and try again",
             path.display()
         );
     }
-
-    bail!(
-        "unsupported input file type for '{}' (expected ROS 1 bag or ROS 2 SQLite db3 input)",
-        path.display()
-    );
+    Ok(())
 }
 
 fn ensure_distinct_paths(input: &Path, output: &Path) -> Result<()> {
@@ -147,9 +169,7 @@ mod tests {
 
     use anyhow::Result;
 
-    use super::{
-        build_write_options, detect_file_type, ensure_distinct_paths, ros2_db3, InputFileType,
-    };
+    use super::{build_write_options, ensure_distinct_paths, ros2_db3, ConvertInput};
     use crate::cli::{CompressionFormat, ConvertCommand};
     use crate::context::CommandContext;
 
@@ -244,25 +264,25 @@ mod tests {
     }
 
     #[test]
-    fn detects_ros1_bag_magic() {
-        let path = temp_input("ros1-not-a-bag-extension", b"#ROSBAG V2.0\n");
-        let file_type = detect_file_type(&path).expect("detect");
+    fn detects_ros1_bag_extension() {
+        let path = temp_input("ros1.bag", b"not validated until conversion");
+        let input = ConvertInput::detect(path.clone()).expect("detect");
         std::fs::remove_file(path).expect("remove temp input");
-        assert_eq!(file_type, InputFileType::Ros1Bag);
+        assert!(matches!(input, ConvertInput::Ros1Bag(_)));
     }
 
     #[test]
-    fn detects_ros2_db3_magic() {
-        let file_type = detect_file_type(Path::new(IRON_TALKER_DB3)).expect("detect");
-        assert_eq!(file_type, InputFileType::Ros2Db3);
+    fn detects_ros2_db3_extension() {
+        let input = ConvertInput::detect(PathBuf::from(IRON_TALKER_DB3)).expect("detect");
+        assert!(matches!(input, ConvertInput::Ros2Db3(_)));
     }
 
     #[test]
-    fn rejects_unknown_magic() {
+    fn rejects_unknown_extension() {
         let path = temp_input("unknown", b"not an mcap input");
-        let err = detect_file_type(&path).expect_err("unknown input should fail");
+        let err = ConvertInput::detect(path.clone()).expect_err("unknown input should fail");
         std::fs::remove_file(path).expect("remove temp input");
-        assert!(err.to_string().contains("unsupported input file type"));
+        assert!(err.to_string().contains("unsupported input file extension"));
     }
 
     #[test]
@@ -273,7 +293,7 @@ mod tests {
 oid sha256:0000000000000000000000000000000000000000000000000000000000000000\n\
 size 123\n",
         );
-        let err = detect_file_type(&path).expect_err("LFS pointer should fail");
+        let err = ConvertInput::detect(path.clone()).expect_err("LFS pointer should fail");
         std::fs::remove_file(path).expect("remove temp input");
         assert!(err.to_string().contains("Git LFS pointer"));
         assert!(err.to_string().contains("git lfs pull"));
@@ -376,6 +396,19 @@ size 123\n",
             .to_string()
             .contains("does not contain embedded message definitions"));
         assert!(err.to_string().contains("ros2 bag convert"));
+    }
+
+    #[test]
+    fn rejects_db3_extension_with_invalid_sqlite_magic_during_conversion() {
+        let path = temp_input("invalid.db3", b"not sqlite");
+        let mut output = Cursor::new(Vec::new());
+        let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
+
+        let err = ros2_db3::convert_ros2_db3(&mut output, &path, opts)
+            .expect_err("invalid sqlite magic should fail");
+
+        assert!(err.to_string().contains("invalid ROS 2 db3 magic"));
+        std::fs::remove_file(path).expect("remove temp input");
     }
 
     #[test]
