@@ -201,7 +201,7 @@ function semanticValue(
 }
 
 async function parseRecords(
-  implementation: string,
+  label: string,
   data: Uint8Array,
 ): Promise<{ records: TypedMcapRecord[] } | { error: string }> {
   try {
@@ -217,7 +217,7 @@ async function parseRecords(
     return { records };
   } catch (error) {
     return {
-      error: `${implementation} MCAP parse failed: ${
+      error: `${label} MCAP parse failed: ${
         error instanceof Error ? error.message : String(error)
       }`,
     };
