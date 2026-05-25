@@ -4,8 +4,8 @@ const MCAP_MAGIC = Buffer.from([0x89, 0x4d, 0x43, 0x41, 0x50, 0x30, 0x0d, 0x0a])
 
 type ProtobufJsonMessage = {
   sequence: number;
-  logTime: number;
-  publishTime: number;
+  logTime: bigint | number;
+  publishTime: bigint | number;
   snakeCase: string;
   zeroValue?: number;
   count: number;
@@ -147,8 +147,15 @@ function uint32(value: number): Buffer {
   return out;
 }
 
-function uint64(value: number): Buffer {
+function uint64(value: bigint | number): Buffer {
+  if (typeof value === "number" && !Number.isSafeInteger(value)) {
+    throw new Error(`uint64 number value must be a safe integer: ${value.toString()}`);
+  }
+  const integer = typeof value === "bigint" ? value : BigInt(value);
+  if (integer < 0n) {
+    throw new Error(`uint64 value must be non-negative: ${value.toString()}`);
+  }
   const out = Buffer.alloc(8);
-  out.writeBigUInt64LE(BigInt(value));
+  out.writeBigUInt64LE(integer);
   return out;
 }

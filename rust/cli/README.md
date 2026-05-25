@@ -47,6 +47,12 @@ port is still pre-production:
    - Apply the same timestamp input syntax consistently across all commands
      that accept times, including `cat`, `filter`, `add attachment`, and any
      future time-filtered commands.
+2. Topic filter arguments:
+   - Current Go-compatible `cat --topics` accepts one comma-separated string.
+   - Before Rust CLI 1.0, decide whether topic filtering should use the comma
+     list, repeatable flags such as `--topic foo --topic bar`, or support both.
+   - Apply the chosen shape consistently across commands that filter by topic so
+     users do not have to learn separate `cat` and `filter` conventions.
 
 ## Intentional divergences from Go CLI
 

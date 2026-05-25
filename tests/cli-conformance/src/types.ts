@@ -30,8 +30,8 @@ export type FixtureAction =
       to: string;
       messages: Array<{
         sequence: number;
-        logTime: number;
-        publishTime: number;
+        logTime: bigint | number;
+        publishTime: bigint | number;
         snakeCase: string;
         zeroValue?: number;
         count: number;
