@@ -185,6 +185,19 @@ mod tests {
     }
 
     fn top_level_chunk_ranges(bytes: &[u8]) -> Vec<(usize, usize)> {
+        top_level_record_ranges(bytes)
+            .into_iter()
+            .filter_map(|(opcode, offset, len)| {
+                if opcode == op::CHUNK {
+                    Some((offset, len))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    fn top_level_record_ranges(bytes: &[u8]) -> Vec<(u8, usize, usize)> {
         let mut offset = mcap::MAGIC.len();
         let limit = bytes.len().saturating_sub(mcap::MAGIC.len());
         let mut ranges = Vec::new();
@@ -196,12 +209,58 @@ mod tests {
                     .expect("record length bytes"),
             ) as usize;
             let record_len = mcap::records::OPCODE_LEN_SIZE + length;
-            if opcode == op::CHUNK {
-                ranges.push((offset, record_len));
-            }
+            ranges.push((opcode, offset, record_len));
             offset += record_len;
         }
         ranges
+    }
+
+    fn bytes_before_data_end(bytes: &[u8]) -> &[u8] {
+        let data_end_offset = top_level_record_ranges(bytes)
+            .into_iter()
+            .find_map(|(opcode, offset, _)| (opcode == op::DATA_END).then_some(offset))
+            .expect("test input should have data end");
+        &bytes[..data_end_offset]
+    }
+
+    fn write_mixed_unchunked_then_chunked_input() -> (Vec<u8>, (mcap::records::ChunkHeader, Vec<u8>))
+    {
+        let mut unchunked = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .use_chunks(false)
+                .create(&mut unchunked)
+                .expect("writer");
+            let channel = writer
+                .add_channel(0, "plain", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &MessageHeader {
+                        channel_id: channel,
+                        sequence: 0,
+                        log_time: 1,
+                        publish_time: 1,
+                    },
+                    b"plain",
+                )
+                .expect("write");
+            writer.finish().expect("finish");
+        }
+
+        let chunked = write_multi_chunk_input();
+        let source_chunk = collect_chunks(&chunked)
+            .into_iter()
+            .next()
+            .expect("chunked input should have a chunk");
+        let (chunk_offset, chunk_len) = top_level_chunk_ranges(&chunked)
+            .into_iter()
+            .next()
+            .expect("chunked input should have a chunk");
+
+        let mut mixed = bytes_before_data_end(unchunked.get_ref()).to_vec();
+        mixed.extend_from_slice(&chunked[chunk_offset..chunk_offset + chunk_len]);
+        (mixed, source_chunk)
     }
 
     fn default_options() -> RecoverOptions {
@@ -310,6 +369,32 @@ mod tests {
             .iter()
             .all(|(header, _)| header.compression.is_empty()));
         assert_eq!(stats.messages, 300);
+    }
+
+    #[test]
+    fn rebuilds_indexes_for_raw_chunk_after_unchunked_records() {
+        let (input, source_chunk) = write_mixed_unchunked_then_chunked_input();
+
+        let (output, stats) = recover_to_vec(&input, &default_options());
+        let output_chunks = collect_chunks(&output);
+        assert!(output_chunks.len() >= 2);
+        assert_eq!(output_chunks.last(), Some(&source_chunk));
+        assert!(stats.messages > 1);
+
+        let summary = mcap::Summary::read(&output)
+            .expect("summary should parse")
+            .expect("summary should be present");
+        let raw_chunk_index = summary
+            .chunk_indexes
+            .last()
+            .expect("raw chunk index should be present");
+        assert!(!raw_chunk_index.message_index_offsets.is_empty());
+        assert_eq!(
+            mcap::MessageStream::new(output.as_slice())
+                .expect("message stream")
+                .count() as u64,
+            stats.messages
+        );
     }
 
     #[test]

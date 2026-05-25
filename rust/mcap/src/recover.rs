@@ -202,6 +202,10 @@ fn recover_records<W: Write + Seek>(
                         }
                         Record::DataEnd(_) | Record::Footer(_) => break,
                         Record::Schema { .. } | Record::Channel(_) | Record::Message { .. } => {
+                            // Match Go recover's mid-stream behavior: once a top-level schema,
+                            // channel, or message proves the input is not fully chunked,
+                            // subsequent chunk records are still copied raw but their indexes are
+                            // rebuilt from chunk contents.
                             decode_chunks = true;
                         }
                         _ => {}
@@ -290,6 +294,13 @@ fn flush_pending_chunk<W: Write + Seek>(
     } else {
         None
     };
+
+    if let Err(err) = validate_raw_chunk(&chunk, supplied_indexes) {
+        eprintln!("Failed to write chunk, skipping: {err:#}");
+        pending_indexes.clear();
+        return Ok(());
+    }
+
     let indexes = match update_info_from_chunk(writer, state, &chunk, supplied_indexes) {
         Ok(indexes) => indexes,
         Err(err) => {
@@ -317,6 +328,29 @@ fn flush_pending_chunk<W: Write + Seek>(
     Ok(())
 }
 
+fn validate_raw_chunk(
+    chunk: &RawChunk,
+    supplied_indexes: Option<&[MessageIndex]>,
+) -> McapResult<()> {
+    if chunk.header.compressed_size != chunk.data.len() as u64 {
+        return Err(McapError::BadChunkLength {
+            header: chunk.header.compressed_size,
+            available: chunk.data.len() as u64,
+        });
+    }
+
+    if let Some(indexes) = supplied_indexes {
+        let mut seen_channels = BTreeSet::new();
+        for index in indexes {
+            if !seen_channels.insert(index.channel_id) {
+                return Err(McapError::BadIndex);
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn update_info_from_chunk<W: Write + Seek>(
     writer: &mut Writer<W>,
     state: &mut RecoveryState,
@@ -324,9 +358,12 @@ fn update_info_from_chunk<W: Write + Seek>(
     supplied_indexes: Option<&[MessageIndex]>,
 ) -> McapResult<Vec<MessageIndex>> {
     let needs_chunk_scan = match supplied_indexes {
-        Some(indexes) => indexes.iter().any(|index| {
-            !index.records.is_empty() && !state.channel_map.contains_key(&index.channel_id)
-        }),
+        Some(indexes) => {
+            indexes.iter().all(|index| index.records.is_empty())
+                || indexes.iter().any(|index| {
+                    !index.records.is_empty() && !state.channel_map.contains_key(&index.channel_id)
+                })
+        }
         None => true,
     };
 
@@ -341,8 +378,9 @@ fn update_info_from_chunk<W: Write + Seek>(
     // If indexes were supplied, the scan above is only needed for schema/channel side effects.
     // The supplied index offsets remain authoritative for the copied raw chunk.
     Ok(match supplied_indexes {
-        Some(indexes) => indexes.to_vec(),
+        Some(indexes) if indexes.iter().any(|index| !index.records.is_empty()) => indexes.to_vec(),
         None => rebuilt_indexes.unwrap_or_default(),
+        Some(_) => rebuilt_indexes.unwrap_or_default(),
     })
 }
 
@@ -381,7 +419,7 @@ fn apply_chunk_definitions<W: Write + Seek>(
 }
 
 fn scan_chunk_records(chunk: &RawChunk) -> McapResult<ChunkScan> {
-    let mut reader = LinearReader::for_chunk_with_crc_validation(chunk.header.clone(), false)?;
+    let mut reader = LinearReader::for_chunk_without_crc_validation(chunk.header.clone())?;
     let mut remaining = chunk.data.as_slice();
     let mut rebuilt_indexes: BTreeMap<u16, Vec<MessageIndexEntry>> = BTreeMap::new();
     let mut definitions = Vec::new();

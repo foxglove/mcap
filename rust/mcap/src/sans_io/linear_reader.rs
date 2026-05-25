@@ -350,6 +350,12 @@ impl LinearReader {
         Self::for_chunk_with_crc_validation(header, true)
     }
 
+    /// Constructs a linear reader that will iterate through records in a chunk without checking
+    /// the chunk's stored uncompressed CRC.
+    pub(crate) fn for_chunk_without_crc_validation(header: ChunkHeader) -> McapResult<Self> {
+        Self::for_chunk_with_crc_validation(header, false)
+    }
+
     /// Constructs a linear reader that will iterate through all records in a chunk.
     ///
     /// When `validate_chunk_crcs` is false, the reader will still decompress and parse chunk
