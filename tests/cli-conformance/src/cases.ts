@@ -693,6 +693,39 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "known-difference-convert-extension-dispatch",
+    description:
+      "Rust convert dispatches by input extension; Go convert dispatches by magic bytes.",
+    tags: ["known-difference", "convert", "surface"],
+    setup: [{ type: "copy", from: NOETIC_MULTITOPIC_NONE, to: "{caseWorkDir}/input.notbag" }],
+    invocation: {
+      args: ["convert", "input.notbag", "converted.mcap", "--compression", "none"],
+    },
+    knownDifference: {
+      id: "convert-extension-dispatch",
+      summary:
+        "Go convert accepts supported inputs with non-standard extensions by magic bytes; Rust convert requires known extensions.",
+      reason:
+        "Rust convert uses a central extension-to-converter mapping so converters own format validation after dispatch.",
+      desiredBehavior:
+        "Rust convert should keep extension-based dispatch unless a future CLI design adds explicit input-format selection.",
+      goBehavior: {
+        exitCode: 0,
+        files: [
+          {
+            path: "converted.mcap",
+            exists: true,
+            mcapSummary: { profile: "ros1", messageCount: 3, channelCount: 2, schemaCount: 2 },
+          },
+        ],
+      },
+      rustBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "unsupported input file extension" },
+      },
+    },
+  },
+  {
     id: "known-difference-pprof-profile-global",
     description:
       "Go CLI writes pprof profiles; Rust CLI parses --pprof-profile but reports it unimplemented.",
