@@ -1,4 +1,4 @@
-/* cspell:words pprof */
+/* cspell:words ndjson pprof */
 
 import type { CliTestCase } from "./types.ts";
 
@@ -10,18 +10,6 @@ const ONE_SCHEMALESS =
 const TEN_MESSAGES = "{dataDir}/TenMessages/TenMessages-ch-chx-mx-pad-rch-rsh-st-sum.mcap";
 const ONE_ATTACHMENT = "{dataDir}/OneAttachment/OneAttachment-ax-st-sum.mcap";
 const ONE_METADATA = "{dataDir}/OneMetadata/OneMetadata-mdx-st-sum.mcap";
-
-// Single-message protobuf MCAP fixture for `test.Sample`:
-// message Sample {
-//   string snake_case = 1;
-//   uint32 zero_value = 2;
-//   uint32 count = 3;
-// }
-// Payload sets snake_case="hello", zero_value=0, count=7.
-/* cspell:disable */
-const PROTOBUF_JSON_MCAP_BASE64 =
-  "iU1DQVAwDQoBCAAAAAAAAAAAAAAAAAAAAAOdAAAAAAAAAAEACwAAAHRlc3QuU2FtcGxlCAAAAHByb3RvYnVmfAAAAAp6CgxzYW1wbGUucHJvdG8SBHRlc3QiXAoGU2FtcGxlEh0KCnNuYWtlX2Nhc2UYASABKAlSCXNuYWtlQ2FzZRIdCgp6ZXJvX3ZhbHVlGAIgASgNUgl6ZXJvVmFsdWUSFAoFY291bnQYAyABKA1SBWNvdW50YgZwcm90bzMEHQAAAAAAAAABAAEABQAAAHByb3RvCAAAAHByb3RvYnVmAAAAAAUfAAAAAAAAAAEAAQAAAAIAAAAAAAAAAQAAAAAAAAAKBWhlbGxvGAcPBAAAAAAAAAAAAAAAAhQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACJTUNBUDANCg==";
-/* cspell:enable */
 
 const HELP_PATHS = [
   ["add"],
@@ -182,19 +170,36 @@ export const cases: CliTestCase[] = [
   {
     id: "cat-json-protobuf-stdin",
     description:
-      "Cat --json protobuf output matches Go field casing and zero-value omission for stdin input.",
+      "Cat --json emits protobuf messages as NDJSON with Go-compatible field casing and zero-value omission.",
     tags: ["cat", "json", "protobuf", "stdin"],
     setup: [
       {
-        type: "writeBase64",
+        type: "writeProtobufJsonMcap",
         to: "{caseWorkDir}/protobuf.mcap",
-        contents: PROTOBUF_JSON_MCAP_BASE64,
+        messages: [
+          {
+            sequence: 1,
+            logTime: 2,
+            publishTime: 1,
+            snakeCase: "hello",
+            zeroValue: 0,
+            count: 7,
+          },
+          {
+            sequence: 2,
+            logTime: 3,
+            publishTime: 2,
+            snakeCase: "world",
+            zeroValue: 0,
+            count: 8,
+          },
+        ],
       },
     ],
     invocation: { args: ["cat", "--json"], stdin: { path: "{caseWorkDir}/protobuf.mcap" } },
     comparison: {
       exitCode: 0,
-      stdout: { kind: "json" },
+      stdout: { kind: "ndjson" },
       stderr: { kind: "text" },
     },
   },

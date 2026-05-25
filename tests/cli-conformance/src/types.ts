@@ -1,3 +1,5 @@
+/* cspell:words ndjson */
+
 export type CliImplementation = "go" | "rust";
 
 export type PathContext = {
@@ -24,9 +26,16 @@ export type FixtureAction =
       bytes: number[];
     }
   | {
-      type: "writeBase64";
+      type: "writeProtobufJsonMcap";
       to: string;
-      contents: string;
+      messages: Array<{
+        sequence: number;
+        logTime: number;
+        publishTime: number;
+        snakeCase: string;
+        zeroValue?: number;
+        count: number;
+      }>;
     }
   | {
       type: "mkdir";
@@ -79,6 +88,10 @@ export type JsonComparatorSpec = {
   kind: "json";
 };
 
+export type NdjsonComparatorSpec = {
+  kind: "ndjson";
+};
+
 export type TableComparatorSpec = {
   kind: "table";
 };
@@ -113,6 +126,7 @@ export type McapComparatorSpec = {
 export type ComparatorSpec =
   | TextComparatorSpec
   | JsonComparatorSpec
+  | NdjsonComparatorSpec
   | TableComparatorSpec
   | CommandListComparatorSpec
   | InfoComparatorSpec
