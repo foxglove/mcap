@@ -1,4 +1,4 @@
-/* cspell:words pprof */
+/* cspell:words lz4 multitopic noetic pprof testdata */
 
 import type { CliTestCase } from "./types.ts";
 
@@ -10,6 +10,9 @@ const ONE_SCHEMALESS =
 const TEN_MESSAGES = "{dataDir}/TenMessages/TenMessages-ch-chx-mx-pad-rch-rsh-st-sum.mcap";
 const ONE_ATTACHMENT = "{dataDir}/OneAttachment/OneAttachment-ax-st-sum.mcap";
 const ONE_METADATA = "{dataDir}/OneMetadata/OneMetadata-mdx-st-sum.mcap";
+const NOETIC_MULTITOPIC_NONE = "{repoRoot}/testdata/bags/generated/noetic-multitopic-none.bag";
+const NOETIC_MULTITOPIC_BZ2 = "{repoRoot}/testdata/bags/generated/noetic-multitopic-bz2.bag";
+const NOETIC_MULTITOPIC_LZ4 = "{repoRoot}/testdata/bags/generated/noetic-multitopic-lz4.bag";
 
 const HELP_PATHS = [
   ["add"],
@@ -199,6 +202,51 @@ export const cases: CliTestCase[] = [
     invocation: { args: ["doctor", ONE_MESSAGE] },
     comparison: EXIT_CODE_ONLY,
   },
+  ...[
+    {
+      id: "convert-noetic-ros1-bag-none",
+      fixture: NOETIC_MULTITOPIC_NONE,
+      description: "Converting a Noetic ROS1 bag with uncompressed chunks preserves messages.",
+      tags: ["convert", "ros1", "mcap-output"],
+    },
+    {
+      id: "convert-noetic-ros1-bag-bz2",
+      fixture: NOETIC_MULTITOPIC_BZ2,
+      description: "Converting a Noetic ROS1 bag with bz2 chunks preserves messages.",
+      tags: ["convert", "ros1", "mcap-output", "bz2"],
+    },
+    {
+      id: "convert-noetic-ros1-bag-lz4",
+      fixture: NOETIC_MULTITOPIC_LZ4,
+      description: "Converting a Noetic ROS1 bag with lz4 chunks preserves messages.",
+      tags: ["convert", "ros1", "mcap-output", "lz4"],
+    },
+  ].map<CliTestCase>((testCase) => ({
+    id: testCase.id,
+    description: testCase.description,
+    tags: testCase.tags,
+    invocation: {
+      args: [
+        "convert",
+        testCase.fixture,
+        "converted.mcap",
+        "--compression",
+        "none",
+        "--include-crc=false",
+      ],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "ignore" },
+      stderr: { kind: "ignore" },
+      files: [
+        {
+          path: "converted.mcap",
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
+        },
+      ],
+    },
+  })),
   {
     id: "filter-topic-output-messages",
     description: "Filtering by topic preserves the same message stream.",
