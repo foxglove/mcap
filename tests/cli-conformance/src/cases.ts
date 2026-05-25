@@ -112,7 +112,7 @@ export const cases: CliTestCase[] = [
     },
   },
   {
-    id: "cat-topic-filter-excludes-nonmatching-topic",
+    id: "cat-topic-filter-excludes-missing-topic",
     description: "Cat topic filtering emits no messages when no requested topic matches.",
     tags: ["cat", "stdout", "topics"],
     invocation: { args: ["cat", ONE_MESSAGE, "--topics", "missing"] },

@@ -11,7 +11,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | Command      | Status | Notes                                                                                                                                     |
 | ------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `add`        | 🟢     |                                                                                                                                           |
-| `cat`        | 🟡     | Local and stdin input are implemented, including `--topics`, time-range filters, and `--json`; remote URI input is not yet supported.      |
+| `cat`        | 🟡     | Local and stdin input are implemented, including `--topics`, time-range filters, and `--json`; remote URI input is not yet supported.     |
 | `compress`   | 🟢     |                                                                                                                                           |
 | `convert`    | 🟡     | ROS1 bag → MCAP conversion is implemented (including `none`/`lz4`/`bz2` bag chunk decompression); ROS2 db3 input is not yet supported.    |
 | `decompress` | 🟢     |                                                                                                                                           |
