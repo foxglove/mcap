@@ -56,8 +56,13 @@ port is still pre-production:
 3. Output overwrite behavior:
    - Current Go-compatible behavior overwrites existing output files for commands
      such as `convert`, `filter`, `merge`, `recover`, and `sort`.
+   - Current output path syntax is inconsistent: `convert` uses a positional
+     output path, while other output-producing commands generally use
+     `-o` / `--output` or `--output-file`.
    - Before Rust CLI 1.0, decide whether output-producing commands should fail
      when the output path exists unless the user passes `--force` / `-f`.
+   - Decide whether Rust CLI output paths should standardize on positional
+     arguments or `-o` / `--output` flags, then apply that consistently.
    - Write output-producing commands through a temporary sibling file and rename
      it into place only after successful completion, so failures do not leave a
      partial output at the requested path.
@@ -78,9 +83,9 @@ port is still pre-production:
 6. Convert output paths and multiple inputs:
    - Current Go-compatible `mcap convert` requires exactly one input path and one
      output path.
-   - Before Rust CLI 1.0, consider making the output path optional. When omitted,
-     write a sibling file next to each input by replacing the input extension
-     with `.mcap`.
+   - If `convert` keeps or adopts optional output paths, consider writing a
+     sibling file next to each input by replacing the input extension with
+     `.mcap` when no explicit output is provided.
    - This would also allow `mcap convert` to accept multiple input paths in one
      invocation, including wildcard-expanded paths from the user's shell.
 
