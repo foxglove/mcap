@@ -445,9 +445,10 @@ mod tests {
     use anyhow::{Context, Result};
 
     use super::{
-        decompress_chunk, parse_header_fields, process_records, read_record, BAG_MAGIC, KEY_CONN,
-        KEY_MD5SUM, KEY_MESSAGE_DEFINITION, KEY_OP, KEY_TIME, KEY_TOPIC, KEY_TYPE,
-        MAX_RECORD_SECTION_SIZE, OP_BAG_CONNECTION, OP_BAG_HEADER, OP_BAG_MESSAGE_DATA,
+        decompress_chunk, parse_header_fields, process_records, read_record, BAG_MAGIC,
+        KEY_COMPRESSION, KEY_CONN, KEY_MD5SUM, KEY_MESSAGE_DEFINITION, KEY_OP, KEY_SIZE, KEY_TIME,
+        KEY_TOPIC, KEY_TYPE, MAX_RECORD_SECTION_SIZE, OP_BAG_CHUNK, OP_BAG_CONNECTION,
+        OP_BAG_HEADER, OP_BAG_MESSAGE_DATA,
     };
 
     fn encode_field_bytes(key: &str, value: &[u8]) -> Vec<u8> {
@@ -607,6 +608,54 @@ mod tests {
                 &[data],
             ));
         }
+        bag
+    }
+
+    fn synthetic_bag_with_duplicate_connection_inside_chunk() -> Vec<u8> {
+        let mut bag = Vec::new();
+        bag.extend_from_slice(BAG_MAGIC);
+        bag.extend(encode_record(
+            vec![encode_field_bytes(KEY_OP, &[OP_BAG_HEADER])],
+            &[],
+        ));
+
+        let topic = "/chunked";
+        let conn_data = [
+            encode_field_string(KEY_TOPIC, topic),
+            encode_field_string(KEY_TYPE, "demo_msgs/Msg"),
+            encode_field_string(KEY_MD5SUM, "abc123"),
+            encode_field_string(KEY_MESSAGE_DEFINITION, "uint8 data\n"),
+        ]
+        .concat();
+        let conn_record = encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
+                encode_field_bytes(KEY_CONN, &0u32.to_le_bytes()),
+                encode_field_string(KEY_TOPIC, topic),
+            ],
+            &conn_data,
+        );
+
+        bag.extend_from_slice(&conn_record);
+
+        let mut chunk_data = Vec::new();
+        chunk_data.extend_from_slice(&conn_record);
+        chunk_data.extend(encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_MESSAGE_DATA]),
+                encode_field_bytes(KEY_CONN, &0u32.to_le_bytes()),
+                encode_field_bytes(KEY_TIME, &encode_ros_time(1, 2)),
+            ],
+            &[0x11],
+        ));
+        bag.extend(encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CHUNK]),
+                encode_field_string(KEY_COMPRESSION, "none"),
+                encode_field_bytes(KEY_SIZE, &(chunk_data.len() as u32).to_le_bytes()),
+            ],
+            &chunk_data,
+        ));
         bag
     }
 
@@ -794,7 +843,22 @@ mod tests {
         let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
         assert_eq!(summary.schemas.len(), 1);
         assert_eq!(summary.channels.len(), 1);
-        assert!(summary.channels.contains_key(&7));
+        let channel = summary.channels.get(&7).expect("channel 7 should exist");
+        assert_eq!(channel.topic, "/unused");
+        assert_eq!(channel.message_encoding, "ros1");
+        assert_eq!(
+            channel
+                .schema
+                .as_ref()
+                .expect("channel schema should exist")
+                .name,
+            "demo_msgs/Unused"
+        );
+        assert_eq!(channel.metadata.get("topic"), Some(&"/unused".to_string()));
+        assert_eq!(
+            channel.metadata.get("md5sum"),
+            Some(&"unused-md5".to_string())
+        );
         let messages = mcap::MessageStream::new(&bytes)?.collect::<mcap::McapResult<Vec<_>>>()?;
         assert!(messages.is_empty());
         Ok(())
@@ -816,13 +880,57 @@ mod tests {
         let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
         assert_eq!(summary.schemas.len(), 1);
         assert_eq!(summary.channels.len(), 2);
-        assert!(summary.channels.contains_key(&0));
-        assert!(summary.channels.contains_key(&1));
+        let channel0 = summary.channels.get(&0).expect("channel 0 should exist");
+        let channel1 = summary.channels.get(&1).expect("channel 1 should exist");
+        assert_eq!(channel0.topic, "/same");
+        assert_eq!(channel1.topic, "/same");
+        assert_eq!(channel0.message_encoding, "ros1");
+        assert_eq!(channel1.message_encoding, "ros1");
+        assert_eq!(channel0.metadata, channel1.metadata);
+        assert_eq!(
+            channel0
+                .schema
+                .as_ref()
+                .expect("channel 0 schema should exist")
+                .id,
+            channel1
+                .schema
+                .as_ref()
+                .expect("channel 1 schema should exist")
+                .id
+        );
 
         let messages = mcap::MessageStream::new(&bytes)?.collect::<mcap::McapResult<Vec<_>>>()?;
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].channel.id, 0);
         assert_eq!(messages[1].channel.id, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn convert_synthetic_bag_accepts_duplicate_connection_inside_chunk() -> Result<()> {
+        let input = Cursor::new(synthetic_bag_with_duplicate_connection_inside_chunk());
+        let mut output = Cursor::new(Vec::<u8>::new());
+        super::convert_ros1_bag(
+            &mut output,
+            input,
+            mcap::WriteOptions::new().profile("ros1").compression(None),
+        )?;
+        output.seek(SeekFrom::Start(0))?;
+        let mut bytes = Vec::new();
+        output.read_to_end(&mut bytes)?;
+
+        let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
+        assert_eq!(summary.schemas.len(), 1);
+        assert_eq!(summary.channels.len(), 1);
+        let channel = summary.channels.get(&0).expect("channel 0 should exist");
+        assert_eq!(channel.topic, "/chunked");
+        assert_eq!(channel.message_encoding, "ros1");
+
+        let messages = mcap::MessageStream::new(&bytes)?.collect::<mcap::McapResult<Vec<_>>>()?;
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].channel.id, 0);
+        assert_eq!(messages[0].log_time, 1_000_000_002);
         Ok(())
     }
 
