@@ -1,7 +1,5 @@
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read, Seek};
-use std::sync::Arc;
 
 use anyhow::{bail, ensure, Context, Result};
 
@@ -33,7 +31,7 @@ struct SchemaKey {
 
 #[derive(Debug, Clone)]
 struct ConnectionInfo {
-    channel: Arc<mcap::Channel<'static>>,
+    channel_id: u16,
 }
 
 #[derive(Debug, Clone)]
@@ -148,25 +146,12 @@ fn process_connection<W: std::io::Write + Seek>(
 
     let metadata = to_string_map(conn_data)?;
     let channel_id = conn_id_to_channel_id(conn_id)?;
-    let schema = mcap::Schema {
-        id: schema_id,
-        name: msg_type,
-        encoding: "ros1msg".to_string(),
-        data: Cow::Owned(message_definition),
-    };
-    let channel = mcap::Channel {
-        id: channel_id,
-        topic: topic.to_string(),
-        schema: Some(Arc::new(schema)),
-        message_encoding: "ros1".to_string(),
-        metadata,
-    };
-    state.connections.insert(
-        conn_id,
-        ConnectionInfo {
-            channel: Arc::new(channel),
-        },
-    );
+    writer
+        .add_channel_with_id(channel_id, schema_id, topic, "ros1", &metadata)
+        .context("failed to write ROS1 channel")?;
+    state
+        .connections
+        .insert(conn_id, ConnectionInfo { channel_id });
     Ok(())
 }
 
@@ -187,21 +172,16 @@ fn process_message<W: std::io::Write + Seek>(
     let Some(conn_info) = state.connections.get(&conn_id) else {
         bail!("message references unknown connection id {conn_id}");
     };
-    // We intentionally write via the high-level `Writer::write()` path (instead of
-    // `write_to_known_channel`) so we can preserve ROS `conn` IDs as MCAP channel IDs.
-    // `add_channel()` auto-assigns channel IDs, and `write_to_known_channel()` requires
-    // those writer-assigned IDs. We build the explicit channel once per ROS connection
-    // and Arc-clone it here, avoiding per-message topic/schema/metadata allocations
-    // while still keeping Go parity for conn->channel mapping.
-
     writer
-        .write(&mcap::Message {
-            channel: Arc::clone(&conn_info.channel),
-            sequence: state.sequence,
-            log_time,
-            publish_time: log_time,
-            data: Cow::Borrowed(data),
-        })
+        .write_to_known_channel(
+            &mcap::records::MessageHeader {
+                channel_id: conn_info.channel_id,
+                sequence: state.sequence,
+                log_time,
+                publish_time: log_time,
+            },
+            data,
+        )
         .context("failed to write converted ROS1 message")?;
     state.sequence = state.sequence.wrapping_add(1);
     Ok(())
@@ -562,6 +542,74 @@ mod tests {
         bag
     }
 
+    fn synthetic_bag_with_connection_without_messages() -> Vec<u8> {
+        let mut bag = Vec::new();
+        bag.extend_from_slice(BAG_MAGIC);
+        bag.extend(encode_record(
+            vec![encode_field_bytes(KEY_OP, &[OP_BAG_HEADER])],
+            &[],
+        ));
+
+        let topic = "/unused";
+        let conn_data = [
+            encode_field_string(KEY_TOPIC, topic),
+            encode_field_string(KEY_TYPE, "demo_msgs/Unused"),
+            encode_field_string(KEY_MD5SUM, "unused-md5"),
+            encode_field_string(KEY_MESSAGE_DEFINITION, "uint32 value\n"),
+        ]
+        .concat();
+        bag.extend(encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
+                encode_field_bytes(KEY_CONN, &7u32.to_le_bytes()),
+                encode_field_string(KEY_TOPIC, topic),
+            ],
+            &conn_data,
+        ));
+        bag
+    }
+
+    fn synthetic_bag_with_duplicate_channel_content() -> Vec<u8> {
+        let mut bag = Vec::new();
+        bag.extend_from_slice(BAG_MAGIC);
+        bag.extend(encode_record(
+            vec![encode_field_bytes(KEY_OP, &[OP_BAG_HEADER])],
+            &[],
+        ));
+
+        let topic = "/same";
+        let conn_data = [
+            encode_field_string(KEY_TOPIC, topic),
+            encode_field_string(KEY_TYPE, "demo_msgs/Msg"),
+            encode_field_string(KEY_MD5SUM, "abc123"),
+            encode_field_string(KEY_MESSAGE_DEFINITION, "uint8 data\n"),
+        ]
+        .concat();
+
+        for conn_id in [0u32, 1u32] {
+            bag.extend(encode_record(
+                vec![
+                    encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
+                    encode_field_bytes(KEY_CONN, &conn_id.to_le_bytes()),
+                    encode_field_string(KEY_TOPIC, topic),
+                ],
+                &conn_data,
+            ));
+        }
+
+        for (conn_id, time, data) in [(0u32, 2u32, 0x11u8), (1u32, 3u32, 0x22u8)] {
+            bag.extend(encode_record(
+                vec![
+                    encode_field_bytes(KEY_OP, &[OP_BAG_MESSAGE_DATA]),
+                    encode_field_bytes(KEY_CONN, &conn_id.to_le_bytes()),
+                    encode_field_bytes(KEY_TIME, &encode_ros_time(1, time)),
+                ],
+                &[data],
+            ));
+        }
+        bag
+    }
+
     fn fixture_path(relative_from_repo_root: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -727,6 +775,54 @@ mod tests {
         assert_eq!(messages.len(), 2);
         assert_eq!(messages[0].log_time, 1_000_000_002);
         assert_eq!(messages[1].log_time, 1_000_000_003);
+        Ok(())
+    }
+
+    #[test]
+    fn convert_synthetic_bag_preserves_connection_without_messages() -> Result<()> {
+        let input = Cursor::new(synthetic_bag_with_connection_without_messages());
+        let mut output = Cursor::new(Vec::<u8>::new());
+        super::convert_ros1_bag(
+            &mut output,
+            input,
+            mcap::WriteOptions::new().profile("ros1").compression(None),
+        )?;
+        output.seek(SeekFrom::Start(0))?;
+        let mut bytes = Vec::new();
+        output.read_to_end(&mut bytes)?;
+
+        let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
+        assert_eq!(summary.schemas.len(), 1);
+        assert_eq!(summary.channels.len(), 1);
+        assert!(summary.channels.contains_key(&7));
+        let messages = mcap::MessageStream::new(&bytes)?.collect::<mcap::McapResult<Vec<_>>>()?;
+        assert!(messages.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn convert_synthetic_bag_preserves_duplicate_channel_content_ids() -> Result<()> {
+        let input = Cursor::new(synthetic_bag_with_duplicate_channel_content());
+        let mut output = Cursor::new(Vec::<u8>::new());
+        super::convert_ros1_bag(
+            &mut output,
+            input,
+            mcap::WriteOptions::new().profile("ros1").compression(None),
+        )?;
+        output.seek(SeekFrom::Start(0))?;
+        let mut bytes = Vec::new();
+        output.read_to_end(&mut bytes)?;
+
+        let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
+        assert_eq!(summary.schemas.len(), 1);
+        assert_eq!(summary.channels.len(), 2);
+        assert!(summary.channels.contains_key(&0));
+        assert!(summary.channels.contains_key(&1));
+
+        let messages = mcap::MessageStream::new(&bytes)?.collect::<mcap::McapResult<Vec<_>>>()?;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].channel.id, 0);
+        assert_eq!(messages[1].channel.id, 1);
         Ok(())
     }
 
