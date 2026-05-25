@@ -240,6 +240,10 @@ fn write_messages<W: Write + Seek>(
     channel_ids_by_topic_id: &HashMap<i64, u16>,
     sequences: &mut BTreeMap<u16, u32>,
 ) -> Result<()> {
+    if !table_exists(db, "messages")? {
+        bail!("input is a SQLite database, but it does not look like a ROS 2 db3 bag: missing 'messages' table");
+    }
+
     let mut stmt = db
         .prepare(
             "SELECT topic_id, timestamp, data \

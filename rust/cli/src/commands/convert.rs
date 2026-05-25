@@ -105,7 +105,10 @@ fn ensure_distinct_paths(input: &Path, output: &Path) -> Result<()> {
     let output_path = match output.canonicalize() {
         Ok(path) => path,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            let parent = output.parent().unwrap_or_else(|| Path::new("."));
+            let parent = output
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
             let file_name = output
                 .file_name()
                 .with_context(|| format!("invalid output path '{}'", output.display()))?;
@@ -133,7 +136,9 @@ mod tests {
     use std::io::{Cursor, Read, Seek, SeekFrom};
     use std::path::Path;
 
-    use super::{build_write_options, detect_file_type, ros2_db3, InputFileType};
+    use super::{
+        build_write_options, detect_file_type, ensure_distinct_paths, ros2_db3, InputFileType,
+    };
     use crate::cli::CompressionFormat;
 
     const IRON_TALKER_DB3: &str = "../../testdata/db3/talker-iron.db3";
@@ -219,6 +224,19 @@ mod tests {
         let err = detect_file_type(&path).expect_err("unknown input should fail");
         std::fs::remove_file(path).expect("remove temp input");
         assert!(err.to_string().contains("unsupported input file type"));
+    }
+
+    #[test]
+    fn distinct_path_check_allows_single_component_missing_output() {
+        let output_path = temp_path("single-component-output.mcap");
+        let file_name = output_path.file_name().expect("file name");
+        let current_dir_output = std::env::current_dir()
+            .expect("current dir")
+            .join(file_name);
+        let _ = std::fs::remove_file(&current_dir_output);
+
+        ensure_distinct_paths(Path::new(IRON_TALKER_DB3), Path::new(file_name))
+            .expect("single-component output should resolve through current directory");
     }
 
     #[test]
@@ -318,6 +336,33 @@ mod tests {
         assert!(err
             .to_string()
             .contains("does not look like a ROS 2 db3 bag"));
+        std::fs::remove_file(sqlite_path).expect("remove temp sqlite");
+    }
+
+    #[test]
+    fn rejects_sqlite_database_without_rosbag2_messages_table() {
+        let sqlite_path = temp_path("not-a-rosbag2-no-messages.db3");
+        let _ = std::fs::remove_file(&sqlite_path);
+        {
+            let db = rusqlite::Connection::open(&sqlite_path).expect("create sqlite db");
+            db.execute(
+                "CREATE TABLE topics(
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    serialization_format TEXT NOT NULL
+                )",
+                [],
+            )
+            .expect("create topics table");
+        }
+        let mut output = Cursor::new(Vec::new());
+        let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
+
+        let err = ros2_db3::convert_ros2_db3(&mut output, &sqlite_path, opts)
+            .expect_err("sqlite without messages should fail");
+
+        assert!(err.to_string().contains("missing 'messages' table"));
         std::fs::remove_file(sqlite_path).expect("remove temp sqlite");
     }
 }
