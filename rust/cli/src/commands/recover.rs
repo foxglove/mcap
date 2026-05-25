@@ -672,6 +672,17 @@ mod tests {
         (message_count, attachment_count, metadata_count)
     }
 
+    fn count_messages_allowing_bad_chunk_crc(bytes: &[u8]) -> usize {
+        mcap::MessageStream::new(bytes)
+            .expect("message stream")
+            .filter_map(|message| match message {
+                Ok(_) => Some(()),
+                Err(mcap::McapError::BadChunkCrc { .. }) => None,
+                Err(err) => panic!("unexpected message read error: {err}"),
+            })
+            .count()
+    }
+
     fn collect_chunks(bytes: &[u8]) -> Vec<(mcap::records::ChunkHeader, Vec<u8>)> {
         mcap::read::LinearReader::new(bytes)
             .expect("linear reader")
@@ -779,9 +790,11 @@ mod tests {
         corrupt_first_chunk_crc(&mut input);
 
         // This validates that disabled chunk CRC validation does not drop otherwise readable
-        // data. It intentionally does not cover corrupted compressed payload bytes.
+        // data. The raw-passthrough path preserves the original chunk bytes, including the
+        // bad stored CRC, matching Go recover behavior.
         let (output, stats) = recover_to_vec(&input, &default_options());
-        let (messages, attachments, metadata) = count_output_records(&output);
+        let messages = count_messages_allowing_bad_chunk_crc(&output);
+        let (_, attachments, metadata) = count_output_records(&output);
         assert_eq!(messages, 300);
         assert_eq!(attachments, 1);
         assert_eq!(metadata, 1);
