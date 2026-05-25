@@ -146,11 +146,25 @@ mod tests {
             .join(relative_from_repo_root)
     }
 
-    fn temp_output_path(name: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "mcap-rust-convert-{name}-{}.mcap",
-            std::process::id()
-        ))
+    struct TempOutput {
+        path: PathBuf,
+    }
+
+    impl TempOutput {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "mcap-rust-convert-{name}-{}.mcap",
+                std::process::id()
+            ));
+            let _ = fs::remove_file(&path);
+            Self { path }
+        }
+    }
+
+    impl Drop for TempOutput {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
     }
 
     #[test]
@@ -199,14 +213,13 @@ mod tests {
 
         for (fixture, expected_messages, expected_channels, expected_schemas) in cases {
             let input = fixture_path(&format!("testdata/bags/generated/{fixture}"));
-            let output = temp_output_path(fixture.trim_end_matches(".bag"));
-            let _ = fs::remove_file(&output);
+            let output = TempOutput::new(fixture.trim_end_matches(".bag"));
 
             super::run(
                 &CommandContext::default(),
                 ConvertCommand {
                     input: input.clone(),
-                    output: output.clone(),
+                    output: output.path.clone(),
                     compression: CompressionFormat::None,
                     chunk_size: 8 * 1024 * 1024,
                     include_crc: false,
@@ -214,7 +227,7 @@ mod tests {
                 },
             )?;
 
-            let bytes = fs::read(&output)?;
+            let bytes = fs::read(&output.path)?;
             let mut records = mcap::read::LinearReader::new(&bytes)?;
             match records.next() {
                 Some(Ok(mcap::records::Record::Header(header))) => {
@@ -302,7 +315,6 @@ mod tests {
                 assert_eq!(messages[2].log_time, 3_000_000_004, "{fixture}");
                 assert_eq!(messages[2].data.as_ref(), b"\x05\0\0\0world", "{fixture}");
             }
-            let _ = fs::remove_file(&output);
         }
 
         Ok(())
