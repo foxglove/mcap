@@ -86,11 +86,15 @@ fn detect_file_type(path: &Path) -> Result<InputFileType> {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::fs;
     use std::io::{Cursor, Read, Seek, SeekFrom};
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+
+    use anyhow::Result;
 
     use super::{build_write_options, detect_file_type, InputFileType};
-    use crate::cli::CompressionFormat;
+    use crate::cli::{CompressionFormat, ConvertCommand};
+    use crate::context::CommandContext;
 
     fn build_sample_mcap(include_crc: bool) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
@@ -136,6 +140,19 @@ mod tests {
         panic!("missing DataEnd record");
     }
 
+    fn fixture_path(relative_from_repo_root: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(relative_from_repo_root)
+    }
+
+    fn temp_output_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!(
+            "mcap-rust-convert-{name}-{}.mcap",
+            std::process::id()
+        ))
+    }
+
     #[test]
     fn detects_ros1_bag_extension() {
         let file_type = detect_file_type(Path::new("/tmp/input.bag")).expect("detect");
@@ -169,5 +186,60 @@ mod tests {
         let footer = mcap::read::footer(&bytes).expect("footer");
         assert_ne!(footer.summary_crc, 0);
         assert_ne!(data_end_crc(&bytes), 0);
+    }
+
+    #[test]
+    fn convert_command_handles_noetic_generated_ros1_bags() -> Result<()> {
+        let cases = [
+            ("noetic-empty.bag", 0usize, 0usize, 0usize),
+            ("noetic-multitopic-none.bag", 3, 2, 2),
+            ("noetic-multitopic-bz2.bag", 3, 2, 2),
+            ("noetic-multitopic-lz4.bag", 3, 2, 2),
+        ];
+
+        for (fixture, expected_messages, expected_channels, expected_schemas) in cases {
+            let input = fixture_path(&format!("testdata/bags/generated/{fixture}"));
+            let output = temp_output_path(fixture.trim_end_matches(".bag"));
+            let _ = fs::remove_file(&output);
+
+            super::run(
+                &CommandContext::default(),
+                ConvertCommand {
+                    input: input.clone(),
+                    output: output.clone(),
+                    compression: CompressionFormat::None,
+                    chunk_size: 8 * 1024 * 1024,
+                    include_crc: false,
+                    chunked: true,
+                },
+            )?;
+
+            let bytes = fs::read(&output)?;
+            let mut records = mcap::read::LinearReader::new(&bytes)?;
+            match records.next() {
+                Some(Ok(mcap::records::Record::Header(header))) => {
+                    assert_eq!(header.profile, "ros1", "{fixture}")
+                }
+                other => panic!("{fixture}: expected MCAP header as first record, got {other:?}"),
+            }
+            let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
+            assert_eq!(summary.channels.len(), expected_channels, "{fixture}");
+            assert_eq!(summary.schemas.len(), expected_schemas, "{fixture}");
+            assert!(summary
+                .channels
+                .values()
+                .all(|channel| channel.message_encoding == "ros1"));
+            assert!(summary
+                .schemas
+                .values()
+                .all(|schema| schema.encoding == "ros1msg"));
+
+            let messages =
+                mcap::MessageStream::new(&bytes)?.collect::<mcap::McapResult<Vec<_>>>()?;
+            assert_eq!(messages.len(), expected_messages, "{fixture}");
+            let _ = fs::remove_file(&output);
+        }
+
+        Ok(())
     }
 }
