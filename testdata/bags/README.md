@@ -17,7 +17,8 @@ testdata/bags/generate_noetic_bags.sh
 
 The script runs the official `ros:noetic-ros-base` Docker image, installs the
 small message/compression packages needed by the generator, deletes existing
-`noetic-*.bag` files in this directory, and writes regenerated bags here.
+`noetic-*.bag` files in `testdata/bags/generated/`, and writes regenerated bags
+there.
 
 Parser edge cases that cannot be produced through the public `rosbag.Bag` writer
 API, such as a connection record with no messages, should stay as small

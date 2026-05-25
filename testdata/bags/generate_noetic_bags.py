@@ -42,7 +42,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("."),
+        default=Path("generated"),
         help="directory to write generated noetic-*.bag fixtures into",
     )
     args = parser.parse_args()
