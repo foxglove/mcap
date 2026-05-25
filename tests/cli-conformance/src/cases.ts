@@ -157,7 +157,8 @@ export const cases: CliTestCase[] = [
   },
   {
     id: "cat-json-unsupported-schema-errors",
-    description: "Cat --json accepts the flag and errors consistently for unsupported schema encodings.",
+    description:
+      "Cat --json accepts the flag and errors consistently for unsupported schema encodings.",
     tags: ["cat", "json"],
     invocation: { args: ["cat", ONE_MESSAGE, "--json"] },
     comparison: {
