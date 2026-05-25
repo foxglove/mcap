@@ -120,8 +120,8 @@ mod tests {
     use super::{build_write_options, detect_file_type, ros2_db3, InputFileType};
     use crate::cli::CompressionFormat;
 
-    const IRON_TALKER_DB3: &str = "../../testdata/db3/iron-talker.db3";
-    const HUMBLE_TALKER_DB3: &str = "../../testdata/db3/humble-talker.db3";
+    const IRON_TALKER_DB3: &str = "../../testdata/db3/talker-iron.db3";
+    const HUMBLE_TALKER_DB3: &str = "../../testdata/db3/talker-humble.db3";
 
     fn temp_input(name: &str, bytes: &[u8]) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!(
