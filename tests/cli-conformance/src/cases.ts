@@ -10,6 +10,7 @@ const ONE_SCHEMALESS =
 const TEN_MESSAGES = "{dataDir}/TenMessages/TenMessages-ch-chx-mx-pad-rch-rsh-st-sum.mcap";
 const ONE_ATTACHMENT = "{dataDir}/OneAttachment/OneAttachment-ax-st-sum.mcap";
 const ONE_METADATA = "{dataDir}/OneMetadata/OneMetadata-mdx-st-sum.mcap";
+const ROS2_EMBEDDED_SCHEMA_DB3 = "{repoRoot}/testdata/db3/talker-iron.db3";
 
 const HELP_PATHS = [
   ["add"],
@@ -518,6 +519,33 @@ export const cases: CliTestCase[] = [
       rustBehavior: {
         exitCode: 0,
         stdout: { kind: "matches", pattern: "^(?![\\s\\S]*ament-prefix-path)[\\s\\S]*$" },
+      },
+    },
+  },
+  {
+    id: "known-difference-convert-ros2-db3-embedded-schemas",
+    description:
+      "Rust converts self-contained ROS 2 db3 bags with embedded schemas; Go requires ament schemas.",
+    tags: ["known-difference", "convert", "ros2"],
+    invocation: {
+      args: ["convert", ROS2_EMBEDDED_SCHEMA_DB3, "converted.mcap", "--compression", "none"],
+      env: { AMENT_PREFIX_PATH: "" },
+    },
+    knownDifference: {
+      id: "convert-ros2-db3-embedded-schemas",
+      summary:
+        "Rust convert reads embedded ROS 2 db3 schemas, while Go convert ignores them and requires ament lookup.",
+      reason:
+        "The Rust replacement intentionally supports self-contained db3 conversion and omits brittle ament lookup; the legacy Go converter predates embedded db3 schemas.",
+      desiredBehavior:
+        "Rust convert should continue to convert self-contained ROS 2 db3 bags without requiring a ROS workspace.",
+      goBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "schema not found" },
+      },
+      rustBehavior: {
+        exitCode: 0,
+        files: [{ path: "converted.mcap", exists: true }],
       },
     },
   },

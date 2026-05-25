@@ -171,11 +171,10 @@ safe local test double is available:
 - Remote URI reads (`s3://` and `gs://`): the Go CLI has remote reader plumbing
   and the Rust CLI is local-only today, but an executable parity case should not
   depend on real cloud credentials or network state.
-- ROS 1/ROS 2 conversion parity: the Go CLI supports ament-based ROS 2 DB3
-  conversion for legacy bags, while the Rust CLI intentionally supports only
-  self-contained ROS 2 DB3 bags with embedded message definitions. Add executable
-  conversion cases when this directory has tiny deterministic `.bag`/`.db3`
-  fixtures or generated equivalents.
+- ROS 1/ROS 2 conversion parity: embedded-schema ROS 2 DB3 conversion is covered
+  as a known Go/Rust difference, but full positive parity coverage for legacy
+  ament-based DB3 conversion still needs either a fake ament schema tree or
+  generated `.bag`/`.db3` fixtures.
 - Recover raw chunk passthrough behavior: Rust still has a documented recover
   gap around raw chunk passthrough. Add a focused corrupt/chunk fixture before
   making that behavior executable in this suite.
