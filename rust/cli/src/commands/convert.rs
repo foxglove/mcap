@@ -77,19 +77,27 @@ fn build_write_options(
 fn detect_file_type(path: &Path) -> Result<InputFileType> {
     const ROS1_BAG_MAGIC: &[u8] = b"#ROSBAG V2.0\n";
     const SQLITE_MAGIC: &[u8] = b"SQLite format 3\0";
+    const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
     let mut input =
         File::open(path).with_context(|| format!("failed to open input '{}'", path.display()))?;
-    let mut magic = [0u8; 16];
+    let mut magic = [0u8; 64];
     let bytes_read = input
         .read(&mut magic)
         .with_context(|| format!("failed to read input magic from '{}'", path.display()))?;
+    let magic = &magic[..bytes_read];
 
-    if bytes_read >= ROS1_BAG_MAGIC.len() && &magic[..ROS1_BAG_MAGIC.len()] == ROS1_BAG_MAGIC {
+    if magic.starts_with(ROS1_BAG_MAGIC) {
         return Ok(InputFileType::Ros1Bag);
     }
-    if bytes_read >= SQLITE_MAGIC.len() && &magic[..SQLITE_MAGIC.len()] == SQLITE_MAGIC {
+    if magic.starts_with(SQLITE_MAGIC) {
         return Ok(InputFileType::Ros2Db3);
+    }
+    if magic.starts_with(GIT_LFS_POINTER_PREFIX) {
+        bail!(
+            "input '{}' appears to be a Git LFS pointer, not a bag file; run `git lfs pull` and try again",
+            path.display()
+        );
     }
 
     bail!(
@@ -255,6 +263,20 @@ mod tests {
         let err = detect_file_type(&path).expect_err("unknown input should fail");
         std::fs::remove_file(path).expect("remove temp input");
         assert!(err.to_string().contains("unsupported input file type"));
+    }
+
+    #[test]
+    fn rejects_git_lfs_pointer_before_output_creation() {
+        let path = temp_input(
+            "lfs-pointer.db3",
+            b"version https://git-lfs.github.com/spec/v1\n\
+oid sha256:0000000000000000000000000000000000000000000000000000000000000000\n\
+size 123\n",
+        );
+        let err = detect_file_type(&path).expect_err("LFS pointer should fail");
+        std::fs::remove_file(path).expect("remove temp input");
+        assert!(err.to_string().contains("Git LFS pointer"));
+        assert!(err.to_string().contains("git lfs pull"));
     }
 
     #[test]
