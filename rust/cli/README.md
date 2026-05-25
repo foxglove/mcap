@@ -72,6 +72,14 @@ port is still pre-production:
    - ULog is a self-describing binary log format with embedded message
      definitions, so it should fit the same extension-based `mcap convert`
      dispatch model used for ROS 1 bag and ROS 2 db3 inputs.
+6. Convert output paths and multiple inputs:
+   - Current Go-compatible `mcap convert` requires exactly one input path and one
+     output path.
+   - Before Rust CLI 1.0, consider making the output path optional. When omitted,
+     write a sibling file next to each input by replacing the input extension
+     with `.mcap`.
+   - This would also allow `mcap convert` to accept multiple input paths in one
+     invocation, including wildcard-expanded paths from the user's shell.
 
 ## Intentional divergences from Go CLI
 
