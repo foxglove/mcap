@@ -554,9 +554,6 @@ impl Ros1MessageDef {
         let mut cursor = 0usize;
         let mut out = Vec::new();
         self.write_message(&mut out, &self.root_type, data, &mut cursor)?;
-        if cursor > data.len() {
-            bail!("ROS1 decoder read past end of message");
-        }
         Ok(out)
     }
 
