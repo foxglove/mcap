@@ -1,12 +1,10 @@
 use std::collections::BTreeMap;
 use std::fs::File;
 use std::io::BufWriter;
-use std::io::{Cursor, ErrorKind, Read, Seek};
+use std::io::{Cursor, Read, Seek};
 use std::path::Path;
 
 use anyhow::{bail, ensure, Context, Result};
-
-use super::GIT_LFS_POINTER_PREFIX;
 
 const BAG_MAGIC: &[u8] = b"#ROSBAG V2.0\n";
 
@@ -100,21 +98,6 @@ fn read_and_validate_ros1_bag_magic<R: Read + Seek>(input: &mut R) -> Result<()>
         .context("failed to read ROS1 bag magic")?;
     if magic == BAG_MAGIC {
         return Ok(());
-    }
-
-    input
-        .rewind()
-        .context("failed to rewind input after failed ROS1 bag magic check")?;
-    let mut lfs_prefix = vec![0u8; GIT_LFS_POINTER_PREFIX.len()];
-    match input.read_exact(&mut lfs_prefix) {
-        Ok(()) if lfs_prefix == GIT_LFS_POINTER_PREFIX => {
-            bail!(
-                "input appears to be a Git LFS pointer, not a ROS1 bag; run `git lfs pull` and try again"
-            );
-        }
-        Err(err) if err.kind() == ErrorKind::UnexpectedEof => {}
-        Err(err) => return Err(err).context("failed to read input for Git LFS pointer check"),
-        _ => {}
     }
 
     bail!("invalid ROS1 bag magic (expected '#ROSBAG V2.0\\n')")
@@ -504,13 +487,6 @@ mod tests {
         out
     }
 
-    fn git_lfs_pointer() -> Vec<u8> {
-        b"version https://git-lfs.github.com/spec/v1\n\
-oid sha256:0000000000000000000000000000000000000000000000000000000000000000\n\
-size 123\n"
-            .to_vec()
-    }
-
     fn convert_ros1_bag_for_test<W: std::io::Write + Seek, R: Read + Seek>(
         output: W,
         mut input: R,
@@ -807,25 +783,6 @@ size 123\n"
         let mut reader = Cursor::new(bytes);
         let err = read_record(&mut reader).expect_err("oversized data should fail");
         assert!(err.to_string().contains("record data length"));
-    }
-
-    #[test]
-    fn validate_ros1_bag_magic_reports_git_lfs_pointer() {
-        let mut input = Cursor::new(git_lfs_pointer());
-        let err =
-            read_and_validate_ros1_bag_magic(&mut input).expect_err("LFS pointer should fail");
-        assert!(err.to_string().contains("Git LFS pointer"));
-        assert!(err.to_string().contains("git lfs pull"));
-    }
-
-    #[test]
-    fn convert_ros1_bag_reports_git_lfs_pointer() {
-        let input = Cursor::new(git_lfs_pointer());
-        let output = Cursor::new(Vec::<u8>::new());
-        let err = convert_ros1_bag_for_test(output, input, mcap::WriteOptions::new())
-            .expect_err("LFS pointer should fail");
-        assert!(err.to_string().contains("Git LFS pointer"));
-        assert!(err.to_string().contains("git lfs pull"));
     }
 
     #[test]
