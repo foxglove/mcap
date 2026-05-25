@@ -44,17 +44,6 @@ pub fn convert_ros2_db3_file(
     convert_open_ros2_db3(BufWriter::new(output), &db, plan, write_options)
 }
 
-#[cfg(test)]
-pub fn convert_ros2_db3<W: Write + Seek>(
-    output: W,
-    input_path: &Path,
-    write_options: mcap::WriteOptions,
-) -> Result<()> {
-    let db = open_db(input_path)?;
-    let plan = read_conversion_plan(&db)?;
-    convert_open_ros2_db3(output, &db, plan, write_options)
-}
-
 fn open_db(input_path: &Path) -> Result<Connection> {
     validate_sqlite_magic(input_path)?;
     Connection::open_with_flags(input_path, OpenFlags::SQLITE_OPEN_READ_ONLY)

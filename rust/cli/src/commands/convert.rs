@@ -194,6 +194,13 @@ mod tests {
         ))
     }
 
+    fn convert_ros2_db3_fixture(path: &Path) -> Vec<u8> {
+        let output = TempOutput::new("ros2-db3");
+        let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
+        ros2_db3::convert_ros2_db3_file(path, &output.path, opts).expect("convert ROS 2 db3");
+        fs::read(&output.path).expect("read converted MCAP")
+    }
+
     fn build_sample_mcap(include_crc: bool) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         let opts = build_write_options(CompressionFormat::None, 1024, include_crc, true, "ros1");
@@ -358,13 +365,7 @@ size 123\n",
 
     #[test]
     fn converts_iron_talker_db3_with_embedded_schemas() {
-        let mut output = Cursor::new(Vec::new());
-        let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
-
-        ros2_db3::convert_ros2_db3(&mut output, Path::new(IRON_TALKER_DB3), opts)
-            .expect("convert iron db3");
-
-        let bytes = output.into_inner();
+        let bytes = convert_ros2_db3_fixture(Path::new(IRON_TALKER_DB3));
         let summary = mcap::Summary::read(&bytes)
             .expect("summary read")
             .expect("summary present");
@@ -388,10 +389,10 @@ size 123\n",
 
     #[test]
     fn rejects_humble_talker_db3_without_embedded_schemas() {
-        let mut output = Cursor::new(Vec::new());
+        let output = TempOutput::new("humble-ros2-db3");
         let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
 
-        let err = ros2_db3::convert_ros2_db3(&mut output, Path::new(HUMBLE_TALKER_DB3), opts)
+        let err = ros2_db3::convert_ros2_db3_file(Path::new(HUMBLE_TALKER_DB3), &output.path, opts)
             .expect_err("humble db3 should fail");
 
         assert!(err
@@ -403,10 +404,10 @@ size 123\n",
     #[test]
     fn rejects_db3_extension_with_invalid_sqlite_magic_during_conversion() {
         let path = temp_input("invalid.db3", b"not sqlite");
-        let mut output = Cursor::new(Vec::new());
+        let output = TempOutput::new("invalid-ros2-db3");
         let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
 
-        let err = ros2_db3::convert_ros2_db3(&mut output, &path, opts)
+        let err = ros2_db3::convert_ros2_db3_file(&path, &output.path, opts)
             .expect_err("invalid sqlite magic should fail");
 
         assert!(err.to_string().contains("invalid ROS 2 db3 magic"));
@@ -467,10 +468,10 @@ size 123\n",
             db.execute("CREATE TABLE unrelated(id INTEGER PRIMARY KEY)", [])
                 .expect("create unrelated table");
         }
-        let mut output = Cursor::new(Vec::new());
+        let output = TempOutput::new("not-a-rosbag2");
         let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
 
-        let err = ros2_db3::convert_ros2_db3(&mut output, &sqlite_path, opts)
+        let err = ros2_db3::convert_ros2_db3_file(&sqlite_path, &output.path, opts)
             .expect_err("non-rosbag2 sqlite should fail");
 
         assert!(err
@@ -496,10 +497,10 @@ size 123\n",
             )
             .expect("create topics table");
         }
-        let mut output = Cursor::new(Vec::new());
+        let output = TempOutput::new("not-a-rosbag2-no-messages");
         let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
 
-        let err = ros2_db3::convert_ros2_db3(&mut output, &sqlite_path, opts)
+        let err = ros2_db3::convert_ros2_db3_file(&sqlite_path, &output.path, opts)
             .expect_err("sqlite without messages should fail");
 
         assert!(err.to_string().contains("missing 'messages' table"));
@@ -550,13 +551,7 @@ size 123\n",
             )
             .expect("insert message");
         }
-        let mut output = Cursor::new(Vec::new());
-        let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
-
-        ros2_db3::convert_ros2_db3(&mut output, &sqlite_path, opts)
-            .expect("convert service event topic");
-
-        let bytes = output.into_inner();
+        let bytes = convert_ros2_db3_fixture(&sqlite_path);
         let summary = mcap::Summary::read(&bytes)
             .expect("summary read")
             .expect("summary present");
