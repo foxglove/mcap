@@ -110,10 +110,37 @@ pub struct AddCommand {
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
-#[command(arg_required_else_help = true)]
 pub struct CatCommand {
-    /// One or more local paths to MCAP files
+    /// One or more local paths to MCAP files. If omitted, reads from stdin.
     pub files: Vec<PathBuf>,
+
+    /// Comma-separated list of topics to include
+    #[arg(long = "topics", default_value = "")]
+    pub topics: String,
+
+    /// Include messages at or after this time (seconds)
+    #[arg(
+        long = "start-secs",
+        default_value_t = 0,
+        conflicts_with = "start_nsecs"
+    )]
+    pub start_secs: u64,
+
+    /// Include messages at or after this time (nanoseconds)
+    #[arg(long = "start-nsecs", default_value_t = 0)]
+    pub start_nsecs: u64,
+
+    /// Include messages before this time (seconds)
+    #[arg(long = "end-secs", default_value_t = 0, conflicts_with = "end_nsecs")]
+    pub end_secs: u64,
+
+    /// Include messages before this time (nanoseconds)
+    #[arg(long = "end-nsecs", default_value_t = 0)]
+    pub end_nsecs: u64,
+
+    /// Print messages as JSON. Supported message encodings: ros1, protobuf, and json.
+    #[arg(long = "json", default_value_t = false)]
+    pub json: bool,
 }
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]

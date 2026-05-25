@@ -1,11 +1,10 @@
-use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::io::{Cursor, Read, Seek};
-use std::sync::Arc;
+use std::io::{Cursor, ErrorKind, Read, Seek};
 
 use anyhow::{bail, ensure, Context, Result};
 
 const BAG_MAGIC: &[u8] = b"#ROSBAG V2.0\n";
+const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
 const OP_BAG_HEADER: u8 = 0x03;
 const OP_BAG_CHUNK: u8 = 0x05;
@@ -33,7 +32,7 @@ struct SchemaKey {
 
 #[derive(Debug, Clone)]
 struct ConnectionInfo {
-    channel: Arc<mcap::Channel<'static>>,
+    channel_id: u16,
 }
 
 #[derive(Debug, Clone)]
@@ -64,14 +63,7 @@ pub fn convert_ros1_bag<W: std::io::Write + Seek, R: Read + Seek>(
     mut input: R,
     write_options: mcap::WriteOptions,
 ) -> Result<()> {
-    let mut magic = vec![0u8; BAG_MAGIC.len()];
-    input
-        .read_exact(&mut magic)
-        .context("failed to read ROS1 bag magic")?;
-    ensure!(
-        magic == BAG_MAGIC,
-        "invalid ROS1 bag magic (expected '#ROSBAG V2.0\\n')"
-    );
+    read_and_validate_ros1_bag_magic(&mut input)?;
 
     let mut writer = write_options
         .create(output)
@@ -83,6 +75,42 @@ pub fn convert_ros1_bag<W: std::io::Write + Seek, R: Read + Seek>(
     })?;
 
     writer.finish().context("failed to finalize MCAP writer")?;
+    Ok(())
+}
+
+fn read_and_validate_ros1_bag_magic<R: Read + Seek>(input: &mut R) -> Result<()> {
+    let mut magic = vec![0u8; BAG_MAGIC.len()];
+    input
+        .read_exact(&mut magic)
+        .context("failed to read ROS1 bag magic")?;
+    if magic == BAG_MAGIC {
+        return Ok(());
+    }
+
+    input
+        .rewind()
+        .context("failed to rewind input after failed ROS1 bag magic check")?;
+    let mut lfs_prefix = vec![0u8; GIT_LFS_POINTER_PREFIX.len()];
+    match input.read_exact(&mut lfs_prefix) {
+        Ok(()) if lfs_prefix == GIT_LFS_POINTER_PREFIX => {
+            bail!(
+                "input appears to be a Git LFS pointer, not a ROS1 bag; run `git lfs pull` and try again"
+            );
+        }
+        Err(err) if err.kind() == ErrorKind::UnexpectedEof => {}
+        Err(err) => return Err(err).context("failed to read input for Git LFS pointer check"),
+        _ => {}
+    }
+
+    bail!("invalid ROS1 bag magic (expected '#ROSBAG V2.0\\n')")
+}
+
+#[cfg(test)]
+pub fn validate_ros1_bag_magic<R: Read + Seek>(input: &mut R) -> Result<()> {
+    read_and_validate_ros1_bag_magic(input)?;
+    input
+        .rewind()
+        .context("failed to rewind input after ROS1 bag magic check")?;
     Ok(())
 }
 
@@ -133,25 +161,12 @@ fn process_connection<W: std::io::Write + Seek>(
 
     let metadata = to_string_map(conn_data)?;
     let channel_id = conn_id_to_channel_id(conn_id)?;
-    let schema = mcap::Schema {
-        id: schema_id,
-        name: msg_type,
-        encoding: "ros1msg".to_string(),
-        data: Cow::Owned(message_definition),
-    };
-    let channel = mcap::Channel {
-        id: channel_id,
-        topic: topic.to_string(),
-        schema: Some(Arc::new(schema)),
-        message_encoding: "ros1".to_string(),
-        metadata,
-    };
-    state.connections.insert(
-        conn_id,
-        ConnectionInfo {
-            channel: Arc::new(channel),
-        },
-    );
+    writer
+        .add_channel_with_id(channel_id, schema_id, topic, "ros1", &metadata)
+        .context("failed to write ROS1 channel")?;
+    state
+        .connections
+        .insert(conn_id, ConnectionInfo { channel_id });
     Ok(())
 }
 
@@ -172,21 +187,16 @@ fn process_message<W: std::io::Write + Seek>(
     let Some(conn_info) = state.connections.get(&conn_id) else {
         bail!("message references unknown connection id {conn_id}");
     };
-    // We intentionally write via the high-level `Writer::write()` path (instead of
-    // `write_to_known_channel`) so we can preserve ROS `conn` IDs as MCAP channel IDs.
-    // `add_channel()` auto-assigns channel IDs, and `write_to_known_channel()` requires
-    // those writer-assigned IDs. We build the explicit channel once per ROS connection
-    // and Arc-clone it here, avoiding per-message topic/schema/metadata allocations
-    // while still keeping Go parity for conn->channel mapping.
-
     writer
-        .write(&mcap::Message {
-            channel: Arc::clone(&conn_info.channel),
-            sequence: state.sequence,
-            log_time,
-            publish_time: log_time,
-            data: Cow::Borrowed(data),
-        })
+        .write_to_known_channel(
+            &mcap::records::MessageHeader {
+                channel_id: conn_info.channel_id,
+                sequence: state.sequence,
+                log_time,
+                publish_time: log_time,
+            },
+            data,
+        )
         .context("failed to write converted ROS1 message")?;
     state.sequence = state.sequence.wrapping_add(1);
     Ok(())
@@ -450,9 +460,11 @@ mod tests {
     use anyhow::{Context, Result};
 
     use super::{
-        decompress_chunk, parse_header_fields, process_records, read_record, BAG_MAGIC, KEY_CONN,
-        KEY_MD5SUM, KEY_MESSAGE_DEFINITION, KEY_OP, KEY_TIME, KEY_TOPIC, KEY_TYPE,
-        MAX_RECORD_SECTION_SIZE, OP_BAG_CONNECTION, OP_BAG_HEADER, OP_BAG_MESSAGE_DATA,
+        convert_ros1_bag, decompress_chunk, parse_header_fields, process_records, read_record,
+        validate_ros1_bag_magic, BAG_MAGIC, KEY_COMPRESSION, KEY_CONN, KEY_MD5SUM,
+        KEY_MESSAGE_DEFINITION, KEY_OP, KEY_SIZE, KEY_TIME, KEY_TOPIC, KEY_TYPE,
+        MAX_RECORD_SECTION_SIZE, OP_BAG_CHUNK, OP_BAG_CONNECTION, OP_BAG_HEADER,
+        OP_BAG_MESSAGE_DATA,
     };
 
     fn encode_field_bytes(key: &str, value: &[u8]) -> Vec<u8> {
@@ -484,6 +496,13 @@ mod tests {
         out[0..4].copy_from_slice(&secs.to_le_bytes());
         out[4..8].copy_from_slice(&nsecs.to_le_bytes());
         out
+    }
+
+    fn git_lfs_pointer() -> Vec<u8> {
+        b"version https://git-lfs.github.com/spec/v1\n\
+oid sha256:0000000000000000000000000000000000000000000000000000000000000000\n\
+size 123\n"
+            .to_vec()
     }
 
     fn synthetic_bag_with_two_connections_same_schema() -> Vec<u8> {
@@ -547,6 +566,173 @@ mod tests {
         bag
     }
 
+    fn synthetic_bag_with_connection_without_messages() -> Vec<u8> {
+        let mut bag = Vec::new();
+        bag.extend_from_slice(BAG_MAGIC);
+        bag.extend(encode_record(
+            vec![encode_field_bytes(KEY_OP, &[OP_BAG_HEADER])],
+            &[],
+        ));
+
+        let topic = "/unused";
+        let conn_data = [
+            encode_field_string(KEY_TOPIC, topic),
+            encode_field_string(KEY_TYPE, "demo_msgs/Unused"),
+            encode_field_string(KEY_MD5SUM, "unused-md5"),
+            encode_field_string(KEY_MESSAGE_DEFINITION, "uint32 value\n"),
+        ]
+        .concat();
+        bag.extend(encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
+                encode_field_bytes(KEY_CONN, &7u32.to_le_bytes()),
+                encode_field_string(KEY_TOPIC, topic),
+            ],
+            &conn_data,
+        ));
+        bag
+    }
+
+    fn synthetic_bag_with_duplicate_channel_content() -> Vec<u8> {
+        let mut bag = Vec::new();
+        bag.extend_from_slice(BAG_MAGIC);
+        bag.extend(encode_record(
+            vec![encode_field_bytes(KEY_OP, &[OP_BAG_HEADER])],
+            &[],
+        ));
+
+        let topic = "/same";
+        let conn_data = [
+            encode_field_string(KEY_TOPIC, topic),
+            encode_field_string(KEY_TYPE, "demo_msgs/Msg"),
+            encode_field_string(KEY_MD5SUM, "abc123"),
+            encode_field_string(KEY_MESSAGE_DEFINITION, "uint8 data\n"),
+        ]
+        .concat();
+
+        for conn_id in [0u32, 1u32] {
+            bag.extend(encode_record(
+                vec![
+                    encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
+                    encode_field_bytes(KEY_CONN, &conn_id.to_le_bytes()),
+                    encode_field_string(KEY_TOPIC, topic),
+                ],
+                &conn_data,
+            ));
+        }
+
+        for (conn_id, time, data) in [(0u32, 2u32, 0x11u8), (1u32, 3u32, 0x22u8)] {
+            bag.extend(encode_record(
+                vec![
+                    encode_field_bytes(KEY_OP, &[OP_BAG_MESSAGE_DATA]),
+                    encode_field_bytes(KEY_CONN, &conn_id.to_le_bytes()),
+                    encode_field_bytes(KEY_TIME, &encode_ros_time(1, time)),
+                ],
+                &[data],
+            ));
+        }
+        bag
+    }
+
+    fn synthetic_bag_with_duplicate_connection_inside_chunk() -> Vec<u8> {
+        let mut bag = Vec::new();
+        bag.extend_from_slice(BAG_MAGIC);
+        bag.extend(encode_record(
+            vec![encode_field_bytes(KEY_OP, &[OP_BAG_HEADER])],
+            &[],
+        ));
+
+        let topic = "/chunked";
+        let conn_data = [
+            encode_field_string(KEY_TOPIC, topic),
+            encode_field_string(KEY_TYPE, "demo_msgs/Msg"),
+            encode_field_string(KEY_MD5SUM, "abc123"),
+            encode_field_string(KEY_MESSAGE_DEFINITION, "uint8 data\n"),
+        ]
+        .concat();
+        let conn_record = encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
+                encode_field_bytes(KEY_CONN, &0u32.to_le_bytes()),
+                encode_field_string(KEY_TOPIC, topic),
+            ],
+            &conn_data,
+        );
+
+        bag.extend_from_slice(&conn_record);
+
+        let mut chunk_data = Vec::new();
+        chunk_data.extend_from_slice(&conn_record);
+        chunk_data.extend(encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_MESSAGE_DATA]),
+                encode_field_bytes(KEY_CONN, &0u32.to_le_bytes()),
+                encode_field_bytes(KEY_TIME, &encode_ros_time(1, 2)),
+            ],
+            &[0x11],
+        ));
+        bag.extend(encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CHUNK]),
+                encode_field_string(KEY_COMPRESSION, "none"),
+                encode_field_bytes(KEY_SIZE, &(chunk_data.len() as u32).to_le_bytes()),
+            ],
+            &chunk_data,
+        ));
+        bag
+    }
+
+    fn synthetic_bag_with_conflicting_duplicate_connection_inside_chunk() -> Vec<u8> {
+        let mut bag = Vec::new();
+        bag.extend_from_slice(BAG_MAGIC);
+        bag.extend(encode_record(
+            vec![encode_field_bytes(KEY_OP, &[OP_BAG_HEADER])],
+            &[],
+        ));
+
+        let conn_data = [
+            encode_field_string(KEY_TOPIC, "/outer"),
+            encode_field_string(KEY_TYPE, "demo_msgs/Outer"),
+            encode_field_string(KEY_MD5SUM, "outer-md5"),
+            encode_field_string(KEY_MESSAGE_DEFINITION, "uint8 data\n"),
+        ]
+        .concat();
+        let conn_record = encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
+                encode_field_bytes(KEY_CONN, &0u32.to_le_bytes()),
+                encode_field_string(KEY_TOPIC, "/outer"),
+            ],
+            &conn_data,
+        );
+        bag.extend_from_slice(&conn_record);
+
+        let conflicting_conn_data = [
+            encode_field_string(KEY_TOPIC, "/inner"),
+            encode_field_string(KEY_TYPE, "demo_msgs/Inner"),
+            encode_field_string(KEY_MD5SUM, "inner-md5"),
+            encode_field_string(KEY_MESSAGE_DEFINITION, "uint32 data\n"),
+        ]
+        .concat();
+        let chunk_data = encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
+                encode_field_bytes(KEY_CONN, &0u32.to_le_bytes()),
+                encode_field_string(KEY_TOPIC, "/inner"),
+            ],
+            &conflicting_conn_data,
+        );
+        bag.extend(encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CHUNK]),
+                encode_field_string(KEY_COMPRESSION, "none"),
+                encode_field_bytes(KEY_SIZE, &(chunk_data.len() as u32).to_le_bytes()),
+            ],
+            &chunk_data,
+        ));
+        bag
+    }
+
     fn fixture_path(relative_from_repo_root: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -606,6 +792,24 @@ mod tests {
         let mut reader = Cursor::new(bytes);
         let err = read_record(&mut reader).expect_err("oversized data should fail");
         assert!(err.to_string().contains("record data length"));
+    }
+
+    #[test]
+    fn validate_ros1_bag_magic_reports_git_lfs_pointer() {
+        let mut input = Cursor::new(git_lfs_pointer());
+        let err = validate_ros1_bag_magic(&mut input).expect_err("LFS pointer should fail");
+        assert!(err.to_string().contains("Git LFS pointer"));
+        assert!(err.to_string().contains("git lfs pull"));
+    }
+
+    #[test]
+    fn convert_ros1_bag_reports_git_lfs_pointer() {
+        let input = Cursor::new(git_lfs_pointer());
+        let output = Cursor::new(Vec::<u8>::new());
+        let err = convert_ros1_bag(output, input, mcap::WriteOptions::new())
+            .expect_err("LFS pointer should fail");
+        assert!(err.to_string().contains("Git LFS pointer"));
+        assert!(err.to_string().contains("git lfs pull"));
     }
 
     #[test]
@@ -713,6 +917,131 @@ mod tests {
         assert_eq!(messages[0].log_time, 1_000_000_002);
         assert_eq!(messages[1].log_time, 1_000_000_003);
         Ok(())
+    }
+
+    #[test]
+    fn convert_synthetic_bag_preserves_connection_without_messages() -> Result<()> {
+        let input = Cursor::new(synthetic_bag_with_connection_without_messages());
+        let mut output = Cursor::new(Vec::<u8>::new());
+        super::convert_ros1_bag(
+            &mut output,
+            input,
+            mcap::WriteOptions::new().profile("ros1").compression(None),
+        )?;
+        output.seek(SeekFrom::Start(0))?;
+        let mut bytes = Vec::new();
+        output.read_to_end(&mut bytes)?;
+
+        let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
+        assert_eq!(summary.schemas.len(), 1);
+        assert_eq!(summary.channels.len(), 1);
+        let channel = summary.channels.get(&7).expect("channel 7 should exist");
+        assert_eq!(channel.topic, "/unused");
+        assert_eq!(channel.message_encoding, "ros1");
+        assert_eq!(
+            channel
+                .schema
+                .as_ref()
+                .expect("channel schema should exist")
+                .name,
+            "demo_msgs/Unused"
+        );
+        assert_eq!(channel.metadata.get("topic"), Some(&"/unused".to_string()));
+        assert_eq!(
+            channel.metadata.get("md5sum"),
+            Some(&"unused-md5".to_string())
+        );
+        let messages = mcap::MessageStream::new(&bytes)?.collect::<mcap::McapResult<Vec<_>>>()?;
+        assert!(messages.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn convert_synthetic_bag_preserves_duplicate_channel_content_ids() -> Result<()> {
+        let input = Cursor::new(synthetic_bag_with_duplicate_channel_content());
+        let mut output = Cursor::new(Vec::<u8>::new());
+        super::convert_ros1_bag(
+            &mut output,
+            input,
+            mcap::WriteOptions::new().profile("ros1").compression(None),
+        )?;
+        output.seek(SeekFrom::Start(0))?;
+        let mut bytes = Vec::new();
+        output.read_to_end(&mut bytes)?;
+
+        let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
+        assert_eq!(summary.schemas.len(), 1);
+        assert_eq!(summary.channels.len(), 2);
+        let channel0 = summary.channels.get(&0).expect("channel 0 should exist");
+        let channel1 = summary.channels.get(&1).expect("channel 1 should exist");
+        assert_eq!(channel0.topic, "/same");
+        assert_eq!(channel1.topic, "/same");
+        assert_eq!(channel0.message_encoding, "ros1");
+        assert_eq!(channel1.message_encoding, "ros1");
+        assert_eq!(channel0.metadata, channel1.metadata);
+        assert_eq!(
+            channel0
+                .schema
+                .as_ref()
+                .expect("channel 0 schema should exist")
+                .id,
+            channel1
+                .schema
+                .as_ref()
+                .expect("channel 1 schema should exist")
+                .id
+        );
+
+        let messages = mcap::MessageStream::new(&bytes)?.collect::<mcap::McapResult<Vec<_>>>()?;
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].channel.id, 0);
+        assert_eq!(messages[1].channel.id, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn convert_synthetic_bag_accepts_duplicate_connection_inside_chunk() -> Result<()> {
+        let input = Cursor::new(synthetic_bag_with_duplicate_connection_inside_chunk());
+        let mut output = Cursor::new(Vec::<u8>::new());
+        super::convert_ros1_bag(
+            &mut output,
+            input,
+            mcap::WriteOptions::new().profile("ros1").compression(None),
+        )?;
+        output.seek(SeekFrom::Start(0))?;
+        let mut bytes = Vec::new();
+        output.read_to_end(&mut bytes)?;
+
+        let summary = mcap::Summary::read(&bytes)?.expect("expected summary");
+        assert_eq!(summary.schemas.len(), 1);
+        assert_eq!(summary.channels.len(), 1);
+        let channel = summary.channels.get(&0).expect("channel 0 should exist");
+        assert_eq!(channel.topic, "/chunked");
+        assert_eq!(channel.message_encoding, "ros1");
+
+        let messages = mcap::MessageStream::new(&bytes)?.collect::<mcap::McapResult<Vec<_>>>()?;
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].channel.id, 0);
+        assert_eq!(messages[0].log_time, 1_000_000_002);
+        Ok(())
+    }
+
+    #[test]
+    fn convert_synthetic_bag_rejects_conflicting_duplicate_connection_inside_chunk() {
+        let input = Cursor::new(synthetic_bag_with_conflicting_duplicate_connection_inside_chunk());
+        let mut output = Cursor::new(Vec::<u8>::new());
+        let err = super::convert_ros1_bag(
+            &mut output,
+            input,
+            mcap::WriteOptions::new().profile("ros1").compression(None),
+        )
+        .expect_err("conflicting duplicate connection should fail");
+
+        assert!(err.to_string().contains("failed to write ROS1 channel"));
+        assert!(err
+            .root_cause()
+            .to_string()
+            .contains("multiple records that don't match"));
     }
 
     #[test]
