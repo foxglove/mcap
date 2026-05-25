@@ -152,12 +152,6 @@ fn validate_schema_coverage(
 ) -> Result<HashMap<String, MessageDefinitionRecord>> {
     let mut definitions_by_type = HashMap::new();
     for definition in message_definitions {
-        ensure!(
-            definition.encoding == "ros2msg" || definition.encoding == "ros2idl",
-            "unsupported ROS 2 message definition encoding '{}' for type {}",
-            definition.encoding,
-            definition.topic_type
-        );
         if definitions_by_type
             .insert(definition.topic_type.clone(), definition.clone())
             .is_some()
@@ -176,13 +170,20 @@ fn validate_schema_coverage(
             topic.serialization_format,
             topic.name
         );
-        if !definitions_by_type.contains_key(&topic.typ) {
-            bail!(
+        let definition = definitions_by_type.get(&topic.typ).ok_or_else(|| {
+            anyhow::anyhow!(
                 "ROS 2 db3 topic '{}' has type '{}' but the bag's embedded message definitions do not include that type. Use `ros2 bag convert` from a sourced ROS 2 workspace with the rosbag2_storage_mcap plugin instead.",
                 topic.name,
                 topic.typ
-            );
-        }
+            )
+        })?;
+        ensure!(
+            definition.encoding == "ros2msg" || definition.encoding == "ros2idl",
+            "unsupported ROS 2 message definition encoding '{}' for topic '{}' with type {}",
+            definition.encoding,
+            topic.name,
+            topic.typ
+        );
     }
 
     Ok(definitions_by_type)
@@ -568,6 +569,68 @@ mod tests {
             .schemas
             .values()
             .any(|schema| schema.name == "example_interfaces/srv/AddTwoInts_Event"));
+        fs::remove_file(sqlite_path).expect("remove temp sqlite");
+    }
+
+    #[test]
+    fn ignores_unused_definitions_with_unknown_encoding() {
+        let sqlite_path = temp_path("unused-future-definition.db3");
+        let _ = fs::remove_file(&sqlite_path);
+        {
+            let db = rusqlite::Connection::open(&sqlite_path).expect("create sqlite db");
+            db.execute_batch(
+                "CREATE TABLE topics(
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    serialization_format TEXT NOT NULL
+                );
+                CREATE TABLE message_definitions(
+                    id INTEGER PRIMARY KEY,
+                    topic_type TEXT NOT NULL,
+                    encoding TEXT NOT NULL,
+                    encoded_message_definition TEXT NOT NULL,
+                    type_description_hash TEXT NOT NULL
+                );
+                CREATE TABLE messages(
+                    id INTEGER PRIMARY KEY,
+                    topic_id INTEGER NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    data BLOB NOT NULL
+                );",
+            )
+            .expect("create db3 tables");
+            db.execute(
+                "INSERT INTO topics(id, name, type, serialization_format) VALUES(1, '/topic', 'std_msgs/msg/String', 'cdr')",
+                [],
+            )
+            .expect("insert topic");
+            db.execute(
+                "INSERT INTO message_definitions(id, topic_type, encoding, encoded_message_definition, type_description_hash) VALUES(1, 'std_msgs/msg/String', 'ros2msg', 'string data', '')",
+                [],
+            )
+            .expect("insert used message definition");
+            db.execute(
+                "INSERT INTO message_definitions(id, topic_type, encoding, encoded_message_definition, type_description_hash) VALUES(2, 'future_msgs/msg/Unused', 'ros2future', 'uint8 data', '')",
+                [],
+            )
+            .expect("insert unused message definition");
+            db.execute(
+                "INSERT INTO messages(topic_id, timestamp, data) VALUES(1, 42, x'010203')",
+                [],
+            )
+            .expect("insert message");
+        }
+
+        let bytes = convert_fixture(&sqlite_path);
+        let summary = mcap::Summary::read(&bytes)
+            .expect("summary read")
+            .expect("summary present");
+        assert_eq!(summary.schemas.len(), 1);
+        assert!(summary
+            .schemas
+            .values()
+            .any(|schema| schema.name == "std_msgs/msg/String"));
         fs::remove_file(sqlite_path).expect("remove temp sqlite");
     }
 }
