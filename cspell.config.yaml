@@ -185,6 +185,9 @@ overrides:
       - addopts
       - xfail
       - pyyaml
+      - deadsnakes
+      - pyproject
+      - venv
 
   - filename: "python/**/*.rst"
     words:

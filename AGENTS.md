@@ -101,7 +101,7 @@ This is a library-only monorepo — there are no services to start. Development 
 ### Environment notes
 
 - **PATH**: The update script ensures `$HOME/.local/bin` (for `uv`) and `$HOME/go/bin` (for `golangci-lint`) are on PATH via `~/.bashrc`. Ensure these are on PATH if running commands in a non-login shell.
-- **Rust toolchain**: The update script runs `rustup update stable && rustup default stable` to ensure the latest stable Rust is installed. The VM's pre-installed rustc 1.83 is too old for some transitive dependencies (e.g., `time` crate requires `edition2024` support).
+- **Rust toolchain**: The update script runs `rustup update stable && rustup default stable` to ensure the latest stable Rust is installed. The pre-installed rustc 1.83 on the VM is too old for some transitive dependencies (e.g., `time` crate requires `edition2024` support).
 - **Git LFS before Rust tests**: The update script runs `git lfs pull` first. Rust tests under `rust/mcap/tests/data/` depend on LFS-tracked `.mcap` fixtures; without them, tests fail with `InvalidMagic` errors.
 - **Python version**: The `python/pyproject.toml` requires `>=3.10,<3.11`. Python 3.10 is installed from the deadsnakes PPA. Use `uv run --python python3.10` or the venv at `python/.venv` directly.
 - **Prettier/fmt:check**: Running `yarn fmt:check` from the repo root will flag files inside `python/.venv/` because `.prettierignore` doesn't exclude it. This is expected in a dev environment; CI doesn't have the venv present. Lint individual TypeScript workspaces with `yarn workspace <name> lint:ci` instead.
