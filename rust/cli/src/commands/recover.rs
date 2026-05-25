@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{IsTerminal as _, Seek, Write};
 
 use anyhow::{bail, Context, Result};
-use mcap::records::{self, op, MessageIndex, MessageIndexEntry, Record};
+use mcap::records::{self, op, MessageIndex, MessageIndexEntry, Record, OPCODE_LEN_SIZE};
 use mcap::sans_io::{LinearReadEvent, LinearReader, LinearReaderOptions};
 
 use crate::cli::RecoverCommand;
@@ -32,6 +32,23 @@ struct RawChunk {
 enum RegistrationMode {
     WriteRecords,
     SummaryOnly,
+}
+
+#[derive(Debug, Clone)]
+enum ChunkDefinition {
+    Schema {
+        id: u16,
+        name: String,
+        encoding: String,
+        data: Vec<u8>,
+    },
+    Channel(records::Channel),
+}
+
+#[derive(Debug, Default, Clone)]
+struct ChunkScan {
+    definitions: Vec<ChunkDefinition>,
+    indexes: Vec<MessageIndex>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,6 +180,7 @@ fn recover_records<W: Write + Seek>(
     let mut saw_any_record = false;
     let mut pending_chunk: Option<RawChunk> = None;
     let mut pending_indexes = Vec::new();
+    let mut decode_chunks = opts.always_decode_chunk;
 
     while let Some(event) = reader.next_event() {
         match event {
@@ -175,7 +193,7 @@ fn recover_records<W: Write + Seek>(
             }
             Ok(LinearReadEvent::Record { opcode, data }) => {
                 saw_any_record = true;
-                if !opts.always_decode_chunk && opcode != op::MESSAGE_INDEX {
+                if !decode_chunks && opcode != op::MESSAGE_INDEX {
                     flush_pending_chunk(
                         writer,
                         &mut state,
@@ -196,7 +214,7 @@ fn recover_records<W: Write + Seek>(
                     }
                 };
 
-                if !opts.always_decode_chunk {
+                if !decode_chunks {
                     match record {
                         Record::Chunk { header, data } => {
                             pending_chunk = Some(RawChunk {
@@ -208,16 +226,42 @@ fn recover_records<W: Write + Seek>(
                         }
                         Record::MessageIndex(index) => {
                             if pending_chunk.is_none() {
-                                bail!("got message index but no preceding chunk");
+                                eprintln!(
+                                    "Warning: got message index for channel {} but no preceding chunk; skipping",
+                                    index.channel_id
+                                );
+                                continue;
                             }
                             pending_indexes.push(index);
                             continue;
                         }
                         Record::DataEnd(_) | Record::Footer(_) => break,
+                        Record::Schema { .. } | Record::Channel(_) | Record::Message { .. } => {
+                            decode_chunks = true;
+                        }
                         _ => {}
                     }
-                } else if matches!(record, Record::DataEnd(_) | Record::Footer(_)) {
-                    break;
+                } else {
+                    match record {
+                        Record::Chunk { header, data } => {
+                            let mut chunk = Some(RawChunk {
+                                header,
+                                data: data.into_owned(),
+                            });
+                            let mut indexes = Vec::new();
+                            flush_pending_chunk(
+                                writer,
+                                &mut state,
+                                &mut stats,
+                                &mut chunk,
+                                &mut indexes,
+                                true,
+                            )?;
+                            continue;
+                        }
+                        Record::DataEnd(_) | Record::Footer(_) => break,
+                        _ => {}
+                    }
                 }
 
                 recover_record(
@@ -290,7 +334,17 @@ fn flush_pending_chunk<W: Write + Seek>(
         }
     };
 
-    writer.write_chunk_with_indexes(&chunk.header, &chunk.data, &indexes)?;
+    if let Err(err) = writer.write_chunk_with_indexes(&chunk.header, &chunk.data, &indexes) {
+        match err {
+            err @ (mcap::McapError::BadChunkLength { .. }
+            | mcap::McapError::DuplicateMessageIndex(_)) => {
+                eprintln!("Failed to write chunk, skipping: {err:#}");
+                pending_indexes.clear();
+                return Ok(());
+            }
+            err => return Err(err.into()),
+        }
+    }
     stats.messages += indexes
         .iter()
         .map(|index| index.records.len() as u64)
@@ -313,26 +367,61 @@ fn update_info_from_chunk<W: Write + Seek>(
     };
 
     let rebuilt_indexes = if needs_chunk_scan {
-        Some(scan_chunk_records(writer, state, chunk)?)
+        let scan = scan_chunk_records(chunk)?;
+        apply_chunk_definitions(writer, state, &scan.definitions)?;
+        Some(scan.indexes)
     } else {
         None
     };
 
+    // If indexes were supplied, the scan above is only needed for schema/channel side effects.
+    // The supplied index offsets remain authoritative for the copied raw chunk.
     Ok(match supplied_indexes {
         Some(indexes) => indexes.to_vec(),
         None => rebuilt_indexes.unwrap_or_default(),
     })
 }
 
-fn scan_chunk_records<W: Write + Seek>(
+fn apply_chunk_definitions<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     state: &mut RecoveryState,
-    chunk: &RawChunk,
-) -> Result<Vec<MessageIndex>> {
+    definitions: &[ChunkDefinition],
+) -> Result<()> {
+    for definition in definitions {
+        match definition {
+            ChunkDefinition::Schema {
+                id,
+                name,
+                encoding,
+                data,
+            } => register_schema(
+                writer,
+                state,
+                *id,
+                name,
+                encoding,
+                data.as_slice(),
+                RegistrationMode::SummaryOnly,
+            )?,
+            ChunkDefinition::Channel(channel) => {
+                register_channel(
+                    writer,
+                    state,
+                    channel.clone(),
+                    RegistrationMode::SummaryOnly,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn scan_chunk_records(chunk: &RawChunk) -> Result<ChunkScan> {
     let mut reader = LinearReader::for_chunk_with_crc_validation(chunk.header.clone(), false)
         .context("failed to create chunk reader")?;
     let mut remaining = chunk.data.as_slice();
     let mut rebuilt_indexes: BTreeMap<u16, Vec<MessageIndexEntry>> = BTreeMap::new();
+    let mut definitions = Vec::new();
     let mut uncompressed_offset = 0u64;
 
     while let Some(event) = reader.next_event() {
@@ -346,7 +435,7 @@ fn scan_chunk_records<W: Write + Seek>(
             }
             Ok(LinearReadEvent::Record { opcode, data }) => {
                 let record_offset = uncompressed_offset;
-                uncompressed_offset += 9 + data.len() as u64;
+                uncompressed_offset += OPCODE_LEN_SIZE as u64 + data.len() as u64;
                 let record = match mcap::parse_record(opcode, data) {
                     Ok(record) => record,
                     Err(err) => {
@@ -357,17 +446,16 @@ fn scan_chunk_records<W: Write + Seek>(
                     }
                 };
                 match record {
-                    Record::Schema { header, data } => register_schema(
-                        writer,
-                        state,
-                        header.id,
-                        &header.name,
-                        &header.encoding,
-                        data.as_ref(),
-                        RegistrationMode::SummaryOnly,
-                    )?,
+                    Record::Schema { header, data } => {
+                        definitions.push(ChunkDefinition::Schema {
+                            id: header.id,
+                            name: header.name,
+                            encoding: header.encoding,
+                            data: data.into_owned(),
+                        });
+                    }
                     Record::Channel(channel) => {
-                        register_channel(writer, state, channel, RegistrationMode::SummaryOnly)?;
+                        definitions.push(ChunkDefinition::Channel(channel));
                     }
                     Record::Message { header, .. } => {
                         rebuilt_indexes.entry(header.channel_id).or_default().push(
@@ -384,13 +472,16 @@ fn scan_chunk_records<W: Write + Seek>(
         }
     }
 
-    Ok(rebuilt_indexes
-        .into_iter()
-        .map(|(channel_id, records)| MessageIndex {
-            channel_id,
-            records,
-        })
-        .collect())
+    Ok(ChunkScan {
+        definitions,
+        indexes: rebuilt_indexes
+            .into_iter()
+            .map(|(channel_id, records)| MessageIndex {
+                channel_id,
+                records,
+            })
+            .collect(),
+    })
 }
 
 fn recover_record<W: Write + Seek>(
@@ -646,6 +737,34 @@ mod tests {
         output.into_inner()
     }
 
+    fn write_multi_chunk_input() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(128))
+                .create(&mut output)
+                .expect("writer");
+            let channel = writer
+                .add_channel(0, "multi", "json", &BTreeMap::new())
+                .expect("channel");
+            for i in 0..100 {
+                writer
+                    .write_to_known_channel(
+                        &MessageHeader {
+                            channel_id: channel,
+                            sequence: i,
+                            log_time: i as u64,
+                            publish_time: i as u64,
+                        },
+                        &[b'x'; 64],
+                    )
+                    .expect("write");
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
     fn recover_to_vec(input: &[u8], opts: &RecoverOptions) -> (Vec<u8>, super::RecoverStats) {
         let output = Cursor::new(Vec::new());
         let (stats, output) =
@@ -691,6 +810,26 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    fn top_level_chunk_ranges(bytes: &[u8]) -> Vec<(usize, usize)> {
+        let mut offset = mcap::MAGIC.len();
+        let limit = bytes.len().saturating_sub(mcap::MAGIC.len());
+        let mut ranges = Vec::new();
+        while offset + mcap::records::OPCODE_LEN_SIZE <= limit {
+            let opcode = bytes[offset];
+            let length = u64::from_le_bytes(
+                bytes[offset + 1..offset + mcap::records::OPCODE_LEN_SIZE]
+                    .try_into()
+                    .expect("record length bytes"),
+            ) as usize;
+            let record_len = mcap::records::OPCODE_LEN_SIZE + length;
+            if opcode == op::CHUNK {
+                ranges.push((offset, record_len));
+            }
+            offset += record_len;
+        }
+        ranges
     }
 
     fn default_options() -> RecoverOptions {
@@ -748,6 +887,38 @@ mod tests {
         let (output, stats) = recover_to_vec(&input, &opts);
         assert_eq!(collect_chunks(&output), collect_chunks(&input));
         assert_eq!(stats.messages, 300);
+        let summary = mcap::Summary::read(&output)
+            .expect("summary should parse")
+            .expect("summary should be present");
+        let summary_stats = summary.stats.expect("statistics should be present");
+        assert_eq!(summary_stats.message_count, 300);
+        assert_eq!(
+            summary_stats.channel_message_counts.values().sum::<u64>(),
+            300
+        );
+        assert_eq!(summary_stats.channel_message_counts.len(), 3);
+        assert!(summary
+            .chunk_indexes
+            .iter()
+            .all(|index| !index.message_index_offsets.is_empty()));
+    }
+
+    #[test]
+    fn flushes_last_complete_raw_chunk_after_truncated_following_chunk() {
+        let mut input = write_multi_chunk_input();
+        let original_chunks = collect_chunks(&input);
+        let chunk_ranges = top_level_chunk_ranges(&input);
+        assert!(
+            chunk_ranges.len() >= 2,
+            "test input should contain multiple chunks"
+        );
+        let (second_chunk_offset, second_chunk_len) = chunk_ranges[1];
+        input.truncate(second_chunk_offset + second_chunk_len / 2);
+
+        let (output, stats) = recover_to_vec(&input, &default_options());
+        assert_eq!(collect_chunks(&output), vec![original_chunks[0].clone()]);
+        assert!(stats.messages > 0);
+        assert!(stats.messages < 300);
     }
 
     #[test]

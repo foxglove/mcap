@@ -114,6 +114,8 @@ pub enum McapError {
     ConflictingChannels(String),
     #[error("Schema `{0}` has multiple records that don't match.")]
     ConflictingSchemas(String),
+    #[error("Chunk has multiple message index records for channel {0}")]
+    DuplicateMessageIndex(u16),
     #[error("Record parse failed")]
     Parse(#[from] binrw::Error),
     #[error("I/O error from writing, or reading a compression stream")]

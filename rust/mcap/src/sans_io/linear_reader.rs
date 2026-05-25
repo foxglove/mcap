@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use super::decompressor::Decompressor;
 use crate::{
-    records::{op, ChunkHeader},
+    records::{op, ChunkHeader, OPCODE_LEN_SIZE},
     sans_io::check_len,
     McapError, McapResult, MAGIC,
 };
@@ -57,9 +57,6 @@ struct ChunkState {
     // The CRC value that was read at the start of the chunk record.
     crc: u32,
 }
-
-// MCAP records start with an opcode (1 byte) and a 64-bit length (8 bytes).
-const OPCODE_LEN_SIZE: usize = 1 + 8;
 
 mod rw_buf {
     /// A private struct that encapsulates a buffer with start and end cursors.

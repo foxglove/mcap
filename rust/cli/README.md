@@ -22,7 +22,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | `info`       | 🟢     |                                                                                                                                        |
 | `list`       | 🟢     |                                                                                                                                        |
 | `merge`      | 🟢     |                                                                                                                                        |
-| `recover`    | 🟢     |                                                                                                                                        |
+| `recover`    | 🟢     | Preserves raw chunks by default for Go parity; use `--always-decode-chunk` to decode and rechunk output.                               |
 | `sort`       | 🟢     |                                                                                                                                        |
 | `version`    | 🟢     |                                                                                                                                        |
 
