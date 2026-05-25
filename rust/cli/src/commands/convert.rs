@@ -18,16 +18,8 @@ enum InputFileType {
 }
 
 pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
-    ensure!(
-        args.input != args.output,
-        "input and output paths must be different"
-    );
+    ensure_distinct_paths(&args.input, &args.output)?;
     let file_type = detect_file_type(&args.input)?;
-
-    let output = File::create(&args.output)
-        .with_context(|| format!("failed to open output '{}'", args.output.display()))?;
-    let writer = BufWriter::new(output);
-
     let opts = build_write_options(
         args.compression,
         args.chunk_size,
@@ -38,19 +30,14 @@ pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
 
     match file_type {
         InputFileType::Ros1Bag => {
-            let mut input = File::open(&args.input)
+            let input = File::open(&args.input)
                 .with_context(|| format!("failed to open input '{}'", args.input.display()))?;
-            validate_input(file_type, &mut input)?;
+            let output = File::create(&args.output)
+                .with_context(|| format!("failed to open output '{}'", args.output.display()))?;
+            let writer = BufWriter::new(output);
             ros1_bag::convert_ros1_bag(writer, input, opts)
         }
-        InputFileType::Ros2Db3 => ros2_db3::convert_ros2_db3(writer, &args.input, opts),
-    }
-}
-
-fn validate_input(file_type: InputFileType, input: &mut File) -> Result<()> {
-    match file_type {
-        InputFileType::Ros1Bag => ros1_bag::validate_ros1_bag_magic(input),
-        InputFileType::Ros2Db3 => Ok(()),
+        InputFileType::Ros2Db3 => ros2_db3::convert_ros2_db3_file(&args.input, &args.output, opts),
     }
 }
 
@@ -88,7 +75,7 @@ fn build_write_options(
 }
 
 fn detect_file_type(path: &Path) -> Result<InputFileType> {
-    const ROS1_BAG_MAGIC: &[u8] = b"#ROSBAG V2.0";
+    const ROS1_BAG_MAGIC: &[u8] = b"#ROSBAG V2.0\n";
     const SQLITE_MAGIC: &[u8] = b"SQLite format 3\0";
 
     let mut input =
@@ -106,9 +93,38 @@ fn detect_file_type(path: &Path) -> Result<InputFileType> {
     }
 
     bail!(
-        "unsupported input file type for '{}' (expected ROS1 bag or ROS2 SQLite db3 input)",
+        "unsupported input file type for '{}' (expected ROS 1 bag or ROS 2 SQLite db3 input)",
         path.display()
     );
+}
+
+fn ensure_distinct_paths(input: &Path, output: &Path) -> Result<()> {
+    let input_path = input
+        .canonicalize()
+        .with_context(|| format!("failed to resolve input path '{}'", input.display()))?;
+    let output_path = match output.canonicalize() {
+        Ok(path) => path,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            let parent = output.parent().unwrap_or_else(|| Path::new("."));
+            let file_name = output
+                .file_name()
+                .with_context(|| format!("invalid output path '{}'", output.display()))?;
+            parent
+                .canonicalize()
+                .with_context(|| format!("failed to resolve output parent '{}'", parent.display()))?
+                .join(file_name)
+        }
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("failed to resolve output path '{}'", output.display()));
+        }
+    };
+
+    ensure!(
+        input_path != output_path,
+        "input and output paths must be different"
+    );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -130,6 +146,13 @@ mod tests {
         ));
         std::fs::write(&path, bytes).expect("write temp input");
         path
+    }
+
+    fn temp_path(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "mcap-cli-convert-test-{}-{name}",
+            std::process::id()
+        ))
     }
 
     fn build_sample_mcap(include_crc: bool) -> Vec<u8> {
@@ -257,5 +280,44 @@ mod tests {
             .to_string()
             .contains("does not contain embedded message definitions"));
         assert!(err.to_string().contains("ros2 bag convert"));
+    }
+
+    #[test]
+    fn rejects_humble_talker_db3_without_truncating_existing_output() {
+        let output_path = temp_input("existing-output.mcap", b"keep me");
+        let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
+
+        let err = ros2_db3::convert_ros2_db3_file(Path::new(HUMBLE_TALKER_DB3), &output_path, opts)
+            .expect_err("humble db3 should fail");
+
+        assert!(err
+            .to_string()
+            .contains("does not contain embedded message definitions"));
+        assert_eq!(
+            std::fs::read(&output_path).expect("read existing output"),
+            b"keep me"
+        );
+        std::fs::remove_file(output_path).expect("remove temp output");
+    }
+
+    #[test]
+    fn rejects_sqlite_database_without_rosbag2_topics_table() {
+        let sqlite_path = temp_path("not-a-rosbag2.db3");
+        let _ = std::fs::remove_file(&sqlite_path);
+        {
+            let db = rusqlite::Connection::open(&sqlite_path).expect("create sqlite db");
+            db.execute("CREATE TABLE unrelated(id INTEGER PRIMARY KEY)", [])
+                .expect("create unrelated table");
+        }
+        let mut output = Cursor::new(Vec::new());
+        let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
+
+        let err = ros2_db3::convert_ros2_db3(&mut output, &sqlite_path, opts)
+            .expect_err("non-rosbag2 sqlite should fail");
+
+        assert!(err
+            .to_string()
+            .contains("does not look like a ROS 2 db3 bag"));
+        std::fs::remove_file(sqlite_path).expect("remove temp sqlite");
     }
 }

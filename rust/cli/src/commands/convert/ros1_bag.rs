@@ -86,21 +86,6 @@ pub fn convert_ros1_bag<W: std::io::Write + Seek, R: Read + Seek>(
     Ok(())
 }
 
-pub fn validate_ros1_bag_magic<R: Read + Seek>(input: &mut R) -> Result<()> {
-    let mut magic = vec![0u8; BAG_MAGIC.len()];
-    input
-        .read_exact(&mut magic)
-        .context("failed to read ROS1 bag magic")?;
-    ensure!(
-        magic == BAG_MAGIC,
-        "invalid ROS1 bag magic (expected '#ROSBAG V2.0\\n')"
-    );
-    input
-        .rewind()
-        .context("failed to rewind input after ROS1 bag magic check")?;
-    Ok(())
-}
-
 fn process_record<W: std::io::Write + Seek>(
     writer: &mut mcap::Writer<W>,
     state: &mut ConversionState,
