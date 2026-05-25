@@ -237,6 +237,71 @@ mod tests {
             let messages =
                 mcap::MessageStream::new(&bytes)?.collect::<mcap::McapResult<Vec<_>>>()?;
             assert_eq!(messages.len(), expected_messages, "{fixture}");
+            if expected_messages > 0 {
+                let chatter = summary
+                    .channels
+                    .values()
+                    .find(|channel| channel.topic == "/chatter")
+                    .unwrap_or_else(|| panic!("{fixture}: missing /chatter channel"));
+                assert_eq!(chatter.message_encoding, "ros1", "{fixture}");
+                assert_eq!(
+                    chatter
+                        .schema
+                        .as_ref()
+                        .expect("/chatter should have a schema")
+                        .name,
+                    "std_msgs/String",
+                    "{fixture}"
+                );
+
+                let numbers = summary
+                    .channels
+                    .values()
+                    .find(|channel| channel.topic == "/numbers")
+                    .unwrap_or_else(|| panic!("{fixture}: missing /numbers channel"));
+                assert_eq!(numbers.message_encoding, "ros1", "{fixture}");
+                assert_eq!(
+                    numbers
+                        .schema
+                        .as_ref()
+                        .expect("/numbers should have a schema")
+                        .name,
+                    "std_msgs/UInt32",
+                    "{fixture}"
+                );
+
+                assert_eq!(messages[0].channel.topic, "/chatter", "{fixture}");
+                assert_eq!(
+                    messages[0]
+                        .channel
+                        .schema
+                        .as_ref()
+                        .expect("first message schema")
+                        .name,
+                    "std_msgs/String",
+                    "{fixture}"
+                );
+                assert_eq!(messages[0].log_time, 1_000_000_002, "{fixture}");
+                assert_eq!(messages[0].data.as_ref(), b"\x05\0\0\0hello", "{fixture}");
+
+                assert_eq!(messages[1].channel.topic, "/numbers", "{fixture}");
+                assert_eq!(
+                    messages[1]
+                        .channel
+                        .schema
+                        .as_ref()
+                        .expect("second message schema")
+                        .name,
+                    "std_msgs/UInt32",
+                    "{fixture}"
+                );
+                assert_eq!(messages[1].log_time, 2_000_000_003, "{fixture}");
+                assert_eq!(messages[1].data.as_ref(), &42u32.to_le_bytes(), "{fixture}");
+
+                assert_eq!(messages[2].channel.topic, "/chatter", "{fixture}");
+                assert_eq!(messages[2].log_time, 3_000_000_004, "{fixture}");
+                assert_eq!(messages[2].data.as_ref(), b"\x05\0\0\0world", "{fixture}");
+            }
             let _ = fs::remove_file(&output);
         }
 
