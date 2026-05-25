@@ -1,4 +1,4 @@
-/* cspell:words pprof */
+/* cspell:words pprof testdata */
 
 import type { CliTestCase } from "./types.ts";
 
