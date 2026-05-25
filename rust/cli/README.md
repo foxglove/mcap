@@ -58,6 +58,9 @@ port is still pre-production:
      such as `convert`, `filter`, `merge`, `recover`, and `sort`.
    - Before Rust CLI 1.0, decide whether output-producing commands should fail
      when the output path exists unless the user passes `--force` / `-f`.
+   - Write output-producing commands through a temporary sibling file and rename
+     it into place only after successful completion, so failures do not leave a
+     partial output at the requested path.
    - Apply the policy consistently so users do not have to remember separate
      overwrite behavior per command.
 4. Git LFS pointer detection:
