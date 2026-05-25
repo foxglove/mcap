@@ -171,10 +171,10 @@ safe local test double is available:
 - Remote URI reads (`s3://` and `gs://`): the Go CLI has remote reader plumbing
   and the Rust CLI is local-only today, but an executable parity case should not
   depend on real cloud credentials or network state.
-- ROS1/ROS2 conversion parity: the Go CLI supports ROS1 bag and ROS2 DB3 input,
-  while the Rust CLI currently supports ROS1 bag input only. Add executable
-  conversion cases when this directory has tiny deterministic `.bag`/`.db3`
-  fixtures or generated equivalents.
+- ROS2 conversion parity: the Go CLI supports ROS2 DB3 input, while the Rust
+  CLI currently supports ROS1 bag input only. Add executable conversion cases
+  when this directory has tiny deterministic `.db3` fixtures or generated
+  equivalents.
 - Recover raw chunk passthrough behavior: Rust still has a documented recover
   gap around raw chunk passthrough. Add a focused corrupt/chunk fixture before
   making that behavior executable in this suite.
