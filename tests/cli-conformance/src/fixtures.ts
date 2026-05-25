@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { makeProtobufJsonMcap } from "./protobufJsonFixture.ts";
+import { makeRos1JsonMcap } from "./ros1JsonFixture.ts";
 import type { FixtureAction, PathContext } from "./types.ts";
 
 const PLACEHOLDER_PATTERN = /\{(repoRoot|dataDir|workDir|caseWorkDir)\}/g;
@@ -49,6 +50,12 @@ export async function applyFixtureActions(
         const to = resolvePlaceholders(action.to, context);
         await fs.mkdir(path.dirname(to), { recursive: true });
         await fs.writeFile(to, makeProtobufJsonMcap(action));
+        break;
+      }
+      case "writeRos1JsonMcap": {
+        const to = resolvePlaceholders(action.to, context);
+        await fs.mkdir(path.dirname(to), { recursive: true });
+        await fs.writeFile(to, makeRos1JsonMcap(action));
         break;
       }
       case "mkdir": {

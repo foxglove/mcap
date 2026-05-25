@@ -1,6 +1,14 @@
 /* cspell:words varint */
 
-const MCAP_MAGIC = Buffer.from([0x89, 0x4d, 0x43, 0x41, 0x50, 0x30, 0x0d, 0x0a]);
+import {
+  MCAP_MAGIC,
+  mcapString,
+  prefixedBytes,
+  record,
+  uint16,
+  uint32,
+  uint64,
+} from "./mcapFixtureHelpers.ts";
 
 type ProtobufJsonMessage = {
   sequence: number;
@@ -99,19 +107,6 @@ function sampleMessage(message: ProtobufJsonMessage): Buffer {
   return Buffer.concat(fields);
 }
 
-function record(opcode: number, body: Buffer): Buffer {
-  return Buffer.concat([Buffer.from([opcode]), uint64(body.length), body]);
-}
-
-function mcapString(value: string): Buffer {
-  const bytes = Buffer.from(value, "utf8");
-  return Buffer.concat([uint32(bytes.length), bytes]);
-}
-
-function prefixedBytes(value: Buffer): Buffer {
-  return Buffer.concat([uint32(value.length), value]);
-}
-
 function protoField(fieldNumber: number, value: Buffer): Buffer {
   return Buffer.concat([varint((fieldNumber << 3) | 2), varint(value.length), value]);
 }
@@ -133,29 +128,4 @@ function varint(value: number): Buffer {
   }
   bytes.push(remaining);
   return Buffer.from(bytes);
-}
-
-function uint16(value: number): Buffer {
-  const out = Buffer.alloc(2);
-  out.writeUInt16LE(value);
-  return out;
-}
-
-function uint32(value: number): Buffer {
-  const out = Buffer.alloc(4);
-  out.writeUInt32LE(value);
-  return out;
-}
-
-function uint64(value: bigint | number): Buffer {
-  if (typeof value === "number" && !Number.isSafeInteger(value)) {
-    throw new Error(`uint64 number value must be a safe integer: ${value.toString()}`);
-  }
-  const integer = typeof value === "bigint" ? value : BigInt(value);
-  if (integer < 0n) {
-    throw new Error(`uint64 value must be non-negative: ${value.toString()}`);
-  }
-  const out = Buffer.alloc(8);
-  out.writeBigUInt64LE(integer);
-  return out;
 }

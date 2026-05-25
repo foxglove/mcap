@@ -38,6 +38,22 @@ export type FixtureAction =
       }>;
     }
   | {
+      type: "writeRos1JsonMcap";
+      to: string;
+      messages: Array<{
+        sequence: number;
+        logTime: bigint | number;
+        publishTime: bigint | number;
+        headerSeq: number;
+        stampSec: number;
+        stampNsec: number;
+        frameId: string;
+        durationSec: number;
+        durationNsec: number;
+        values: number[];
+      }>;
+    }
+  | {
       type: "mkdir";
       path: string;
     };

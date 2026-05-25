@@ -204,6 +204,50 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "cat-json-ros1msg-stdin",
+    description:
+      "Cat --json emits ROS1 messages as NDJSON with Go-compatible nested message, special float, duration, and array output.",
+    tags: ["cat", "json", "ros1msg", "stdin"],
+    setup: [
+      {
+        type: "writeRos1JsonMcap",
+        to: "{caseWorkDir}/ros1.mcap",
+        messages: [
+          {
+            sequence: 1,
+            logTime: 2,
+            publishTime: 1,
+            headerSeq: 7,
+            stampSec: 1,
+            stampNsec: 2,
+            frameId: "map",
+            durationSec: 4,
+            durationNsec: 5,
+            values: [10, 20],
+          },
+          {
+            sequence: 2,
+            logTime: 3,
+            publishTime: 2,
+            headerSeq: 8,
+            stampSec: 2,
+            stampNsec: 3,
+            frameId: "odom",
+            durationSec: 5,
+            durationNsec: 6,
+            values: [30],
+          },
+        ],
+      },
+    ],
+    invocation: { args: ["cat", "--json"], stdin: { path: "{caseWorkDir}/ros1.mcap" } },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "ndjson" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
     id: "info-one-message",
     description: "Info output reports the same stable summary fields for a representative MCAP.",
     tags: ["info", "stdout"],
