@@ -62,6 +62,7 @@ fn open_db(input_path: &Path) -> Result<Connection> {
 
 fn read_conversion_plan(db: &Connection) -> Result<ConversionPlan> {
     let topics = read_topics(db)?;
+    ensure_table_exists(db, "messages")?;
     let message_definitions = if topics.is_empty() {
         Vec::new()
     } else {
@@ -177,9 +178,7 @@ fn validate_schema_coverage(
 }
 
 fn read_topics(db: &Connection) -> Result<Vec<TopicRecord>> {
-    if !table_exists(db, "topics")? {
-        bail!("input is a SQLite database, but it does not look like a ROS 2 db3 bag: missing 'topics' table");
-    }
+    ensure_table_exists(db, "topics")?;
     let has_qos_profiles = column_exists(db, "topics", "offered_qos_profiles")?;
     let query = if has_qos_profiles {
         "SELECT id, name, type, serialization_format, offered_qos_profiles FROM topics ORDER BY id"
@@ -200,10 +199,7 @@ fn read_topics(db: &Connection) -> Result<Vec<TopicRecord>> {
         })?
         .collect::<rusqlite::Result<Vec<_>>>()
         .context("failed to read ROS 2 topics")?;
-    Ok(topics
-        .into_iter()
-        .filter(|topic| is_message_topic_type(&topic.typ))
-        .collect())
+    Ok(topics)
 }
 
 fn read_message_definitions(db: &Connection) -> Result<Vec<MessageDefinitionRecord>> {
@@ -240,10 +236,6 @@ fn write_messages<W: Write + Seek>(
     channel_ids_by_topic_id: &HashMap<i64, u16>,
     sequences: &mut BTreeMap<u16, u32>,
 ) -> Result<()> {
-    if !table_exists(db, "messages")? {
-        bail!("input is a SQLite database, but it does not look like a ROS 2 db3 bag: missing 'messages' table");
-    }
-
     let mut stmt = db
         .prepare(
             "SELECT topic_id, timestamp, data \
@@ -309,12 +301,11 @@ fn column_exists(db: &Connection, table: &str, column: &str) -> Result<bool> {
     Ok(count > 0)
 }
 
-fn is_message_topic_type(typ: &str) -> bool {
-    let mut parts = typ.split('/');
-    matches!(
-        (parts.next(), parts.next(), parts.next()),
-        (Some(package), Some("msg"), Some(_)) if !package.is_empty()
-    )
+fn ensure_table_exists(db: &Connection, table: &str) -> Result<()> {
+    if !table_exists(db, table)? {
+        bail!("input is a SQLite database, but it does not look like a ROS 2 db3 bag: missing '{table}' table");
+    }
+    Ok(())
 }
 
 fn timestamp(timestamp: i64) -> Result<u64> {
@@ -323,20 +314,4 @@ fn timestamp(timestamp: i64) -> Result<u64> {
         "invalid negative ROS 2 timestamp {timestamp}"
     );
     Ok(timestamp as u64)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::is_message_topic_type;
-
-    #[test]
-    fn message_topic_type_filter_matches_go_converter_scope() {
-        assert!(is_message_topic_type("std_msgs/msg/String"));
-        assert!(is_message_topic_type("rcl_interfaces/msg/ParameterEvent"));
-        assert!(!is_message_topic_type(
-            "example_interfaces/srv/AddTwoInts_Event"
-        ));
-        assert!(!is_message_topic_type("action_msgs/action/GoalStatusArray"));
-        assert!(!is_message_topic_type("legacy/TypeName"));
-    }
 }

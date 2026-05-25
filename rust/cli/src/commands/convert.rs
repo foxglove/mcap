@@ -365,4 +365,69 @@ mod tests {
         assert!(err.to_string().contains("missing 'messages' table"));
         std::fs::remove_file(sqlite_path).expect("remove temp sqlite");
     }
+
+    #[test]
+    fn converts_non_msg_topics_when_embedded_schema_exists() {
+        let sqlite_path = temp_path("service-event.db3");
+        let _ = std::fs::remove_file(&sqlite_path);
+        {
+            let db = rusqlite::Connection::open(&sqlite_path).expect("create sqlite db");
+            db.execute_batch(
+                "CREATE TABLE topics(
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    serialization_format TEXT NOT NULL
+                );
+                CREATE TABLE message_definitions(
+                    id INTEGER PRIMARY KEY,
+                    topic_type TEXT NOT NULL,
+                    encoding TEXT NOT NULL,
+                    encoded_message_definition TEXT NOT NULL,
+                    type_description_hash TEXT NOT NULL
+                );
+                CREATE TABLE messages(
+                    id INTEGER PRIMARY KEY,
+                    topic_id INTEGER NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    data BLOB NOT NULL
+                );",
+            )
+            .expect("create db3 tables");
+            db.execute(
+                "INSERT INTO topics(id, name, type, serialization_format) VALUES(1, '/add_two_ints/_service_event', 'example_interfaces/srv/AddTwoInts_Event', 'cdr')",
+                [],
+            )
+            .expect("insert topic");
+            db.execute(
+                "INSERT INTO message_definitions(id, topic_type, encoding, encoded_message_definition, type_description_hash) VALUES(1, 'example_interfaces/srv/AddTwoInts_Event', 'ros2msg', 'int64 a\nint64 b\n', '')",
+                [],
+            )
+            .expect("insert message definition");
+            db.execute(
+                "INSERT INTO messages(topic_id, timestamp, data) VALUES(1, 42, x'010203')",
+                [],
+            )
+            .expect("insert message");
+        }
+        let mut output = Cursor::new(Vec::new());
+        let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
+
+        ros2_db3::convert_ros2_db3(&mut output, &sqlite_path, opts)
+            .expect("convert service event topic");
+
+        let bytes = output.into_inner();
+        let summary = mcap::Summary::read(&bytes)
+            .expect("summary read")
+            .expect("summary present");
+        assert!(summary
+            .channels
+            .values()
+            .any(|channel| channel.topic == "/add_two_ints/_service_event"));
+        assert!(summary
+            .schemas
+            .values()
+            .any(|schema| schema.name == "example_interfaces/srv/AddTwoInts_Event"));
+        std::fs::remove_file(sqlite_path).expect("remove temp sqlite");
+    }
 }
