@@ -355,7 +355,7 @@ impl LinearReader {
     /// When `validate_chunk_crcs` is false, the reader will still decompress and parse chunk
     /// contents but will not reject otherwise-readable chunks whose stored uncompressed CRC is
     /// wrong. This is useful for recovery tools.
-    pub fn for_chunk_with_crc_validation(
+    pub(crate) fn for_chunk_with_crc_validation(
         header: ChunkHeader,
         validate_chunk_crcs: bool,
     ) -> McapResult<Self> {

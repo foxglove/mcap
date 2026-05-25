@@ -625,7 +625,7 @@ impl<W: Write + Seek> Writer<W> {
     /// This is useful when copying raw chunks from an existing MCAP: the schema record remains
     /// inside the copied chunk, but the writer still needs to know about it when building the
     /// summary section.
-    pub fn register_schema_with_id(
+    pub(crate) fn register_schema_with_id(
         &mut self,
         id: u16,
         name: &str,
@@ -793,7 +793,7 @@ impl<W: Write + Seek> Writer<W> {
     ///
     /// This pairs with [`Self::register_schema_with_id`] for raw chunk passthrough, where the
     /// channel record is preserved inside a copied chunk.
-    pub fn register_channel_with_id(
+    pub(crate) fn register_channel_with_id(
         &mut self,
         id: u16,
         schema_id: u16,
@@ -990,7 +990,7 @@ impl<W: Write + Seek> Writer<W> {
     /// complete summary section should register those records separately with
     /// [`Self::register_schema_with_id`] and [`Self::register_channel_with_id`] before finishing the
     /// writer.
-    pub fn write_chunk_with_indexes(
+    pub(crate) fn write_chunk_with_indexes(
         &mut self,
         header: &records::ChunkHeader,
         data: &[u8],
@@ -1006,7 +1006,7 @@ impl<W: Write + Seek> Writer<W> {
         let mut seen_index_channels = BTreeSet::new();
         for index in indexes {
             if !seen_index_channels.insert(index.channel_id) {
-                return Err(McapError::DuplicateMessageIndex(index.channel_id));
+                return Err(McapError::BadIndex);
             }
         }
 
@@ -2980,7 +2980,7 @@ mod tests {
                 ],
             )
             .expect_err("duplicate indexes should fail");
-        assert_matches!(err, McapError::DuplicateMessageIndex(1));
+        assert_matches!(err, McapError::BadIndex);
     }
 
     #[test]
