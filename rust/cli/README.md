@@ -53,6 +53,13 @@ port is still pre-production:
      list, repeatable flags such as `--topic foo --topic bar`, or support both.
    - Apply the chosen shape consistently across commands that filter by topic so
      users do not have to learn separate `cat` and `filter` conventions.
+3. Output overwrite behavior:
+   - Current Go-compatible behavior overwrites existing output files for commands
+     such as `convert`, `filter`, `merge`, `recover`, and `sort`.
+   - Before Rust CLI 1.0, decide whether output-producing commands should fail
+     when the output path exists unless the user passes `--force` / `-f`.
+   - Apply the policy consistently so users do not have to remember separate
+     overwrite behavior per command.
 
 ## Intentional divergences from Go CLI
 
