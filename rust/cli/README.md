@@ -66,6 +66,18 @@ port is still pre-production:
    - Before Rust CLI 1.0, centralize that check so all commands that read local
      MCAP, bag, db3, or other LFS-backed fixture files produce the same
      actionable error instead of lower-level parse failures.
+5. Converter input architecture:
+   - Future `mcap convert` inputs may include directory-shaped formats such as
+     rosbag2 directories and additional self-describing file formats such as PX4
+     ULog (`.ulg`).
+   - Keep converter dispatch path-based rather than reader-based: the top-level
+     command should identify the broad input format from the path shape or
+     extension, while the selected converter validates magic bytes and format
+     details before creating the output.
+   - Preserve clear ownership of unsupported-but-recognized inputs. For example,
+     a ROS 2 bag directory without embedded schemas should fail from the ROS 2
+     converter with an actionable schema error rather than falling through as an
+     unidentified input.
 
 ## Intentional divergences from Go CLI
 
