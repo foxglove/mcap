@@ -325,3 +325,247 @@ fn timestamp(timestamp: i64) -> Result<u64> {
     );
     Ok(timestamp as u64)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use super::convert_ros2_db3_file;
+
+    const IRON_TALKER_DB3: &str = "testdata/db3/talker-iron.db3";
+    const HUMBLE_TALKER_DB3: &str = "testdata/db3/talker-humble.db3";
+
+    struct TempOutput {
+        path: PathBuf,
+    }
+
+    impl TempOutput {
+        fn new(name: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "mcap-rust-ros2-db3-{name}-{}.mcap",
+                std::process::id()
+            ));
+            let _ = fs::remove_file(&path);
+            Self { path }
+        }
+    }
+
+    impl Drop for TempOutput {
+        fn drop(&mut self) {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+
+    fn fixture_path(relative_from_repo_root: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .join(relative_from_repo_root)
+    }
+
+    fn temp_input(name: &str, bytes: &[u8]) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "mcap-rust-ros2-db3-input-{}-{name}",
+            std::process::id()
+        ));
+        fs::write(&path, bytes).expect("write temp input");
+        path
+    }
+
+    fn temp_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("mcap-rust-ros2-db3-{}-{name}", std::process::id()))
+    }
+
+    fn write_options() -> mcap::WriteOptions {
+        mcap::WriteOptions::new()
+            .profile("ros2")
+            .compression(None)
+            .chunk_size(Some(1024))
+    }
+
+    fn convert_fixture(path: &Path) -> Vec<u8> {
+        let output = TempOutput::new("converted");
+        convert_ros2_db3_file(path, &output.path, write_options()).expect("convert ROS 2 db3");
+        fs::read(&output.path).expect("read converted MCAP")
+    }
+
+    #[test]
+    fn converts_iron_talker_db3_with_embedded_schemas() {
+        let bytes = convert_fixture(&fixture_path(IRON_TALKER_DB3));
+        let summary = mcap::Summary::read(&bytes)
+            .expect("summary read")
+            .expect("summary present");
+        let stats = summary.stats.expect("statistics");
+
+        assert_eq!(stats.message_count, 20);
+        assert_eq!(summary.channels.len(), 3);
+        assert_eq!(summary.schemas.len(), 3);
+        assert!(summary
+            .schemas
+            .values()
+            .all(|schema| schema.encoding == "ros2msg"));
+        let topic_channel = summary
+            .channels
+            .values()
+            .find(|channel| channel.topic == "/topic")
+            .expect("topic channel");
+        assert_eq!(topic_channel.message_encoding, "cdr");
+        assert!(topic_channel.metadata.contains_key("offered_qos_profiles"));
+    }
+
+    #[test]
+    fn rejects_humble_talker_db3_without_embedded_schemas() {
+        let output = TempOutput::new("humble");
+
+        let err = convert_ros2_db3_file(
+            &fixture_path(HUMBLE_TALKER_DB3),
+            &output.path,
+            write_options(),
+        )
+        .expect_err("humble db3 should fail");
+
+        assert!(err
+            .to_string()
+            .contains("does not contain embedded message definitions"));
+        assert!(err.to_string().contains("ros2 bag convert"));
+    }
+
+    #[test]
+    fn rejects_invalid_sqlite_magic() {
+        let input = temp_input("invalid.db3", b"not sqlite");
+        let output = TempOutput::new("invalid-magic");
+
+        let err = convert_ros2_db3_file(&input, &output.path, write_options())
+            .expect_err("invalid sqlite magic should fail");
+
+        assert!(err.to_string().contains("invalid ROS 2 db3 magic"));
+        fs::remove_file(input).expect("remove temp input");
+    }
+
+    #[test]
+    fn rejects_humble_talker_db3_without_truncating_existing_output() {
+        let output_path = temp_input("existing-output.mcap", b"keep me");
+
+        let err = convert_ros2_db3_file(
+            &fixture_path(HUMBLE_TALKER_DB3),
+            &output_path,
+            write_options(),
+        )
+        .expect_err("humble db3 should fail");
+
+        assert!(err
+            .to_string()
+            .contains("does not contain embedded message definitions"));
+        assert_eq!(
+            fs::read(&output_path).expect("read existing output"),
+            b"keep me"
+        );
+        fs::remove_file(output_path).expect("remove temp output");
+    }
+
+    #[test]
+    fn rejects_sqlite_database_without_rosbag2_topics_table() {
+        let sqlite_path = temp_path("not-a-rosbag2.db3");
+        let _ = fs::remove_file(&sqlite_path);
+        {
+            let db = rusqlite::Connection::open(&sqlite_path).expect("create sqlite db");
+            db.execute("CREATE TABLE unrelated(id INTEGER PRIMARY KEY)", [])
+                .expect("create unrelated table");
+        }
+        let output = TempOutput::new("not-a-rosbag2");
+
+        let err = convert_ros2_db3_file(&sqlite_path, &output.path, write_options())
+            .expect_err("non-rosbag2 sqlite should fail");
+
+        assert!(err
+            .to_string()
+            .contains("does not look like a ROS 2 db3 bag"));
+        fs::remove_file(sqlite_path).expect("remove temp sqlite");
+    }
+
+    #[test]
+    fn rejects_sqlite_database_without_rosbag2_messages_table() {
+        let sqlite_path = temp_path("not-a-rosbag2-no-messages.db3");
+        let _ = fs::remove_file(&sqlite_path);
+        {
+            let db = rusqlite::Connection::open(&sqlite_path).expect("create sqlite db");
+            db.execute(
+                "CREATE TABLE topics(
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    serialization_format TEXT NOT NULL
+                )",
+                [],
+            )
+            .expect("create topics table");
+        }
+        let output = TempOutput::new("not-a-rosbag2-no-messages");
+
+        let err = convert_ros2_db3_file(&sqlite_path, &output.path, write_options())
+            .expect_err("sqlite without messages should fail");
+
+        assert!(err.to_string().contains("missing 'messages' table"));
+        fs::remove_file(sqlite_path).expect("remove temp sqlite");
+    }
+
+    #[test]
+    fn converts_non_msg_topics_when_embedded_schema_exists() {
+        let sqlite_path = temp_path("service-event.db3");
+        let _ = fs::remove_file(&sqlite_path);
+        {
+            let db = rusqlite::Connection::open(&sqlite_path).expect("create sqlite db");
+            db.execute_batch(
+                "CREATE TABLE topics(
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    serialization_format TEXT NOT NULL
+                );
+                CREATE TABLE message_definitions(
+                    id INTEGER PRIMARY KEY,
+                    topic_type TEXT NOT NULL,
+                    encoding TEXT NOT NULL,
+                    encoded_message_definition TEXT NOT NULL,
+                    type_description_hash TEXT NOT NULL
+                );
+                CREATE TABLE messages(
+                    id INTEGER PRIMARY KEY,
+                    topic_id INTEGER NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    data BLOB NOT NULL
+                );",
+            )
+            .expect("create db3 tables");
+            db.execute(
+                "INSERT INTO topics(id, name, type, serialization_format) VALUES(1, '/add_two_ints/_service_event', 'example_interfaces/srv/AddTwoInts_Event', 'cdr')",
+                [],
+            )
+            .expect("insert topic");
+            db.execute(
+                "INSERT INTO message_definitions(id, topic_type, encoding, encoded_message_definition, type_description_hash) VALUES(1, 'example_interfaces/srv/AddTwoInts_Event', 'ros2msg', 'int64 a\nint64 b\n', '')",
+                [],
+            )
+            .expect("insert message definition");
+            db.execute(
+                "INSERT INTO messages(topic_id, timestamp, data) VALUES(1, 42, x'010203')",
+                [],
+            )
+            .expect("insert message");
+        }
+
+        let bytes = convert_fixture(&sqlite_path);
+        let summary = mcap::Summary::read(&bytes)
+            .expect("summary read")
+            .expect("summary present");
+        assert!(summary
+            .channels
+            .values()
+            .any(|channel| channel.topic == "/add_two_ints/_service_event"));
+        assert!(summary
+            .schemas
+            .values()
+            .any(|schema| schema.name == "example_interfaces/srv/AddTwoInts_Event"));
+        fs::remove_file(sqlite_path).expect("remove temp sqlite");
+    }
+}
