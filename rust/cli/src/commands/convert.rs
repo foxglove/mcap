@@ -1,10 +1,11 @@
 mod ros1_bag;
+mod ros2_db3;
 
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Read};
 use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use mcap::{Compression, WriteOptions};
 
 use crate::cli::{CompressionFormat, ConvertCommand};
@@ -13,13 +14,15 @@ use crate::context::CommandContext;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum InputFileType {
     Ros1Bag,
+    Ros2Db3,
 }
 
 pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
+    ensure!(
+        args.input != args.output,
+        "input and output paths must be different"
+    );
     let file_type = detect_file_type(&args.input)?;
-    let mut input = File::open(&args.input)
-        .with_context(|| format!("failed to open input '{}'", args.input.display()))?;
-    validate_input(file_type, &mut input)?;
 
     let output = File::create(&args.output)
         .with_context(|| format!("failed to open output '{}'", args.output.display()))?;
@@ -30,16 +33,33 @@ pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
         args.chunk_size,
         args.include_crc,
         args.chunked,
+        file_type.profile(),
     );
 
     match file_type {
-        InputFileType::Ros1Bag => ros1_bag::convert_ros1_bag(writer, input, opts),
+        InputFileType::Ros1Bag => {
+            let mut input = File::open(&args.input)
+                .with_context(|| format!("failed to open input '{}'", args.input.display()))?;
+            validate_input(file_type, &mut input)?;
+            ros1_bag::convert_ros1_bag(writer, input, opts)
+        }
+        InputFileType::Ros2Db3 => ros2_db3::convert_ros2_db3(writer, &args.input, opts),
     }
 }
 
 fn validate_input(file_type: InputFileType, input: &mut File) -> Result<()> {
     match file_type {
         InputFileType::Ros1Bag => ros1_bag::validate_ros1_bag_magic(input),
+        InputFileType::Ros2Db3 => Ok(()),
+    }
+}
+
+impl InputFileType {
+    fn profile(self) -> &'static str {
+        match self {
+            InputFileType::Ros1Bag => "ros1",
+            InputFileType::Ros2Db3 => "ros2",
+        }
     }
 }
 
@@ -48,6 +68,7 @@ fn build_write_options(
     chunk_size: u64,
     include_crc: bool,
     chunked: bool,
+    profile: &str,
 ) -> WriteOptions {
     let compression = match compression {
         CompressionFormat::Zstd => Some(Compression::Zstd),
@@ -56,7 +77,7 @@ fn build_write_options(
     };
 
     WriteOptions::new()
-        .profile("ros1")
+        .profile(profile)
         .use_chunks(chunked)
         .chunk_size(Some(chunk_size))
         .compression(compression)
@@ -67,19 +88,26 @@ fn build_write_options(
 }
 
 fn detect_file_type(path: &Path) -> Result<InputFileType> {
-    if path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("bag"))
-    {
+    const ROS1_BAG_MAGIC: &[u8] = b"#ROSBAG V2.0";
+    const SQLITE_MAGIC: &[u8] = b"SQLite format 3\0";
+
+    let mut input =
+        File::open(path).with_context(|| format!("failed to open input '{}'", path.display()))?;
+    let mut magic = [0u8; 16];
+    let bytes_read = input
+        .read(&mut magic)
+        .with_context(|| format!("failed to read input magic from '{}'", path.display()))?;
+
+    if bytes_read >= ROS1_BAG_MAGIC.len() && &magic[..ROS1_BAG_MAGIC.len()] == ROS1_BAG_MAGIC {
         return Ok(InputFileType::Ros1Bag);
+    }
+    if bytes_read >= SQLITE_MAGIC.len() && &magic[..SQLITE_MAGIC.len()] == SQLITE_MAGIC {
+        return Ok(InputFileType::Ros2Db3);
     }
 
     bail!(
-        "unsupported input file extension '{}' (expected .bag for ROS1 bag input)",
-        path.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("<none>")
+        "unsupported input file type for '{}' (expected ROS1 bag or ROS2 SQLite db3 input)",
+        path.display()
     );
 }
 
@@ -89,12 +117,24 @@ mod tests {
     use std::io::{Cursor, Read, Seek, SeekFrom};
     use std::path::Path;
 
-    use super::{build_write_options, detect_file_type, InputFileType};
+    use super::{build_write_options, detect_file_type, ros2_db3, InputFileType};
     use crate::cli::CompressionFormat;
+
+    const IRON_TALKER_DB3: &str = "../../testdata/db3/iron-talker.db3";
+    const HUMBLE_TALKER_DB3: &str = "../../testdata/db3/humble-talker.db3";
+
+    fn temp_input(name: &str, bytes: &[u8]) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "mcap-cli-convert-test-{}-{name}",
+            std::process::id()
+        ));
+        std::fs::write(&path, bytes).expect("write temp input");
+        path
+    }
 
     fn build_sample_mcap(include_crc: bool) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
-        let opts = build_write_options(CompressionFormat::None, 1024, include_crc, true);
+        let opts = build_write_options(CompressionFormat::None, 1024, include_crc, true, "ros1");
         {
             let mut writer = opts.create(&mut output).expect("writer");
             let schema_id = writer
@@ -137,21 +177,25 @@ mod tests {
     }
 
     #[test]
-    fn detects_ros1_bag_extension() {
-        let file_type = detect_file_type(Path::new("/tmp/input.bag")).expect("detect");
+    fn detects_ros1_bag_magic() {
+        let path = temp_input("ros1-not-a-bag-extension", b"#ROSBAG V2.0\n");
+        let file_type = detect_file_type(&path).expect("detect");
+        std::fs::remove_file(path).expect("remove temp input");
         assert_eq!(file_type, InputFileType::Ros1Bag);
     }
 
     #[test]
-    fn detects_ros1_bag_extension_case_insensitive() {
-        let file_type = detect_file_type(Path::new("/tmp/input.BAG")).expect("detect");
-        assert_eq!(file_type, InputFileType::Ros1Bag);
+    fn detects_ros2_db3_magic() {
+        let file_type = detect_file_type(Path::new(IRON_TALKER_DB3)).expect("detect");
+        assert_eq!(file_type, InputFileType::Ros2Db3);
     }
 
     #[test]
-    fn rejects_non_bag_extension() {
-        let err = detect_file_type(Path::new("/tmp/input.mcap")).expect_err("non-bag should fail");
-        assert!(err.to_string().contains("unsupported input file extension"));
+    fn rejects_unknown_magic() {
+        let path = temp_input("unknown", b"not an mcap input");
+        let err = detect_file_type(&path).expect_err("unknown input should fail");
+        std::fs::remove_file(path).expect("remove temp input");
+        assert!(err.to_string().contains("unsupported input file type"));
     }
 
     #[test]
@@ -169,5 +213,49 @@ mod tests {
         let footer = mcap::read::footer(&bytes).expect("footer");
         assert_ne!(footer.summary_crc, 0);
         assert_ne!(data_end_crc(&bytes), 0);
+    }
+
+    #[test]
+    fn converts_iron_talker_db3_with_embedded_schemas() {
+        let mut output = Cursor::new(Vec::new());
+        let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
+
+        ros2_db3::convert_ros2_db3(&mut output, Path::new(IRON_TALKER_DB3), opts)
+            .expect("convert iron db3");
+
+        let bytes = output.into_inner();
+        let summary = mcap::Summary::read(&bytes)
+            .expect("summary read")
+            .expect("summary present");
+        let stats = summary.stats.expect("statistics");
+
+        assert_eq!(stats.message_count, 20);
+        assert_eq!(summary.channels.len(), 3);
+        assert_eq!(summary.schemas.len(), 3);
+        assert!(summary
+            .schemas
+            .values()
+            .all(|schema| schema.encoding == "ros2msg"));
+        let topic_channel = summary
+            .channels
+            .values()
+            .find(|channel| channel.topic == "/topic")
+            .expect("topic channel");
+        assert_eq!(topic_channel.message_encoding, "cdr");
+        assert!(topic_channel.metadata.contains_key("offered_qos_profiles"));
+    }
+
+    #[test]
+    fn rejects_humble_talker_db3_without_embedded_schemas() {
+        let mut output = Cursor::new(Vec::new());
+        let opts = build_write_options(CompressionFormat::None, 1024, true, true, "ros2");
+
+        let err = ros2_db3::convert_ros2_db3(&mut output, Path::new(HUMBLE_TALKER_DB3), opts)
+            .expect_err("humble db3 should fail");
+
+        assert!(err
+            .to_string()
+            .contains("does not contain embedded message definitions"));
+        assert!(err.to_string().contains("ros2 bag convert"));
     }
 }

@@ -500,16 +500,17 @@ export const cases: CliTestCase[] = [
   {
     id: "known-difference-convert-ros2-ament-help",
     description:
-      "Go CLI documents ROS2 DB3 conversion support; Rust CLI only supports ROS1 bag input.",
+      "Go CLI exposes ament-based ROS2 DB3 conversion; Rust CLI intentionally supports embedded-schema DB3 conversion instead.",
     tags: ["known-difference", "convert", "surface"],
     invocation: { args: ["convert", "--help"] },
     knownDifference: {
       id: "convert-ros2-ament-help",
       summary:
         "Go convert exposes --ament-prefix-path for ROS2 DB3 conversion; Rust convert does not.",
-      reason: "Rust convert currently implements ROS1 bag conversion only.",
+      reason:
+        "Rust convert avoids brittle ament workspace lookup and only converts ROS2 DB3 bags that contain embedded message definitions.",
       desiredBehavior:
-        "Rust convert should support ROS2 DB3 conversion or document an intentional replacement.",
+        "Rust convert should continue to document the embedded-schema-only behavior for ROS2 DB3 conversion.",
       goBehavior: {
         exitCode: 0,
         stdout: { kind: "contains", value: "--ament-prefix-path" },
