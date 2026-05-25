@@ -350,17 +350,29 @@ impl LinearReader {
 
     /// Constructs a linear reader that will iterate through all records in a chunk.
     pub(crate) fn for_chunk(header: ChunkHeader) -> McapResult<Self> {
+        Self::for_chunk_with_crc_validation(header, true)
+    }
+
+    /// Constructs a linear reader that will iterate through all records in a chunk.
+    ///
+    /// When `validate_chunk_crcs` is false, the reader will still decompress and parse chunk
+    /// contents but will not reject otherwise-readable chunks whose stored uncompressed CRC is
+    /// wrong. This is useful for recovery tools.
+    pub fn for_chunk_with_crc_validation(
+        header: ChunkHeader,
+        validate_chunk_crcs: bool,
+    ) -> McapResult<Self> {
         let mut result = Self::new_with_options(
             LinearReaderOptions::default()
                 .with_skip_end_magic(true)
                 .with_skip_start_magic(true)
-                .with_validate_chunk_crcs(true),
+                .with_validate_chunk_crcs(validate_chunk_crcs),
         );
         result.currently_reading = ChunkRecord;
         result.chunk_state = Some(ChunkState {
             decompressor: get_decompressor(&mut HashMap::new(), &header.compression)?,
             crc: header.uncompressed_crc,
-            uncompressed_data_hasher: Some(crc32fast::Hasher::new()),
+            uncompressed_data_hasher: validate_chunk_crcs.then(crc32fast::Hasher::new),
             uncompressed_len: header.uncompressed_size,
             compressed_remaining: header.compressed_size,
             uncompressed_remaining: header.uncompressed_size,

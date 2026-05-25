@@ -34,6 +34,8 @@ enum WriteMode<W: Write + Seek> {
     Failed(W),
 }
 
+const OPCODE_LEN_SIZE: usize = 1 + 8;
+
 #[derive(EnumSetType, Debug)]
 pub enum PrivateRecordOptions {
     /// If set and chunking is enabled, the private record will be written into a chunk. Otherwise, the record will be written directly to the file.
@@ -110,6 +112,21 @@ fn write_record<W: Write>(mut w: &mut W, r: &Record) -> io::Result<()> {
         }
     };
     Ok(())
+}
+
+fn write_chunk_record<W: Write>(
+    w: &mut W,
+    header: &records::ChunkHeader,
+    data: &[u8],
+) -> io::Result<u64> {
+    let mut header_buf = Vec::new();
+    Cursor::new(&mut header_buf).write_le(header).unwrap();
+
+    let body_len = (header_buf.len() + data.len()) as u64;
+    op_and_len(w, op::CHUNK, body_len)?;
+    w.write_all(&header_buf)?;
+    w.write_all(data)?;
+    Ok(OPCODE_LEN_SIZE as u64 + body_len)
 }
 
 #[derive(Debug, Clone)]
@@ -592,6 +609,51 @@ impl<W: Write + Seek> Writer<W> {
         Ok(id)
     }
 
+    /// Registers a schema for summary/statistics output without writing a schema record.
+    ///
+    /// This is useful when copying raw chunks from an existing MCAP: the schema record remains
+    /// inside the copied chunk, but the writer still needs to know about it when building the
+    /// summary section.
+    pub fn register_schema_with_id(
+        &mut self,
+        id: u16,
+        name: &str,
+        encoding: &str,
+        data: &[u8],
+    ) -> McapResult<u16> {
+        if id == 0 {
+            return Err(McapError::InvalidSchemaId);
+        }
+
+        let content = SchemaContent {
+            name: Cow::Borrowed(name),
+            encoding: Cow::Borrowed(encoding),
+            data: Cow::Borrowed(data),
+        };
+
+        if let Some(existing_canonical_id) = self.all_schema_ids.get(&id).copied() {
+            let Some(current_canonical_id) = self.canonical_schemas.get_by_left(&content).copied()
+            else {
+                return Err(McapError::ConflictingSchemas(name.into()));
+            };
+            if existing_canonical_id != current_canonical_id {
+                return Err(McapError::ConflictingSchemas(name.into()));
+            }
+            return Ok(id);
+        }
+
+        if let Some(canonical_id) = self.canonical_schemas.get_by_left(&content).copied() {
+            self.all_schema_ids.insert(id, canonical_id);
+        } else {
+            self.canonical_schemas
+                .insert_no_overwrite(content.into_owned(), id)
+                .expect("neither content nor new ID should be present in canonical_schemas");
+            self.all_schema_ids.insert(id, id);
+        }
+
+        Ok(id)
+    }
+
     /// Write a schema record into the MCAP.
     fn write_schema(&mut self, schema: Schema) -> McapResult<()> {
         let record = Record::Schema {
@@ -719,6 +781,52 @@ impl<W: Write + Seek> Writer<W> {
             message_encoding: message_encoding.into(),
             metadata: metadata.clone(),
         })?;
+
+        if let Some(canonical_id) = self.canonical_channels.get_by_left(&content).copied() {
+            self.all_channel_ids.insert(id, canonical_id);
+        } else {
+            self.canonical_channels
+                .insert_no_overwrite(content.into_owned(), id)
+                .expect("neither content nor new ID should be present in canonical_channels");
+            self.all_channel_ids.insert(id, id);
+        }
+
+        Ok(id)
+    }
+
+    /// Registers a channel for summary/statistics output without writing a channel record.
+    ///
+    /// This pairs with [`Self::register_schema_with_id`] for raw chunk passthrough, where the
+    /// channel record is preserved inside a copied chunk.
+    pub fn register_channel_with_id(
+        &mut self,
+        id: u16,
+        schema_id: u16,
+        topic: &str,
+        message_encoding: &str,
+        metadata: &BTreeMap<String, String>,
+    ) -> McapResult<u16> {
+        if schema_id != 0 && !self.all_schema_ids.contains_key(&schema_id) {
+            return Err(McapError::UnknownSchema(topic.into(), schema_id));
+        }
+
+        let content = ChannelContent {
+            topic: Cow::Borrowed(topic),
+            schema_id,
+            message_encoding: Cow::Borrowed(message_encoding),
+            metadata: Cow::Borrowed(metadata),
+        };
+
+        if let Some(existing_canonical_id) = self.all_channel_ids.get(&id).copied() {
+            let Some(current_canonical_id) = self.canonical_channels.get_by_left(&content).copied()
+            else {
+                return Err(McapError::ConflictingChannels(topic.into()));
+            };
+            if existing_canonical_id != current_canonical_id {
+                return Err(McapError::ConflictingChannels(topic.into()));
+            }
+            return Ok(id);
+        }
 
         if let Some(canonical_id) = self.canonical_channels.get_by_left(&content).copied() {
             self.all_channel_ids.insert(id, canonical_id);
@@ -899,6 +1007,79 @@ impl<W: Write + Seek> Writer<W> {
         } else {
             write_record(self.finish_chunk()?, &record)?;
         }
+
+        Ok(())
+    }
+
+    /// Write an already-serialized chunk and its message indexes directly to the data section.
+    ///
+    /// The chunk payload is copied as-is; it is not decompressed, recompressed, or rewritten. The
+    /// supplied message indexes are written immediately after the chunk and are also used to update
+    /// writer statistics and chunk indexes for the output summary.
+    pub fn write_chunk_with_indexes(
+        &mut self,
+        header: &records::ChunkHeader,
+        data: &[u8],
+        indexes: &[records::MessageIndex],
+    ) -> McapResult<()> {
+        self.assert_not_finished();
+
+        let (chunk_start_offset, chunk_length, message_index_offsets, message_index_length) = {
+            let writer = self.finish_chunk()?;
+            let chunk_start_offset = writer.stream_position()?;
+            let chunk_length = write_chunk_record(writer, header, data)?;
+
+            let message_indexes_start = writer.stream_position()?;
+            let mut message_index_offsets = BTreeMap::new();
+            let mut index_buf = Vec::new();
+            for index in indexes {
+                let position = writer.stream_position()?;
+                let existing = message_index_offsets.insert(index.channel_id, position);
+                assert!(existing.is_none());
+
+                index_buf.clear();
+                Cursor::new(&mut index_buf).write_le(index)?;
+                op_and_len(writer, op::MESSAGE_INDEX, index_buf.len() as _)?;
+                writer.write_all(&index_buf)?;
+            }
+            let message_index_length = writer.stream_position()? - message_indexes_start;
+
+            (
+                chunk_start_offset,
+                chunk_length,
+                message_index_offsets,
+                message_index_length,
+            )
+        };
+
+        for index in indexes {
+            let message_count = index.records.len() as u64;
+            if message_count == 0 {
+                continue;
+            }
+            *self
+                .channel_message_counts
+                .entry(index.channel_id)
+                .or_insert(0) += message_count;
+            for entry in &index.records {
+                self.message_bounds = Some(match self.message_bounds {
+                    None => (entry.log_time, entry.log_time),
+                    Some((start, end)) => (start.min(entry.log_time), end.max(entry.log_time)),
+                });
+            }
+        }
+
+        self.chunk_indexes.push(records::ChunkIndex {
+            message_start_time: header.message_start_time,
+            message_end_time: header.message_end_time,
+            chunk_start_offset,
+            chunk_length,
+            message_index_offsets,
+            message_index_length,
+            compression: header.compression.clone(),
+            compressed_size: header.compressed_size,
+            uncompressed_size: header.uncompressed_size,
+        });
 
         Ok(())
     }

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::{IsTerminal as _, Seek, Write};
 
 use anyhow::{bail, Context, Result};
-use mcap::records::{self, op, Record};
+use mcap::records::{self, op, MessageIndex, MessageIndexEntry, Record};
 use mcap::sans_io::{LinearReadEvent, LinearReader, LinearReaderOptions};
 
 use crate::cli::RecoverCommand;
@@ -20,6 +20,18 @@ struct RecoverStats {
     messages: u64,
     attachments: u64,
     metadata: u64,
+}
+
+#[derive(Debug, Clone)]
+struct RawChunk {
+    header: records::ChunkHeader,
+    data: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum RegistrationMode {
+    WriteRecords,
+    SummaryOnly,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -136,16 +148,10 @@ fn recover_records<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     opts: &RecoverOptions,
 ) -> Result<RecoverStats> {
-    if opts.always_decode_chunk {
-        eprintln!(
-            "Note: --always-decode-chunk has no effect; the Rust recover implementation always decodes chunks."
-        );
-    }
-
     let mut reader = LinearReader::new_with_options(
         LinearReaderOptions::default()
             .with_skip_end_magic(true)
-            .with_emit_chunks(false)
+            .with_emit_chunks(!opts.always_decode_chunk)
             // Recover should ignore chunk CRC mismatches and continue decoding payload data.
             .with_validate_chunk_crcs(false)
             .with_record_length_limit(input.len()),
@@ -155,6 +161,8 @@ fn recover_records<W: Write + Seek>(
     let mut state = RecoveryState::default();
     let mut stats = RecoverStats::default();
     let mut saw_any_record = false;
+    let mut pending_chunk: Option<RawChunk> = None;
+    let mut pending_indexes = Vec::new();
 
     while let Some(event) = reader.next_event() {
         match event {
@@ -167,6 +175,17 @@ fn recover_records<W: Write + Seek>(
             }
             Ok(LinearReadEvent::Record { opcode, data }) => {
                 saw_any_record = true;
+                if !opts.always_decode_chunk && opcode != op::MESSAGE_INDEX {
+                    flush_pending_chunk(
+                        writer,
+                        &mut state,
+                        &mut stats,
+                        &mut pending_chunk,
+                        &mut pending_indexes,
+                        false,
+                    )?;
+                }
+
                 let record = match mcap::parse_record(opcode, data) {
                     Ok(record) => record,
                     Err(err) => {
@@ -176,9 +195,50 @@ fn recover_records<W: Write + Seek>(
                         continue;
                     }
                 };
-                recover_record(writer, &mut state, &mut stats, record)?;
+
+                if !opts.always_decode_chunk {
+                    match record {
+                        Record::Chunk { header, data } => {
+                            pending_chunk = Some(RawChunk {
+                                header,
+                                data: data.into_owned(),
+                            });
+                            pending_indexes.clear();
+                            continue;
+                        }
+                        Record::MessageIndex(index) => {
+                            if pending_chunk.is_none() {
+                                bail!("got message index but no preceding chunk");
+                            }
+                            pending_indexes.push(index);
+                            continue;
+                        }
+                        Record::DataEnd(_) | Record::Footer(_) => break,
+                        _ => {}
+                    }
+                } else if matches!(record, Record::DataEnd(_) | Record::Footer(_)) {
+                    break;
+                }
+
+                recover_record(
+                    writer,
+                    &mut state,
+                    &mut stats,
+                    record,
+                    RegistrationMode::WriteRecords,
+                )?;
             }
             Err(err) => {
+                if !opts.always_decode_chunk {
+                    flush_pending_chunk(
+                        writer,
+                        &mut state,
+                        &mut stats,
+                        &mut pending_chunk,
+                        &mut pending_indexes,
+                        true,
+                    )?;
+                }
                 if !saw_any_record {
                     return Err(err.into());
                 }
@@ -190,7 +250,147 @@ fn recover_records<W: Write + Seek>(
             }
         }
     }
+    if !opts.always_decode_chunk {
+        flush_pending_chunk(
+            writer,
+            &mut state,
+            &mut stats,
+            &mut pending_chunk,
+            &mut pending_indexes,
+            true,
+        )?;
+    }
     Ok(stats)
+}
+
+fn flush_pending_chunk<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
+    state: &mut RecoveryState,
+    stats: &mut RecoverStats,
+    pending_chunk: &mut Option<RawChunk>,
+    pending_indexes: &mut Vec<MessageIndex>,
+    force_rebuild_indexes: bool,
+) -> Result<()> {
+    let Some(chunk) = pending_chunk.take() else {
+        pending_indexes.clear();
+        return Ok(());
+    };
+
+    let supplied_indexes = if !force_rebuild_indexes && !pending_indexes.is_empty() {
+        Some(pending_indexes.as_slice())
+    } else {
+        None
+    };
+    let indexes = match update_info_from_chunk(writer, state, &chunk, supplied_indexes) {
+        Ok(indexes) => indexes,
+        Err(err) => {
+            eprintln!("Failed to update info from chunk, skipping: {err:#}");
+            pending_indexes.clear();
+            return Ok(());
+        }
+    };
+
+    writer.write_chunk_with_indexes(&chunk.header, &chunk.data, &indexes)?;
+    stats.messages += indexes
+        .iter()
+        .map(|index| index.records.len() as u64)
+        .sum::<u64>();
+    pending_indexes.clear();
+    Ok(())
+}
+
+fn update_info_from_chunk<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
+    state: &mut RecoveryState,
+    chunk: &RawChunk,
+    supplied_indexes: Option<&[MessageIndex]>,
+) -> Result<Vec<MessageIndex>> {
+    let needs_chunk_scan = match supplied_indexes {
+        Some(indexes) => indexes.iter().any(|index| {
+            !index.records.is_empty() && !state.channel_map.contains_key(&index.channel_id)
+        }),
+        None => true,
+    };
+
+    let rebuilt_indexes = if needs_chunk_scan {
+        Some(scan_chunk_records(writer, state, chunk)?)
+    } else {
+        None
+    };
+
+    Ok(match supplied_indexes {
+        Some(indexes) => indexes.to_vec(),
+        None => rebuilt_indexes.unwrap_or_default(),
+    })
+}
+
+fn scan_chunk_records<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
+    state: &mut RecoveryState,
+    chunk: &RawChunk,
+) -> Result<Vec<MessageIndex>> {
+    let mut reader = LinearReader::for_chunk_with_crc_validation(chunk.header.clone(), false)
+        .context("failed to create chunk reader")?;
+    let mut remaining = chunk.data.as_slice();
+    let mut rebuilt_indexes: BTreeMap<u16, Vec<MessageIndexEntry>> = BTreeMap::new();
+    let mut uncompressed_offset = 0u64;
+
+    while let Some(event) = reader.next_event() {
+        match event {
+            Ok(LinearReadEvent::ReadRequest(need)) => {
+                let read = need.min(remaining.len());
+                let dst = reader.insert(read);
+                dst.copy_from_slice(&remaining[..read]);
+                reader.notify_read(read);
+                remaining = &remaining[read..];
+            }
+            Ok(LinearReadEvent::Record { opcode, data }) => {
+                let record_offset = uncompressed_offset;
+                uncompressed_offset += 9 + data.len() as u64;
+                let record = match mcap::parse_record(opcode, data) {
+                    Ok(record) => record,
+                    Err(err) => {
+                        eprintln!(
+                            "Warning: failed to parse chunk record opcode 0x{opcode:02x}: {err:#}; skipping"
+                        );
+                        continue;
+                    }
+                };
+                match record {
+                    Record::Schema { header, data } => register_schema(
+                        writer,
+                        state,
+                        header.id,
+                        &header.name,
+                        &header.encoding,
+                        data.as_ref(),
+                        RegistrationMode::SummaryOnly,
+                    )?,
+                    Record::Channel(channel) => {
+                        register_channel(writer, state, channel, RegistrationMode::SummaryOnly)?;
+                    }
+                    Record::Message { header, .. } => {
+                        rebuilt_indexes.entry(header.channel_id).or_default().push(
+                            MessageIndexEntry {
+                                log_time: header.log_time,
+                                offset: record_offset,
+                            },
+                        );
+                    }
+                    _ => {}
+                }
+            }
+            Err(err) => return Err(err.into()),
+        }
+    }
+
+    Ok(rebuilt_indexes
+        .into_iter()
+        .map(|(channel_id, records)| MessageIndex {
+            channel_id,
+            records,
+        })
+        .collect())
 }
 
 fn recover_record<W: Write + Seek>(
@@ -198,6 +398,7 @@ fn recover_record<W: Write + Seek>(
     state: &mut RecoveryState,
     stats: &mut RecoverStats,
     record: Record<'_>,
+    registration_mode: RegistrationMode,
 ) -> Result<()> {
     match record {
         Record::Schema { header, data } => register_schema(
@@ -207,9 +408,10 @@ fn recover_record<W: Write + Seek>(
             &header.name,
             &header.encoding,
             data.as_ref(),
+            registration_mode,
         )?,
         Record::Channel(channel) => {
-            register_channel(writer, state, channel)?;
+            register_channel(writer, state, channel, registration_mode)?;
         }
         Record::Message { header, data } => {
             let Some(&channel_id) = state.channel_map.get(&header.channel_id) else {
@@ -264,6 +466,7 @@ fn register_schema<W: Write + Seek>(
     name: &str,
     encoding: &str,
     data: &[u8],
+    registration_mode: RegistrationMode,
 ) -> Result<()> {
     let schema = SchemaDef {
         name: name.to_string(),
@@ -279,10 +482,17 @@ fn register_schema<W: Write + Seek>(
         return Ok(());
     }
 
-    let output_schema_id = writer.add_schema(name, encoding, data)?;
+    let output_schema_id = match registration_mode {
+        RegistrationMode::WriteRecords => {
+            writer.add_schema_with_id(input_schema_id, name, encoding, data)?
+        }
+        RegistrationMode::SummaryOnly => {
+            writer.register_schema_with_id(input_schema_id, name, encoding, data)?
+        }
+    };
     state.schema_map.insert(input_schema_id, output_schema_id);
     state.seen_schemas.insert(input_schema_id, schema);
-    resolve_pending_channels(writer, state, input_schema_id)?;
+    resolve_pending_channels(writer, state, input_schema_id, registration_mode)?;
     Ok(())
 }
 
@@ -290,6 +500,7 @@ fn register_channel<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     state: &mut RecoveryState,
     channel: records::Channel,
+    registration_mode: RegistrationMode,
 ) -> Result<()> {
     if let Some(existing) = state.seen_channels.get(&channel.id) {
         if existing != &channel {
@@ -306,13 +517,14 @@ fn register_channel<W: Write + Seek>(
         return Ok(());
     }
 
-    write_channel_mapping(writer, state, channel)
+    write_channel_mapping(writer, state, channel, registration_mode)
 }
 
 fn resolve_pending_channels<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     state: &mut RecoveryState,
     schema_id: u16,
+    registration_mode: RegistrationMode,
 ) -> Result<()> {
     let to_resolve: Vec<u16> = state
         .pending_channels
@@ -330,7 +542,7 @@ fn resolve_pending_channels<W: Write + Seek>(
         let Some(channel) = state.pending_channels.remove(&channel_id) else {
             continue;
         };
-        write_channel_mapping(writer, state, channel)?;
+        write_channel_mapping(writer, state, channel, registration_mode)?;
     }
 
     Ok(())
@@ -340,6 +552,7 @@ fn write_channel_mapping<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     state: &mut RecoveryState,
     channel: records::Channel,
+    registration_mode: RegistrationMode,
 ) -> Result<()> {
     let output_schema_id = if channel.schema_id == 0 {
         0
@@ -349,12 +562,22 @@ fn write_channel_mapping<W: Write + Seek>(
             None => return Ok(()),
         }
     };
-    let output_channel_id = writer.add_channel(
-        output_schema_id,
-        &channel.topic,
-        &channel.message_encoding,
-        &channel.metadata,
-    )?;
+    let output_channel_id = match registration_mode {
+        RegistrationMode::WriteRecords => writer.add_channel_with_id(
+            channel.id,
+            output_schema_id,
+            &channel.topic,
+            &channel.message_encoding,
+            &channel.metadata,
+        )?,
+        RegistrationMode::SummaryOnly => writer.register_channel_with_id(
+            channel.id,
+            output_schema_id,
+            &channel.topic,
+            &channel.message_encoding,
+            &channel.metadata,
+        )?,
+    };
 
     state.channel_map.insert(channel.id, output_channel_id);
     state.seen_channels.insert(channel.id, channel);
@@ -449,6 +672,16 @@ mod tests {
         (message_count, attachment_count, metadata_count)
     }
 
+    fn collect_chunks(bytes: &[u8]) -> Vec<(mcap::records::ChunkHeader, Vec<u8>)> {
+        mcap::read::LinearReader::new(bytes)
+            .expect("linear reader")
+            .filter_map(|record| match record.expect("record parse") {
+                Record::Chunk { header, data } => Some((header, data.into_owned())),
+                _ => None,
+            })
+            .collect()
+    }
+
     fn default_options() -> RecoverOptions {
         RecoverOptions {
             compression: Some(mcap::Compression::Zstd),
@@ -491,6 +724,37 @@ mod tests {
         assert_eq!(stats.messages, 300);
         assert_eq!(stats.attachments, 1);
         assert_eq!(stats.metadata, 1);
+    }
+
+    #[test]
+    fn preserves_raw_chunks_by_default() {
+        let input = write_test_input();
+        let opts = RecoverOptions {
+            compression: None,
+            ..default_options()
+        };
+
+        let (output, stats) = recover_to_vec(&input, &opts);
+        assert_eq!(collect_chunks(&output), collect_chunks(&input));
+        assert_eq!(stats.messages, 300);
+    }
+
+    #[test]
+    fn always_decode_chunk_rewrites_chunks_with_requested_compression() {
+        let input = write_test_input();
+        let opts = RecoverOptions {
+            compression: None,
+            always_decode_chunk: true,
+            ..default_options()
+        };
+
+        let (output, stats) = recover_to_vec(&input, &opts);
+        let chunks = collect_chunks(&output);
+        assert!(!chunks.is_empty());
+        assert!(chunks
+            .iter()
+            .all(|(header, _)| header.compression.is_empty()));
+        assert_eq!(stats.messages, 300);
     }
 
     #[test]
