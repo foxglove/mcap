@@ -205,13 +205,6 @@ overrides:
       - rclpy
       - rosidl
 
-  - filename: "tests/fixtures/ros1/**"
-    words:
-      - multitopic
-      - roslz
-      - rospy
-      - workdir
-
   - filename: "**/*.swift"
     ignoreRegExpList:
       - "\\b0x[0-9a-f_]+"
