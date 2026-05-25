@@ -1,4 +1,4 @@
-/* cspell:words pprof */
+/* cspell:words ndjson pprof */
 
 import type { CliTestCase } from "./types.ts";
 
@@ -97,6 +97,153 @@ export const cases: CliTestCase[] = [
     comparison: {
       exitCode: 0,
       stdout: { kind: "bytes" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "cat-topic-filter-includes-matching-topic",
+    description: "Cat topic filtering includes messages on requested topics.",
+    tags: ["cat", "stdout", "topics"],
+    invocation: { args: ["cat", ONE_MESSAGE, "--topics", "example"] },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "bytes" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "cat-topic-filter-excludes-missing-topic",
+    description: "Cat topic filtering emits no messages when no requested topic matches.",
+    tags: ["cat", "stdout", "topics"],
+    invocation: { args: ["cat", ONE_MESSAGE, "--topics", "missing"] },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "cat-time-filter-includes-range",
+    description: "Cat time filtering includes messages in the requested nanosecond range.",
+    tags: ["cat", "stdout", "time"],
+    invocation: { args: ["cat", ONE_MESSAGE, "--start-nsecs", "2", "--end-nsecs", "3"] },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "bytes" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "cat-time-filter-excludes-out-of-range",
+    description: "Cat time filtering emits no messages outside the requested range.",
+    tags: ["cat", "stdout", "time"],
+    invocation: { args: ["cat", ONE_MESSAGE, "--start-nsecs", "3"] },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "cat-stdin-one-message",
+    description: "Cat reads stdin when no file argument is supplied.",
+    tags: ["cat", "stdout", "stdin"],
+    invocation: { args: ["cat"], stdin: { path: ONE_MESSAGE } },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "bytes" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "cat-json-unsupported-schema-errors",
+    description:
+      "Cat --json accepts the flag and errors consistently for unsupported schema encodings.",
+    tags: ["cat", "json"],
+    invocation: { args: ["cat", ONE_MESSAGE, "--json"] },
+    comparison: {
+      exitCode: "same",
+      stdout: { kind: "text" },
+      stderr: { kind: "ignore" },
+    },
+  },
+  {
+    id: "cat-json-protobuf-stdin",
+    description:
+      "Cat --json emits protobuf messages as NDJSON with Go-compatible field casing and zero-value omission.",
+    tags: ["cat", "json", "protobuf", "stdin"],
+    setup: [
+      {
+        type: "writeProtobufJsonMcap",
+        to: "{caseWorkDir}/protobuf.mcap",
+        messages: [
+          {
+            sequence: 1,
+            logTime: 2,
+            publishTime: 1,
+            snakeCase: "hello",
+            zeroValue: 0,
+            count: 7,
+          },
+          {
+            sequence: 2,
+            logTime: 3,
+            publishTime: 2,
+            snakeCase: "world",
+            zeroValue: 0,
+            count: 8,
+          },
+        ],
+      },
+    ],
+    invocation: { args: ["cat", "--json"], stdin: { path: "{caseWorkDir}/protobuf.mcap" } },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "ndjson" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "cat-json-ros1msg-stdin",
+    description:
+      "Cat --json emits ROS1 messages as NDJSON with Go-compatible nested message, special float, duration, and array output.",
+    tags: ["cat", "json", "ros1msg", "stdin"],
+    setup: [
+      {
+        type: "writeRos1JsonMcap",
+        to: "{caseWorkDir}/ros1.mcap",
+        messages: [
+          {
+            sequence: 1,
+            logTime: 2,
+            publishTime: 1,
+            headerSeq: 7,
+            stampSec: 1,
+            stampNsec: 2,
+            frameId: "map",
+            durationSec: 4,
+            durationNsec: 5,
+            values: [10, 20],
+          },
+          {
+            sequence: 2,
+            logTime: 3,
+            publishTime: 2,
+            headerSeq: 8,
+            stampSec: 2,
+            stampNsec: 3,
+            frameId: "odom",
+            durationSec: 5,
+            durationNsec: 6,
+            values: [30],
+          },
+        ],
+      },
+    ],
+    invocation: { args: ["cat", "--json"], stdin: { path: "{caseWorkDir}/ros1.mcap" } },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "ndjson" },
       stderr: { kind: "text" },
     },
   },
@@ -434,66 +581,6 @@ export const cases: CliTestCase[] = [
       rustBehavior: {
         exitCode: "nonzero",
         stderr: { kind: "contains", value: "unrecognized" },
-      },
-    },
-  },
-  {
-    id: "known-difference-cat-json-flag",
-    description: "Go CLI parses cat --json; Rust CLI does not yet.",
-    tags: ["known-difference", "cat"],
-    invocation: { args: ["cat", ONE_MESSAGE, "--json"] },
-    knownDifference: {
-      id: "cat-json-flag",
-      summary: "Go cat accepts --json while Rust cat currently rejects it.",
-      reason: "The Rust cat command implementation is still partial.",
-      desiredBehavior: "Rust cat should support Go-compatible JSON output before v1.0.",
-      goBehavior: {
-        exitCode: "nonzero",
-        stderr: { kind: "contains", value: "JSON output only supported" },
-      },
-      rustBehavior: {
-        exitCode: "nonzero",
-        stderr: { kind: "contains", value: "unexpected argument" },
-      },
-    },
-  },
-  {
-    id: "known-difference-cat-topics-flag",
-    description: "Go CLI supports topic filtering in cat; Rust CLI does not yet.",
-    tags: ["known-difference", "cat"],
-    invocation: { args: ["cat", ONE_MESSAGE, "--topics", "example"] },
-    knownDifference: {
-      id: "cat-topics-flag",
-      summary: "Go cat supports --topics but Rust cat currently rejects it.",
-      reason: "The Rust cat command implementation is still partial.",
-      desiredBehavior: "Rust cat should support Go-compatible topic filtering before v1.0.",
-      goBehavior: {
-        exitCode: 0,
-        stdout: { kind: "contains", value: "example" },
-      },
-      rustBehavior: {
-        exitCode: "nonzero",
-        stderr: { kind: "contains", value: "unexpected argument" },
-      },
-    },
-  },
-  {
-    id: "known-difference-cat-stdin",
-    description: "Go CLI reads cat input from stdin; Rust CLI currently requires file arguments.",
-    tags: ["known-difference", "cat", "stdin"],
-    invocation: { args: ["cat"], stdin: { path: ONE_MESSAGE } },
-    knownDifference: {
-      id: "cat-stdin",
-      summary: "Go cat reads stdin when no file is supplied but Rust cat requires file arguments.",
-      reason: "The Rust cat command implementation is still partial.",
-      desiredBehavior: "Rust cat should support stdin input before v1.0.",
-      goBehavior: {
-        exitCode: 0,
-        stdout: { kind: "contains", value: "example" },
-      },
-      rustBehavior: {
-        exitCode: "nonzero",
-        stderr: { kind: "contains", value: "Usage:" },
       },
     },
   },
