@@ -167,7 +167,7 @@ fn validate_schema_coverage(
         );
         if !definitions_by_type.contains_key(&topic.typ) {
             bail!(
-                "ROS 2 db3 topic '{}' has type '{}' but the bag does not contain an embedded message definition for that type. Use `ros2 bag convert` from a sourced ROS 2 workspace with the rosbag2_storage_mcap plugin instead.",
+                "ROS 2 db3 topic '{}' has type '{}' but the bag's embedded message definitions do not include that type. Use `ros2 bag convert` from a sourced ROS 2 workspace with the rosbag2_storage_mcap plugin instead.",
                 topic.name,
                 topic.typ
             );
@@ -253,9 +253,10 @@ fn write_messages<W: Write + Seek>(
                 .context("failed to read ROS 2 message timestamp")?,
         )?;
         let data: Vec<u8> = row.get(2).context("failed to read ROS 2 message data")?;
-        let Some(channel_id) = channel_ids_by_topic_id.get(&topic_id).copied() else {
-            continue;
-        };
+        let channel_id = channel_ids_by_topic_id
+            .get(&topic_id)
+            .copied()
+            .with_context(|| format!("message references unknown ROS 2 topic id {topic_id}"))?;
         let sequence = sequences.entry(channel_id).or_insert(0);
         ensure!(
             *sequence < u32::MAX,

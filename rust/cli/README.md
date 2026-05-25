@@ -60,5 +60,5 @@ port is still pre-production:
    - Rust CLI includes `attachment` record bytes in the top-level record stats table.
    - Go CLI currently skips attachment records in `du` record-kind accounting due to lexer behavior.
 2. `mcap convert` ROS 2 db3 schema discovery:
-   - Rust CLI converts self-contained db3 files using embedded message definitions, including non-`/msg/` topics such as service event topics when definitions are present.
+   - Rust CLI converts self-contained db3 files using embedded message definitions, including non-`/msg/` topics such as service event topics. It fails the conversion if any topic is missing an embedded definition.
    - Go CLI ignores embedded db3 schemas and emulates ament resource lookup with `--ament-prefix-path`, which can miss schemas or silently use definitions from the wrong workspace.

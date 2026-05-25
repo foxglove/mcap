@@ -18,8 +18,8 @@ enum InputFileType {
 }
 
 pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
-    ensure_distinct_paths(&args.input, &args.output)?;
     let file_type = detect_file_type(&args.input)?;
+    ensure_distinct_paths(&args.input, &args.output)?;
     let opts = build_write_options(
         args.compression,
         args.chunk_size,
@@ -290,6 +290,31 @@ size 123\n",
 
         ensure_distinct_paths(Path::new(IRON_TALKER_DB3), Path::new(file_name))
             .expect("single-component output should resolve through current directory");
+    }
+
+    #[test]
+    fn distinct_path_check_rejects_same_file_paths() {
+        let path = Path::new(IRON_TALKER_DB3);
+        let err = ensure_distinct_paths(path, path).expect_err("same input/output should fail");
+        assert!(err.to_string().contains("input and output paths"));
+    }
+
+    #[test]
+    fn run_reports_missing_input_as_open_error() {
+        let err = super::run(
+            &CommandContext::default(),
+            ConvertCommand {
+                input: PathBuf::from("/tmp/mcap-cli-missing-input-does-not-exist.db3"),
+                output: PathBuf::from("/tmp/mcap-cli-missing-output.mcap"),
+                compression: CompressionFormat::None,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: false,
+                chunked: true,
+            },
+        )
+        .expect_err("missing input should fail");
+
+        assert!(err.to_string().contains("failed to open input"));
     }
 
     #[test]
