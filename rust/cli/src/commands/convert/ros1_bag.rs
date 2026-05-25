@@ -62,16 +62,6 @@ struct BagRecord {
     data: Vec<u8>,
 }
 
-#[cfg(test)]
-pub fn convert_ros1_bag<W: std::io::Write + Seek, R: Read + Seek>(
-    output: W,
-    mut input: R,
-    write_options: mcap::WriteOptions,
-) -> Result<()> {
-    read_and_validate_ros1_bag_magic(&mut input)?;
-    convert_validated_ros1_bag(output, input, write_options)
-}
-
 pub fn convert_ros1_bag_file(
     input_path: &Path,
     output_path: &Path,
@@ -128,15 +118,6 @@ fn read_and_validate_ros1_bag_magic<R: Read + Seek>(input: &mut R) -> Result<()>
     }
 
     bail!("invalid ROS1 bag magic (expected '#ROSBAG V2.0\\n')")
-}
-
-#[cfg(test)]
-pub fn validate_ros1_bag_magic<R: Read + Seek>(input: &mut R) -> Result<()> {
-    read_and_validate_ros1_bag_magic(input)?;
-    input
-        .rewind()
-        .context("failed to rewind input after ROS1 bag magic check")?;
-    Ok(())
 }
 
 fn process_record<W: std::io::Write + Seek>(
@@ -485,9 +466,9 @@ mod tests {
     use anyhow::{Context, Result};
 
     use super::{
-        convert_ros1_bag, decompress_chunk, parse_header_fields, process_records, read_record,
-        validate_ros1_bag_magic, BAG_MAGIC, KEY_COMPRESSION, KEY_CONN, KEY_MD5SUM,
-        KEY_MESSAGE_DEFINITION, KEY_OP, KEY_SIZE, KEY_TIME, KEY_TOPIC, KEY_TYPE,
+        convert_validated_ros1_bag, decompress_chunk, parse_header_fields, process_records,
+        read_and_validate_ros1_bag_magic, read_record, BAG_MAGIC, KEY_COMPRESSION, KEY_CONN,
+        KEY_MD5SUM, KEY_MESSAGE_DEFINITION, KEY_OP, KEY_SIZE, KEY_TIME, KEY_TOPIC, KEY_TYPE,
         MAX_RECORD_SECTION_SIZE, OP_BAG_CHUNK, OP_BAG_CONNECTION, OP_BAG_HEADER,
         OP_BAG_MESSAGE_DATA,
     };
@@ -528,6 +509,15 @@ mod tests {
 oid sha256:0000000000000000000000000000000000000000000000000000000000000000\n\
 size 123\n"
             .to_vec()
+    }
+
+    fn convert_ros1_bag_for_test<W: std::io::Write + Seek, R: Read + Seek>(
+        output: W,
+        mut input: R,
+        write_options: mcap::WriteOptions,
+    ) -> Result<()> {
+        read_and_validate_ros1_bag_magic(&mut input)?;
+        convert_validated_ros1_bag(output, input, write_options)
     }
 
     fn synthetic_bag_with_two_connections_same_schema() -> Vec<u8> {
@@ -822,7 +812,8 @@ size 123\n"
     #[test]
     fn validate_ros1_bag_magic_reports_git_lfs_pointer() {
         let mut input = Cursor::new(git_lfs_pointer());
-        let err = validate_ros1_bag_magic(&mut input).expect_err("LFS pointer should fail");
+        let err =
+            read_and_validate_ros1_bag_magic(&mut input).expect_err("LFS pointer should fail");
         assert!(err.to_string().contains("Git LFS pointer"));
         assert!(err.to_string().contains("git lfs pull"));
     }
@@ -831,7 +822,7 @@ size 123\n"
     fn convert_ros1_bag_reports_git_lfs_pointer() {
         let input = Cursor::new(git_lfs_pointer());
         let output = Cursor::new(Vec::<u8>::new());
-        let err = convert_ros1_bag(output, input, mcap::WriteOptions::new())
+        let err = convert_ros1_bag_for_test(output, input, mcap::WriteOptions::new())
             .expect_err("LFS pointer should fail");
         assert!(err.to_string().contains("Git LFS pointer"));
         assert!(err.to_string().contains("git lfs pull"));
@@ -915,7 +906,7 @@ size 123\n"
     fn convert_synthetic_bag_deduplicates_schema_key() -> Result<()> {
         let input = Cursor::new(synthetic_bag_with_two_connections_same_schema());
         let mut output = Cursor::new(Vec::<u8>::new());
-        super::convert_ros1_bag(
+        convert_ros1_bag_for_test(
             &mut output,
             input,
             mcap::WriteOptions::new().profile("ros1").compression(None),
@@ -948,7 +939,7 @@ size 123\n"
     fn convert_synthetic_bag_preserves_connection_without_messages() -> Result<()> {
         let input = Cursor::new(synthetic_bag_with_connection_without_messages());
         let mut output = Cursor::new(Vec::<u8>::new());
-        super::convert_ros1_bag(
+        convert_ros1_bag_for_test(
             &mut output,
             input,
             mcap::WriteOptions::new().profile("ros1").compression(None),
@@ -985,7 +976,7 @@ size 123\n"
     fn convert_synthetic_bag_preserves_duplicate_channel_content_ids() -> Result<()> {
         let input = Cursor::new(synthetic_bag_with_duplicate_channel_content());
         let mut output = Cursor::new(Vec::<u8>::new());
-        super::convert_ros1_bag(
+        convert_ros1_bag_for_test(
             &mut output,
             input,
             mcap::WriteOptions::new().profile("ros1").compression(None),
@@ -1028,7 +1019,7 @@ size 123\n"
     fn convert_synthetic_bag_accepts_duplicate_connection_inside_chunk() -> Result<()> {
         let input = Cursor::new(synthetic_bag_with_duplicate_connection_inside_chunk());
         let mut output = Cursor::new(Vec::<u8>::new());
-        super::convert_ros1_bag(
+        convert_ros1_bag_for_test(
             &mut output,
             input,
             mcap::WriteOptions::new().profile("ros1").compression(None),
@@ -1055,7 +1046,7 @@ size 123\n"
     fn convert_synthetic_bag_rejects_conflicting_duplicate_connection_inside_chunk() {
         let input = Cursor::new(synthetic_bag_with_conflicting_duplicate_connection_inside_chunk());
         let mut output = Cursor::new(Vec::<u8>::new());
-        let err = super::convert_ros1_bag(
+        let err = convert_ros1_bag_for_test(
             &mut output,
             input,
             mcap::WriteOptions::new().profile("ros1").compression(None),
@@ -1075,7 +1066,7 @@ size 123\n"
         let input =
             std::fs::File::open(&fixture).context("failed to open markers.bz2.bag fixture")?;
         let mut output = Cursor::new(Vec::<u8>::new());
-        super::convert_ros1_bag(
+        convert_ros1_bag_for_test(
             &mut output,
             input,
             mcap::WriteOptions::new().profile("ros1").compression(None),
@@ -1113,7 +1104,7 @@ size 123\n"
         let fixture = fixture_path("testdata/bags/demo.bag");
         let input = std::fs::File::open(&fixture).context("failed to open demo.bag fixture")?;
         let mut output = Cursor::new(Vec::<u8>::new());
-        super::convert_ros1_bag(
+        convert_ros1_bag_for_test(
             &mut output,
             input,
             mcap::WriteOptions::new().profile("ros1").compression(None),
