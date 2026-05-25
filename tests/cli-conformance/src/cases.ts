@@ -1,4 +1,4 @@
-/* cspell:words lz4 multitopic ndjson noetic pprof testdata */
+/* cspell:words lz4 multitopic ndjson noetic notbag pprof testdata */
 
 import type { CliTestCase } from "./types.ts";
 
