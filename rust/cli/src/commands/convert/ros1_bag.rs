@@ -681,6 +681,57 @@ size 123\n"
         bag
     }
 
+    fn synthetic_bag_with_conflicting_duplicate_connection_inside_chunk() -> Vec<u8> {
+        let mut bag = Vec::new();
+        bag.extend_from_slice(BAG_MAGIC);
+        bag.extend(encode_record(
+            vec![encode_field_bytes(KEY_OP, &[OP_BAG_HEADER])],
+            &[],
+        ));
+
+        let conn_data = [
+            encode_field_string(KEY_TOPIC, "/outer"),
+            encode_field_string(KEY_TYPE, "demo_msgs/Outer"),
+            encode_field_string(KEY_MD5SUM, "outer-md5"),
+            encode_field_string(KEY_MESSAGE_DEFINITION, "uint8 data\n"),
+        ]
+        .concat();
+        let conn_record = encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
+                encode_field_bytes(KEY_CONN, &0u32.to_le_bytes()),
+                encode_field_string(KEY_TOPIC, "/outer"),
+            ],
+            &conn_data,
+        );
+        bag.extend_from_slice(&conn_record);
+
+        let conflicting_conn_data = [
+            encode_field_string(KEY_TOPIC, "/inner"),
+            encode_field_string(KEY_TYPE, "demo_msgs/Inner"),
+            encode_field_string(KEY_MD5SUM, "inner-md5"),
+            encode_field_string(KEY_MESSAGE_DEFINITION, "uint32 data\n"),
+        ]
+        .concat();
+        let chunk_data = encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CONNECTION]),
+                encode_field_bytes(KEY_CONN, &0u32.to_le_bytes()),
+                encode_field_string(KEY_TOPIC, "/inner"),
+            ],
+            &conflicting_conn_data,
+        );
+        bag.extend(encode_record(
+            vec![
+                encode_field_bytes(KEY_OP, &[OP_BAG_CHUNK]),
+                encode_field_string(KEY_COMPRESSION, "none"),
+                encode_field_bytes(KEY_SIZE, &(chunk_data.len() as u32).to_le_bytes()),
+            ],
+            &chunk_data,
+        ));
+        bag
+    }
+
     fn fixture_path(relative_from_repo_root: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../..")
@@ -972,6 +1023,24 @@ size 123\n"
         assert_eq!(messages[0].channel.id, 0);
         assert_eq!(messages[0].log_time, 1_000_000_002);
         Ok(())
+    }
+
+    #[test]
+    fn convert_synthetic_bag_rejects_conflicting_duplicate_connection_inside_chunk() {
+        let input = Cursor::new(synthetic_bag_with_conflicting_duplicate_connection_inside_chunk());
+        let mut output = Cursor::new(Vec::<u8>::new());
+        let err = super::convert_ros1_bag(
+            &mut output,
+            input,
+            mcap::WriteOptions::new().profile("ros1").compression(None),
+        )
+        .expect_err("conflicting duplicate connection should fail");
+
+        assert!(err.to_string().contains("failed to write ROS1 channel"));
+        assert!(err
+            .root_cause()
+            .to_string()
+            .contains("multiple records that don't match"));
     }
 
     #[test]
