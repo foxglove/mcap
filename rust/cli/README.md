@@ -60,6 +60,12 @@ port is still pre-production:
      when the output path exists unless the user passes `--force` / `-f`.
    - Apply the policy consistently so users do not have to remember separate
      overwrite behavior per command.
+4. Git LFS pointer detection:
+   - `mcap convert` detects Git LFS pointer inputs and tells users to run
+     `git lfs pull`.
+   - Before Rust CLI 1.0, centralize that check so all commands that read local
+     MCAP, bag, db3, or other LFS-backed fixture files produce the same
+     actionable error instead of lower-level parse failures.
 
 ## Intentional divergences from Go CLI
 
