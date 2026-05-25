@@ -4,7 +4,7 @@ use std::io::{Cursor, ErrorKind, Read, Seek};
 use anyhow::{bail, ensure, Context, Result};
 
 const BAG_MAGIC: &[u8] = b"#ROSBAG V2.0\n";
-const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com/spec/v1\n";
+const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
 const OP_BAG_HEADER: u8 = 0x03;
 const OP_BAG_CHUNK: u8 = 0x05;
