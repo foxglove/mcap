@@ -7,7 +7,7 @@ use std::path::Path;
 use anyhow::{bail, ensure, Context, Result};
 use rusqlite::{params, Connection, OpenFlags};
 
-const EMBEDDED_SCHEMA_ERROR: &str = "This ROS 2 SQLite bag does not contain embedded message definitions, so the MCAP CLI cannot convert it safely. This usually means it was recorded with ROS 2 Humble or earlier. Use `ros2 bag convert` from a sourced ROS 2 workspace with the rosbag2_storage_mcap plugin instead.";
+const EMBEDDED_SCHEMA_ERROR: &str = "This ROS 2 SQLite bag does not contain embedded message definitions, so the MCAP CLI cannot convert it safely. This usually means it was recorded with an older version of rosbag2 before embedded schemas were available. Use `ros2 bag convert` from a sourced ROS 2 workspace with the rosbag2_storage_mcap plugin installed instead.";
 
 #[derive(Debug, Clone)]
 struct TopicRecord {
@@ -27,8 +27,7 @@ struct MessageDefinitionRecord {
 
 struct ConversionPlan {
     topics: Vec<TopicRecord>,
-    message_definitions: Vec<MessageDefinitionRecord>,
-    definitions_by_type: HashMap<String, usize>,
+    definitions_by_type: HashMap<String, MessageDefinitionRecord>,
 }
 
 pub fn convert_ros2_db3_file(
@@ -46,8 +45,13 @@ pub fn convert_ros2_db3_file(
 
 fn open_db(input_path: &Path) -> Result<Connection> {
     validate_sqlite_magic(input_path)?;
-    Connection::open_with_flags(input_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .with_context(|| format!("failed to open ROS 2 db3 '{}'", input_path.display()))
+    Connection::open_with_flags(
+        input_path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX
+            | OpenFlags::SQLITE_OPEN_URI,
+    )
+    .with_context(|| format!("failed to open ROS 2 db3 '{}'", input_path.display()))
 }
 
 fn validate_sqlite_magic(input_path: &Path) -> Result<()> {
@@ -81,7 +85,6 @@ fn read_conversion_plan(db: &Connection) -> Result<ConversionPlan> {
 
     Ok(ConversionPlan {
         topics,
-        message_definitions,
         definitions_by_type,
     })
 }
@@ -102,11 +105,10 @@ fn convert_open_ros2_db3<W: Write + Seek>(
         let schema_id = if let Some(id) = schema_ids_by_type.get(&topic.typ) {
             *id
         } else {
-            let definition =
-                &plan.message_definitions[*plan
-                    .definitions_by_type
-                    .get(&topic.typ)
-                    .with_context(|| format!("missing schema for topic type {}", topic.typ))?];
+            let definition = plan
+                .definitions_by_type
+                .get(&topic.typ)
+                .with_context(|| format!("missing schema for topic type {}", topic.typ))?;
             let id = writer
                 .add_schema(
                     &definition.topic_type,
@@ -147,9 +149,9 @@ fn convert_open_ros2_db3<W: Write + Seek>(
 fn validate_schema_coverage(
     topics: &[TopicRecord],
     message_definitions: &[MessageDefinitionRecord],
-) -> Result<HashMap<String, usize>> {
+) -> Result<HashMap<String, MessageDefinitionRecord>> {
     let mut definitions_by_type = HashMap::new();
-    for (index, definition) in message_definitions.iter().enumerate() {
+    for definition in message_definitions {
         ensure!(
             definition.encoding == "ros2msg" || definition.encoding == "ros2idl",
             "unsupported ROS 2 message definition encoding '{}' for type {}",
@@ -157,7 +159,7 @@ fn validate_schema_coverage(
             definition.topic_type
         );
         if definitions_by_type
-            .insert(definition.topic_type.clone(), index)
+            .insert(definition.topic_type.clone(), definition.clone())
             .is_some()
         {
             bail!(

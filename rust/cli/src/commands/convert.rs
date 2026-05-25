@@ -107,19 +107,31 @@ fn build_write_options(
 fn reject_lfs_pointer(path: &Path) -> Result<()> {
     let mut input =
         File::open(path).with_context(|| format!("failed to open input '{}'", path.display()))?;
-    let mut magic = [0u8; 64];
-    let bytes_read = input
-        .read(&mut magic)
-        .with_context(|| format!("failed to read input magic from '{}'", path.display()))?;
+    let mut magic = [0u8; GIT_LFS_POINTER_PREFIX.len()];
+    let bytes_read = read_prefix(&mut input, &mut magic)
+        .with_context(|| format!("failed to read input prefix from '{}'", path.display()))?;
     let magic = &magic[..bytes_read];
 
     if magic.starts_with(GIT_LFS_POINTER_PREFIX) {
         bail!(
-            "input '{}' appears to be a Git LFS pointer, not a bag file; run `git lfs pull` and try again",
+            "input '{}' appears to be a Git LFS pointer; run `git lfs pull` and try again",
             path.display()
         );
     }
     Ok(())
+}
+
+fn read_prefix(input: &mut File, buffer: &mut [u8]) -> std::io::Result<usize> {
+    let mut bytes_read = 0;
+    while bytes_read < buffer.len() {
+        match input.read(&mut buffer[bytes_read..]) {
+            Ok(0) => break,
+            Ok(read) => bytes_read += read,
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(err),
+        }
+    }
+    Ok(bytes_read)
 }
 
 fn ensure_distinct_paths(input: &Path, output: &Path) -> Result<()> {
