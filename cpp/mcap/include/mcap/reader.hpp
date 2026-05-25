@@ -66,6 +66,18 @@ struct MCAP_PUBLIC IReadable {
    *   method should return 0.
    */
   virtual uint64_t read(std::byte** output, uint64_t offset, uint64_t size) = 0;
+
+  /**
+   * @brief Returns true if read() is safe to call concurrently from multiple
+   * threads (i.e. it has no shared mutable cursor/buffer). The default is false,
+   * which is correct for any source returning a pointer into one shared buffer
+   * (FileReader, FileStreamReader). Sources backed by an immutable mapping
+   * (MmapReader) or an immutable buffer override this to return true. The
+   * parallel reader requires a source for which this is true.
+   */
+  virtual bool supportsConcurrentRead() const {
+    return false;
+  }
 };
 
 /**
