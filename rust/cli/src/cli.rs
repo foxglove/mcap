@@ -40,7 +40,10 @@ pub enum Command {
     Cat(CatCommand),
     /// Create a compressed copy of an MCAP file
     Compress(CompressCommand),
-    /// Convert a bag file to an MCAP file
+    /// Convert supported input files to MCAP
+    #[command(
+        long_about = "Convert supported input files to MCAP.\n\nSupported inputs:\n  .bag  ROS 1 bag\n  .db3  ROS 2 SQLite db3"
+    )]
     Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file
     Decompress(DecompressCommand),
