@@ -47,7 +47,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    args.output.mkdir(parents=True)
+    args.output.mkdir(parents=True, exist_ok=True)
     for old_fixture in args.output.glob("noetic-*.bag"):
         old_fixture.unlink()
 
