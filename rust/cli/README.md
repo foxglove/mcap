@@ -8,23 +8,23 @@ It is not ready for production use yet.
 
 Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 
-| Command      | Status | Notes                                                                                                                                                                                     |
-| ------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `add`        | 🟢     |                                                                                                                                                                                           |
-| `cat`        | 🟡     | Local and stdin input are implemented, including `--topics`, time-range filters, and `--json`; remote URI input is not yet supported.                                                     |
-| `compress`   | 🟢     |                                                                                                                                                                                           |
-| `convert`    | 🟡     | ROS 1 bag → MCAP conversion is implemented (including `none`/`lz4`/`bz2` bag chunk decompression); ROS 2 db3 → MCAP conversion is implemented for bags with embedded message definitions. |
-| `decompress` | 🟢     |                                                                                                                                                                                           |
-| `doctor`     | 🟢     |                                                                                                                                                                                           |
-| `du`         | 🟢     |                                                                                                                                                                                           |
-| `filter`     | 🟢     |                                                                                                                                                                                           |
-| `get`        | 🟢     |                                                                                                                                                                                           |
-| `info`       | 🟢     |                                                                                                                                                                                           |
-| `list`       | 🟢     |                                                                                                                                                                                           |
-| `merge`      | 🟢     |                                                                                                                                                                                           |
-| `recover`    | 🟡     | Best-effort recovery is implemented for messages, attachments, and metadata; Go-parity gaps remain around raw chunk passthrough behavior.                                                 |
-| `sort`       | 🟢     |                                                                                                                                                                                           |
-| `version`    | 🟢     |                                                                                                                                                                                           |
+| Command      | Status | Notes                                                        |
+| ------------ | ------ | ------------------------------------------------------------ |
+| `add`        | 🟢     |                                                              |
+| `cat`        | 🟡     | Remote URI input is not yet supported.                       |
+| `compress`   | 🟢     |                                                              |
+| `convert`    | 🟢     |                                                              |
+| `decompress` | 🟢     |                                                              |
+| `doctor`     | 🟢     |                                                              |
+| `du`         | 🟢     |                                                              |
+| `filter`     | 🟢     |                                                              |
+| `get`        | 🟢     |                                                              |
+| `info`       | 🟢     |                                                              |
+| `list`       | 🟢     |                                                              |
+| `merge`      | 🟢     |                                                              |
+| `recover`    | 🟡     | Go-parity gaps remain around raw chunk passthrough behavior. |
+| `sort`       | 🟢     |                                                              |
+| `version`    | 🟢     |                                                              |
 
 ## Pre-1.0 compatibility cleanup
 
