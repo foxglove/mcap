@@ -11,6 +11,13 @@ const TEN_MESSAGES = "{dataDir}/TenMessages/TenMessages-ch-chx-mx-pad-rch-rsh-st
 const ONE_ATTACHMENT = "{dataDir}/OneAttachment/OneAttachment-ax-st-sum.mcap";
 const ONE_METADATA = "{dataDir}/OneMetadata/OneMetadata-mdx-st-sum.mcap";
 
+// Single-message protobuf MCAP fixture for `test.Sample`:
+// message Sample {
+//   string snake_case = 1;
+//   uint32 zero_value = 2;
+//   uint32 count = 3;
+// }
+// Payload sets snake_case="hello", zero_value=0, count=7.
 /* cspell:disable */
 const PROTOBUF_JSON_MCAP_BASE64 =
   "iU1DQVAwDQoBCAAAAAAAAAAAAAAAAAAAAAOdAAAAAAAAAAEACwAAAHRlc3QuU2FtcGxlCAAAAHByb3RvYnVmfAAAAAp6CgxzYW1wbGUucHJvdG8SBHRlc3QiXAoGU2FtcGxlEh0KCnNuYWtlX2Nhc2UYASABKAlSCXNuYWtlQ2FzZRIdCgp6ZXJvX3ZhbHVlGAIgASgNUgl6ZXJvVmFsdWUSFAoFY291bnQYAyABKA1SBWNvdW50YgZwcm90bzMEHQAAAAAAAAABAAEABQAAAHByb3RvCAAAAHByb3RvYnVmAAAAAAUfAAAAAAAAAAEAAQAAAAIAAAAAAAAAAQAAAAAAAAAKBWhlbGxvGAcPBAAAAAAAAAAAAAAAAhQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACJTUNBUDANCg==";

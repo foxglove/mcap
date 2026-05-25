@@ -129,6 +129,33 @@ mod tests {
     }
 
     #[test]
+    fn cat_rejects_conflicting_time_units() {
+        let parse_err = Args::try_parse_from([
+            "mcap",
+            "cat",
+            "demo.mcap",
+            "--start-secs",
+            "1",
+            "--start-nsecs",
+            "1",
+        ])
+        .expect_err("start seconds and nanoseconds should conflict");
+        assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
+
+        let parse_err = Args::try_parse_from([
+            "mcap",
+            "cat",
+            "demo.mcap",
+            "--end-secs",
+            "1",
+            "--end-nsecs",
+            "1",
+        ])
+        .expect_err("end seconds and nanoseconds should conflict");
+        assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
     fn requires_subcommand() {
         let parse_err = Args::try_parse_from(["mcap"]).expect_err("subcommand is required");
         assert_eq!(

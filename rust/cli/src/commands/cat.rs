@@ -194,9 +194,7 @@ fn cat_streaming(
     mut source: impl std::io::Read,
     opts: &CatOptions,
 ) -> Result<bool> {
-    let mut reader = mcap::sans_io::LinearReader::new_with_options(
-        mcap::sans_io::LinearReaderOptions::default().with_validate_chunk_crcs(true),
-    );
+    let mut reader = mcap::sans_io::LinearReader::new();
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
