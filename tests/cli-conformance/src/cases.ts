@@ -529,6 +529,8 @@ export const cases: CliTestCase[] = [
     tags: ["known-difference", "convert", "ros2"],
     invocation: {
       args: ["convert", ROS2_EMBEDDED_SCHEMA_DB3, "converted.mcap", "--compression", "none"],
+      // Make Go's ament-only schema lookup deterministic even when the developer shell has
+      // sourced a ROS 2 workspace. Rust does not consult this environment variable.
       env: { AMENT_PREFIX_PATH: "" },
     },
     knownDifference: {
