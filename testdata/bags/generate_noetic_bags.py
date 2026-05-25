@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import shutil
 from pathlib import Path
 
 import rosbag
@@ -43,13 +44,13 @@ def main() -> None:
         "--output",
         type=Path,
         default=Path("generated"),
-        help="directory to write generated noetic-*.bag fixtures into",
+        help="directory to recreate and write generated .bag fixtures into",
     )
     args = parser.parse_args()
 
-    args.output.mkdir(parents=True, exist_ok=True)
-    for old_fixture in args.output.glob("noetic-*.bag"):
-        old_fixture.unlink()
+    if args.output.exists():
+        shutil.rmtree(args.output)
+    args.output.mkdir(parents=True)
 
     fixtures = [
         ("noetic-multitopic-none.bag", rosbag.Compression.NONE, write_multitopic_bag),
