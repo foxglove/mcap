@@ -38,11 +38,15 @@ port is still pre-production:
      seconds and `--start-nsecs` / `--end-nsecs` select nanoseconds.
    - This matches MCAP's internal timestamp unit and preserves copy/paste from
      existing `mcap cat` output, but it is surprising for CLI users.
-   - For Rust CLI 1.0, consider making decimal seconds the default human input
-     form, e.g. `--start 1.23456789`, while supporting explicit units such as
-     `--start 1709146829659264519ns` and RFC3339 timestamps.
-   - If this changes, deprecate or remove the split `--*-secs` / `--*-nsecs`
-     flags rather than carrying them as the preferred interface.
+   - For Rust CLI 1.0, remove the split `--*-secs` / `--*-nsecs` variants and
+     standardize all commands on `--start` / `--end` where applicable.
+   - Parse `--start` / `--end` values as RFC3339 timestamps, exact decimal
+     seconds strings (for example `1.23456789`), or explicit unit-suffixed
+     durations/timestamps such as `1.5s`, `250ms`, and
+     `1709146829659264519ns`.
+   - Apply the same timestamp input syntax consistently across all commands
+     that accept times, including `cat`, `filter`, `add attachment`, and any
+     future time-filtered commands.
 
 ## Intentional divergences from Go CLI
 
