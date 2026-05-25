@@ -633,8 +633,8 @@ impl Ros1MessageDef {
             "uint32" => write!(out, "{}", read_u32(data, cursor)?)?,
             "int64" => write!(out, "{}", read_i64(data, cursor)?)?,
             "uint64" => write!(out, "{}", read_u64(data, cursor)?)?,
-            "float32" => serde_json::to_writer(&mut *out, &read_f32(data, cursor)?)?,
-            "float64" => serde_json::to_writer(&mut *out, &read_f64(data, cursor)?)?,
+            "float32" => write_ros1_float(out, read_f32(data, cursor)? as f64)?,
+            "float64" => write_ros1_float(out, read_f64(data, cursor)?)?,
             "string" => {
                 let len = read_u32(data, cursor)? as usize;
                 let bytes = read_exact(data, cursor, len)?;
@@ -716,21 +716,16 @@ fn parse_ros1_field(line: &str) -> Option<Ros1Field> {
 }
 
 fn parse_ros1_field_type(type_token: &str) -> Ros1FieldType {
-    let type_token = type_token
-        .split_once("<=")
-        .map(|(base, _)| base)
-        .unwrap_or(type_token);
     if let Some(array_start) = type_token.find('[') {
-        let Some(array_suffix) =
-            type_token.get(array_start + 1..type_token.len().saturating_sub(1))
+        let base = strip_bound(&type_token[..array_start]).to_string();
+        let Some(array_end) = type_token[array_start + 1..]
+            .find(']')
+            .map(|relative| array_start + 1 + relative)
         else {
-            return Ros1FieldType {
-                base: type_token.to_string(),
-                array: None,
-            };
+            return Ros1FieldType { base, array: None };
         };
-        let base = type_token[..array_start].to_string();
-        let array = if array_suffix.is_empty() {
+        let array_suffix = &type_token[array_start + 1..array_end];
+        let array = if array_suffix.is_empty() || array_suffix.starts_with("<=") {
             Some(None)
         } else {
             Some(array_suffix.parse::<usize>().ok())
@@ -738,9 +733,30 @@ fn parse_ros1_field_type(type_token: &str) -> Ros1FieldType {
         Ros1FieldType { base, array }
     } else {
         Ros1FieldType {
-            base: type_token.to_string(),
+            base: strip_bound(type_token).to_string(),
             array: None,
         }
+    }
+}
+
+fn strip_bound(type_token: &str) -> &str {
+    type_token
+        .split_once("<=")
+        .map(|(base, _)| base)
+        .unwrap_or(type_token)
+}
+
+fn write_ros1_float(writer: &mut impl std::io::Write, value: f64) -> std::io::Result<()> {
+    if value.is_nan() {
+        writer.write_all(br#""NaN""#)
+    } else if value == f64::INFINITY {
+        writer.write_all(br#""Infinity""#)
+    } else if value == f64::NEG_INFINITY {
+        writer.write_all(br#""-Infinity""#)
+    } else {
+        serde_json::to_writer(writer, &value)
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+        Ok(())
     }
 }
 
@@ -842,7 +858,7 @@ mod tests {
     use std::{borrow::Cow, collections::BTreeMap, io::Cursor, sync::Arc};
 
     use super::{
-        cat_mcap, cat_streaming, parse_ros1_field_type, write_payload_preview,
+        cat_mcap, cat_streaming, parse_ros1_field_type, write_payload_preview, write_ros1_float,
         write_signed_decimal_time, CatOptions, JsonTranscoders, Ros1MessageDef,
     };
 
@@ -1237,7 +1253,39 @@ mod tests {
     #[test]
     fn malformed_ros1_array_type_does_not_panic() {
         let field_type = parse_ros1_field_type("int32[");
-        assert_eq!(field_type.base, "int32[");
+        assert_eq!(field_type.base, "int32");
         assert!(field_type.array.is_none());
+    }
+
+    #[test]
+    fn bounded_ros1_array_type_is_variable_length_array() {
+        let field_type = parse_ros1_field_type("int32[<=10]");
+        assert_eq!(field_type.base, "int32");
+        assert_eq!(field_type.array, Some(None));
+    }
+
+    #[test]
+    fn bounded_ros1_scalar_type_strips_bound() {
+        let field_type = parse_ros1_field_type("string<=10");
+        assert_eq!(field_type.base, "string");
+        assert!(field_type.array.is_none());
+    }
+
+    #[test]
+    fn ros1_float_special_values_match_protojson_strings() {
+        let mut out = Vec::new();
+        write_ros1_float(&mut out, f64::NAN).expect("nan should write");
+        assert_eq!(String::from_utf8(out).expect("valid utf8"), r#""NaN""#);
+
+        let mut out = Vec::new();
+        write_ros1_float(&mut out, f64::INFINITY).expect("infinity should write");
+        assert_eq!(String::from_utf8(out).expect("valid utf8"), r#""Infinity""#);
+
+        let mut out = Vec::new();
+        write_ros1_float(&mut out, f64::NEG_INFINITY).expect("negative infinity should write");
+        assert_eq!(
+            String::from_utf8(out).expect("valid utf8"),
+            r#""-Infinity""#
+        );
     }
 }
