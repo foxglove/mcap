@@ -279,7 +279,7 @@ pub enum CompressionFormat {
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct ConvertCommand {
-    /// Local path to the source ROS 1 bag or ROS 2 db3 file
+    /// Local path to the input file
     pub input: PathBuf,
 
     /// Local path for the destination MCAP file
