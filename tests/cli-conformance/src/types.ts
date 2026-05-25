@@ -24,6 +24,11 @@ export type FixtureAction =
       bytes: number[];
     }
   | {
+      type: "writeBase64";
+      to: string;
+      contents: string;
+    }
+  | {
       type: "mkdir";
       path: string;
     };

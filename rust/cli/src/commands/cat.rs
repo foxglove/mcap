@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
-use std::io::{IsTerminal as _, Read as _, Write as _};
+use std::io::{self, IsTerminal as _, Write as _};
+use std::sync::Arc;
 
 use anyhow::{bail, Context as _, Result};
 use mcap::sans_io::indexed_reader::ReadOrder;
@@ -22,12 +23,7 @@ pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
         if stdin.is_terminal() {
             bail!("supply a file");
         }
-        let mut input = Vec::new();
-        stdin
-            .lock()
-            .read_to_end(&mut input)
-            .context("failed to read input from stdin")?;
-        if cat_mcap(&mut writer, &input, &opts)? {
+        if cat_streaming(&mut writer, stdin.lock(), &opts)? {
             return Ok(());
         }
     } else {
@@ -193,17 +189,144 @@ fn cat_linear(
     Ok(false)
 }
 
-struct CatMessage<'a> {
-    channel: &'a mcap::Channel<'a>,
+fn cat_streaming(
+    writer: &mut impl std::io::Write,
+    mut source: impl std::io::Read,
+    opts: &CatOptions,
+) -> Result<bool> {
+    let mut reader = mcap::sans_io::LinearReader::new_with_options(
+        mcap::sans_io::LinearReaderOptions::default().with_validate_chunk_crcs(true),
+    );
+    let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
+    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
+    let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+    let mut json_transcoders = JsonTranscoders::default();
+
+    while let Some(event) = reader.next_event() {
+        match event? {
+            mcap::sans_io::LinearReadEvent::ReadRequest(need) => {
+                let read = source
+                    .read(reader.insert(need))
+                    .context("failed to read input from stdin")?;
+                reader.notify_read(read);
+            }
+            mcap::sans_io::LinearReadEvent::Record { data, opcode } => {
+                let record = mcap::parse_record(opcode, data)?;
+                if handle_linear_record(
+                    writer,
+                    record,
+                    opts,
+                    &mut schemas,
+                    &mut channel_defs,
+                    &mut channels,
+                    &mut json_transcoders,
+                )? {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+
+    Ok(false)
+}
+
+fn handle_linear_record(
+    writer: &mut impl std::io::Write,
+    record: mcap::records::Record<'_>,
+    opts: &CatOptions,
+    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
+    channel_defs: &mut HashMap<u16, mcap::records::Channel>,
+    channels: &mut HashMap<u16, Arc<mcap::Channel<'static>>>,
+    json_transcoders: &mut JsonTranscoders,
+) -> Result<bool> {
+    match record {
+        mcap::records::Record::Schema { header, data } => {
+            let schema = Arc::new(mcap::Schema {
+                id: header.id,
+                name: header.name,
+                encoding: header.encoding,
+                data: Cow::Owned(data.into_owned()),
+            });
+            schemas.insert(schema.id, schema);
+        }
+        mcap::records::Record::Channel(channel) => {
+            if channel.schema_id == 0 || schemas.contains_key(&channel.schema_id) {
+                let resolved = build_channel(&channel, schemas)?;
+                channels.insert(channel.id, resolved);
+            }
+            channel_defs.insert(channel.id, channel);
+        }
+        mcap::records::Record::Message { header, data } => {
+            if !opts.include_time(header.log_time) {
+                return Ok(false);
+            }
+
+            let channel = if let Some(channel) = channels.get(&header.channel_id) {
+                channel.clone()
+            } else {
+                let Some(channel_def) = channel_defs.get(&header.channel_id) else {
+                    bail!("message references unknown channel {}", header.channel_id);
+                };
+                let resolved = build_channel(channel_def, schemas)?;
+                channels.insert(header.channel_id, resolved.clone());
+                resolved
+            };
+
+            if !opts.include_topic(&channel.topic) {
+                return Ok(false);
+            }
+
+            let message = CatMessage {
+                channel: &channel,
+                sequence: header.sequence,
+                log_time: header.log_time,
+                publish_time: header.publish_time,
+                data: data.as_ref(),
+            };
+            return write_message(writer, message, opts, json_transcoders);
+        }
+        _ => {}
+    }
+
+    Ok(false)
+}
+
+fn build_channel(
+    channel: &mcap::records::Channel,
+    schemas: &HashMap<u16, Arc<mcap::Schema<'static>>>,
+) -> Result<Arc<mcap::Channel<'static>>> {
+    let schema = if channel.schema_id == 0 {
+        None
+    } else {
+        Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
+            anyhow::anyhow!(
+                "encountered channel with topic {} with unknown schema ID {}",
+                channel.topic,
+                channel.schema_id
+            )
+        })?)
+    };
+
+    Ok(Arc::new(mcap::Channel {
+        id: channel.id,
+        topic: channel.topic.clone(),
+        schema,
+        message_encoding: channel.message_encoding.clone(),
+        metadata: channel.metadata.clone(),
+    }))
+}
+
+struct CatMessage<'a, 'schema, 'data> {
+    channel: &'a mcap::Channel<'schema>,
     sequence: u32,
     log_time: u64,
     publish_time: u64,
-    data: &'a [u8],
+    data: &'data [u8],
 }
 
 fn write_message(
     writer: &mut impl std::io::Write,
-    message: CatMessage<'_>,
+    message: CatMessage<'_, '_, '_>,
     opts: &CatOptions,
     json_transcoders: &mut JsonTranscoders,
 ) -> Result<bool> {
@@ -243,34 +366,13 @@ fn write_message_fields(
     data: &[u8],
     max_preview_bytes: usize,
 ) -> Result<bool> {
-    if let Err(err) = common::write_raw_time(writer, log_time) {
-        if err.kind() == std::io::ErrorKind::BrokenPipe {
-            return Ok(true);
-        }
-        return Err(err.into());
-    }
-    if let Err(err) = write!(writer, " {} [{}] ", topic, schema_name) {
-        if err.kind() == std::io::ErrorKind::BrokenPipe {
-            return Ok(true);
-        }
-        return Err(err.into());
-    }
-
-    if let Err(err) = write_payload_preview(writer, data, max_preview_bytes) {
-        if err.kind() == std::io::ErrorKind::BrokenPipe {
-            return Ok(true);
-        }
-        return Err(err.into());
-    }
-
-    if let Err(err) = writeln!(writer) {
-        if err.kind() == std::io::ErrorKind::BrokenPipe {
-            return Ok(true);
-        }
-        return Err(err.into());
-    }
-
-    Ok(false)
+    let result: io::Result<()> = (|| {
+        common::write_raw_time(writer, log_time)?;
+        write!(writer, " {} [{}] ", topic, schema_name)?;
+        write_payload_preview(writer, data, max_preview_bytes)?;
+        writeln!(writer)
+    })();
+    io_result_to_broken_pipe(result)
 }
 
 fn write_json_message(
@@ -283,54 +385,35 @@ fn write_json_message(
     json_transcoders: &mut JsonTranscoders,
 ) -> Result<bool> {
     let encoded_data = json_transcoders.encode(channel, data)?;
+    // Unlike the Go CLI's current manual string concatenation, escaping here keeps
+    // JSON valid for topics containing quotes or backslashes.
     let topic = serde_json::to_string(&channel.topic).context("failed to encode topic")?;
-    if let Err(err) = write!(
-        writer,
-        "{{\"topic\":{topic},\"sequence\":{sequence},\"log_time\":"
-    ) {
-        return maybe_broken_pipe(err);
-    }
-    if let Err(err) = write_decimal_time(writer, log_time) {
-        return maybe_broken_pipe(err);
-    }
-    if let Err(err) = write!(writer, ",\"publish_time\":") {
-        return maybe_broken_pipe(err);
-    }
-    if let Err(err) = write_decimal_time(writer, publish_time) {
-        return maybe_broken_pipe(err);
-    }
-    if let Err(err) = writer.write_all(b",\"data\":") {
-        return maybe_broken_pipe(err);
-    }
-    if let Err(err) = writer.write_all(encoded_data.as_ref()) {
-        return maybe_broken_pipe(err);
-    }
-    if let Err(err) = writer.write_all(b"}\n") {
-        return maybe_broken_pipe(err);
-    }
-    Ok(false)
+    let result: io::Result<()> = (|| {
+        write!(
+            writer,
+            "{{\"topic\":{topic},\"sequence\":{sequence},\"log_time\":"
+        )?;
+        writer.write_all(common::decimal_time(log_time).as_bytes())?;
+        write!(writer, ",\"publish_time\":")?;
+        writer.write_all(common::decimal_time(publish_time).as_bytes())?;
+        writer.write_all(b",\"data\":")?;
+        writer.write_all(encoded_data.as_ref())?;
+        writer.write_all(b"}\n")
+    })();
+    io_result_to_broken_pipe(result)
 }
 
-fn write_decimal_time(writer: &mut impl std::io::Write, time: u64) -> std::io::Result<()> {
-    write!(
-        writer,
-        "{}.{:09}",
-        time / 1_000_000_000,
-        time % 1_000_000_000
-    )
-}
-
-fn maybe_broken_pipe(err: std::io::Error) -> Result<bool> {
-    if err.kind() == std::io::ErrorKind::BrokenPipe {
-        Ok(true)
-    } else {
-        Err(err.into())
+fn io_result_to_broken_pipe(result: io::Result<()>) -> Result<bool> {
+    match result {
+        Ok(()) => Ok(false),
+        Err(err) if err.kind() == io::ErrorKind::BrokenPipe => Ok(true),
+        Err(err) => Err(err.into()),
     }
 }
 
 fn flush_or_ignore_broken_pipe(writer: &mut impl std::io::Write) -> Result<()> {
     if let Err(err) = writer.flush() {
-        if err.kind() == std::io::ErrorKind::BrokenPipe {
+        if err.kind() == io::ErrorKind::BrokenPipe {
             return Ok(());
         }
         return Err(err.into());
@@ -568,16 +651,7 @@ impl Ros1MessageDef {
             "duration" => {
                 let sec = read_i32(data, cursor)?;
                 let nsec = read_i32(data, cursor)?;
-                if sec < 0 || nsec < 0 {
-                    write!(
-                        out,
-                        "-{}.{:09}",
-                        sec.saturating_abs(),
-                        nsec.saturating_abs()
-                    )?;
-                } else {
-                    write!(out, "{sec}.{nsec:09}")?;
-                }
+                write_signed_decimal_time(out, sec, nsec)?;
             }
             nested_type => {
                 let resolved = resolve_ros1_type(package, nested_type);
@@ -649,8 +723,15 @@ fn parse_ros1_field_type(type_token: &str) -> Ros1FieldType {
         .map(|(base, _)| base)
         .unwrap_or(type_token);
     if let Some(array_start) = type_token.find('[') {
+        let Some(array_suffix) =
+            type_token.get(array_start + 1..type_token.len().saturating_sub(1))
+        else {
+            return Ros1FieldType {
+                base: type_token.to_string(),
+                array: None,
+            };
+        };
         let base = type_token[..array_start].to_string();
-        let array_suffix = &type_token[array_start + 1..type_token.len().saturating_sub(1)];
         let array = if array_suffix.is_empty() {
             Some(None)
         } else {
@@ -663,6 +744,22 @@ fn parse_ros1_field_type(type_token: &str) -> Ros1FieldType {
             array: None,
         }
     }
+}
+
+fn write_signed_decimal_time(
+    writer: &mut impl std::io::Write,
+    seconds: i32,
+    nanos: i32,
+) -> std::io::Result<()> {
+    let total_nanos = seconds as i128 * 1_000_000_000i128 + nanos as i128;
+    let sign = if total_nanos < 0 { "-" } else { "" };
+    let abs = total_nanos.abs();
+    write!(
+        writer,
+        "{sign}{}.{:09}",
+        abs / 1_000_000_000,
+        abs % 1_000_000_000
+    )
 }
 
 fn read_exact<'a>(data: &'a [u8], cursor: &mut usize, len: usize) -> Result<&'a [u8]> {
@@ -746,7 +843,10 @@ fn write_payload_preview(
 mod tests {
     use std::{borrow::Cow, collections::BTreeMap, io::Cursor, sync::Arc};
 
-    use super::{cat_mcap, write_payload_preview, CatOptions, JsonTranscoders, Ros1MessageDef};
+    use super::{
+        cat_mcap, cat_streaming, parse_ros1_field_type, write_payload_preview,
+        write_signed_decimal_time, CatOptions, JsonTranscoders, Ros1MessageDef,
+    };
 
     fn sample_message(schema_name: Option<&str>, data: Vec<u8>) -> mcap::Message<'static> {
         let schema = schema_name.map(|name| {
@@ -1018,6 +1118,26 @@ mod tests {
     }
 
     #[test]
+    fn cat_streaming_reads_without_buffering_full_input() {
+        let mcap = build_multi_topic_mcap();
+        let opts = CatOptions {
+            topics: vec!["/radar".to_string()],
+            ..CatOptions::default()
+        };
+        let mut out = Vec::new();
+        let broken_pipe = cat_streaming(&mut out, Cursor::new(mcap), &opts)
+            .expect("streaming cat should succeed");
+        assert!(!broken_pipe);
+
+        let output = String::from_utf8(out).expect("valid utf8 output");
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(
+            lines,
+            vec![r#"20 /radar [Example] [123 34 114 97 100 97 114 34 58 49]..."#]
+        );
+    }
+
+    #[test]
     fn cat_json_wraps_jsonschema_messages() {
         let message = sample_message(Some("Example"), br#"{"value":1}"#.to_vec());
         let mut out = Vec::new();
@@ -1046,6 +1166,40 @@ mod tests {
     }
 
     #[test]
+    fn protobuf_json_uses_lower_camel_case_and_omits_zero_values() {
+        let descriptor = vec![
+            10, 122, 10, 12, 115, 97, 109, 112, 108, 101, 46, 112, 114, 111, 116, 111, 18, 4, 116,
+            101, 115, 116, 34, 92, 10, 6, 83, 97, 109, 112, 108, 101, 18, 29, 10, 10, 115, 110, 97,
+            107, 101, 95, 99, 97, 115, 101, 24, 1, 32, 1, 40, 9, 82, 9, 115, 110, 97, 107, 101, 67,
+            97, 115, 101, 18, 29, 10, 10, 122, 101, 114, 111, 95, 118, 97, 108, 117, 101, 24, 2,
+            32, 1, 40, 13, 82, 9, 122, 101, 114, 111, 86, 97, 108, 117, 101, 18, 20, 10, 5, 99,
+            111, 117, 110, 116, 24, 3, 32, 1, 40, 13, 82, 5, 99, 111, 117, 110, 116, 98, 6, 112,
+            114, 111, 116, 111, 51,
+        ];
+        let schema = Arc::new(mcap::Schema {
+            id: 1,
+            name: "test.Sample".to_string(),
+            encoding: "protobuf".to_string(),
+            data: Cow::Owned(descriptor),
+        });
+        let channel = Arc::new(mcap::Channel {
+            id: 1,
+            topic: "proto".to_string(),
+            schema: Some(schema),
+            message_encoding: "protobuf".to_string(),
+            metadata: BTreeMap::new(),
+        });
+        let mut transcoders = JsonTranscoders::default();
+        let encoded = transcoders
+            .encode(&channel, &[10, 5, b'h', b'e', b'l', b'l', b'o', 24, 7])
+            .expect("protobuf should encode");
+        assert_eq!(
+            String::from_utf8(encoded.into_owned()).expect("valid utf8"),
+            r#"{"snakeCase":"hello","count":7}"#
+        );
+    }
+
+    #[test]
     fn ros1_transcoder_handles_nested_messages_and_arrays() {
         let schema = b"Header header\nint32[] values\nstring label\n================================================================================\nMSG: std_msgs/Header\nuint32 seq\ntime stamp\nstring frame_id\n";
         let transcoder =
@@ -1069,5 +1223,23 @@ mod tests {
             String::from_utf8(json).expect("valid utf8"),
             r#"{"header":{"seq":7,"stamp":1.000000002,"frame_id":"map"},"values":[10,20],"label":"hello"}"#
         );
+    }
+
+    #[test]
+    fn ros1_duration_formats_signed_total_nanoseconds() {
+        let mut out = Vec::new();
+        write_signed_decimal_time(&mut out, 5, -100).expect("duration should format");
+        assert_eq!(String::from_utf8(out).expect("valid utf8"), "4.999999900");
+
+        let mut out = Vec::new();
+        write_signed_decimal_time(&mut out, -5, 100).expect("duration should format");
+        assert_eq!(String::from_utf8(out).expect("valid utf8"), "-4.999999900");
+    }
+
+    #[test]
+    fn malformed_ros1_array_type_does_not_panic() {
+        let field_type = parse_ros1_field_type("int32[");
+        assert_eq!(field_type.base, "int32[");
+        assert!(field_type.array.is_none());
     }
 }

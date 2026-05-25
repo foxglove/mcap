@@ -44,6 +44,12 @@ export async function applyFixtureActions(
         await fs.writeFile(to, Buffer.from(action.bytes));
         break;
       }
+      case "writeBase64": {
+        const to = resolvePlaceholders(action.to, context);
+        await fs.mkdir(path.dirname(to), { recursive: true });
+        await fs.writeFile(to, Buffer.from(action.contents, "base64"));
+        break;
+      }
       case "mkdir": {
         await fs.mkdir(resolvePlaceholders(action.path, context), { recursive: true });
         break;

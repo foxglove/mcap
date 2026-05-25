@@ -851,7 +851,6 @@ dependencies = [
  "lz4",
  "mcap",
  "memmap2",
- "prost",
  "prost-reflect",
  "regex",
  "serde_json",

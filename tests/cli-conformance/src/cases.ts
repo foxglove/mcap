@@ -11,6 +11,11 @@ const TEN_MESSAGES = "{dataDir}/TenMessages/TenMessages-ch-chx-mx-pad-rch-rsh-st
 const ONE_ATTACHMENT = "{dataDir}/OneAttachment/OneAttachment-ax-st-sum.mcap";
 const ONE_METADATA = "{dataDir}/OneMetadata/OneMetadata-mdx-st-sum.mcap";
 
+/* cspell:disable */
+const PROTOBUF_JSON_MCAP_BASE64 =
+  "iU1DQVAwDQoBCAAAAAAAAAAAAAAAAAAAAAOdAAAAAAAAAAEACwAAAHRlc3QuU2FtcGxlCAAAAHByb3RvYnVmfAAAAAp6CgxzYW1wbGUucHJvdG8SBHRlc3QiXAoGU2FtcGxlEh0KCnNuYWtlX2Nhc2UYASABKAlSCXNuYWtlQ2FzZRIdCgp6ZXJvX3ZhbHVlGAIgASgNUgl6ZXJvVmFsdWUSFAoFY291bnQYAyABKA1SBWNvdW50YgZwcm90bzMEHQAAAAAAAAABAAEABQAAAHByb3RvCAAAAHByb3RvYnVmAAAAAAUfAAAAAAAAAAEAAQAAAAIAAAAAAAAAAQAAAAAAAAAKBWhlbGxvGAcPBAAAAAAAAAAAAAAAAhQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACJTUNBUDANCg==";
+/* cspell:enable */
+
 const HELP_PATHS = [
   ["add"],
   ["add", "attachment"],
@@ -165,6 +170,25 @@ export const cases: CliTestCase[] = [
       exitCode: "same",
       stdout: { kind: "text" },
       stderr: { kind: "ignore" },
+    },
+  },
+  {
+    id: "cat-json-protobuf-stdin",
+    description:
+      "Cat --json protobuf output matches Go field casing and zero-value omission for stdin input.",
+    tags: ["cat", "json", "protobuf", "stdin"],
+    setup: [
+      {
+        type: "writeBase64",
+        to: "{caseWorkDir}/protobuf.mcap",
+        contents: PROTOBUF_JSON_MCAP_BASE64,
+      },
+    ],
+    invocation: { args: ["cat", "--json"], stdin: { path: "{caseWorkDir}/protobuf.mcap" } },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "json" },
+      stderr: { kind: "text" },
     },
   },
   {
