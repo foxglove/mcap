@@ -1,10 +1,14 @@
 use std::collections::BTreeMap;
+use std::fs::File;
+use std::io::BufWriter;
 use std::io::{Cursor, ErrorKind, Read, Seek};
+use std::path::Path;
 
 use anyhow::{bail, ensure, Context, Result};
 
+use super::GIT_LFS_POINTER_PREFIX;
+
 const BAG_MAGIC: &[u8] = b"#ROSBAG V2.0\n";
-const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
 const OP_BAG_HEADER: u8 = 0x03;
 const OP_BAG_CHUNK: u8 = 0x05;
@@ -58,13 +62,34 @@ struct BagRecord {
     data: Vec<u8>,
 }
 
+#[cfg(test)]
 pub fn convert_ros1_bag<W: std::io::Write + Seek, R: Read + Seek>(
     output: W,
     mut input: R,
     write_options: mcap::WriteOptions,
 ) -> Result<()> {
     read_and_validate_ros1_bag_magic(&mut input)?;
+    convert_validated_ros1_bag(output, input, write_options)
+}
 
+pub fn convert_ros1_bag_file(
+    input_path: &Path,
+    output_path: &Path,
+    write_options: mcap::WriteOptions,
+) -> Result<()> {
+    let mut input = File::open(input_path)
+        .with_context(|| format!("failed to open input '{}'", input_path.display()))?;
+    read_and_validate_ros1_bag_magic(&mut input)?;
+    let output = File::create(output_path)
+        .with_context(|| format!("failed to open output '{}'", output_path.display()))?;
+    convert_validated_ros1_bag(BufWriter::new(output), input, write_options)
+}
+
+fn convert_validated_ros1_bag<W: std::io::Write + Seek, R: Read + Seek>(
+    output: W,
+    input: R,
+    write_options: mcap::WriteOptions,
+) -> Result<()> {
     let mut writer = write_options
         .create(output)
         .context("failed to create MCAP writer")?;

@@ -2,7 +2,7 @@ mod ros1_bag;
 mod ros2_db3;
 
 use std::fs::File;
-use std::io::{BufWriter, Read};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, ensure, Context, Result};
@@ -10,6 +10,8 @@ use mcap::{Compression, WriteOptions};
 
 use crate::cli::{CompressionFormat, ConvertCommand};
 use crate::context::CommandContext;
+
+const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
 pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     let input = ConvertInput::detect(args.input)?;
@@ -69,13 +71,7 @@ impl ConvertInput {
     fn convert(self, output_path: &Path, opts: WriteOptions) -> Result<()> {
         match self {
             Self::Ros1Bag(input_path) => {
-                let input = File::open(&input_path)
-                    .with_context(|| format!("failed to open input '{}'", input_path.display()))?;
-                let output = File::create(output_path).with_context(|| {
-                    format!("failed to open output '{}'", output_path.display())
-                })?;
-                let writer = BufWriter::new(output);
-                ros1_bag::convert_ros1_bag(writer, input, opts)
+                ros1_bag::convert_ros1_bag_file(&input_path, output_path, opts)
             }
             Self::Ros2Db3(input_path) => {
                 ros2_db3::convert_ros2_db3_file(&input_path, output_path, opts)
@@ -109,8 +105,6 @@ fn build_write_options(
 }
 
 fn reject_lfs_pointer(path: &Path) -> Result<()> {
-    const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
-
     let mut input =
         File::open(path).with_context(|| format!("failed to open input '{}'", path.display()))?;
     let mut magic = [0u8; 64];
@@ -142,10 +136,18 @@ fn ensure_distinct_paths(input: &Path, output: &Path) -> Result<()> {
             let file_name = output
                 .file_name()
                 .with_context(|| format!("invalid output path '{}'", output.display()))?;
-            parent
-                .canonicalize()
-                .with_context(|| format!("failed to resolve output parent '{}'", parent.display()))?
-                .join(file_name)
+            let parent_path = match parent.canonicalize() {
+                Ok(path) => path,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    return Ok(());
+                }
+                Err(err) => {
+                    return Err(err).with_context(|| {
+                        format!("failed to resolve output parent '{}'", parent.display())
+                    });
+                }
+            };
+            parent_path.join(file_name)
         }
         Err(err) => {
             return Err(err)
@@ -426,6 +428,33 @@ size 123\n",
             std::fs::read(&output_path).expect("read existing output"),
             b"keep me"
         );
+        std::fs::remove_file(output_path).expect("remove temp output");
+    }
+
+    #[test]
+    fn rejects_invalid_ros1_bag_magic_without_truncating_existing_output() {
+        let input_path = temp_input("invalid.bag", b"not a bag file for sure");
+        let output_path = temp_input("existing-ros1-output.mcap", b"keep me");
+
+        let err = super::run(
+            &CommandContext::default(),
+            ConvertCommand {
+                input: input_path.clone(),
+                output: output_path.clone(),
+                compression: CompressionFormat::None,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: false,
+                chunked: true,
+            },
+        )
+        .expect_err("invalid ROS 1 bag should fail");
+
+        assert!(err.to_string().contains("invalid ROS1 bag magic"));
+        assert_eq!(
+            std::fs::read(&output_path).expect("read existing output"),
+            b"keep me"
+        );
+        std::fs::remove_file(input_path).expect("remove temp input");
         std::fs::remove_file(output_path).expect("remove temp output");
     }
 

@@ -4,7 +4,7 @@ import * as Diff from "diff";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { compareMcapBuffers } from "./mcapCompare.ts";
+import { compareMcapBuffers, compareMcapSummary } from "./mcapCompare.ts";
 import { stableStringify } from "./stableJson.ts";
 import { normalizeTable } from "./tableNormalize.ts";
 import { bufferToUtf8, normalizeText } from "./textNormalize.ts";
@@ -272,7 +272,16 @@ async function compareExpectedFile(
     .then(() => true)
     .catch(() => false);
   if (exists === expected.exists) {
-    return [];
+    if (!exists || expected.mcapSummary == undefined) {
+      return [];
+    }
+    const data = await readComparedFile(implementation, filePath);
+    if (typeof data === "string") {
+      return [data];
+    }
+    return (await compareMcapSummary(data, expected.mcapSummary)).map(
+      (message) => `${implementation} file ${expected.path}: ${message}`,
+    );
   }
   return [
     `${implementation} expected file ${expected.path} to ${

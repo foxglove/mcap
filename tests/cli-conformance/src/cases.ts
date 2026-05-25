@@ -682,7 +682,13 @@ export const cases: CliTestCase[] = [
       },
       rustBehavior: {
         exitCode: 0,
-        files: [{ path: "converted.mcap", exists: true }],
+        files: [
+          {
+            path: "converted.mcap",
+            exists: true,
+            mcapSummary: { profile: "ros2", messageCount: 20, channelCount: 3, schemaCount: 3 },
+          },
+        ],
       },
     },
   },
