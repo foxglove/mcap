@@ -42,7 +42,7 @@ pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
     flush_or_ignore_broken_pipe(&mut writer)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct CatOptions {
     topics: Vec<String>,
     start: u64,
@@ -86,17 +86,6 @@ impl CatOptions {
 
     fn include_time(&self, log_time: u64) -> bool {
         log_time >= self.start && self.end.is_none_or(|end| log_time < end)
-    }
-}
-
-impl Default for CatOptions {
-    fn default() -> Self {
-        Self {
-            topics: Vec::new(),
-            start: 0,
-            end: None,
-            json: false,
-        }
     }
 }
 
@@ -162,16 +151,14 @@ fn cat_indexed(
                     .channels
                     .get(&header.channel_id)
                     .ok_or_else(|| anyhow::anyhow!("unknown channel {}", header.channel_id))?;
-                if write_message(
-                    writer,
+                let message = CatMessage {
                     channel,
-                    header.sequence,
-                    header.log_time,
-                    header.publish_time,
+                    sequence: header.sequence,
+                    log_time: header.log_time,
+                    publish_time: header.publish_time,
                     data,
-                    opts,
-                    json_transcoders,
-                )? {
+                };
+                if write_message(writer, message, opts, json_transcoders)? {
                     return Ok(Some(true));
                 }
             }
@@ -192,54 +179,57 @@ fn cat_linear(
         if !opts.include_time(message.log_time) || !opts.include_topic(&message.channel.topic) {
             continue;
         }
-        if write_message(
-            writer,
-            &message.channel,
-            message.sequence,
-            message.log_time,
-            message.publish_time,
-            message.data.as_ref(),
-            opts,
-            json_transcoders,
-        )? {
+        let message = CatMessage {
+            channel: &message.channel,
+            sequence: message.sequence,
+            log_time: message.log_time,
+            publish_time: message.publish_time,
+            data: message.data.as_ref(),
+        };
+        if write_message(writer, message, opts, json_transcoders)? {
             return Ok(true);
         }
     }
     Ok(false)
 }
 
-fn write_message(
-    writer: &mut impl std::io::Write,
-    channel: &mcap::Channel<'_>,
+struct CatMessage<'a> {
+    channel: &'a mcap::Channel<'a>,
     sequence: u32,
     log_time: u64,
     publish_time: u64,
-    data: &[u8],
+    data: &'a [u8],
+}
+
+fn write_message(
+    writer: &mut impl std::io::Write,
+    message: CatMessage<'_>,
     opts: &CatOptions,
     json_transcoders: &mut JsonTranscoders,
 ) -> Result<bool> {
     if opts.json {
         write_json_message(
             writer,
-            channel,
-            sequence,
-            log_time,
-            publish_time,
-            data,
+            message.channel,
+            message.sequence,
+            message.log_time,
+            message.publish_time,
+            message.data,
             json_transcoders,
         )
     } else {
-        let schema_name = channel
+        let schema_name = message
+            .channel
             .schema
             .as_ref()
             .map(|schema| schema.name.as_str())
             .unwrap_or("no schema");
         write_message_fields(
             writer,
-            log_time,
-            &channel.topic,
+            message.log_time,
+            &message.channel.topic,
             schema_name,
-            data,
+            message.data,
             MESSAGE_PREVIEW_LEN,
         )
     }
@@ -1036,17 +1026,15 @@ mod tests {
             json: true,
             ..CatOptions::default()
         };
-        let broken_pipe = super::write_message(
-            &mut out,
-            &message.channel,
-            message.sequence,
-            message.log_time,
-            message.publish_time,
-            message.data.as_ref(),
-            &opts,
-            &mut transcoders,
-        )
-        .expect("json message should write");
+        let cat_message = super::CatMessage {
+            channel: &message.channel,
+            sequence: message.sequence,
+            log_time: message.log_time,
+            publish_time: message.publish_time,
+            data: message.data.as_ref(),
+        };
+        let broken_pipe = super::write_message(&mut out, cat_message, &opts, &mut transcoders)
+            .expect("json message should write");
         assert!(!broken_pipe);
 
         assert_eq!(
