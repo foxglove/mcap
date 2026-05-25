@@ -93,3 +93,16 @@ The Rust workspace includes the `mcap` library crate under `rust/mcap` and the `
 | Build  | `swift build`                                                        |
 | Test   | `swift test`                                                         |
 | Lint   | See SwiftLint and SwiftFormat commands in `.github/workflows/ci.yml` |
+
+## Cursor Cloud specific instructions
+
+This is a library-only monorepo — there are no services to start. Development involves building and testing the libraries in each language.
+
+### Environment notes
+
+- **PATH**: The update script ensures `$HOME/.local/bin` (for `uv`) and `$HOME/go/bin` (for `golangci-lint`) are on PATH via `~/.bashrc`. Ensure these are on PATH if running commands in a non-login shell.
+- **Rust toolchain**: The default Rust stable toolchain must be current (run `rustup default stable`). The pre-installed rustc 1.83 is too old for some transitive dependencies (e.g., `time` crate requires `edition2024` support). The update script handles this.
+- **Python version**: The `python/pyproject.toml` requires `>=3.10,<3.11`. Python 3.10 is installed from the deadsnakes PPA. Use `uv run --python python3.10` or the venv at `python/.venv` directly.
+- **Prettier/fmt:check**: Running `yarn fmt:check` from the repo root will flag files inside `python/.venv/` because `.prettierignore` doesn't exclude it. This is expected in a dev environment; CI doesn't have the venv present. Lint individual TypeScript workspaces with `yarn workspace <name> lint:ci` instead.
+- **Go build**: Run `go build ./...` from within a module directory (e.g., `go/mcap`), not from the `go/` workspace root directly.
+- **C++ and Swift**: These require Docker and Swift compiler respectively, which are not installed by default in the Cloud VM. They are optional for most development work.
