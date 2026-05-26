@@ -40,7 +40,10 @@ pub enum Command {
     Cat(CatCommand),
     /// Create a compressed copy of an MCAP file
     Compress(CompressCommand),
-    /// Convert a bag file to an MCAP file
+    /// Convert supported input files to MCAP
+    #[command(
+        long_about = "Convert supported input files to MCAP.\n\nSupported inputs:\n  .bag  ROS 1 bag\n  .db3  ROS 2 SQLite db3"
+    )]
     Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file
     Decompress(DecompressCommand),
@@ -110,10 +113,37 @@ pub struct AddCommand {
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
-#[command(arg_required_else_help = true)]
 pub struct CatCommand {
-    /// One or more local paths to MCAP files
+    /// One or more local paths to MCAP files. If omitted, reads from stdin.
     pub files: Vec<PathBuf>,
+
+    /// Comma-separated list of topics to include
+    #[arg(long = "topics", default_value = "")]
+    pub topics: String,
+
+    /// Include messages at or after this time (seconds)
+    #[arg(
+        long = "start-secs",
+        default_value_t = 0,
+        conflicts_with = "start_nsecs"
+    )]
+    pub start_secs: u64,
+
+    /// Include messages at or after this time (nanoseconds)
+    #[arg(long = "start-nsecs", default_value_t = 0)]
+    pub start_nsecs: u64,
+
+    /// Include messages before this time (seconds)
+    #[arg(long = "end-secs", default_value_t = 0, conflicts_with = "end_nsecs")]
+    pub end_secs: u64,
+
+    /// Include messages before this time (nanoseconds)
+    #[arg(long = "end-nsecs", default_value_t = 0)]
+    pub end_nsecs: u64,
+
+    /// Print messages as JSON. Supported message encodings: ros1, protobuf, and json.
+    #[arg(long = "json", default_value_t = false)]
+    pub json: bool,
 }
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
@@ -252,7 +282,7 @@ pub enum CompressionFormat {
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct ConvertCommand {
-    /// Local path to the source ROS1 bag file
+    /// Local path to the input file
     pub input: PathBuf,
 
     /// Local path for the destination MCAP file

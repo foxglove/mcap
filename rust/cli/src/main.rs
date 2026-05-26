@@ -72,13 +72,87 @@ mod tests {
             args.command,
             Command::Cat(CatCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
+                topics: String::new(),
+                start_secs: 0,
+                start_nsecs: 0,
+                end_secs: 0,
+                end_nsecs: 0,
+                json: false,
             })
         );
     }
 
     #[test]
-    fn cat_requires_at_least_one_file() {
-        Args::try_parse_from(["mcap", "cat"]).expect_err("cat requires at least one file");
+    fn parses_cat_without_files_for_stdin() {
+        let args = Args::try_parse_from(["mcap", "cat"]).expect("cat should parse");
+        assert_eq!(
+            args.command,
+            Command::Cat(CatCommand {
+                files: Vec::new(),
+                topics: String::new(),
+                start_secs: 0,
+                start_nsecs: 0,
+                end_secs: 0,
+                end_nsecs: 0,
+                json: false,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_cat_subcommand_with_flags() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "cat",
+            "demo.mcap",
+            "--topics",
+            "/tf,/odom",
+            "--start-secs",
+            "10",
+            "--end-nsecs",
+            "20000000000",
+            "--json",
+        ])
+        .expect("cat should parse");
+        assert_eq!(
+            args.command,
+            Command::Cat(CatCommand {
+                files: vec!["demo.mcap".into()],
+                topics: "/tf,/odom".to_string(),
+                start_secs: 10,
+                start_nsecs: 0,
+                end_secs: 0,
+                end_nsecs: 20_000_000_000,
+                json: true,
+            })
+        );
+    }
+
+    #[test]
+    fn cat_rejects_conflicting_time_units() {
+        let parse_err = Args::try_parse_from([
+            "mcap",
+            "cat",
+            "demo.mcap",
+            "--start-secs",
+            "1",
+            "--start-nsecs",
+            "1",
+        ])
+        .expect_err("start seconds and nanoseconds should conflict");
+        assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
+
+        let parse_err = Args::try_parse_from([
+            "mcap",
+            "cat",
+            "demo.mcap",
+            "--end-secs",
+            "1",
+            "--end-nsecs",
+            "1",
+        ])
+        .expect_err("end seconds and nanoseconds should conflict");
+        assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
     }
 
     #[test]

@@ -24,3 +24,5 @@ mcap = { path = "../mcap" }
 regex = "1"
 serde_json = "1"
 simplelog = "0.12"
+prost-reflect = { version = "0.16.4", features = ["serde"] }
+rusqlite = { version = "0.39.0", features = ["bundled"] }

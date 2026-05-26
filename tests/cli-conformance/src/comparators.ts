@@ -1,8 +1,10 @@
+/* cspell:words ndjson */
+
 import * as Diff from "diff";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { compareMcapBuffers } from "./mcapCompare.ts";
+import { compareMcapBuffers, compareMcapSummary } from "./mcapCompare.ts";
 import { stableStringify } from "./stableJson.ts";
 import { normalizeTable } from "./tableNormalize.ts";
 import { bufferToUtf8, normalizeText } from "./textNormalize.ts";
@@ -171,6 +173,16 @@ async function compareBuffers(
       }
       return expectedJson === actualJson ? [] : [formatPatch(label, expectedJson, actualJson)];
     }
+    case "ndjson": {
+      const expectedJson = parseCanonicalNdjson("go", bufferToUtf8(expected));
+      const actualJson = parseCanonicalNdjson("rust", bufferToUtf8(actual));
+      if (typeof expectedJson !== "string" || typeof actualJson !== "string") {
+        return [expectedJson, actualJson]
+          .filter((result): result is { error: string } => typeof result !== "string")
+          .map((result) => `${label} ${result.error}`);
+      }
+      return expectedJson === actualJson ? [] : [formatPatch(label, expectedJson, actualJson)];
+    }
     case "table": {
       const expectedTable = normalizeTable(bufferToUtf8(expected));
       const actualTable = normalizeTable(bufferToUtf8(actual));
@@ -260,7 +272,16 @@ async function compareExpectedFile(
     .then(() => true)
     .catch(() => false);
   if (exists === expected.exists) {
-    return [];
+    if (!exists || expected.mcapSummary == undefined) {
+      return [];
+    }
+    const data = await readComparedFile(implementation, filePath);
+    if (typeof data === "string") {
+      return [data];
+    }
+    return (await compareMcapSummary(data, expected.mcapSummary)).map(
+      (message) => `${implementation} file ${expected.path}: ${message}`,
+    );
   }
   return [
     `${implementation} expected file ${expected.path} to ${
@@ -282,6 +303,29 @@ function parseCanonicalJson(
       }`,
     };
   }
+}
+
+function parseCanonicalNdjson(
+  implementation: "go" | "rust",
+  text: string,
+): string | { error: string } {
+  const lines = text
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const parsedLines = [];
+  for (const [index, line] of lines.entries()) {
+    try {
+      parsedLines.push(JSON.parse(line));
+    } catch (error) {
+      return {
+        error: `${implementation} NDJSON parse failed on line ${index + 1}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      };
+    }
+  }
+  return stableStringify(parsedLines);
 }
 
 function normalizeInfo(text: string): string {
