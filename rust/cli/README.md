@@ -8,23 +8,23 @@ It is not ready for production use yet.
 
 Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 
-| Command      | Status | Notes                                                                                                    |
-| ------------ | ------ | -------------------------------------------------------------------------------------------------------- |
-| `add`        | 🟢     |                                                                                                          |
-| `cat`        | 🟡     | Remote URI input is not yet supported.                                                                   |
-| `compress`   | 🟢     |                                                                                                          |
-| `convert`    | 🟢     |                                                                                                          |
-| `decompress` | 🟢     |                                                                                                          |
-| `doctor`     | 🟢     |                                                                                                          |
-| `du`         | 🟢     |                                                                                                          |
-| `filter`     | 🟢     |                                                                                                          |
-| `get`        | 🟢     |                                                                                                          |
-| `info`       | 🟢     |                                                                                                          |
-| `list`       | 🟢     |                                                                                                          |
-| `merge`      | 🟢     |                                                                                                          |
-| `recover`    | 🟢     | Preserves raw chunks by default for Go parity; use `--always-decode-chunk` to decode and rechunk output. |
-| `sort`       | 🟢     |                                                                                                          |
-| `version`    | 🟢     |                                                                                                          |
+| Command      | Status | Notes                                  |
+| ------------ | ------ | -------------------------------------- |
+| `add`        | 🟢     |                                        |
+| `cat`        | 🟡     | Remote URI input is not yet supported. |
+| `compress`   | 🟢     |                                        |
+| `convert`    | 🟢     |                                        |
+| `decompress` | 🟢     |                                        |
+| `doctor`     | 🟢     |                                        |
+| `du`         | 🟢     |                                        |
+| `filter`     | 🟢     |                                        |
+| `get`        | 🟢     |                                        |
+| `info`       | 🟢     |                                        |
+| `list`       | 🟢     |                                        |
+| `merge`      | 🟢     |                                        |
+| `recover`    | 🟢     |                                        |
+| `sort`       | 🟢     |                                        |
+| `version`    | 🟢     |                                        |
 
 ## Pre-1.0 compatibility cleanup
 
