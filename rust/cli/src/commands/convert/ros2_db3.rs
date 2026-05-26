@@ -339,6 +339,9 @@ mod tests {
 
     const IRON_TALKER_DB3: &str = "testdata/db3/talker-iron.db3";
     const HUMBLE_TALKER_DB3: &str = "testdata/db3/talker-humble.db3";
+
+    // Rust runs tests in this module concurrently, so each conversion needs a
+    // distinct output path to avoid one test deleting another test's MCAP.
     static TEMP_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     struct TempOutput {
