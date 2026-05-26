@@ -386,15 +386,17 @@ mod tests {
             .chunk_size(Some(1024))
     }
 
-    fn convert_fixture(path: &Path) -> Vec<u8> {
-        let output = TempOutput::new("converted");
+    fn convert_fixture(name: &str, path: &Path) -> Vec<u8> {
+        // Rust runs tests in this module concurrently, so callers must pass a
+        // distinct name to avoid one test deleting another test's MCAP.
+        let output = TempOutput::new(name);
         convert_ros2_db3_file(path, &output.path, write_options()).expect("convert ROS 2 db3");
         fs::read(&output.path).expect("read converted MCAP")
     }
 
     #[test]
     fn converts_iron_talker_db3_with_embedded_schemas() {
-        let bytes = convert_fixture(&fixture_path(IRON_TALKER_DB3));
+        let bytes = convert_fixture("iron-talker-converted", &fixture_path(IRON_TALKER_DB3));
         let summary = mcap::Summary::read(&bytes)
             .expect("summary read")
             .expect("summary present");
@@ -557,7 +559,7 @@ mod tests {
             .expect("insert message");
         }
 
-        let bytes = convert_fixture(&sqlite_path);
+        let bytes = convert_fixture("service-event-converted", &sqlite_path);
         let summary = mcap::Summary::read(&bytes)
             .expect("summary read")
             .expect("summary present");
@@ -622,7 +624,7 @@ mod tests {
             .expect("insert message");
         }
 
-        let bytes = convert_fixture(&sqlite_path);
+        let bytes = convert_fixture("unused-definition-converted", &sqlite_path);
         let summary = mcap::Summary::read(&bytes)
             .expect("summary read")
             .expect("summary present");
