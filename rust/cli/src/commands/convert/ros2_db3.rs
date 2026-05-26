@@ -333,16 +333,11 @@ fn timestamp(timestamp: i64) -> Result<u64> {
 mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
-    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::convert_ros2_db3_file;
 
     const IRON_TALKER_DB3: &str = "testdata/db3/talker-iron.db3";
     const HUMBLE_TALKER_DB3: &str = "testdata/db3/talker-humble.db3";
-
-    // Rust runs tests in this module concurrently, so each conversion needs a
-    // distinct output path to avoid one test deleting another test's MCAP.
-    static TEMP_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     struct TempOutput {
         path: PathBuf,
@@ -350,10 +345,9 @@ mod tests {
 
     impl TempOutput {
         fn new(name: &str) -> Self {
-            let nonce = TEMP_OUTPUT_COUNTER.fetch_add(1, Ordering::Relaxed);
             let path = std::env::temp_dir().join(format!(
-                "mcap-rust-ros2-db3-{name}-{}-{nonce}.mcap",
-                std::process::id(),
+                "mcap-rust-ros2-db3-{name}-{}.mcap",
+                std::process::id()
             ));
             let _ = fs::remove_file(&path);
             Self { path }
@@ -392,15 +386,17 @@ mod tests {
             .chunk_size(Some(1024))
     }
 
-    fn convert_fixture(path: &Path) -> Vec<u8> {
-        let output = TempOutput::new("converted");
+    fn convert_fixture(name: &str, path: &Path) -> Vec<u8> {
+        // Rust runs tests in this module concurrently, so callers must pass a
+        // distinct name to avoid one test deleting another test's MCAP.
+        let output = TempOutput::new(name);
         convert_ros2_db3_file(path, &output.path, write_options()).expect("convert ROS 2 db3");
         fs::read(&output.path).expect("read converted MCAP")
     }
 
     #[test]
     fn converts_iron_talker_db3_with_embedded_schemas() {
-        let bytes = convert_fixture(&fixture_path(IRON_TALKER_DB3));
+        let bytes = convert_fixture("iron-talker-converted", &fixture_path(IRON_TALKER_DB3));
         let summary = mcap::Summary::read(&bytes)
             .expect("summary read")
             .expect("summary present");
@@ -563,7 +559,7 @@ mod tests {
             .expect("insert message");
         }
 
-        let bytes = convert_fixture(&sqlite_path);
+        let bytes = convert_fixture("service-event-converted", &sqlite_path);
         let summary = mcap::Summary::read(&bytes)
             .expect("summary read")
             .expect("summary present");
@@ -628,7 +624,7 @@ mod tests {
             .expect("insert message");
         }
 
-        let bytes = convert_fixture(&sqlite_path);
+        let bytes = convert_fixture("unused-definition-converted", &sqlite_path);
         let summary = mcap::Summary::read(&bytes)
             .expect("summary read")
             .expect("summary present");
