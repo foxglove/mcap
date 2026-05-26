@@ -1,45 +1,82 @@
 mod ros1_bag;
+mod ros2_db3;
 
 use std::fs::File;
-use std::io::BufWriter;
-use std::path::Path;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use mcap::{Compression, WriteOptions};
 
 use crate::cli::{CompressionFormat, ConvertCommand};
 use crate::context::CommandContext;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum InputFileType {
-    Ros1Bag,
-}
+const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
 pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
-    let file_type = detect_file_type(&args.input)?;
-    let mut input = File::open(&args.input)
-        .with_context(|| format!("failed to open input '{}'", args.input.display()))?;
-    validate_input(file_type, &mut input)?;
-
-    let output = File::create(&args.output)
-        .with_context(|| format!("failed to open output '{}'", args.output.display()))?;
-    let writer = BufWriter::new(output);
-
+    let input = ConvertInput::detect(args.input)?;
+    ensure_distinct_paths(input.path(), &args.output)?;
     let opts = build_write_options(
         args.compression,
         args.chunk_size,
         args.include_crc,
         args.chunked,
+        input.profile(),
     );
 
-    match file_type {
-        InputFileType::Ros1Bag => ros1_bag::convert_ros1_bag(writer, input, opts),
-    }
+    input.convert(&args.output, opts)
 }
 
-fn validate_input(file_type: InputFileType, input: &mut File) -> Result<()> {
-    match file_type {
-        InputFileType::Ros1Bag => ros1_bag::validate_ros1_bag_magic(input),
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ConvertInput {
+    Ros1Bag(PathBuf),
+    Ros2Db3(PathBuf),
+}
+
+impl ConvertInput {
+    fn detect(path: PathBuf) -> Result<Self> {
+        let extension = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .unwrap_or_default();
+
+        if extension.eq_ignore_ascii_case("bag") {
+            reject_lfs_pointer(&path)?;
+            return Ok(Self::Ros1Bag(path));
+        }
+        if extension.eq_ignore_ascii_case("db3") {
+            reject_lfs_pointer(&path)?;
+            return Ok(Self::Ros2Db3(path));
+        }
+
+        bail!(
+            "unsupported input file extension for '{}' (expected .bag for ROS 1 bag or .db3 for ROS 2 SQLite db3 input)",
+            path.display()
+        );
+    }
+
+    fn path(&self) -> &Path {
+        match self {
+            Self::Ros1Bag(path) | Self::Ros2Db3(path) => path,
+        }
+    }
+
+    fn profile(&self) -> &'static str {
+        match self {
+            Self::Ros1Bag(_) => "ros1",
+            Self::Ros2Db3(_) => "ros2",
+        }
+    }
+
+    fn convert(self, output_path: &Path, opts: WriteOptions) -> Result<()> {
+        match self {
+            Self::Ros1Bag(input_path) => {
+                ros1_bag::convert_ros1_bag_file(&input_path, output_path, opts)
+            }
+            Self::Ros2Db3(input_path) => {
+                ros2_db3::convert_ros2_db3_file(&input_path, output_path, opts)
+            }
+        }
     }
 }
 
@@ -48,6 +85,7 @@ fn build_write_options(
     chunk_size: u64,
     include_crc: bool,
     chunked: bool,
+    profile: &str,
 ) -> WriteOptions {
     let compression = match compression {
         CompressionFormat::Zstd => Some(Compression::Zstd),
@@ -56,7 +94,7 @@ fn build_write_options(
     };
 
     WriteOptions::new()
-        .profile("ros1")
+        .profile(profile)
         .use_chunks(chunked)
         .chunk_size(Some(chunk_size))
         .compression(compression)
@@ -66,21 +104,74 @@ fn build_write_options(
         .calculate_attachment_crcs(include_crc)
 }
 
-fn detect_file_type(path: &Path) -> Result<InputFileType> {
-    if path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .is_some_and(|ext| ext.eq_ignore_ascii_case("bag"))
-    {
-        return Ok(InputFileType::Ros1Bag);
-    }
+fn reject_lfs_pointer(path: &Path) -> Result<()> {
+    let mut input =
+        File::open(path).with_context(|| format!("failed to open input '{}'", path.display()))?;
+    let mut magic = [0u8; GIT_LFS_POINTER_PREFIX.len()];
+    let bytes_read = read_prefix(&mut input, &mut magic)
+        .with_context(|| format!("failed to read input prefix from '{}'", path.display()))?;
+    let magic = &magic[..bytes_read];
 
-    bail!(
-        "unsupported input file extension '{}' (expected .bag for ROS1 bag input)",
-        path.extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or("<none>")
+    if magic.starts_with(GIT_LFS_POINTER_PREFIX) {
+        bail!(
+            "input '{}' appears to be a Git LFS pointer; run `git lfs pull` and try again",
+            path.display()
+        );
+    }
+    Ok(())
+}
+
+fn read_prefix(input: &mut File, buffer: &mut [u8]) -> std::io::Result<usize> {
+    let mut bytes_read = 0;
+    while bytes_read < buffer.len() {
+        match input.read(&mut buffer[bytes_read..]) {
+            Ok(0) => break,
+            Ok(read) => bytes_read += read,
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(err) => return Err(err),
+        }
+    }
+    Ok(bytes_read)
+}
+
+fn ensure_distinct_paths(input: &Path, output: &Path) -> Result<()> {
+    let input_path = input
+        .canonicalize()
+        .with_context(|| format!("failed to resolve input path '{}'", input.display()))?;
+    let output_path = match output.canonicalize() {
+        Ok(path) => path,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            let parent = output
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            let file_name = output
+                .file_name()
+                .with_context(|| format!("invalid output path '{}'", output.display()))?;
+            let parent_path = match parent.canonicalize() {
+                Ok(path) => path,
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                    return Ok(());
+                }
+                Err(err) => {
+                    return Err(err).with_context(|| {
+                        format!("failed to resolve output parent '{}'", parent.display())
+                    });
+                }
+            };
+            parent_path.join(file_name)
+        }
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("failed to resolve output path '{}'", output.display()));
+        }
+    };
+
+    ensure!(
+        input_path != output_path,
+        "input and output paths must be different"
     );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -92,13 +183,29 @@ mod tests {
 
     use anyhow::Result;
 
-    use super::{build_write_options, detect_file_type, InputFileType};
+    use super::{build_write_options, ensure_distinct_paths, ConvertInput};
     use crate::cli::{CompressionFormat, ConvertCommand};
     use crate::context::CommandContext;
 
+    fn temp_input(name: &str, bytes: &[u8]) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "mcap-cli-convert-test-{}-{name}",
+            std::process::id()
+        ));
+        std::fs::write(&path, bytes).expect("write temp input");
+        path
+    }
+
+    fn temp_path(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "mcap-cli-convert-test-{}-{name}",
+            std::process::id()
+        ))
+    }
+
     fn build_sample_mcap(include_crc: bool) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
-        let opts = build_write_options(CompressionFormat::None, 1024, include_crc, true);
+        let opts = build_write_options(CompressionFormat::None, 1024, include_crc, true, "ros1");
         {
             let mut writer = opts.create(&mut output).expect("writer");
             let schema_id = writer
@@ -169,20 +276,81 @@ mod tests {
 
     #[test]
     fn detects_ros1_bag_extension() {
-        let file_type = detect_file_type(Path::new("/tmp/input.bag")).expect("detect");
-        assert_eq!(file_type, InputFileType::Ros1Bag);
+        let path = temp_input("ros1.bag", b"not validated until conversion");
+        let input = ConvertInput::detect(path.clone()).expect("detect");
+        std::fs::remove_file(path).expect("remove temp input");
+        assert!(matches!(input, ConvertInput::Ros1Bag(_)));
     }
 
     #[test]
-    fn detects_ros1_bag_extension_case_insensitive() {
-        let file_type = detect_file_type(Path::new("/tmp/input.BAG")).expect("detect");
-        assert_eq!(file_type, InputFileType::Ros1Bag);
+    fn detects_ros2_db3_extension() {
+        let path = temp_input("ros2.db3", b"not validated until conversion");
+        let input = ConvertInput::detect(path.clone()).expect("detect");
+        std::fs::remove_file(path).expect("remove temp input");
+        assert!(matches!(input, ConvertInput::Ros2Db3(_)));
     }
 
     #[test]
-    fn rejects_non_bag_extension() {
-        let err = detect_file_type(Path::new("/tmp/input.mcap")).expect_err("non-bag should fail");
+    fn rejects_unknown_extension() {
+        let path = temp_input("unknown", b"not an mcap input");
+        let err = ConvertInput::detect(path.clone()).expect_err("unknown input should fail");
+        std::fs::remove_file(path).expect("remove temp input");
         assert!(err.to_string().contains("unsupported input file extension"));
+    }
+
+    #[test]
+    fn rejects_git_lfs_pointer_before_output_creation() {
+        let path = temp_input(
+            "lfs-pointer.db3",
+            b"version https://git-lfs.github.com/spec/v1\n\
+oid sha256:0000000000000000000000000000000000000000000000000000000000000000\n\
+size 123\n",
+        );
+        let err = ConvertInput::detect(path.clone()).expect_err("LFS pointer should fail");
+        std::fs::remove_file(path).expect("remove temp input");
+        assert!(err.to_string().contains("Git LFS pointer"));
+        assert!(err.to_string().contains("git lfs pull"));
+    }
+
+    #[test]
+    fn distinct_path_check_allows_single_component_missing_output() {
+        let input_path = temp_input("distinct-input.db3", b"placeholder");
+        let output_path = temp_path("single-component-output.mcap");
+        let file_name = output_path.file_name().expect("file name");
+        let current_dir_output = std::env::current_dir()
+            .expect("current dir")
+            .join(file_name);
+        let _ = std::fs::remove_file(&current_dir_output);
+
+        ensure_distinct_paths(&input_path, Path::new(file_name))
+            .expect("single-component output should resolve through current directory");
+        std::fs::remove_file(input_path).expect("remove temp input");
+    }
+
+    #[test]
+    fn distinct_path_check_rejects_same_file_paths() {
+        let path = temp_input("same-path.db3", b"placeholder");
+        let err = ensure_distinct_paths(&path, &path).expect_err("same input/output should fail");
+        assert!(err.to_string().contains("input and output paths"));
+        std::fs::remove_file(path).expect("remove temp input");
+    }
+
+    #[test]
+    fn run_reports_missing_input_as_open_error() {
+        let err = super::run(
+            &CommandContext::default(),
+            ConvertCommand {
+                input: PathBuf::from("/tmp/mcap-cli-missing-input-does-not-exist.db3"),
+                output: PathBuf::from("/tmp/mcap-cli-missing-output.mcap"),
+                compression: CompressionFormat::None,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: false,
+                chunked: true,
+            },
+        )
+        .expect_err("missing input should fail");
+
+        assert!(err.to_string().contains("failed to open input"));
     }
 
     #[test]
@@ -200,6 +368,33 @@ mod tests {
         let footer = mcap::read::footer(&bytes).expect("footer");
         assert_ne!(footer.summary_crc, 0);
         assert_ne!(data_end_crc(&bytes), 0);
+    }
+
+    #[test]
+    fn rejects_invalid_ros1_bag_magic_without_truncating_existing_output() {
+        let input_path = temp_input("invalid.bag", b"not a bag file for sure");
+        let output_path = temp_input("existing-ros1-output.mcap", b"keep me");
+
+        let err = super::run(
+            &CommandContext::default(),
+            ConvertCommand {
+                input: input_path.clone(),
+                output: output_path.clone(),
+                compression: CompressionFormat::None,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: false,
+                chunked: true,
+            },
+        )
+        .expect_err("invalid ROS 1 bag should fail");
+
+        assert!(err.to_string().contains("invalid ROS1 bag magic"));
+        assert_eq!(
+            std::fs::read(&output_path).expect("read existing output"),
+            b"keep me"
+        );
+        std::fs::remove_file(input_path).expect("remove temp input");
+        std::fs::remove_file(output_path).expect("remove temp output");
     }
 
     #[test]

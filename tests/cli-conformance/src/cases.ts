@@ -1,4 +1,4 @@
-/* cspell:words lz4 multitopic ndjson noetic pprof testdata */
+/* cspell:words lz4 multitopic ndjson noetic notbag pprof testdata */
 
 import type { CliTestCase } from "./types.ts";
 
@@ -10,6 +10,7 @@ const ONE_SCHEMALESS =
 const TEN_MESSAGES = "{dataDir}/TenMessages/TenMessages-ch-chx-mx-pad-rch-rsh-st-sum.mcap";
 const ONE_ATTACHMENT = "{dataDir}/OneAttachment/OneAttachment-ax-st-sum.mcap";
 const ONE_METADATA = "{dataDir}/OneMetadata/OneMetadata-mdx-st-sum.mcap";
+const ROS2_EMBEDDED_SCHEMA_DB3 = "{repoRoot}/testdata/db3/talker-iron.db3";
 const NOETIC_MULTITOPIC_NONE = "{repoRoot}/testdata/bags/generated/noetic-multitopic-none.bag";
 const NOETIC_MULTITOPIC_BZ2 = "{repoRoot}/testdata/bags/generated/noetic-multitopic-bz2.bag";
 const NOETIC_MULTITOPIC_LZ4 = "{repoRoot}/testdata/bags/generated/noetic-multitopic-lz4.bag";
@@ -635,16 +636,17 @@ export const cases: CliTestCase[] = [
   {
     id: "known-difference-convert-ros2-ament-help",
     description:
-      "Go CLI documents ROS2 DB3 conversion support; Rust CLI only supports ROS1 bag input.",
+      "Go CLI exposes ament-based ROS 2 db3 conversion; Rust CLI intentionally supports embedded-schema db3 conversion instead.",
     tags: ["known-difference", "convert", "surface"],
     invocation: { args: ["convert", "--help"] },
     knownDifference: {
       id: "convert-ros2-ament-help",
       summary:
-        "Go convert exposes --ament-prefix-path for ROS2 DB3 conversion; Rust convert does not.",
-      reason: "Rust convert currently implements ROS1 bag conversion only.",
+        "Go convert exposes --ament-prefix-path for ROS 2 db3 conversion; Rust convert does not.",
+      reason:
+        "Rust convert avoids brittle ament workspace lookup and only converts ROS 2 db3 bags that contain embedded message definitions.",
       desiredBehavior:
-        "Rust convert should support ROS2 DB3 conversion or document an intentional replacement.",
+        "Rust convert should continue to document the embedded-schema-only behavior for ROS 2 db3 conversion.",
       goBehavior: {
         exitCode: 0,
         stdout: { kind: "contains", value: "--ament-prefix-path" },
@@ -652,6 +654,74 @@ export const cases: CliTestCase[] = [
       rustBehavior: {
         exitCode: 0,
         stdout: { kind: "matches", pattern: "^(?![\\s\\S]*ament-prefix-path)[\\s\\S]*$" },
+      },
+    },
+  },
+  {
+    id: "known-difference-convert-ros2-db3-embedded-schemas",
+    description:
+      "Rust converts self-contained ROS 2 db3 bags with embedded schemas; Go requires ament schemas.",
+    tags: ["known-difference", "convert", "ros2"],
+    invocation: {
+      args: ["convert", ROS2_EMBEDDED_SCHEMA_DB3, "converted.mcap", "--compression", "none"],
+      // Make Go's ament-only schema lookup deterministic even when the developer shell has
+      // sourced a ROS 2 workspace. Rust does not consult this environment variable.
+      env: { AMENT_PREFIX_PATH: "" },
+    },
+    knownDifference: {
+      id: "convert-ros2-db3-embedded-schemas",
+      summary:
+        "Rust convert reads embedded ROS 2 db3 schemas, while Go convert ignores them and requires ament lookup.",
+      reason:
+        "The Rust replacement intentionally supports self-contained db3 conversion and omits brittle ament lookup; the legacy Go converter predates embedded db3 schemas.",
+      desiredBehavior:
+        "Rust convert should continue to convert self-contained ROS 2 db3 bags without requiring a ROS workspace.",
+      goBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "schema not found" },
+      },
+      rustBehavior: {
+        exitCode: 0,
+        files: [
+          {
+            path: "converted.mcap",
+            exists: true,
+            mcapSummary: { profile: "ros2", messageCount: 20, channelCount: 3, schemaCount: 3 },
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: "known-difference-convert-extension-dispatch",
+    description:
+      "Rust convert dispatches by input extension; Go convert dispatches by magic bytes.",
+    tags: ["known-difference", "convert", "surface"],
+    setup: [{ type: "copy", from: NOETIC_MULTITOPIC_NONE, to: "{caseWorkDir}/input.notbag" }],
+    invocation: {
+      args: ["convert", "input.notbag", "converted.mcap", "--compression", "none"],
+    },
+    knownDifference: {
+      id: "convert-extension-dispatch",
+      summary:
+        "Go convert accepts supported inputs with non-standard extensions by magic bytes; Rust convert requires known extensions.",
+      reason:
+        "Rust convert uses a central extension-to-converter mapping so converters own format validation after dispatch.",
+      desiredBehavior:
+        "Rust convert should keep extension-based dispatch unless a future CLI design adds explicit input-format selection.",
+      goBehavior: {
+        exitCode: 0,
+        files: [
+          {
+            path: "converted.mcap",
+            exists: true,
+            mcapSummary: { profile: "ros1", messageCount: 3, channelCount: 2, schemaCount: 2 },
+          },
+        ],
+      },
+      rustBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "unsupported input file extension" },
       },
     },
   },

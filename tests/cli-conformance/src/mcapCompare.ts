@@ -56,6 +56,13 @@ type CompareResult = {
   actual: string;
 };
 
+export type McapSummaryExpectation = {
+  profile?: string;
+  messageCount?: number;
+  channelCount?: number;
+  schemaCount?: number;
+};
+
 let decompressHandlersPromise: ReturnType<typeof loadDecompressHandlers> | undefined;
 
 async function getDecompressHandlers(): ReturnType<typeof loadDecompressHandlers> {
@@ -115,8 +122,68 @@ export async function compareMcapBuffers(
   };
 }
 
+export async function compareMcapSummary(
+  data: Buffer,
+  expected: McapSummaryExpectation,
+): Promise<string[]> {
+  const parsed = await parseRecords("expected", data);
+  if ("error" in parsed) {
+    return [parsed.error];
+  }
+
+  const actual = summarizeRecords(parsed.records);
+  const messages: string[] = [];
+  if (expected.profile != undefined && actual.profile !== expected.profile) {
+    messages.push(`expected MCAP profile ${expected.profile}, got ${actual.profile}`);
+  }
+  if (expected.messageCount != undefined && actual.messageCount !== expected.messageCount) {
+    messages.push(`expected ${expected.messageCount} messages, got ${actual.messageCount}`);
+  }
+  if (expected.channelCount != undefined && actual.channelCount !== expected.channelCount) {
+    messages.push(`expected ${expected.channelCount} channels, got ${actual.channelCount}`);
+  }
+  if (expected.schemaCount != undefined && actual.schemaCount !== expected.schemaCount) {
+    messages.push(`expected ${expected.schemaCount} schemas, got ${actual.schemaCount}`);
+  }
+  return messages;
+}
+
 function byteExactDiagnostic(byteLength: number, details: string): string {
   return `<${byteLength} bytes>\n${details}`;
+}
+
+function summarizeRecords(records: TypedMcapRecord[]): Required<McapSummaryExpectation> {
+  let profile = "";
+  let messageCount = 0;
+  const channels = new Set<number>();
+  const schemas = new Set<number>();
+
+  for (const record of records) {
+    const normalizedRecord = record as unknown as Record<string, unknown>;
+    switch (record.type) {
+      case "Header":
+        profile = stringField(normalizedRecord, "profile");
+        break;
+      case "Message":
+        messageCount++;
+        break;
+      case "Channel":
+        channels.add(Number(normalizedRecord.id));
+        break;
+      case "Schema":
+        schemas.add(Number(normalizedRecord.id));
+        break;
+      default:
+        break;
+    }
+  }
+
+  return {
+    profile,
+    messageCount,
+    channelCount: channels.size,
+    schemaCount: schemas.size,
+  };
 }
 
 function semanticValue(
@@ -134,7 +201,7 @@ function semanticValue(
 }
 
 async function parseRecords(
-  implementation: "go" | "rust",
+  label: string,
   data: Uint8Array,
 ): Promise<{ records: TypedMcapRecord[] } | { error: string }> {
   try {
@@ -150,7 +217,7 @@ async function parseRecords(
     return { records };
   } catch (error) {
     return {
-      error: `${implementation} MCAP parse failed: ${
+      error: `${label} MCAP parse failed: ${
         error instanceof Error ? error.message : String(error)
       }`,
     };

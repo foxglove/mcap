@@ -82,6 +82,14 @@ export type ExpectedOutput =
 export type ExpectedFile = {
   path: string;
   exists: boolean;
+  mcapSummary?: ExpectedMcapSummary;
+};
+
+export type ExpectedMcapSummary = {
+  profile?: string;
+  messageCount?: number;
+  channelCount?: number;
+  schemaCount?: number;
 };
 
 export type KnownDifference = {
