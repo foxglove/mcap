@@ -333,11 +333,13 @@ fn timestamp(timestamp: i64) -> Result<u64> {
 mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     use super::convert_ros2_db3_file;
 
     const IRON_TALKER_DB3: &str = "testdata/db3/talker-iron.db3";
     const HUMBLE_TALKER_DB3: &str = "testdata/db3/talker-humble.db3";
+    static TEMP_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     struct TempOutput {
         path: PathBuf,
@@ -345,9 +347,10 @@ mod tests {
 
     impl TempOutput {
         fn new(name: &str) -> Self {
+            let nonce = TEMP_OUTPUT_COUNTER.fetch_add(1, Ordering::Relaxed);
             let path = std::env::temp_dir().join(format!(
-                "mcap-rust-ros2-db3-{name}-{}.mcap",
-                std::process::id()
+                "mcap-rust-ros2-db3-{name}-{}-{nonce}.mcap",
+                std::process::id(),
             ));
             let _ = fs::remove_file(&path);
             Self { path }
