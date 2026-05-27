@@ -4,8 +4,8 @@ use crate::cli::ListChannelsCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
-pub fn run(_ctx: &CommandContext, args: ListChannelsCommand) -> Result<()> {
-    let mcap = common::map_file(&args.file)?;
+pub fn run(ctx: &CommandContext, args: ListChannelsCommand) -> Result<()> {
+    let mcap = common::load_path(ctx, &args.file, "mcap list channels")?;
     let parsed = common::parse_mcap(&mcap)?;
     common::print_table(&render_channel_rows(&parsed.channels)?);
     Ok(())

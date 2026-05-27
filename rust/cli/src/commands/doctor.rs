@@ -8,7 +8,7 @@ use crate::commands::common;
 use crate::context::CommandContext;
 
 pub fn run(ctx: &CommandContext, args: DoctorCommand) -> Result<()> {
-    let mcap = common::map_file(&args.file)?;
+    let mcap = common::load_path(ctx, &args.file, "mcap doctor")?;
     if ctx.verbose() > 0 {
         println!("Examining {}", args.file.display());
     }

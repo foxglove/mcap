@@ -1,10 +1,13 @@
 use std::fmt::Write as _;
-use std::io::{IsTerminal as _, Read as _};
-use std::path::Path;
+use std::io::{IsTerminal as _, Read as _, Write as _};
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
 use mcap::records::{self, Record};
 use memmap2::Mmap;
+
+use crate::context::CommandContext;
 
 pub const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
@@ -15,11 +18,46 @@ pub enum InputData {
     Buffered(Vec<u8>),
 }
 
+impl std::fmt::Debug for InputData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("InputData")
+            .field("len", &self.as_slice().len())
+            .finish()
+    }
+}
+
+impl std::ops::Deref for InputData {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
 impl InputData {
     pub fn as_slice(&self) -> &[u8] {
         match self {
             InputData::Mapped(mmap) => mmap.as_ref(),
             InputData::Buffered(buf) => buf.as_slice(),
+        }
+    }
+}
+
+pub struct MaterializedInput {
+    path: PathBuf,
+    cleanup: Option<PathBuf>,
+}
+
+impl MaterializedInput {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for MaterializedInput {
+    fn drop(&mut self) {
+        if let Some(path) = self.cleanup.take() {
+            let _ = std::fs::remove_file(path);
         }
     }
 }
@@ -47,9 +85,18 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
 }
 
-pub fn load_input(file: Option<&Path>) -> Result<InputData> {
+pub fn load_path(ctx: &CommandContext, path: &Path, reason: &str) -> Result<InputData> {
+    if is_http_url(path) {
+        return Ok(InputData::Buffered(download_remote_input(
+            ctx, path, reason,
+        )?));
+    }
+    Ok(InputData::Mapped(map_file(path)?))
+}
+
+pub fn load_input(ctx: &CommandContext, file: Option<&Path>, reason: &str) -> Result<InputData> {
     if let Some(path) = file {
-        return Ok(InputData::Mapped(map_file(path)?));
+        return load_path(ctx, path, reason);
     }
 
     let stdin = std::io::stdin();
@@ -63,6 +110,151 @@ pub fn load_input(file: Option<&Path>) -> Result<InputData> {
         .read_to_end(&mut buf)
         .context("failed to read input from stdin")?;
     Ok(InputData::Buffered(buf))
+}
+
+pub fn materialize_input(
+    ctx: &CommandContext,
+    path: &Path,
+    reason: &str,
+) -> Result<MaterializedInput> {
+    if !is_http_url(path) {
+        return Ok(MaterializedInput {
+            path: path.to_path_buf(),
+            cleanup: None,
+        });
+    }
+
+    let bytes = download_remote_input(ctx, path, reason)?;
+    let suffix = remote_or_local_extension(path)
+        .filter(|extension| !extension.is_empty())
+        .map(|extension| format!(".{extension}"))
+        .unwrap_or_default();
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("system clock is before unix epoch")?
+        .as_nanos();
+    let temp_path = std::env::temp_dir().join(format!(
+        "mcap-cli-remote-input-{}-{now}{suffix}",
+        std::process::id()
+    ));
+    {
+        let mut file = std::fs::File::create(&temp_path)
+            .with_context(|| format!("failed to create temp input '{}'", temp_path.display()))?;
+        file.write_all(&bytes)
+            .with_context(|| format!("failed to write temp input '{}'", temp_path.display()))?;
+    }
+    Ok(MaterializedInput {
+        path: temp_path.clone(),
+        cleanup: Some(temp_path),
+    })
+}
+
+pub fn is_http_url(path: &Path) -> bool {
+    let text = path.to_string_lossy();
+    text.starts_with("http://") || text.starts_with("https://")
+}
+
+fn remote_or_local_extension(path: &Path) -> Option<String> {
+    if is_http_url(path) {
+        let text = path.to_str()?.split('?').next().unwrap_or_default();
+        return Path::new(text)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_string);
+    }
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(str::to_string)
+}
+
+fn download_remote_input(ctx: &CommandContext, path: &Path, reason: &str) -> Result<Vec<u8>> {
+    let url = path
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display()))?;
+    let probe = probe_http_ranges(url)?;
+
+    if !ctx.allow_remote_scan() {
+        if !probe.supports_ranges {
+            bail!(
+                "remote server does not support byte range requests for {url}; this command would need to download the entire file. Re-run with --allow-remote-scan to proceed."
+            );
+        }
+        let size = probe
+            .content_length
+            .map(human_bytes)
+            .unwrap_or_else(|| "unknown size".to_string());
+        bail!(
+            "{reason} requires reading the entire remote file ({size}) from {url}. Re-run with --allow-remote-scan to proceed."
+        );
+    }
+
+    let mut response = ureq::get(url)
+        .call()
+        .with_context(|| format!("failed to download remote input {url}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        bail!("failed to download remote input {url}: HTTP {status}");
+    }
+    let mut bytes = Vec::new();
+    response
+        .body_mut()
+        .as_reader()
+        .read_to_end(&mut bytes)
+        .with_context(|| format!("failed to read remote input {url}"))?;
+    Ok(bytes)
+}
+
+struct HttpProbe {
+    supports_ranges: bool,
+    content_length: Option<u64>,
+}
+
+fn probe_http_ranges(url: &str) -> Result<HttpProbe> {
+    let mut content_length = None;
+    if let Ok(response) = ureq::head(url).call() {
+        if response.status().is_success() {
+            content_length = parse_content_length(response.headers());
+        }
+    }
+
+    let response = ureq::get(url)
+        .header("Range", "bytes=0-0")
+        .call()
+        .with_context(|| format!("failed to probe byte range support for {url}"))?;
+    match response.status() {
+        status if status.as_u16() == 206 => {
+            let probed_length = response
+                .headers()
+                .get("content-range")
+                .and_then(|value| value.to_str().ok())
+                .and_then(parse_content_range_len)
+                .or(content_length);
+            Ok(HttpProbe {
+                supports_ranges: true,
+                content_length: probed_length,
+            })
+        }
+        status if status.as_u16() == 200 => Ok(HttpProbe {
+            supports_ranges: false,
+            content_length: parse_content_length(response.headers()).or(content_length),
+        }),
+        status => bail!("failed to probe byte range support for {url}: HTTP {status}"),
+    }
+}
+
+fn parse_content_length(headers: &ureq::http::HeaderMap) -> Option<u64> {
+    headers
+        .get("content-length")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse().ok())
+}
+
+fn parse_content_range_len(value: &str) -> Option<u64> {
+    let (_, total) = value.rsplit_once('/')?;
+    if total == "*" {
+        return None;
+    }
+    total.parse().ok()
 }
 
 pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
@@ -306,17 +498,97 @@ pub fn print_table(rows: &[Vec<String>]) {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::path::Path;
+    use std::thread;
 
     use super::{
-        decimal_time, format_table, formatted_time, human_bytes, parse_mcap,
+        decimal_time, format_table, formatted_time, human_bytes, load_path, parse_mcap,
         parse_mcap_from_summary, print_table, write_raw_time,
     };
+    use crate::context::CommandContext;
+    use crate::logsetup::Color;
     use mcap::records;
+
+    fn context(allow_remote_scan: bool) -> CommandContext {
+        CommandContext::new(0, Color::Auto, None, false, allow_remote_scan)
+    }
+
+    fn serve_http(body: &'static [u8], supports_ranges: bool) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("test server addr");
+        thread::spawn(move || {
+            for stream in listener.incoming().take(4) {
+                let mut stream = stream.expect("accept test connection");
+                let mut request = [0u8; 4096];
+                let read = stream.read(&mut request).expect("read request");
+                let request = String::from_utf8_lossy(&request[..read]);
+                let is_head = request.starts_with("HEAD ");
+                let wants_range = request.to_ascii_lowercase().contains("range: bytes=0-0");
+                if wants_range && supports_ranges {
+                    let response = format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: 1\r\nContent-Range: bytes 0-0/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write headers");
+                    if !is_head {
+                        stream.write_all(&body[..1]).expect("write range body");
+                    }
+                } else {
+                    let accept_ranges = if supports_ranges { "bytes" } else { "none" };
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: {accept_ranges}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write headers");
+                    if !is_head {
+                        stream.write_all(body).expect("write body");
+                    }
+                }
+            }
+        });
+        format!("http://{addr}/demo.mcap")
+    }
 
     #[test]
     fn table_printer_handles_empty_input() {
         print_table(&[]);
         assert!(format_table(&[]).is_empty());
+    }
+
+    #[test]
+    fn remote_range_capable_input_requires_explicit_scan_for_full_download() {
+        let url = serve_http(b"hello remote", true);
+        let err = load_path(&context(false), Path::new(&url), "mcap info")
+            .expect_err("remote full scan should require opt-in");
+        assert!(err
+            .to_string()
+            .contains("mcap info requires reading the entire remote file"));
+        assert!(err.to_string().contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn remote_without_range_support_has_specific_error() {
+        let url = serve_http(b"hello remote", false);
+        let err = load_path(&context(false), Path::new(&url), "mcap info")
+            .expect_err("remote without ranges should require opt-in");
+        assert!(err
+            .to_string()
+            .contains("remote server does not support byte range requests"));
+        assert!(err.to_string().contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn allow_remote_scan_downloads_http_input() {
+        let url = serve_http(b"hello remote", true);
+        let input =
+            load_path(&context(true), Path::new(&url), "mcap info").expect("remote download");
+        assert_eq!(input.as_slice(), b"hello remote");
     }
 
     #[test]

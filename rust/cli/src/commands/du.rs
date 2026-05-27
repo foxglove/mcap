@@ -31,8 +31,8 @@ struct OffsetEntry {
     channel_id: u16,
 }
 
-pub fn run(_ctx: &CommandContext, args: DuCommand) -> Result<()> {
-    let mcap = common::map_file(&args.file)?;
+pub fn run(ctx: &CommandContext, args: DuCommand) -> Result<()> {
+    let mcap = common::load_path(ctx, &args.file, "mcap du")?;
 
     let (usage, used_approximate) = if args.approximate {
         match collect_usage_approximate(&mcap)? {

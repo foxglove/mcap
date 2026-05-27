@@ -4,11 +4,12 @@ use crate::cli::DecompressCommand;
 use crate::commands::filter::{self, TranscodeCommandOptions};
 use crate::context::CommandContext;
 
-pub fn run(_ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
     let options = TranscodeCommandOptions::new(args.file, args.output, args.chunk_size)
         .compression("none")
         .include_metadata(true)
         .include_attachments(true)
-        .use_chunks(true);
+        .use_chunks(true)
+        .allow_remote_scan(ctx.allow_remote_scan());
     filter::run_transcode(options)
 }

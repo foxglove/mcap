@@ -28,6 +28,10 @@ pub struct Args {
     #[arg(long, default_value_t = false, global = true)]
     pub pprof_profile: bool,
 
+    /// Allow commands to download an entire remote HTTP(S) input when range reads are unavailable or insufficient.
+    #[arg(long, default_value_t = false, global = true)]
+    pub allow_remote_scan: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }

@@ -110,13 +110,13 @@ struct IdMaps {
     next_output_channel_id: u16,
 }
 
-pub fn run(_ctx: &CommandContext, args: MergeCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     let opts = build_merge_options(args);
 
     let mut mapped_inputs = Vec::with_capacity(opts.files.len());
     let mut input_names = Vec::with_capacity(opts.files.len());
     for path in &opts.files {
-        let mapped = crate::commands::common::map_file(path)?;
+        let mapped = crate::commands::common::load_path(ctx, path, "mcap merge")?;
         mapped_inputs.push(mapped);
         input_names.push(path.display().to_string());
     }
@@ -126,7 +126,7 @@ pub fn run(_ctx: &CommandContext, args: MergeCommand) -> Result<()> {
         .zip(input_names.iter())
         .map(|(mapped, name)| InputRef {
             name: name.as_str(),
-            data: mapped.as_ref(),
+            data: mapped.as_slice(),
         })
         .collect();
 

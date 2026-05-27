@@ -6,8 +6,8 @@ use crate::cli::GetMetadataCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
-pub fn run(_ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
-    let mcap = common::map_file(&args.file)?;
+pub fn run(ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
+    let mcap = common::load_path(ctx, &args.file, "mcap get metadata")?;
     let parsed = common::parse_mcap(&mcap)?;
     let metadata = merged_metadata_for_name(&mcap, &parsed.metadata_indexes, &args.name)?;
     let pretty =

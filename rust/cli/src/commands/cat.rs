@@ -28,7 +28,7 @@ pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
         }
     } else {
         for file in args.files {
-            let mcap = common::map_file(&file)?;
+            let mcap = common::load_path(_ctx, &file, "mcap cat")?;
             if cat_mcap(&mut writer, &mcap, &opts)? {
                 return Ok(());
             }
