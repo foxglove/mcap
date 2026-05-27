@@ -63,10 +63,7 @@ impl ConvertInput {
     }
 
     fn remote_scan_reason(&self) -> &'static str {
-        match self {
-            Self::Ros1Bag => "mcap convert for a remote ROS 1 bag",
-            Self::Ros2Db3 => "mcap convert for a remote ROS 2 db3 SQLite database download",
-        }
+        "mcap convert"
     }
 
     fn convert(self, input_path: &Path, output_path: &Path, opts: WriteOptions) -> Result<()> {

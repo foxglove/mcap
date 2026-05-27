@@ -87,9 +87,7 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
 
 pub fn load_path(ctx: &CommandContext, path: &Path, reason: &str) -> Result<InputData> {
     if is_http_url(path) {
-        return Ok(InputData::Buffered(download_remote_input(
-            ctx, path, reason,
-        )?));
+        return Ok(InputData::Buffered(read_remote_input(ctx, path, reason)?));
     }
     Ok(InputData::Mapped(map_file(path)?))
 }
@@ -124,7 +122,7 @@ pub fn materialize_input(
         });
     }
 
-    let bytes = download_remote_input(ctx, path, reason)?;
+    let bytes = read_remote_input(ctx, path, reason)?;
     let suffix = remote_or_local_extension(path)
         .filter(|extension| !extension.is_empty())
         .map(|extension| format!(".{extension}"))
@@ -167,7 +165,7 @@ fn remote_or_local_extension(path: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
-fn download_remote_input(ctx: &CommandContext, path: &Path, reason: &str) -> Result<Vec<u8>> {
+fn read_remote_input(ctx: &CommandContext, path: &Path, reason: &str) -> Result<Vec<u8>> {
     let url = path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display()))?;
@@ -176,7 +174,7 @@ fn download_remote_input(ctx: &CommandContext, path: &Path, reason: &str) -> Res
     if !ctx.allow_remote_scan() {
         if !probe.supports_ranges {
             bail!(
-                "remote server does not support byte range requests for {url}; this command would need to download the entire file. Re-run with --allow-remote-scan to proceed."
+                "remote server does not support byte range requests for {url}; this command would need to read the entire remote file. Re-run with --allow-remote-scan to proceed."
             );
         }
         let size = probe
@@ -190,10 +188,10 @@ fn download_remote_input(ctx: &CommandContext, path: &Path, reason: &str) -> Res
 
     let mut response = ureq::get(url)
         .call()
-        .with_context(|| format!("failed to download remote input {url}"))?;
+        .with_context(|| format!("failed to read remote input {url}"))?;
     let status = response.status();
     if !status.is_success() {
-        bail!("failed to download remote input {url}: HTTP {status}");
+        bail!("failed to read remote input {url}: HTTP {status}");
     }
     let mut bytes = Vec::new();
     response
