@@ -15,6 +15,7 @@ use crate::context::CommandContext;
 pub const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
+pub const DEFAULT_REMOTE_READ_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
 const REMOTE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_BODY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -117,16 +118,16 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
 }
 
-pub fn load_path(ctx: &CommandContext, path: &Path, reason: &str) -> Result<InputData> {
+pub fn load_path(ctx: &CommandContext, path: &Path) -> Result<InputData> {
     if is_http_url(path) {
-        return Ok(InputData::Buffered(read_remote_input(ctx, path, reason)?));
+        return Ok(InputData::Buffered(read_remote_input(ctx, path)?));
     }
     Ok(InputData::Mapped(map_file(path)?))
 }
 
-pub fn load_input(ctx: &CommandContext, file: Option<&Path>, reason: &str) -> Result<InputData> {
+pub fn load_input(ctx: &CommandContext, file: Option<&Path>) -> Result<InputData> {
     if let Some(path) = file {
-        return load_path(ctx, path, reason);
+        return load_path(ctx, path);
     }
 
     let stdin = std::io::stdin();
@@ -142,11 +143,7 @@ pub fn load_input(ctx: &CommandContext, file: Option<&Path>, reason: &str) -> Re
     Ok(InputData::Buffered(buf))
 }
 
-pub fn materialize_input(
-    ctx: &CommandContext,
-    path: &Path,
-    reason: &str,
-) -> Result<MaterializedInput> {
+pub fn materialize_input(ctx: &CommandContext, path: &Path) -> Result<MaterializedInput> {
     if !is_http_url(path) {
         return Ok(MaterializedInput {
             temp_file: None,
@@ -165,7 +162,7 @@ pub fn materialize_input(
     let mut temp_file = builder
         .tempfile()
         .context("failed to create temporary remote input file")?;
-    read_remote_input_to_writer(ctx, path, reason, temp_file.as_file_mut())?;
+    read_remote_input_to_writer(ctx, path, temp_file.as_file_mut())?;
     std::io::Write::flush(temp_file.as_file_mut())
         .context("failed to flush temporary remote input file")?;
     Ok(MaterializedInput {
@@ -174,11 +171,11 @@ pub fn materialize_input(
     })
 }
 
-pub fn try_open_remote_mcap(ctx: &CommandContext, path: &Path) -> Result<Option<RemoteMcap>> {
+pub fn try_open_remote_mcap(path: &Path) -> Result<Option<RemoteMcap>> {
     if !is_http_url(path) {
         return Ok(None);
     }
-    let Some(mut reader) = HttpRangeReader::open(ctx, path)? else {
+    let Some(mut reader) = HttpRangeReader::open(path)? else {
         return Ok(None);
     };
     let header = read_header_from_seekable(&mut reader)?;
@@ -216,14 +213,14 @@ pub fn remote_or_local_extension(path: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
-fn read_remote_input(ctx: &CommandContext, path: &Path, reason: &str) -> Result<Vec<u8>> {
+fn read_remote_input(ctx: &CommandContext, path: &Path) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    read_remote_input_to_writer(ctx, path, reason, &mut bytes)?;
+    read_remote_input_to_writer(ctx, path, &mut bytes)?;
     Ok(bytes)
 }
 
 impl HttpRangeReader {
-    fn open(_ctx: &CommandContext, path: &Path) -> Result<Option<Self>> {
+    fn open(path: &Path) -> Result<Option<Self>> {
         let url = path.to_str().ok_or_else(|| {
             anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display())
         })?;
@@ -321,9 +318,8 @@ fn probe_range_size(agent: &Agent, url: &str, display_url: &str) -> Result<Optio
 }
 
 fn read_remote_input_to_writer(
-    _ctx: &CommandContext,
+    ctx: &CommandContext,
     path: &Path,
-    _reason: &str,
     writer: &mut impl std::io::Write,
 ) -> Result<()> {
     let url = path
@@ -341,7 +337,8 @@ fn read_remote_input_to_writer(
         bail!("failed to read remote input {display_url}: HTTP {status}");
     }
 
-    copy_response(&mut response, writer, &display_url)?;
+    enforce_remote_read_limit(ctx, response.headers(), &display_url)?;
+    copy_limited_response(ctx, &mut response, writer, &display_url)?;
     Ok(())
 }
 
@@ -372,6 +369,60 @@ fn copy_response(
     std::io::copy(&mut response.body_mut().as_reader(), writer)
         .with_context(|| format!("failed to read remote input {display_url}"))?;
     Ok(())
+}
+
+fn enforce_remote_read_limit(
+    ctx: &CommandContext,
+    headers: &ureq::http::HeaderMap,
+    display_url: &str,
+) -> Result<()> {
+    let limit = ctx.remote_read_limit_bytes();
+    if limit == 0 {
+        return Ok(());
+    }
+    if let Some(content_length) = parse_content_length(headers) {
+        if content_length > limit {
+            bail!(
+                "remote input {display_url} is larger than the configured read limit ({} > {}). Increase --remote-read-limit-bytes or pass 0 to disable the limit.",
+                human_bytes(content_length),
+                human_bytes(limit),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn copy_limited_response(
+    ctx: &CommandContext,
+    response: &mut ureq::http::Response<ureq::Body>,
+    writer: &mut impl std::io::Write,
+    display_url: &str,
+) -> Result<()> {
+    let limit = ctx.remote_read_limit_bytes();
+    if limit == 0 {
+        return copy_response(response, writer, display_url);
+    }
+
+    let mut limited = response
+        .body_mut()
+        .as_reader()
+        .take(limit.saturating_add(1));
+    let copied = std::io::copy(&mut limited, writer)
+        .with_context(|| format!("failed to read remote input {display_url}"))?;
+    if copied > limit {
+        bail!(
+            "remote input {display_url} exceeded the configured read limit ({}). Increase --remote-read-limit-bytes or pass 0 to disable the limit.",
+            human_bytes(limit),
+        );
+    }
+    Ok(())
+}
+
+fn parse_content_length(headers: &ureq::http::HeaderMap) -> Option<u64> {
+    headers
+        .get("content-length")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse().ok())
 }
 
 fn read_summary_from_seekable(
@@ -790,12 +841,8 @@ mod tests {
     #[test]
     fn remote_errors_redact_query_strings() {
         let url = "http://127.0.0.1:1/demo.mcap?X-Amz-Signature=secret-token";
-        let err = load_path(
-            &crate::context::CommandContext::default(),
-            Path::new(url),
-            "mcap info",
-        )
-        .expect_err("connection failure should report redacted URL");
+        let err = load_path(&crate::context::CommandContext::default(), Path::new(url))
+            .expect_err("connection failure should report redacted URL");
         assert!(!err.to_string().contains("secret-token"));
         assert!(!err.to_string().contains("X-Amz-Signature"));
     }
@@ -803,12 +850,8 @@ mod tests {
     #[test]
     fn remote_http_input_reads_entire_file() {
         let url = serve_http(b"hello remote", true);
-        let input = load_path(
-            &crate::context::CommandContext::default(),
-            Path::new(&url),
-            "mcap info",
-        )
-        .expect("remote read");
+        let input = load_path(&crate::context::CommandContext::default(), Path::new(&url))
+            .expect("remote read");
         assert_eq!(input.as_slice(), b"hello remote");
     }
 
@@ -828,12 +871,9 @@ mod tests {
         };
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let url = serve_http(body, true);
-        let remote = super::try_open_remote_mcap(
-            &crate::context::CommandContext::default(),
-            Path::new(&url),
-        )
-        .expect("remote summary read")
-        .expect("summary should be present");
+        let remote = super::try_open_remote_mcap(Path::new(&url))
+            .expect("remote summary read")
+            .expect("summary should be present");
 
         assert!(remote.parsed().header.is_some());
         assert!(remote.parsed().channels.contains_key(&channel_id));

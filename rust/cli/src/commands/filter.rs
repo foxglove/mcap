@@ -128,7 +128,7 @@ pub fn run(ctx: &CommandContext, args: FilterCommand) -> Result<()> {
 
 pub(crate) fn run_transcode(ctx: &CommandContext, args: TranscodeCommandOptions) -> Result<()> {
     let opts = build_filter_options_from_transcode_options(&args)?;
-    let input = common::load_input(ctx, args.file.as_deref(), "mcap filter")?;
+    let input = common::load_input(ctx, args.file.as_deref())?;
 
     if let Some(output) = &opts.output {
         let writer = std::fs::File::create(output)

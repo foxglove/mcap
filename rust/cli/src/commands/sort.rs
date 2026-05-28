@@ -18,7 +18,7 @@ struct SortOptions {
 
 pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
     let opts = build_sort_options(&args);
-    let input = common::load_path(ctx, &args.file, "mcap sort")?;
+    let input = common::load_path(ctx, &args.file)?;
     if !common::is_http_url(&args.file) {
         ensure_distinct_input_output(&args.file, &args.output_file)?;
     }

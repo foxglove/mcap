@@ -45,7 +45,7 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
         chunk_size: args.chunk_size,
         always_decode_chunk: args.always_decode_chunk,
     };
-    let input = crate::commands::common::load_input(ctx, args.file.as_deref(), "mcap recover")?;
+    let input = crate::commands::common::load_input(ctx, args.file.as_deref())?;
 
     let stats = if let Some(output) = &args.output {
         let writer = std::fs::File::create(output)

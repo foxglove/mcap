@@ -5,11 +5,11 @@ use crate::commands::common;
 use crate::context::CommandContext;
 
 pub fn run(ctx: &CommandContext, args: ListChunksCommand) -> Result<()> {
-    if let Some(remote) = common::try_open_remote_mcap(ctx, &args.file)? {
+    if let Some(remote) = common::try_open_remote_mcap(&args.file)? {
         common::print_table(&render_chunk_rows(&remote.parsed().chunk_indexes));
         return Ok(());
     }
-    let mcap = common::load_path(ctx, &args.file, "mcap list chunks")?;
+    let mcap = common::load_path(ctx, &args.file)?;
     let parsed = common::parse_mcap(&mcap)?;
     common::print_table(&render_chunk_rows(&parsed.chunk_indexes));
     Ok(())

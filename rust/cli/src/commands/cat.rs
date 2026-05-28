@@ -13,7 +13,7 @@ use crate::context::CommandContext;
 
 const MESSAGE_PREVIEW_LEN: usize = 10;
 
-pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
     let opts = CatOptions::from_args(&args)?;
     let stdout = std::io::stdout();
     let mut writer = std::io::BufWriter::new(stdout.lock());
@@ -28,7 +28,7 @@ pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
         }
     } else {
         for file in args.files {
-            if let Some(mut remote) = common::try_open_remote_mcap(_ctx, &file)? {
+            if let Some(mut remote) = common::try_open_remote_mcap(&file)? {
                 let mut json_transcoders = JsonTranscoders::default();
                 if let Some(broken_pipe) =
                     cat_remote_indexed(&mut writer, &mut remote, &opts, &mut json_transcoders)?
@@ -39,7 +39,7 @@ pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
                     continue;
                 }
             }
-            let mcap = common::load_path(_ctx, &file, "mcap cat")?;
+            let mcap = common::load_path(ctx, &file)?;
             if cat_mcap(&mut writer, &mcap, &opts)? {
                 return Ok(());
             }

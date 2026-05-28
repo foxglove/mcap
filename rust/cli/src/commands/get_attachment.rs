@@ -11,7 +11,7 @@ const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 
 pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
-    let mcap = common::load_path(ctx, &args.file, "mcap get attachment")?;
+    let mcap = common::load_path(ctx, &args.file)?;
     let parsed = common::parse_mcap(&mcap)?;
     let index = select_attachment_index(&parsed.attachment_indexes, &args.name, args.offset)?;
     let attachment = mcap::read::attachment(&mcap, index).with_context(|| {

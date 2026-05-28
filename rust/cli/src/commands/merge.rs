@@ -126,7 +126,7 @@ pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     let mut mapped_inputs = Vec::with_capacity(opts.files.len());
     let mut input_names = Vec::with_capacity(opts.files.len());
     for path in &opts.files {
-        let mapped = crate::commands::common::load_path(ctx, path, "mcap merge")?;
+        let mapped = crate::commands::common::load_path(ctx, path)?;
         mapped_inputs.push(mapped);
         input_names.push(path.display().to_string());
     }

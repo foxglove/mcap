@@ -18,8 +18,7 @@ pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     if !crate::commands::common::is_http_url(&args.input) {
         reject_lfs_pointer(&args.input)?;
     }
-    let materialized_input =
-        crate::commands::common::materialize_input(ctx, &args.input, input.remote_scan_reason())?;
+    let materialized_input = crate::commands::common::materialize_input(ctx, &args.input)?;
     if !crate::commands::common::is_http_url(&args.input) {
         ensure_distinct_paths(materialized_input.path(), &args.output)?;
     }
@@ -63,10 +62,6 @@ impl ConvertInput {
             Self::Ros1Bag => "ros1",
             Self::Ros2Db3 => "ros2",
         }
-    }
-
-    fn remote_scan_reason(&self) -> &'static str {
-        "mcap convert"
     }
 
     fn convert(self, input_path: &Path, output_path: &Path, opts: WriteOptions) -> Result<()> {
