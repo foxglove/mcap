@@ -1,10 +1,11 @@
 use std::fmt::Write as _;
-use std::io::{IsTerminal as _, Read as _};
+use std::io::{IsTerminal as _, Read as _, SeekFrom};
 use std::path::Path;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use mcap::records::{self, Record};
+use mcap::sans_io::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};
 use memmap2::Mmap;
 use tempfile::NamedTempFile;
 use ureq::Agent;
@@ -51,6 +52,34 @@ impl InputData {
 pub struct MaterializedInput {
     temp_file: Option<NamedTempFile>,
     local_path: Option<std::path::PathBuf>,
+}
+
+pub struct RemoteMcap {
+    reader: HttpRangeReader,
+    summary: mcap::Summary,
+    parsed: ParsedMcap,
+}
+
+impl RemoteMcap {
+    pub fn parsed(&self) -> &ParsedMcap {
+        &self.parsed
+    }
+
+    pub fn summary(&self) -> &mcap::Summary {
+        &self.summary
+    }
+
+    pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
+        self.reader.read_range(offset, length)
+    }
+}
+
+pub struct HttpRangeReader {
+    agent: Agent,
+    url: String,
+    display_url: String,
+    size: u64,
+    offset: u64,
 }
 
 impl MaterializedInput {
@@ -145,6 +174,25 @@ pub fn materialize_input(
     })
 }
 
+pub fn try_open_remote_mcap(ctx: &CommandContext, path: &Path) -> Result<Option<RemoteMcap>> {
+    if !is_http_url(path) {
+        return Ok(None);
+    }
+    let Some(mut reader) = HttpRangeReader::open(ctx, path)? else {
+        return Ok(None);
+    };
+    let header = read_header_from_seekable(&mut reader)?;
+    let Some(summary) = read_summary_from_seekable(&mut reader)? else {
+        return Ok(None);
+    };
+    let parsed = parsed_mcap_from_summary(header, &summary);
+    Ok(Some(RemoteMcap {
+        reader,
+        summary,
+        parsed,
+    }))
+}
+
 pub fn is_http_url(path: &Path) -> bool {
     let Some(text) = path.to_str() else {
         return false;
@@ -172,6 +220,104 @@ fn read_remote_input(ctx: &CommandContext, path: &Path, reason: &str) -> Result<
     let mut bytes = Vec::new();
     read_remote_input_to_writer(ctx, path, reason, &mut bytes)?;
     Ok(bytes)
+}
+
+impl HttpRangeReader {
+    fn open(_ctx: &CommandContext, path: &Path) -> Result<Option<Self>> {
+        let url = path.to_str().ok_or_else(|| {
+            anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display())
+        })?;
+        let display_url = redact_url(url);
+        let agent = remote_agent();
+        let Some(size) = probe_range_size(&agent, url, &display_url)? else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
+            agent,
+            url: url.to_string(),
+            display_url,
+            size,
+            offset: 0,
+        }))
+    }
+
+    fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
+        if length == 0 || offset >= self.size {
+            return Ok(Vec::new());
+        }
+        let requested_end = offset
+            .checked_add(length as u64)
+            .and_then(|end| end.checked_sub(1))
+            .ok_or_else(|| anyhow::anyhow!("remote range overflow"))?;
+        let end = requested_end.min(self.size - 1);
+        let range = format!("bytes={offset}-{end}");
+        let mut response = self
+            .agent
+            .get(&self.url)
+            .header("Range", &range)
+            .call()
+            .with_context(|| format!("failed to fetch range from {}", self.display_url))?;
+        let status = response.status();
+        if status.as_u16() != 206 {
+            bail!(
+                "failed to fetch range from {}: HTTP {status}",
+                self.display_url
+            );
+        }
+        let mut bytes = Vec::with_capacity(length.min((end - offset + 1) as usize));
+        std::io::copy(&mut response.body_mut().as_reader(), &mut bytes)
+            .with_context(|| format!("failed to read range from {}", self.display_url))?;
+        Ok(bytes)
+    }
+}
+
+impl std::io::Read for HttpRangeReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self.read_range(self.offset, buf.len()) {
+            Ok(bytes) => {
+                let n = bytes.len();
+                buf[..n].copy_from_slice(&bytes);
+                self.offset = self.offset.saturating_add(n as u64);
+                Ok(n)
+            }
+            Err(err) => Err(std::io::Error::other(err)),
+        }
+    }
+}
+
+impl std::io::Seek for HttpRangeReader {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let target = match pos {
+            SeekFrom::Start(offset) => offset as i128,
+            SeekFrom::End(offset) => self.size as i128 + offset as i128,
+            SeekFrom::Current(offset) => self.offset as i128 + offset as i128,
+        };
+        if target < 0 || target > self.size as i128 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "remote seek out of bounds",
+            ));
+        }
+        self.offset = target as u64;
+        Ok(self.offset)
+    }
+}
+
+fn probe_range_size(agent: &Agent, url: &str, display_url: &str) -> Result<Option<u64>> {
+    let response = agent
+        .get(url)
+        .header("Range", "bytes=0-0")
+        .call()
+        .with_context(|| format!("failed to fetch {display_url}"))?;
+    match response.status() {
+        status if status.as_u16() == 206 => Ok(response
+            .headers()
+            .get("content-range")
+            .and_then(|value| value.to_str().ok())
+            .and_then(parse_content_range_len)),
+        status if status.is_success() => Ok(None),
+        status => bail!("failed to fetch {display_url}: HTTP {status}"),
+    }
 }
 
 fn read_remote_input_to_writer(
@@ -226,6 +372,106 @@ fn copy_response(
     std::io::copy(&mut response.body_mut().as_reader(), writer)
         .with_context(|| format!("failed to read remote input {display_url}"))?;
     Ok(())
+}
+
+fn read_summary_from_seekable(
+    reader: &mut (impl std::io::Read + std::io::Seek),
+) -> Result<Option<mcap::Summary>> {
+    let file_size = reader.seek(SeekFrom::End(0))?;
+    let mut summary_reader =
+        SummaryReader::new_with_options(SummaryReaderOptions::default().with_file_size(file_size));
+    while let Some(event) = summary_reader.next_event() {
+        match event? {
+            SummaryReadEvent::ReadRequest(n) => {
+                let read = reader.read(summary_reader.insert(n))?;
+                summary_reader.notify_read(read);
+            }
+            SummaryReadEvent::SeekRequest(to) => {
+                let pos = reader.seek(to)?;
+                summary_reader.notify_seeked(pos);
+            }
+        }
+    }
+    Ok(summary_reader.finish())
+}
+
+fn read_header_from_seekable(
+    reader: &mut (impl std::io::Read + std::io::Seek),
+) -> Result<Option<records::Header>> {
+    reader.seek(SeekFrom::Start(0))?;
+    let mut linear_reader = mcap::sans_io::LinearReader::new();
+    while let Some(event) = linear_reader.next_event() {
+        match event? {
+            mcap::sans_io::LinearReadEvent::ReadRequest(n) => {
+                let read = reader.read(linear_reader.insert(n))?;
+                linear_reader.notify_read(read);
+                if read == 0 {
+                    return Ok(None);
+                }
+            }
+            mcap::sans_io::LinearReadEvent::Record { opcode, data } => {
+                if let Record::Header(header) = mcap::parse_record(opcode, data)?.into_owned() {
+                    return Ok(Some(header));
+                }
+                return Ok(None);
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn parsed_mcap_from_summary(
+    header: Option<records::Header>,
+    summary: &mcap::Summary,
+) -> ParsedMcap {
+    let mut out = ParsedMcap {
+        header,
+        statistics: summary.stats.clone(),
+        channels: std::collections::BTreeMap::new(),
+        schemas: std::collections::BTreeMap::new(),
+        chunk_indexes: summary.chunk_indexes.clone(),
+        attachment_indexes: summary.attachment_indexes.clone(),
+        metadata_indexes: summary.metadata_indexes.clone(),
+    };
+
+    for schema in summary.schemas.values() {
+        let schema = schema.as_ref();
+        out.schemas.insert(
+            schema.id,
+            ParsedSchema {
+                header: records::SchemaHeader {
+                    id: schema.id,
+                    name: schema.name.clone(),
+                    encoding: schema.encoding.clone(),
+                },
+                data: schema.data.clone().into_owned(),
+            },
+        );
+    }
+
+    for channel in summary.channels.values() {
+        let channel = channel.as_ref();
+        out.channels.insert(
+            channel.id,
+            records::Channel {
+                id: channel.id,
+                schema_id: channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0),
+                topic: channel.topic.clone(),
+                message_encoding: channel.message_encoding.clone(),
+                metadata: channel.metadata.clone(),
+            },
+        );
+    }
+
+    out
+}
+
+fn parse_content_range_len(value: &str) -> Option<u64> {
+    let (_, total) = value.rsplit_once('/')?;
+    if total == "*" {
+        return None;
+    }
+    total.parse().ok()
 }
 
 pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
@@ -484,23 +730,38 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
         let addr = listener.local_addr().expect("test server addr");
         thread::spawn(move || {
-            for stream in listener.incoming().take(4) {
+            for stream in listener.incoming().take(64) {
                 let mut stream = stream.expect("accept test connection");
                 let mut request = [0u8; 4096];
                 let read = stream.read(&mut request).expect("read request");
                 let request = String::from_utf8_lossy(&request[..read]);
                 let is_head = request.starts_with("HEAD ");
-                let wants_range = request.to_ascii_lowercase().contains("range: bytes=0-0");
-                if wants_range && supports_ranges {
+                let requested_range = request
+                    .lines()
+                    .find_map(|line| line.strip_prefix("Range: bytes="))
+                    .or_else(|| {
+                        request
+                            .lines()
+                            .find_map(|line| line.strip_prefix("range: bytes="))
+                    })
+                    .and_then(|range| range.split_once('-'))
+                    .and_then(|(start, end)| {
+                        Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?))
+                    });
+                if let (true, Some((start, end))) = (supports_ranges, requested_range) {
+                    let end = end.min(body.len().saturating_sub(1));
+                    let start = start.min(end);
+                    let content = &body[start..=end];
                     let response = format!(
-                        "HTTP/1.1 206 Partial Content\r\nContent-Length: 1\r\nContent-Range: bytes 0-0/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
-                        body.len()
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        content.len(),
+                        body.len(),
                     );
                     stream
                         .write_all(response.as_bytes())
                         .expect("write headers");
                     if !is_head {
-                        stream.write_all(&body[..1]).expect("write range body");
+                        stream.write_all(content).expect("write range body");
                     }
                 } else {
                     let accept_ranges = if supports_ranges { "bytes" } else { "none" };
@@ -549,6 +810,33 @@ mod tests {
         )
         .expect("remote read");
         assert_eq!(input.as_slice(), b"hello remote");
+    }
+
+    #[test]
+    fn remote_mcap_summary_uses_range_reader() {
+        let mut buffer = Vec::new();
+        let channel_id = {
+            let mut writer = mcap::Writer::new(std::io::Cursor::new(&mut buffer)).expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            writer.finish().expect("finish writer");
+            channel_id
+        };
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http(body, true);
+        let remote = super::try_open_remote_mcap(
+            &crate::context::CommandContext::default(),
+            Path::new(&url),
+        )
+        .expect("remote summary read")
+        .expect("summary should be present");
+
+        assert!(remote.parsed().header.is_some());
+        assert!(remote.parsed().channels.contains_key(&channel_id));
     }
 
     #[test]

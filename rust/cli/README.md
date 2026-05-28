@@ -29,7 +29,9 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 ## Remote inputs
 
 Commands that read an input file can accept `http://` and `https://` URLs. The
-current implementation reads the entire remote file:
+CLI uses byte range requests for indexed MCAP operations where possible and
+falls back to reading the entire remote file for commands or inputs that require
+a linear scan:
 
 ```sh
 mcap info https://example.com/demo.mcap

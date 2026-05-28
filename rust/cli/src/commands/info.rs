@@ -8,6 +8,10 @@ use crate::commands::common;
 use crate::context::CommandContext;
 
 pub fn run(ctx: &CommandContext, args: InfoCommand) -> Result<()> {
+    if let Some(remote) = common::try_open_remote_mcap(ctx, &args.file)? {
+        print!("{}", render_info(remote.parsed()));
+        return Ok(());
+    }
     let mcap = common::load_path(ctx, &args.file, "mcap info")?;
     let parsed = common::parse_mcap(&mcap)?;
     print!("{}", render_info(&parsed));

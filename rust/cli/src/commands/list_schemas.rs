@@ -4,6 +4,10 @@ use crate::context::CommandContext;
 use anyhow::Result;
 
 pub fn run(ctx: &CommandContext, args: ListSchemasCommand) -> Result<()> {
+    if let Some(remote) = common::try_open_remote_mcap(ctx, &args.file)? {
+        common::print_table(&render_schema_rows(&remote.parsed().schemas));
+        return Ok(());
+    }
     let mcap = common::load_path(ctx, &args.file, "mcap list schemas")?;
     let parsed = common::parse_mcap(&mcap)?;
     common::print_table(&render_schema_rows(&parsed.schemas));
