@@ -28,25 +28,31 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
         }
     } else {
         for file in args.files {
-            if let Some(mut remote) = common::try_open_remote_mcap(&file)? {
-                let mut json_transcoders = JsonTranscoders::default();
-                if let Some(broken_pipe) =
-                    cat_remote_indexed(&mut writer, &mut remote, &opts, &mut json_transcoders)?
-                {
-                    if broken_pipe {
-                        return Ok(());
-                    }
-                    continue;
-                }
-            }
-            let mcap = common::load_path(ctx, &file)?;
-            if cat_mcap(&mut writer, &mcap, &opts)? {
+            if cat_file(ctx, &mut writer, &file, &opts)? {
                 return Ok(());
             }
         }
     }
 
     flush_or_ignore_broken_pipe(&mut writer)
+}
+
+fn cat_file(
+    ctx: &CommandContext,
+    writer: &mut impl std::io::Write,
+    file: &std::path::Path,
+    opts: &CatOptions,
+) -> Result<bool> {
+    if let Some(mut remote) = common::try_open_remote_mcap(file)? {
+        let mut json_transcoders = JsonTranscoders::default();
+        if let Some(broken_pipe) =
+            cat_remote_indexed(writer, &mut remote, opts, &mut json_transcoders)?
+        {
+            return Ok(broken_pipe);
+        }
+    }
+    let mcap = common::load_path(ctx, file)?;
+    cat_mcap(writer, &mcap, opts)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

@@ -57,20 +57,44 @@ pub struct MaterializedInput {
 pub struct RemoteMcap {
     reader: HttpRangeReader,
     summary: mcap::Summary,
-    parsed: ParsedMcap,
+}
+
+pub enum McapSource {
+    Local(std::fs::File),
+    Remote(HttpRangeReader),
 }
 
 impl RemoteMcap {
-    pub fn parsed(&self) -> &ParsedMcap {
-        &self.parsed
-    }
-
     pub fn summary(&self) -> &mcap::Summary {
         &self.summary
     }
 
     pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         self.reader.read_range(offset, length)
+    }
+}
+
+impl McapSource {
+    pub fn is_remote(&self) -> bool {
+        matches!(self, Self::Remote(_))
+    }
+}
+
+impl std::io::Read for McapSource {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            Self::Local(file) => file.read(buf),
+            Self::Remote(reader) => reader.read(buf),
+        }
+    }
+}
+
+impl std::io::Seek for McapSource {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        match self {
+            Self::Local(file) => file.seek(pos),
+            Self::Remote(reader) => reader.seek(pos),
+        }
     }
 }
 
@@ -115,6 +139,30 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     let file =
         std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
     unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
+}
+
+pub fn open_seekable_mcap_source(_ctx: &CommandContext, path: &Path) -> Result<Option<McapSource>> {
+    if is_http_url(path) {
+        return Ok(HttpRangeReader::open(path)?.map(McapSource::Remote));
+    }
+    let file =
+        std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
+    Ok(Some(McapSource::Local(file)))
+}
+
+pub fn parse_mcap_from_path(ctx: &CommandContext, path: &Path) -> Result<ParsedMcap> {
+    if let Some(mut source) = open_seekable_mcap_source(ctx, path)? {
+        let header = read_header_from_seekable(&mut source)?;
+        if let Some(summary) = read_summary_from_seekable(&mut source)? {
+            return Ok(parsed_mcap_from_summary_ref(header, &summary));
+        }
+        if source.is_remote() {
+            eprintln!("Warning: remote MCAP has no summary; reading entire remote file.");
+        }
+    }
+
+    let mcap = load_path(ctx, path)?;
+    parse_mcap(&mcap)
 }
 
 pub fn load_path(_ctx: &CommandContext, path: &Path) -> Result<InputData> {
@@ -177,16 +225,10 @@ pub fn try_open_remote_mcap(path: &Path) -> Result<Option<RemoteMcap>> {
     let Some(mut reader) = HttpRangeReader::open(path)? else {
         return Ok(None);
     };
-    let header = read_header_from_seekable(&mut reader)?;
     let Some(summary) = read_summary_from_seekable(&mut reader)? else {
         return Ok(None);
     };
-    let parsed = parsed_mcap_from_summary_ref(header, &summary);
-    Ok(Some(RemoteMcap {
-        reader,
-        summary,
-        parsed,
-    }))
+    Ok(Some(RemoteMcap { reader, summary }))
 }
 
 pub fn is_http_url(path: &Path) -> bool {
@@ -868,8 +910,7 @@ mod tests {
             .expect("remote summary read")
             .expect("summary should be present");
 
-        assert!(remote.parsed().header.is_some());
-        assert!(remote.parsed().channels.contains_key(&channel_id));
+        assert!(remote.summary().channels.contains_key(&channel_id));
     }
 
     #[test]

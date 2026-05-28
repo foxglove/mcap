@@ -5,12 +5,7 @@ use crate::commands::common;
 use crate::context::CommandContext;
 
 pub fn run(ctx: &CommandContext, args: ListChannelsCommand) -> Result<()> {
-    if let Some(remote) = common::try_open_remote_mcap(&args.file)? {
-        common::print_table(&render_channel_rows(&remote.parsed().channels)?);
-        return Ok(());
-    }
-    let mcap = common::load_path(ctx, &args.file)?;
-    let parsed = common::parse_mcap(&mcap)?;
+    let parsed = common::parse_mcap_from_path(ctx, &args.file)?;
     common::print_table(&render_channel_rows(&parsed.channels)?);
     Ok(())
 }

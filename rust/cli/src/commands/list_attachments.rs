@@ -5,14 +5,7 @@ use crate::commands::common;
 use crate::context::CommandContext;
 
 pub fn run(ctx: &CommandContext, args: ListAttachmentsCommand) -> Result<()> {
-    if let Some(remote) = common::try_open_remote_mcap(&args.file)? {
-        let mut indexes = remote.parsed().attachment_indexes.clone();
-        indexes.sort_by_key(|index| index.offset);
-        common::print_table(&render_attachment_rows(&indexes));
-        return Ok(());
-    }
-    let mcap = common::load_path(ctx, &args.file)?;
-    let parsed = common::parse_mcap(&mcap)?;
+    let parsed = common::parse_mcap_from_path(ctx, &args.file)?;
     let mut indexes = parsed.attachment_indexes;
     indexes.sort_by_key(|index| index.offset);
     common::print_table(&render_attachment_rows(&indexes));
