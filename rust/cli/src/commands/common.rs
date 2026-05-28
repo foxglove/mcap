@@ -117,9 +117,9 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
 }
 
-pub fn load_path(ctx: &CommandContext, path: &Path) -> Result<InputData> {
+pub fn load_path(_ctx: &CommandContext, path: &Path) -> Result<InputData> {
     if is_http_url(path) {
-        return Ok(InputData::Buffered(read_remote_input(ctx, path)?));
+        return Ok(InputData::Buffered(read_remote_input(path)?));
     }
     Ok(InputData::Mapped(map_file(path)?))
 }
@@ -142,7 +142,7 @@ pub fn load_input(ctx: &CommandContext, file: Option<&Path>) -> Result<InputData
     Ok(InputData::Buffered(buf))
 }
 
-pub fn materialize_input(ctx: &CommandContext, path: &Path) -> Result<MaterializedInput> {
+pub fn materialize_input(_ctx: &CommandContext, path: &Path) -> Result<MaterializedInput> {
     if !is_http_url(path) {
         return Ok(MaterializedInput {
             temp_file: None,
@@ -161,7 +161,7 @@ pub fn materialize_input(ctx: &CommandContext, path: &Path) -> Result<Materializ
     let mut temp_file = builder
         .tempfile()
         .context("failed to create temporary remote input file")?;
-    read_remote_input_to_writer(ctx, path, temp_file.as_file_mut())?;
+    read_remote_input_to_writer(path, temp_file.as_file_mut())?;
     std::io::Write::flush(temp_file.as_file_mut())
         .context("failed to flush temporary remote input file")?;
     Ok(MaterializedInput {
@@ -212,9 +212,9 @@ pub fn remote_or_local_extension(path: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
-fn read_remote_input(ctx: &CommandContext, path: &Path) -> Result<Vec<u8>> {
+fn read_remote_input(path: &Path) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
-    read_remote_input_to_writer(ctx, path, &mut bytes)?;
+    read_remote_input_to_writer(path, &mut bytes)?;
     Ok(bytes)
 }
 
@@ -316,21 +316,13 @@ fn probe_range_size(agent: &Agent, url: &str, display_url: &str) -> Result<Optio
     }
 }
 
-fn read_remote_input_to_writer(
-    ctx: &CommandContext,
-    path: &Path,
-    writer: &mut impl std::io::Write,
-) -> Result<()> {
+fn read_remote_input_to_writer(path: &Path, writer: &mut impl std::io::Write) -> Result<()> {
     let url = path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display()))?;
     let display_url = redact_url(url);
     let agent = remote_agent();
-    if ctx.verbose() == 0 {
-        eprintln!("Warning: reading entire remote file {display_url}");
-    } else {
-        eprintln!("Warning: reading entire remote file {display_url} (range path unavailable)");
-    }
+    eprintln!("Warning: reading entire remote file {display_url}");
 
     let mut response = agent
         .get(url)
@@ -356,7 +348,15 @@ fn remote_agent() -> Agent {
 }
 
 fn redact_url(url: &str) -> String {
-    remote_url_without_fragment_or_query(url).to_string()
+    let without_fragment_or_query = remote_url_without_fragment_or_query(url);
+    let Some((scheme, rest)) = without_fragment_or_query.split_once("://") else {
+        return without_fragment_or_query.to_string();
+    };
+    let without_userinfo = rest
+        .rsplit_once('@')
+        .map(|(_, suffix)| suffix)
+        .unwrap_or(rest);
+    format!("{scheme}://{without_userinfo}")
 }
 
 fn remote_url_without_fragment_or_query(url: &str) -> &str {
@@ -758,6 +758,16 @@ mod tests {
             .expect_err("connection failure should report redacted URL");
         assert!(!err.to_string().contains("secret-token"));
         assert!(!err.to_string().contains("X-Amz-Signature"));
+    }
+
+    #[test]
+    fn remote_errors_redact_userinfo() {
+        let url = "http://AKIA:secret@127.0.0.1:1/demo.mcap";
+        let err = load_path(&crate::context::CommandContext::default(), Path::new(url))
+            .expect_err("connection failure should report redacted URL");
+        assert!(!err.to_string().contains("AKIA"));
+        assert!(!err.to_string().contains("secret"));
+        assert!(err.to_string().contains("http://127.0.0.1:1/demo.mcap"));
     }
 
     #[test]
