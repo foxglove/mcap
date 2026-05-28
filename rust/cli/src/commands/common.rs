@@ -201,7 +201,7 @@ pub fn is_http_url(path: &Path) -> bool {
 
 pub fn remote_or_local_extension(path: &Path) -> Option<String> {
     if is_http_url(path) {
-        let text = path.to_str()?.split('?').next().unwrap_or_default();
+        let text = remote_url_without_fragment_or_query(path.to_str()?);
         return Path::new(text)
             .extension()
             .and_then(|extension| extension.to_str())
@@ -288,7 +288,7 @@ impl std::io::Seek for HttpRangeReader {
             SeekFrom::End(offset) => self.size as i128 + offset as i128,
             SeekFrom::Current(offset) => self.offset as i128 + offset as i128,
         };
-        if target < 0 || target > self.size as i128 {
+        if target < 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "remote seek out of bounds",
@@ -352,12 +352,16 @@ fn remote_agent() -> Agent {
 }
 
 fn redact_url(url: &str) -> String {
-    let without_fragment = url.split('#').next().unwrap_or(url);
-    without_fragment
+    remote_url_without_fragment_or_query(url).to_string()
+}
+
+fn remote_url_without_fragment_or_query(url: &str) -> &str {
+    url.split('#')
+        .next()
+        .unwrap_or(url)
         .split('?')
         .next()
-        .unwrap_or(without_fragment)
-        .to_string()
+        .unwrap_or(url)
 }
 
 fn copy_response(
@@ -711,7 +715,7 @@ pub fn print_table(rows: &[Vec<String>]) {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::io::{Read, Write};
+    use std::io::{Read, SeekFrom, Write};
     use std::net::TcpListener;
     use std::path::Path;
     use std::thread;
@@ -832,6 +836,35 @@ mod tests {
         assert!(super::is_http_url(Path::new(
             "Https://example.com/demo.mcap"
         )));
+    }
+
+    #[test]
+    fn remote_extension_ignores_query_and_fragment() {
+        assert_eq!(
+            super::remote_or_local_extension(Path::new(
+                "https://example.com/demo.bag?token=secret#section"
+            ))
+            .as_deref(),
+            Some("bag")
+        );
+    }
+
+    #[test]
+    fn http_range_reader_allows_seek_past_end() {
+        let mut reader = super::HttpRangeReader {
+            agent: super::remote_agent(),
+            url: "http://127.0.0.1:1/demo.mcap".to_string(),
+            display_url: "http://127.0.0.1:1/demo.mcap".to_string(),
+            size: 10,
+            offset: 0,
+        };
+
+        assert_eq!(
+            std::io::Seek::seek(&mut reader, SeekFrom::End(1)).unwrap(),
+            11
+        );
+        let mut byte = [0_u8; 1];
+        assert_eq!(std::io::Read::read(&mut reader, &mut byte).unwrap(), 0);
     }
 
     #[test]

@@ -28,7 +28,9 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
         }
     } else {
         for file in args.files {
+            let mut attempted_remote_index = false;
             if let Some(mut remote) = common::try_open_remote_mcap(&file)? {
+                attempted_remote_index = true;
                 let mut json_transcoders = JsonTranscoders::default();
                 if let Some(broken_pipe) =
                     cat_remote_indexed(&mut writer, &mut remote, &opts, &mut json_transcoders)?
@@ -37,6 +39,17 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
                         return Ok(());
                     }
                     continue;
+                }
+            }
+            if common::is_http_url(&file) {
+                if attempted_remote_index {
+                    eprintln!(
+                        "Warning: remote MCAP has no chunk indexes; reading entire remote file."
+                    );
+                } else {
+                    eprintln!(
+                        "Warning: remote MCAP cannot be read with byte ranges; reading entire remote file."
+                    );
                 }
             }
             let mcap = common::load_path(ctx, &file)?;

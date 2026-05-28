@@ -118,9 +118,7 @@ pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
         .filter(|path| crate::commands::common::is_http_url(path))
         .count();
     if remote_inputs > 1 {
-        bail!(
-            "mcap merge supports at most one remote HTTP(S) input for now because it keeps all inputs in memory"
-        );
+        bail!("mcap merge currently supports at most one remote HTTP(S) input");
     }
 
     let mut mapped_inputs = Vec::with_capacity(opts.files.len());
