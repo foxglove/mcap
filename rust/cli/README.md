@@ -26,21 +26,6 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | `sort`       | 🟢     |                                                              |
 | `version`    | 🟢     |                                                              |
 
-## Remote inputs
-
-Commands that read an input file can accept `http://` and `https://` URLs. The
-CLI uses byte range requests for indexed MCAP operations where possible and
-falls back to reading the entire remote file for commands or inputs that require
-a linear scan. Fallback reads download the full remote object into memory, or
-into a temporary local file for `mcap convert`; prefer indexed MCAPs for large
-remote inputs:
-
-```sh
-mcap info https://example.com/demo.mcap
-```
-
-Remote outputs and in-place updates such as `mcap add` remain local-only.
-
 ## Pre-1.0 compatibility cleanup
 
 The Rust CLI is currently prioritizing Go CLI parity. Before declaring a Rust CLI
