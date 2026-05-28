@@ -28,14 +28,6 @@ pub struct Args {
     #[arg(long, default_value_t = false, global = true)]
     pub pprof_profile: bool,
 
-    /// Maximum bytes to read from a single remote HTTP(S) input on whole-file fallback (0 disables the limit).
-    #[arg(
-        long,
-        default_value_t = crate::commands::common::DEFAULT_REMOTE_READ_LIMIT_BYTES,
-        global = true
-    )]
-    pub remote_read_limit_bytes: u64,
-
     #[command(subcommand)]
     pub command: Command,
 }

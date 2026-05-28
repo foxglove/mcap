@@ -13,7 +13,6 @@ pub struct CommandContext {
     color: Color,
     config: Option<PathBuf>,
     pprof_profile: bool,
-    remote_read_limit_bytes: u64,
 }
 
 impl Default for CommandContext {
@@ -23,26 +22,18 @@ impl Default for CommandContext {
             color: Color::Auto,
             config: None,
             pprof_profile: false,
-            remote_read_limit_bytes: crate::commands::common::DEFAULT_REMOTE_READ_LIMIT_BYTES,
         }
     }
 }
 
 #[allow(dead_code)]
 impl CommandContext {
-    pub fn new(
-        verbose: u8,
-        color: Color,
-        config: Option<PathBuf>,
-        pprof_profile: bool,
-        remote_read_limit_bytes: u64,
-    ) -> Self {
+    pub fn new(verbose: u8, color: Color, config: Option<PathBuf>, pprof_profile: bool) -> Self {
         Self {
             verbose,
             color,
             config,
             pprof_profile,
-            remote_read_limit_bytes,
         }
     }
 
@@ -60,9 +51,5 @@ impl CommandContext {
 
     pub fn pprof_profile(&self) -> bool {
         self.pprof_profile
-    }
-
-    pub fn remote_read_limit_bytes(&self) -> u64 {
-        self.remote_read_limit_bytes
     }
 }

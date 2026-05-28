@@ -15,7 +15,6 @@ use crate::context::CommandContext;
 pub const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
-pub const DEFAULT_REMOTE_READ_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
 const REMOTE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_BODY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -337,8 +336,8 @@ fn read_remote_input_to_writer(
         bail!("failed to read remote input {display_url}: HTTP {status}");
     }
 
-    enforce_remote_read_limit(ctx, response.headers(), &display_url)?;
-    copy_limited_response(ctx, &mut response, writer, &display_url)?;
+    let _ = ctx;
+    copy_response(&mut response, writer, &display_url)?;
     Ok(())
 }
 
@@ -369,60 +368,6 @@ fn copy_response(
     std::io::copy(&mut response.body_mut().as_reader(), writer)
         .with_context(|| format!("failed to read remote input {display_url}"))?;
     Ok(())
-}
-
-fn enforce_remote_read_limit(
-    ctx: &CommandContext,
-    headers: &ureq::http::HeaderMap,
-    display_url: &str,
-) -> Result<()> {
-    let limit = ctx.remote_read_limit_bytes();
-    if limit == 0 {
-        return Ok(());
-    }
-    if let Some(content_length) = parse_content_length(headers) {
-        if content_length > limit {
-            bail!(
-                "remote input {display_url} is larger than the configured read limit ({} > {}). Increase --remote-read-limit-bytes or pass 0 to disable the limit.",
-                human_bytes(content_length),
-                human_bytes(limit),
-            );
-        }
-    }
-    Ok(())
-}
-
-fn copy_limited_response(
-    ctx: &CommandContext,
-    response: &mut ureq::http::Response<ureq::Body>,
-    writer: &mut impl std::io::Write,
-    display_url: &str,
-) -> Result<()> {
-    let limit = ctx.remote_read_limit_bytes();
-    if limit == 0 {
-        return copy_response(response, writer, display_url);
-    }
-
-    let mut limited = response
-        .body_mut()
-        .as_reader()
-        .take(limit.saturating_add(1));
-    let copied = std::io::copy(&mut limited, writer)
-        .with_context(|| format!("failed to read remote input {display_url}"))?;
-    if copied > limit {
-        bail!(
-            "remote input {display_url} exceeded the configured read limit ({}). Increase --remote-read-limit-bytes or pass 0 to disable the limit.",
-            human_bytes(limit),
-        );
-    }
-    Ok(())
-}
-
-fn parse_content_length(headers: &ureq::http::HeaderMap) -> Option<u64> {
-    headers
-        .get("content-length")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse().ok())
 }
 
 fn read_summary_from_seekable(
