@@ -18,14 +18,7 @@ fn run() -> Result<()> {
     if args.pprof_profile {
         anyhow::bail!("'--pprof-profile' is not implemented yet");
     }
-    let ctx = CommandContext::new(
-        args.verbose,
-        args.color,
-        args.config,
-        args.pprof_profile,
-        args.allow_remote_scan,
-        args.remote_read_limit_bytes,
-    );
+    let ctx = CommandContext::new(args.verbose, args.color, args.config, args.pprof_profile);
 
     commands::dispatch(&ctx, args.command)
 }
@@ -182,37 +175,6 @@ mod tests {
                 file: "demo.mcap".into(),
             })
         );
-    }
-
-    #[test]
-    fn parses_allow_remote_scan_global_flag() {
-        let args = Args::try_parse_from(["mcap", "--allow-remote-scan", "info", "demo.mcap"])
-            .expect("allow remote scan should parse");
-        assert!(args.allow_remote_scan);
-        assert_eq!(
-            args.remote_read_limit_bytes,
-            crate::commands::common::DEFAULT_REMOTE_READ_LIMIT_BYTES
-        );
-        assert_eq!(
-            args.command,
-            Command::Info(InfoCommand {
-                file: "demo.mcap".into(),
-            })
-        );
-    }
-
-    #[test]
-    fn parses_remote_read_limit_global_flag() {
-        let args = Args::try_parse_from([
-            "mcap",
-            "--allow-remote-scan",
-            "--remote-read-limit-bytes",
-            "1024",
-            "info",
-            "demo.mcap",
-        ])
-        .expect("remote read limit should parse");
-        assert_eq!(args.remote_read_limit_bytes, 1024);
     }
 
     #[test]

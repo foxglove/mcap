@@ -14,7 +14,6 @@ use crate::context::CommandContext;
 pub const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
-pub const DEFAULT_REMOTE_READ_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
 const REMOTE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_BODY_TIMEOUT: Duration = Duration::from_secs(60);
@@ -176,9 +175,9 @@ fn read_remote_input(ctx: &CommandContext, path: &Path, reason: &str) -> Result<
 }
 
 fn read_remote_input_to_writer(
-    ctx: &CommandContext,
+    _ctx: &CommandContext,
     path: &Path,
-    reason: &str,
+    _reason: &str,
     writer: &mut impl std::io::Write,
 ) -> Result<()> {
     let url = path
@@ -186,22 +185,6 @@ fn read_remote_input_to_writer(
         .ok_or_else(|| anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display()))?;
     let display_url = redact_url(url);
     let agent = remote_agent();
-
-    if !ctx.allow_remote_scan() {
-        let probe = probe_http_ranges(&agent, url, &display_url)?;
-        if !probe.supports_ranges {
-            bail!(
-                "remote server does not support byte range requests for {display_url}; this command would need to read the entire remote file. Re-run with --allow-remote-scan to proceed."
-            );
-        }
-        let size = probe
-            .content_length
-            .map(human_bytes)
-            .unwrap_or_else(|| "unknown size".to_string());
-        bail!(
-            "{reason} requires reading the entire remote file ({size}) from {display_url}. Re-run with --allow-remote-scan to proceed."
-        );
-    }
 
     let mut response = agent
         .get(url)
@@ -212,48 +195,8 @@ fn read_remote_input_to_writer(
         bail!("failed to read remote input {display_url}: HTTP {status}");
     }
 
-    enforce_remote_read_limit(ctx, response.headers(), &display_url)?;
-    copy_limited_response(ctx, &mut response, writer, &display_url)?;
+    copy_response(&mut response, writer, &display_url)?;
     Ok(())
-}
-
-struct HttpProbe {
-    supports_ranges: bool,
-    content_length: Option<u64>,
-}
-
-fn probe_http_ranges(agent: &Agent, url: &str, display_url: &str) -> Result<HttpProbe> {
-    let mut content_length = None;
-    if let Ok(response) = agent.head(url).call() {
-        if response.status().is_success() {
-            content_length = parse_content_length(response.headers());
-        }
-    }
-
-    let response = agent
-        .get(url)
-        .header("Range", "bytes=0-0")
-        .call()
-        .with_context(|| format!("failed to fetch {display_url}"))?;
-    match response.status() {
-        status if status.as_u16() == 206 => {
-            let probed_length = response
-                .headers()
-                .get("content-range")
-                .and_then(|value| value.to_str().ok())
-                .and_then(parse_content_range_len)
-                .or(content_length);
-            Ok(HttpProbe {
-                supports_ranges: true,
-                content_length: probed_length,
-            })
-        }
-        status if status.is_success() => Ok(HttpProbe {
-            supports_ranges: false,
-            content_length: parse_content_length(response.headers()).or(content_length),
-        }),
-        status => bail!("failed to fetch {display_url}: HTTP {status}"),
-    }
 }
 
 fn remote_agent() -> Agent {
@@ -275,68 +218,14 @@ fn redact_url(url: &str) -> String {
         .to_string()
 }
 
-fn enforce_remote_read_limit(
-    ctx: &CommandContext,
-    headers: &ureq::http::HeaderMap,
-    display_url: &str,
-) -> Result<()> {
-    let limit = ctx.remote_read_limit_bytes();
-    if limit == 0 {
-        return Ok(());
-    }
-    if let Some(content_length) = parse_content_length(headers) {
-        if content_length > limit {
-            bail!(
-                "remote input {display_url} is larger than the configured read limit ({} > {}). Increase --remote-read-limit-bytes or pass 0 to disable the limit.",
-                human_bytes(content_length),
-                human_bytes(limit),
-            );
-        }
-    }
-    Ok(())
-}
-
-fn copy_limited_response(
-    ctx: &CommandContext,
+fn copy_response(
     response: &mut ureq::http::Response<ureq::Body>,
     writer: &mut impl std::io::Write,
     display_url: &str,
 ) -> Result<()> {
-    let limit = ctx.remote_read_limit_bytes();
-    if limit == 0 {
-        std::io::copy(&mut response.body_mut().as_reader(), writer)
-            .with_context(|| format!("failed to read remote input {display_url}"))?;
-        return Ok(());
-    }
-
-    let mut limited = response
-        .body_mut()
-        .as_reader()
-        .take(limit.saturating_add(1));
-    let copied = std::io::copy(&mut limited, writer)
+    std::io::copy(&mut response.body_mut().as_reader(), writer)
         .with_context(|| format!("failed to read remote input {display_url}"))?;
-    if copied > limit {
-        bail!(
-            "remote input {display_url} exceeded the configured read limit ({}). Increase --remote-read-limit-bytes or pass 0 to disable the limit.",
-            human_bytes(limit),
-        );
-    }
     Ok(())
-}
-
-fn parse_content_length(headers: &ureq::http::HeaderMap) -> Option<u64> {
-    headers
-        .get("content-length")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.parse().ok())
-}
-
-fn parse_content_range_len(value: &str) -> Option<u64> {
-    let (_, total) = value.rsplit_once('/')?;
-    if total == "*" {
-        return None;
-    }
-    total.parse().ok()
 }
 
 pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
@@ -589,24 +478,7 @@ mod tests {
         decimal_time, format_table, formatted_time, human_bytes, load_path, parse_mcap,
         parse_mcap_from_summary, print_table, write_raw_time,
     };
-    use crate::context::CommandContext;
-    use crate::logsetup::Color;
     use mcap::records;
-
-    fn context(allow_remote_scan: bool) -> CommandContext {
-        CommandContext::new(
-            0,
-            Color::Auto,
-            None,
-            false,
-            allow_remote_scan,
-            super::DEFAULT_REMOTE_READ_LIMIT_BYTES,
-        )
-    }
-
-    fn context_with_limit(allow_remote_scan: bool, limit: u64) -> CommandContext {
-        CommandContext::new(0, Color::Auto, None, false, allow_remote_scan, limit)
-    }
 
     fn serve_http(body: &'static [u8], supports_ranges: bool) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
@@ -655,53 +527,28 @@ mod tests {
     }
 
     #[test]
-    fn remote_range_capable_input_requires_explicit_scan_for_full_download() {
-        let url = serve_http(b"hello remote", true);
-        let err = load_path(&context(false), Path::new(&url), "mcap info")
-            .expect_err("remote full scan should require opt-in");
-        assert!(err
-            .to_string()
-            .contains("mcap info requires reading the entire remote file"));
-        assert!(err.to_string().contains("--allow-remote-scan"));
-    }
-
-    #[test]
-    fn remote_without_range_support_has_specific_error() {
-        let url = serve_http(b"hello remote", false);
-        let err = load_path(&context(false), Path::new(&url), "mcap info")
-            .expect_err("remote without ranges should require opt-in");
-        assert!(err
-            .to_string()
-            .contains("remote server does not support byte range requests"));
-        assert!(err.to_string().contains("--allow-remote-scan"));
-    }
-
-    #[test]
     fn remote_errors_redact_query_strings() {
-        let url = format!(
-            "{}?X-Amz-Signature=secret-token",
-            serve_http(b"hello remote", true)
-        );
-        let err = load_path(&context(false), Path::new(&url), "mcap info")
-            .expect_err("remote full read should require opt-in");
+        let url = "http://127.0.0.1:1/demo.mcap?X-Amz-Signature=secret-token";
+        let err = load_path(
+            &crate::context::CommandContext::default(),
+            Path::new(url),
+            "mcap info",
+        )
+        .expect_err("connection failure should report redacted URL");
         assert!(!err.to_string().contains("secret-token"));
         assert!(!err.to_string().contains("X-Amz-Signature"));
     }
 
     #[test]
-    fn allow_remote_scan_downloads_http_input() {
+    fn remote_http_input_reads_entire_file() {
         let url = serve_http(b"hello remote", true);
-        let input =
-            load_path(&context(true), Path::new(&url), "mcap info").expect("remote download");
+        let input = load_path(
+            &crate::context::CommandContext::default(),
+            Path::new(&url),
+            "mcap info",
+        )
+        .expect("remote read");
         assert_eq!(input.as_slice(), b"hello remote");
-    }
-
-    #[test]
-    fn allowed_remote_read_enforces_limit() {
-        let url = serve_http(b"hello remote", true);
-        let err = load_path(&context_with_limit(true, 5), Path::new(&url), "mcap info")
-            .expect_err("remote read should enforce configured limit");
-        assert!(err.to_string().contains("configured read limit"));
     }
 
     #[test]
