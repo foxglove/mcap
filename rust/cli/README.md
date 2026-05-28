@@ -111,6 +111,14 @@ port is still pre-production:
      indexed range reads.
    - Apply the chosen policy consistently across HTTP(S) and future object-store
      inputs such as S3, GCS, and Azure Blob Storage.
+8. Remote indexed read performance:
+   - Current HTTP(S) range reads use the generic seek/read interface, which can
+     issue several small range requests while reading MCAP headers, footers, and
+     summaries.
+   - Before Rust CLI 1.0, optimize summary/index reading in the underlying MCAP
+     reader APIs so HTTP(S), S3, GCS, and Azure Blob Storage backends can share
+     coalesced tail/summary range reads instead of each transport adding its own
+     read-ahead workaround.
 
 ## Intentional divergences from Go CLI
 
