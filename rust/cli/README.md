@@ -103,6 +103,14 @@ port is still pre-production:
      `.mcap` when no explicit output is provided.
    - This would also allow `mcap convert` to accept multiple input paths in one
      invocation, including wildcard-expanded paths from the user's shell.
+7. Remote read policy:
+   - Current Go-compatible behavior allows remote reads without an opt-in flag,
+     including commands or inputs that require reading the entire remote file.
+   - Before Rust CLI 1.0, decide whether to keep this behavior or reintroduce an
+     explicit opt-in such as `--allow-remote-scan` for commands that cannot use
+     indexed range reads.
+   - Apply the chosen policy consistently across HTTP(S) and future object-store
+     inputs such as S3, GCS, and Azure Blob Storage.
 
 ## Intentional divergences from Go CLI
 
