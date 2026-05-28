@@ -181,7 +181,7 @@ pub fn try_open_remote_mcap(path: &Path) -> Result<Option<RemoteMcap>> {
     let Some(summary) = read_summary_from_seekable(&mut reader)? else {
         return Ok(None);
     };
-    let parsed = parsed_mcap_from_summary(header, &summary);
+    let parsed = parsed_mcap_from_summary_ref(header, &summary);
     Ok(Some(RemoteMcap {
         reader,
         summary,
@@ -326,6 +326,11 @@ fn read_remote_input_to_writer(
         .ok_or_else(|| anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display()))?;
     let display_url = redact_url(url);
     let agent = remote_agent();
+    if ctx.verbose() == 0 {
+        eprintln!("Warning: reading entire remote file {display_url}");
+    } else {
+        eprintln!("Warning: reading entire remote file {display_url} (range path unavailable)");
+    }
 
     let mut response = agent
         .get(url)
@@ -336,7 +341,6 @@ fn read_remote_input_to_writer(
         bail!("failed to read remote input {display_url}: HTTP {status}");
     }
 
-    let _ = ctx;
     copy_response(&mut response, writer, &display_url)?;
     Ok(())
 }
@@ -420,7 +424,7 @@ fn read_header_from_seekable(
     Ok(None)
 }
 
-fn parsed_mcap_from_summary(
+fn parsed_mcap_from_summary_ref(
     header: Option<records::Header>,
     summary: &mcap::Summary,
 ) -> ParsedMcap {
@@ -502,47 +506,7 @@ fn parse_mcap_from_summary(
     let Some(summary) = mcap::Summary::read(mcap)? else {
         return Ok(None);
     };
-
-    let mut out = ParsedMcap {
-        header,
-        statistics: summary.stats,
-        channels: std::collections::BTreeMap::new(),
-        schemas: std::collections::BTreeMap::new(),
-        chunk_indexes: summary.chunk_indexes,
-        attachment_indexes: summary.attachment_indexes,
-        metadata_indexes: summary.metadata_indexes,
-    };
-
-    for schema in summary.schemas.values() {
-        let schema = schema.as_ref();
-        out.schemas.insert(
-            schema.id,
-            ParsedSchema {
-                header: records::SchemaHeader {
-                    id: schema.id,
-                    name: schema.name.clone(),
-                    encoding: schema.encoding.clone(),
-                },
-                data: schema.data.clone().into_owned(),
-            },
-        );
-    }
-
-    for channel in summary.channels.values() {
-        let channel = channel.as_ref();
-        out.channels.insert(
-            channel.id,
-            records::Channel {
-                id: channel.id,
-                schema_id: channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0),
-                topic: channel.topic.clone(),
-                message_encoding: channel.message_encoding.clone(),
-                metadata: channel.metadata.clone(),
-            },
-        );
-    }
-
-    Ok(Some(out))
+    Ok(Some(parsed_mcap_from_summary_ref(header, &summary)))
 }
 
 fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
