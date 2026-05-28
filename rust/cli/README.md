@@ -11,7 +11,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | Command      | Status | Notes                                                        |
 | ------------ | ------ | ------------------------------------------------------------ |
 | `add`        | 🟢     |                                                              |
-| `cat`        | 🟡     | Remote URI input is not yet supported.                       |
+| `cat`        | 🟢     |                                                              |
 | `compress`   | 🟢     |                                                              |
 | `convert`    | 🟢     |                                                              |
 | `decompress` | 🟢     |                                                              |
@@ -25,6 +25,25 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | `recover`    | 🟡     | Go-parity gaps remain around raw chunk passthrough behavior. |
 | `sort`       | 🟢     |                                                              |
 | `version`    | 🟢     |                                                              |
+
+## Remote inputs
+
+Commands that read an input file can accept `http://` and `https://` URLs. The
+current implementation reads the entire remote file, so remote reads require the
+explicit `--allow-remote-scan` global flag:
+
+```sh
+mcap --allow-remote-scan info https://example.com/demo.mcap
+```
+
+If the server does not support byte range requests, the CLI reports that the
+command must read the entire remote file. If range requests are supported, the
+CLI still requires `--allow-remote-scan` until range-aware command paths are
+implemented.
+
+Remote reads are capped by `--remote-read-limit-bytes`, which defaults to 1 GiB.
+Pass `--remote-read-limit-bytes=0` to disable the cap. Remote outputs and
+in-place updates such as `mcap add` remain local-only.
 
 ## Pre-1.0 compatibility cleanup
 

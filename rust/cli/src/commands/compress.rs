@@ -12,7 +12,6 @@ pub fn run(ctx: &CommandContext, args: CompressCommand) -> Result<()> {
         .compression(args.compression)
         .use_chunks(!args.unchunked)
         .include_metadata(true)
-        .include_attachments(true)
-        .allow_remote_scan(ctx.allow_remote_scan());
-    filter::run_transcode(options)
+        .include_attachments(true);
+    filter::run_transcode(ctx, options)
 }

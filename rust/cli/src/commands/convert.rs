@@ -15,9 +15,11 @@ const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
 pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     let input = ConvertInput::detect(&args.input)?;
+    if !crate::commands::common::is_http_url(&args.input) {
+        reject_lfs_pointer(&args.input)?;
+    }
     let materialized_input =
         crate::commands::common::materialize_input(ctx, &args.input, input.remote_scan_reason())?;
-    reject_lfs_pointer(materialized_input.path())?;
     if !crate::commands::common::is_http_url(&args.input) {
         ensure_distinct_paths(materialized_input.path(), &args.output)?;
     }
@@ -40,7 +42,8 @@ enum ConvertInput {
 
 impl ConvertInput {
     fn detect(path: &Path) -> Result<Self> {
-        let extension = input_extension(path)?;
+        let extension =
+            crate::commands::common::remote_or_local_extension(path).unwrap_or_default();
 
         if extension.eq_ignore_ascii_case("bag") {
             return Ok(Self::Ros1Bag);
@@ -72,25 +75,6 @@ impl ConvertInput {
             Self::Ros2Db3 => ros2_db3::convert_ros2_db3_file(input_path, output_path, opts),
         }
     }
-}
-
-fn input_extension(path: &Path) -> Result<String> {
-    if crate::commands::common::is_http_url(path) {
-        let url_text = path.to_str().ok_or_else(|| {
-            anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display())
-        })?;
-        let without_query = url_text.split('?').next().unwrap_or_default();
-        return Ok(Path::new(without_query)
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .unwrap_or_default()
-            .to_string());
-    }
-    Ok(path
-        .extension()
-        .and_then(|extension| extension.to_str())
-        .unwrap_or_default()
-        .to_string())
 }
 
 fn build_write_options(

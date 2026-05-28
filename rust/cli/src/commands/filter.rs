@@ -31,7 +31,6 @@ struct FilterOptions {
 pub(crate) struct TranscodeCommandOptions {
     pub(crate) file: Option<PathBuf>,
     pub(crate) output: Option<PathBuf>,
-    pub(crate) allow_remote_scan: bool,
     pub(crate) include_topic_regex: Vec<String>,
     pub(crate) exclude_topic_regex: Vec<String>,
     pub(crate) last_per_channel_topic_regex: Vec<String>,
@@ -53,7 +52,6 @@ impl From<&FilterCommand> for TranscodeCommandOptions {
         Self {
             file: args.file.clone(),
             output: args.output.clone(),
-            allow_remote_scan: false,
             include_topic_regex: args.include_topic_regex.clone(),
             exclude_topic_regex: args.exclude_topic_regex.clone(),
             last_per_channel_topic_regex: args.last_per_channel_topic_regex.clone(),
@@ -77,7 +75,6 @@ impl TranscodeCommandOptions {
         Self {
             file,
             output,
-            allow_remote_scan: false,
             include_topic_regex: Vec::new(),
             exclude_topic_regex: Vec::new(),
             last_per_channel_topic_regex: Vec::new(),
@@ -114,11 +111,6 @@ impl TranscodeCommandOptions {
         self.include_attachments = value;
         self
     }
-
-    pub(crate) fn allow_remote_scan(mut self, value: bool) -> Self {
-        self.allow_remote_scan = value;
-        self
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -131,19 +123,12 @@ struct PreStartMessage {
 }
 
 pub fn run(ctx: &CommandContext, args: FilterCommand) -> Result<()> {
-    run_transcode(TranscodeCommandOptions::from(&args).allow_remote_scan(ctx.allow_remote_scan()))
+    run_transcode(ctx, TranscodeCommandOptions::from(&args))
 }
 
-pub(crate) fn run_transcode(args: TranscodeCommandOptions) -> Result<()> {
+pub(crate) fn run_transcode(ctx: &CommandContext, args: TranscodeCommandOptions) -> Result<()> {
     let opts = build_filter_options_from_transcode_options(&args)?;
-    let ctx = CommandContext::new(
-        0,
-        crate::logsetup::Color::Auto,
-        None,
-        false,
-        args.allow_remote_scan,
-    );
-    let input = common::load_input(&ctx, args.file.as_deref(), "mcap filter")?;
+    let input = common::load_input(ctx, args.file.as_deref(), "mcap filter")?;
 
     if let Some(output) = &opts.output {
         let writer = std::fs::File::create(output)
@@ -972,7 +957,8 @@ mod tests {
         options.use_chunks = false;
         options.output_compression = "none".to_string();
 
-        super::run_transcode(options).expect("transcode should succeed");
+        super::run_transcode(&crate::context::CommandContext::default(), options)
+            .expect("transcode should succeed");
         let output = std::fs::read(&output_path).expect("read output");
         let summary = mcap::Summary::read(&output)
             .expect("summary read should succeed")

@@ -9,7 +9,6 @@ pub fn run(ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
         .compression("none")
         .include_metadata(true)
         .include_attachments(true)
-        .use_chunks(true)
-        .allow_remote_scan(ctx.allow_remote_scan());
-    filter::run_transcode(options)
+        .use_chunks(true);
+    filter::run_transcode(ctx, options)
 }

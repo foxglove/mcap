@@ -112,6 +112,16 @@ struct IdMaps {
 
 pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     let opts = build_merge_options(args);
+    let remote_inputs = opts
+        .files
+        .iter()
+        .filter(|path| crate::commands::common::is_http_url(path))
+        .count();
+    if remote_inputs > 1 {
+        bail!(
+            "mcap merge supports at most one remote HTTP(S) input for now because it keeps all inputs in memory"
+        );
+    }
 
     let mut mapped_inputs = Vec::with_capacity(opts.files.len());
     let mut input_names = Vec::with_capacity(opts.files.len());
@@ -787,6 +797,31 @@ mod tests {
         assert!(!options.chunked);
         assert!(options.allow_duplicate_metadata);
         assert_eq!(options.coalesce_channels, CoalesceChannels::Force);
+    }
+
+    #[test]
+    fn run_rejects_multiple_remote_inputs() {
+        let err = run(
+            &CommandContext::default(),
+            MergeCommand {
+                files: vec![
+                    "http://example.com/a.mcap".into(),
+                    "https://example.com/b.mcap".into(),
+                ],
+                output_file: Some("out.mcap".into()),
+                compression: CompressionFormat::Zstd,
+                chunk_size: 1024,
+                include_crc: true,
+                chunked: true,
+                allow_duplicate_metadata: false,
+                coalesce_channels: CoalesceChannels::Auto,
+            },
+        )
+        .expect_err("multiple remote merge inputs should be rejected");
+
+        assert!(err
+            .to_string()
+            .contains("supports at most one remote HTTP(S) input"));
     }
 
     #[test]

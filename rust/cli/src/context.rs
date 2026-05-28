@@ -14,6 +14,7 @@ pub struct CommandContext {
     config: Option<PathBuf>,
     pprof_profile: bool,
     allow_remote_scan: bool,
+    remote_read_limit_bytes: u64,
 }
 
 impl Default for CommandContext {
@@ -24,6 +25,7 @@ impl Default for CommandContext {
             config: None,
             pprof_profile: false,
             allow_remote_scan: false,
+            remote_read_limit_bytes: crate::commands::common::DEFAULT_REMOTE_READ_LIMIT_BYTES,
         }
     }
 }
@@ -36,6 +38,7 @@ impl CommandContext {
         config: Option<PathBuf>,
         pprof_profile: bool,
         allow_remote_scan: bool,
+        remote_read_limit_bytes: u64,
     ) -> Self {
         Self {
             verbose,
@@ -43,6 +46,7 @@ impl CommandContext {
             config,
             pprof_profile,
             allow_remote_scan,
+            remote_read_limit_bytes,
         }
     }
 
@@ -64,5 +68,9 @@ impl CommandContext {
 
     pub fn allow_remote_scan(&self) -> bool {
         self.allow_remote_scan
+    }
+
+    pub fn remote_read_limit_bytes(&self) -> u64 {
+        self.remote_read_limit_bytes
     }
 }

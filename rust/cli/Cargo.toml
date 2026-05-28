@@ -27,3 +27,4 @@ simplelog = "0.12"
 prost-reflect = { version = "0.16.4", features = ["serde"] }
 rusqlite = { version = "0.39.0", features = ["bundled"] }
 ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
+tempfile = "3.27.0"

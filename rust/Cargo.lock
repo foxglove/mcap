@@ -924,6 +924,7 @@ dependencies = [
  "rusqlite",
  "serde_json",
  "simplelog",
+ "tempfile",
  "ureq",
 ]
 

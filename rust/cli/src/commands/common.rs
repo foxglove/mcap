@@ -1,17 +1,23 @@
 use std::fmt::Write as _;
-use std::io::{IsTerminal as _, Read as _, Write as _};
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::io::{IsTerminal as _, Read as _};
+use std::path::Path;
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use mcap::records::{self, Record};
 use memmap2::Mmap;
+use tempfile::NamedTempFile;
+use ureq::Agent;
 
 use crate::context::CommandContext;
 
 pub const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
+pub const DEFAULT_REMOTE_READ_LIMIT_BYTES: u64 = 1024 * 1024 * 1024;
+const REMOTE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
+const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+const REMOTE_BODY_TIMEOUT: Duration = Duration::from_secs(60);
 
 pub enum InputData {
     Mapped(Mmap),
@@ -44,20 +50,18 @@ impl InputData {
 }
 
 pub struct MaterializedInput {
-    path: PathBuf,
-    cleanup: Option<PathBuf>,
+    temp_file: Option<NamedTempFile>,
+    local_path: Option<std::path::PathBuf>,
 }
 
 impl MaterializedInput {
     pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-impl Drop for MaterializedInput {
-    fn drop(&mut self) {
-        if let Some(path) = self.cleanup.take() {
-            let _ = std::fs::remove_file(path);
+        if let Some(temp_file) = &self.temp_file {
+            temp_file.path()
+        } else {
+            self.local_path
+                .as_deref()
+                .expect("materialized input should have a path")
         }
     }
 }
@@ -117,42 +121,42 @@ pub fn materialize_input(
 ) -> Result<MaterializedInput> {
     if !is_http_url(path) {
         return Ok(MaterializedInput {
-            path: path.to_path_buf(),
-            cleanup: None,
+            temp_file: None,
+            local_path: Some(path.to_path_buf()),
         });
     }
 
-    let bytes = read_remote_input(ctx, path, reason)?;
     let suffix = remote_or_local_extension(path)
         .filter(|extension| !extension.is_empty())
-        .map(|extension| format!(".{extension}"))
-        .unwrap_or_default();
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .context("system clock is before unix epoch")?
-        .as_nanos();
-    let temp_path = std::env::temp_dir().join(format!(
-        "mcap-cli-remote-input-{}-{now}{suffix}",
-        std::process::id()
-    ));
-    {
-        let mut file = std::fs::File::create(&temp_path)
-            .with_context(|| format!("failed to create temp input '{}'", temp_path.display()))?;
-        file.write_all(&bytes)
-            .with_context(|| format!("failed to write temp input '{}'", temp_path.display()))?;
+        .map(|extension| format!(".{extension}"));
+    let mut builder = tempfile::Builder::new();
+    builder.prefix("mcap-cli-remote-input-");
+    if let Some(suffix) = suffix.as_deref() {
+        builder.suffix(suffix);
     }
+    let mut temp_file = builder
+        .tempfile()
+        .context("failed to create temporary remote input file")?;
+    read_remote_input_to_writer(ctx, path, reason, temp_file.as_file_mut())?;
+    std::io::Write::flush(temp_file.as_file_mut())
+        .context("failed to flush temporary remote input file")?;
     Ok(MaterializedInput {
-        path: temp_path.clone(),
-        cleanup: Some(temp_path),
+        temp_file: Some(temp_file),
+        local_path: None,
     })
 }
 
 pub fn is_http_url(path: &Path) -> bool {
-    let text = path.to_string_lossy();
-    text.starts_with("http://") || text.starts_with("https://")
+    let Some(text) = path.to_str() else {
+        return false;
+    };
+    let Some((scheme, _)) = text.split_once("://") else {
+        return false;
+    };
+    scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")
 }
 
-fn remote_or_local_extension(path: &Path) -> Option<String> {
+pub fn remote_or_local_extension(path: &Path) -> Option<String> {
     if is_http_url(path) {
         let text = path.to_str()?.split('?').next().unwrap_or_default();
         return Path::new(text)
@@ -166,15 +170,28 @@ fn remote_or_local_extension(path: &Path) -> Option<String> {
 }
 
 fn read_remote_input(ctx: &CommandContext, path: &Path, reason: &str) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    read_remote_input_to_writer(ctx, path, reason, &mut bytes)?;
+    Ok(bytes)
+}
+
+fn read_remote_input_to_writer(
+    ctx: &CommandContext,
+    path: &Path,
+    reason: &str,
+    writer: &mut impl std::io::Write,
+) -> Result<()> {
     let url = path
         .to_str()
         .ok_or_else(|| anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display()))?;
-    let probe = probe_http_ranges(url)?;
+    let display_url = redact_url(url);
+    let agent = remote_agent();
 
     if !ctx.allow_remote_scan() {
+        let probe = probe_http_ranges(&agent, url, &display_url)?;
         if !probe.supports_ranges {
             bail!(
-                "remote server does not support byte range requests for {url}; this command would need to read the entire remote file. Re-run with --allow-remote-scan to proceed."
+                "remote server does not support byte range requests for {display_url}; this command would need to read the entire remote file. Re-run with --allow-remote-scan to proceed."
             );
         }
         let size = probe
@@ -182,24 +199,22 @@ fn read_remote_input(ctx: &CommandContext, path: &Path, reason: &str) -> Result<
             .map(human_bytes)
             .unwrap_or_else(|| "unknown size".to_string());
         bail!(
-            "{reason} requires reading the entire remote file ({size}) from {url}. Re-run with --allow-remote-scan to proceed."
+            "{reason} requires reading the entire remote file ({size}) from {display_url}. Re-run with --allow-remote-scan to proceed."
         );
     }
 
-    let mut response = ureq::get(url)
+    let mut response = agent
+        .get(url)
         .call()
-        .with_context(|| format!("failed to read remote input {url}"))?;
+        .with_context(|| format!("failed to read remote input {display_url}"))?;
     let status = response.status();
     if !status.is_success() {
-        bail!("failed to read remote input {url}: HTTP {status}");
+        bail!("failed to read remote input {display_url}: HTTP {status}");
     }
-    let mut bytes = Vec::new();
-    response
-        .body_mut()
-        .as_reader()
-        .read_to_end(&mut bytes)
-        .with_context(|| format!("failed to read remote input {url}"))?;
-    Ok(bytes)
+
+    enforce_remote_read_limit(ctx, response.headers(), &display_url)?;
+    copy_limited_response(ctx, &mut response, writer, &display_url)?;
+    Ok(())
 }
 
 struct HttpProbe {
@@ -207,18 +222,19 @@ struct HttpProbe {
     content_length: Option<u64>,
 }
 
-fn probe_http_ranges(url: &str) -> Result<HttpProbe> {
+fn probe_http_ranges(agent: &Agent, url: &str, display_url: &str) -> Result<HttpProbe> {
     let mut content_length = None;
-    if let Ok(response) = ureq::head(url).call() {
+    if let Ok(response) = agent.head(url).call() {
         if response.status().is_success() {
             content_length = parse_content_length(response.headers());
         }
     }
 
-    let response = ureq::get(url)
+    let response = agent
+        .get(url)
         .header("Range", "bytes=0-0")
         .call()
-        .with_context(|| format!("failed to probe byte range support for {url}"))?;
+        .with_context(|| format!("failed to fetch {display_url}"))?;
     match response.status() {
         status if status.as_u16() == 206 => {
             let probed_length = response
@@ -232,12 +248,80 @@ fn probe_http_ranges(url: &str) -> Result<HttpProbe> {
                 content_length: probed_length,
             })
         }
-        status if status.as_u16() == 200 => Ok(HttpProbe {
+        status if status.is_success() => Ok(HttpProbe {
             supports_ranges: false,
             content_length: parse_content_length(response.headers()).or(content_length),
         }),
-        status => bail!("failed to probe byte range support for {url}: HTTP {status}"),
+        status => bail!("failed to fetch {display_url}: HTTP {status}"),
     }
+}
+
+fn remote_agent() -> Agent {
+    Agent::config_builder()
+        .http_status_as_error(false)
+        .timeout_connect(Some(REMOTE_CONNECT_TIMEOUT))
+        .timeout_recv_response(Some(REMOTE_RESPONSE_TIMEOUT))
+        .timeout_recv_body(Some(REMOTE_BODY_TIMEOUT))
+        .build()
+        .into()
+}
+
+fn redact_url(url: &str) -> String {
+    let without_fragment = url.split('#').next().unwrap_or(url);
+    without_fragment
+        .split('?')
+        .next()
+        .unwrap_or(without_fragment)
+        .to_string()
+}
+
+fn enforce_remote_read_limit(
+    ctx: &CommandContext,
+    headers: &ureq::http::HeaderMap,
+    display_url: &str,
+) -> Result<()> {
+    let limit = ctx.remote_read_limit_bytes();
+    if limit == 0 {
+        return Ok(());
+    }
+    if let Some(content_length) = parse_content_length(headers) {
+        if content_length > limit {
+            bail!(
+                "remote input {display_url} is larger than the configured read limit ({} > {}). Increase --remote-read-limit-bytes or pass 0 to disable the limit.",
+                human_bytes(content_length),
+                human_bytes(limit),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn copy_limited_response(
+    ctx: &CommandContext,
+    response: &mut ureq::http::Response<ureq::Body>,
+    writer: &mut impl std::io::Write,
+    display_url: &str,
+) -> Result<()> {
+    let limit = ctx.remote_read_limit_bytes();
+    if limit == 0 {
+        std::io::copy(&mut response.body_mut().as_reader(), writer)
+            .with_context(|| format!("failed to read remote input {display_url}"))?;
+        return Ok(());
+    }
+
+    let mut limited = response
+        .body_mut()
+        .as_reader()
+        .take(limit.saturating_add(1));
+    let copied = std::io::copy(&mut limited, writer)
+        .with_context(|| format!("failed to read remote input {display_url}"))?;
+    if copied > limit {
+        bail!(
+            "remote input {display_url} exceeded the configured read limit ({}). Increase --remote-read-limit-bytes or pass 0 to disable the limit.",
+            human_bytes(limit),
+        );
+    }
+    Ok(())
 }
 
 fn parse_content_length(headers: &ureq::http::HeaderMap) -> Option<u64> {
@@ -510,7 +594,18 @@ mod tests {
     use mcap::records;
 
     fn context(allow_remote_scan: bool) -> CommandContext {
-        CommandContext::new(0, Color::Auto, None, false, allow_remote_scan)
+        CommandContext::new(
+            0,
+            Color::Auto,
+            None,
+            false,
+            allow_remote_scan,
+            super::DEFAULT_REMOTE_READ_LIMIT_BYTES,
+        )
+    }
+
+    fn context_with_limit(allow_remote_scan: bool, limit: u64) -> CommandContext {
+        CommandContext::new(0, Color::Auto, None, false, allow_remote_scan, limit)
     }
 
     fn serve_http(body: &'static [u8], supports_ranges: bool) -> String {
@@ -582,11 +677,41 @@ mod tests {
     }
 
     #[test]
+    fn remote_errors_redact_query_strings() {
+        let url = format!(
+            "{}?X-Amz-Signature=secret-token",
+            serve_http(b"hello remote", true)
+        );
+        let err = load_path(&context(false), Path::new(&url), "mcap info")
+            .expect_err("remote full read should require opt-in");
+        assert!(!err.to_string().contains("secret-token"));
+        assert!(!err.to_string().contains("X-Amz-Signature"));
+    }
+
+    #[test]
     fn allow_remote_scan_downloads_http_input() {
         let url = serve_http(b"hello remote", true);
         let input =
             load_path(&context(true), Path::new(&url), "mcap info").expect("remote download");
         assert_eq!(input.as_slice(), b"hello remote");
+    }
+
+    #[test]
+    fn allowed_remote_read_enforces_limit() {
+        let url = serve_http(b"hello remote", true);
+        let err = load_path(&context_with_limit(true, 5), Path::new(&url), "mcap info")
+            .expect_err("remote read should enforce configured limit");
+        assert!(err.to_string().contains("configured read limit"));
+    }
+
+    #[test]
+    fn http_url_scheme_is_case_insensitive() {
+        assert!(super::is_http_url(Path::new(
+            "HTTP://example.com/demo.mcap"
+        )));
+        assert!(super::is_http_url(Path::new(
+            "Https://example.com/demo.mcap"
+        )));
     }
 
     #[test]
