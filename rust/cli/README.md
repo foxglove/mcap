@@ -119,6 +119,15 @@ port is still pre-production:
      reader APIs so HTTP(S), S3, GCS, and Azure Blob Storage backends can share
      coalesced tail/summary range reads instead of each transport adding its own
      read-ahead workaround.
+9. Range-backed metadata and attachment reads:
+   - Current metadata and attachment convenience helpers, such as
+     `mcap::read::metadata` and `mcap::read::attachment`, require a full MCAP
+     byte slice.
+   - Before Rust CLI 1.0, add CLI or `mcap` crate helpers that can read
+     metadata and attachment records from indexed byte ranges so `get metadata`,
+     `list metadata`, `get attachment`, and metadata/attachment-preserving
+     transforms do not need whole-file fallback for HTTP(S) and future
+     object-store inputs.
 
 ## Intentional divergences from Go CLI
 
