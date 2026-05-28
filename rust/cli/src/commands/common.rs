@@ -260,6 +260,7 @@ impl HttpRangeReader {
                 self.display_url
             );
         }
+        validate_identity_content_encoding(response.headers(), &self.display_url)?;
         let mut bytes = Vec::with_capacity(length.min((end - offset + 1) as usize));
         std::io::copy(&mut response.body_mut().as_reader(), &mut bytes)
             .with_context(|| format!("failed to read range from {}", self.display_url))?;
@@ -306,12 +307,18 @@ fn probe_range_size(agent: &Agent, url: &str, display_url: &str) -> Result<Optio
         .call()
         .with_context(|| format!("failed to fetch {display_url}"))?;
     match response.status() {
-        status if status.as_u16() == 206 => Ok(response
-            .headers()
-            .get("content-range")
-            .and_then(|value| value.to_str().ok())
-            .and_then(parse_content_range_len)),
-        status if status.is_success() => Ok(None),
+        status if status.as_u16() == 206 => {
+            validate_identity_content_encoding(response.headers(), display_url)?;
+            Ok(response
+                .headers()
+                .get("content-range")
+                .and_then(|value| value.to_str().ok())
+                .and_then(parse_content_range_len))
+        }
+        status if status.is_success() => {
+            validate_identity_content_encoding(response.headers(), display_url)?;
+            Ok(None)
+        }
         status => bail!("failed to fetch {display_url}: HTTP {status}"),
     }
 }
@@ -333,6 +340,7 @@ fn read_remote_input_to_writer(path: &Path, writer: &mut impl std::io::Write) ->
         bail!("failed to read remote input {display_url}: HTTP {status}");
     }
 
+    validate_identity_content_encoding(response.headers(), &display_url)?;
     copy_response(&mut response, writer, &display_url)?;
     Ok(())
 }
@@ -376,6 +384,24 @@ fn copy_response(
     std::io::copy(&mut response.body_mut().as_reader(), writer)
         .with_context(|| format!("failed to read remote input {display_url}"))?;
     Ok(())
+}
+
+fn validate_identity_content_encoding(
+    headers: &ureq::http::HeaderMap,
+    display_url: &str,
+) -> Result<()> {
+    let Some(value) = headers.get("content-encoding") else {
+        return Ok(());
+    };
+    let value = value
+        .to_str()
+        .context("remote Content-Encoding header is not valid UTF-8")?;
+    if value.eq_ignore_ascii_case("identity") {
+        return Ok(());
+    }
+    bail!(
+        "remote server returned Content-Encoding: {value} for {display_url}; MCAP remote reads require identity encoding"
+    );
 }
 
 fn read_summary_from_seekable(
@@ -691,6 +717,14 @@ mod tests {
     use mcap::records;
 
     fn serve_http(body: &'static [u8], supports_ranges: bool) -> String {
+        serve_http_with_headers(body, supports_ranges, &[])
+    }
+
+    fn serve_http_with_headers(
+        body: &'static [u8],
+        supports_ranges: bool,
+        extra_headers: &'static [(&'static str, &'static str)],
+    ) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
         let addr = listener.local_addr().expect("test server addr");
         thread::spawn(move || {
@@ -716,8 +750,12 @@ mod tests {
                     let end = end.min(body.len().saturating_sub(1));
                     let start = start.min(end);
                     let content = &body[start..=end];
+                    let extra_headers = extra_headers
+                        .iter()
+                        .map(|(name, value)| format!("{name}: {value}\r\n"))
+                        .collect::<String>();
                     let response = format!(
-                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\n{extra_headers}Connection: close\r\n\r\n",
                         content.len(),
                         body.len(),
                     );
@@ -729,8 +767,12 @@ mod tests {
                     }
                 } else {
                     let accept_ranges = if supports_ranges { "bytes" } else { "none" };
+                    let extra_headers = extra_headers
+                        .iter()
+                        .map(|(name, value)| format!("{name}: {value}\r\n"))
+                        .collect::<String>();
                     let response = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: {accept_ranges}\r\nConnection: close\r\n\r\n",
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: {accept_ranges}\r\n{extra_headers}Connection: close\r\n\r\n",
                         body.len()
                     );
                     stream
@@ -776,6 +818,34 @@ mod tests {
         let input = load_path(&crate::context::CommandContext::default(), Path::new(&url))
             .expect("remote read");
         assert_eq!(input.as_slice(), b"hello remote");
+    }
+
+    #[test]
+    fn remote_http_input_rejects_gzip_content_encoding() {
+        let url = serve_http_with_headers(b"hello remote", false, &[("Content-Encoding", "gzip")]);
+        let err = load_path(&crate::context::CommandContext::default(), Path::new(&url))
+            .expect_err("gzip-encoded remote read should fail");
+        assert!(err
+            .to_string()
+            .contains("MCAP remote reads require identity encoding"));
+    }
+
+    #[test]
+    fn remote_range_probe_rejects_gzip_content_encoding() {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::Writer::new(std::io::Cursor::new(&mut buffer)).expect("writer");
+            writer.finish().expect("finish writer");
+        }
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http_with_headers(body, true, &[("Content-Encoding", "gzip")]);
+        let err = match super::try_open_remote_mcap(Path::new(&url)) {
+            Ok(_) => panic!("gzip-encoded range probe should fail"),
+            Err(err) => err,
+        };
+        assert!(err
+            .to_string()
+            .contains("MCAP remote reads require identity encoding"));
     }
 
     #[test]
