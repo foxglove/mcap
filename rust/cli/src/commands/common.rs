@@ -181,17 +181,26 @@ pub fn open_seekable_mcap_source(path: &Path) -> Result<Option<McapSource>> {
 
 pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<ParsedMcap> {
     if is_http_url(path) {
-        if let Some(mut reader) = HttpRangeReader::open(path)? {
-            if let Some(summary) = read_summary_from_remote(&reader, options)? {
-                let header = read_header_from_seekable(&mut reader)?;
-                return Ok(parsed_mcap_from_summary_ref(header, &summary));
+        match HttpRangeReader::open(path)? {
+            Some(mut reader) => {
+                if let Some(summary) = read_summary_from_remote(&reader, options)? {
+                    let header = read_header_from_seekable(&mut reader)?;
+                    return Ok(parsed_mcap_from_summary_ref(header, &summary));
+                }
+                if !options.allow_remote_scan {
+                    bail!(
+                        "{}: remote file has no summary section; reading without one requires --allow-remote-scan",
+                        redacted_display(path)
+                    );
+                }
             }
-            if !options.allow_remote_scan {
+            None if !options.allow_remote_scan => {
                 bail!(
-                    "{}: remote file has no summary section; reading without one requires --allow-remote-scan",
+                    "{}: remote server does not support HTTP range requests; pass --allow-remote-scan to download the full file",
                     redacted_display(path)
                 );
             }
+            None => {}
         }
     } else if let Some(mut source) = open_seekable_mcap_source(path)? {
         let header = read_header_from_seekable(&mut source)?;
@@ -268,6 +277,12 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
         return Ok(None);
     }
     let Some(reader) = HttpRangeReader::open(path)? else {
+        if !options.allow_remote_scan {
+            bail!(
+                "{}: remote server does not support HTTP range requests; pass --allow-remote-scan to download the full file",
+                redacted_display(path)
+            );
+        }
         return Ok(None);
     };
     let Some(summary) = read_summary_from_remote(&reader, options)? else {
@@ -663,6 +678,9 @@ fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
     Ok(out)
 }
 
+// TODO: keep these exact-record parsers in sync with mcap::read::metadata and
+// mcap::read::attachment. They duplicate the mcap crate helpers so remote range callers can
+// parse owned records without holding a full-file byte slice alive.
 pub(crate) fn parse_metadata_record(bytes: &[u8]) -> Result<mcap::records::Metadata> {
     let mut reader = mcap::read::LinearReader::sans_magic(bytes);
     let metadata = match reader.next().ok_or(mcap::McapError::BadIndex)?? {

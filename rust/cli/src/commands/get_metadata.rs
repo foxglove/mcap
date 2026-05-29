@@ -36,11 +36,13 @@ fn merged_remote_metadata_for_name(
         anyhow::bail!("metadata {name} does not exist");
     }
     matching_indexes.sort_by_key(|index| index.offset);
-    let total_bytes = matching_indexes
-        .iter()
-        .map(|index| index.length)
-        .sum::<u64>();
-    common::require_remote_metadata_budget(total_bytes, source_options, "metadata records")?;
+    if matching_indexes.len() > 1 {
+        let total_bytes = matching_indexes
+            .iter()
+            .map(|index| index.length)
+            .sum::<u64>();
+        common::require_remote_metadata_budget(total_bytes, source_options, "metadata records")?;
+    }
 
     let mut output = BTreeMap::new();
     for index in matching_indexes {
