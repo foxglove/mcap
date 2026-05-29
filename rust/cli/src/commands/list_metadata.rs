@@ -7,7 +7,7 @@ use crate::context::CommandContext;
 pub fn run(ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
     let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
     let records = if let Some(remote) = common::try_open_remote_mcap(&args.file, source_options)? {
-        collect_remote_metadata_records(&remote, source_options)?
+        collect_remote_metadata_records(&remote)?
     } else {
         let mcap = common::load_path(&args.file, source_options)?;
         collect_metadata_records(&mcap)?
@@ -18,16 +18,11 @@ pub fn run(ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
 
 fn collect_remote_metadata_records(
     remote: &common::RemoteMcap,
-    source_options: common::SourceOptions,
 ) -> Result<Vec<(mcap::records::MetadataIndex, mcap::records::Metadata)>> {
     let mut records = Vec::new();
     for index in &remote.summary().metadata_indexes {
-        let bytes = remote.read_indexed_record_range(
-            index.offset,
-            index.length,
-            source_options,
-            "metadata record",
-        )?;
+        let bytes =
+            remote.read_indexed_record_range(index.offset, index.length, "metadata record")?;
         let metadata = common::parse_metadata_record(&bytes)
             .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
         records.push((index.clone(), metadata));
