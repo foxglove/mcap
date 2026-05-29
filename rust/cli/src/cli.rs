@@ -17,13 +17,10 @@ pub(crate) static VERSION: LazyLock<String> = LazyLock::new(|| {
 #[command(
     name = "mcap",
     bin_name = "mcap",
-    version = VERSION.as_str()
+    version = VERSION.as_str(),
+    disable_version_flag = true,
 )]
 pub struct Args {
-    /// Verbosity (-v, -vv, -vvv, etc.)
-    #[arg(short, long, action = ArgAction::Count, global = true)]
-    pub verbose: u8,
-
     #[arg(
         short,
         long,
@@ -43,6 +40,14 @@ pub struct Args {
 
     #[command(subcommand)]
     pub command: Command,
+
+    /// Verbosity (-v, -vv, -vvv, etc.)
+    #[arg(short, long, action = ArgAction::Count, global = true)]
+    pub verbose: u8,
+
+    /// Print version
+    #[arg(long, action = ArgAction::Version)]
+    pub version: Option<bool>,
 }
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
@@ -78,7 +83,7 @@ pub enum Command {
     Recover(RecoverCommand),
     /// Read an MCAP file and write messages sorted by log time
     Sort(SortCommand),
-    /// Output version information
+    /// Print version
     Version(VersionCommand),
 }
 
