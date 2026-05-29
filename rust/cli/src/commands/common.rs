@@ -96,12 +96,6 @@ impl RemoteMcap {
     pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         self.reader.read_range(offset, length)
     }
-
-    pub fn read_indexed_record_range(&self, offset: u64, length: u64) -> Result<Vec<u8>> {
-        let length = usize::try_from(length)
-            .context("indexed record is too large to read on this platform")?;
-        self.reader.read_range(offset, length)
-    }
 }
 
 impl std::io::Read for McapSource {

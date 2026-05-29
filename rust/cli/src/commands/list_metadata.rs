@@ -30,7 +30,11 @@ fn collect_remote_metadata_records(
 
     let mut records = Vec::new();
     for index in &remote.summary().metadata_indexes {
-        let bytes = remote.read_indexed_record_range(index.offset, index.length)?;
+        let bytes = remote.read_range(
+            index.offset,
+            usize::try_from(index.length)
+                .context("indexed record is too large to read on this platform")?,
+        )?;
         let metadata = common::parse_metadata_record(&bytes)
             .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
         records.push((index.clone(), metadata));

@@ -19,7 +19,11 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
             &args.name,
             args.offset,
         )?;
-        let bytes = remote.read_indexed_record_range(index.offset, index.length)?;
+        let bytes = remote.read_range(
+            index.offset,
+            usize::try_from(index.length)
+                .context("indexed record is too large to read on this platform")?,
+        )?;
         common::parse_attachment_record(&bytes).with_context(|| {
             format!(
                 "failed to read attachment {} at offset {}",
