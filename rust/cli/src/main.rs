@@ -65,6 +65,20 @@ mod tests {
     }
 
     #[test]
+    fn displays_long_version_flag() {
+        let parse_err =
+            Args::try_parse_from(["mcap", "--version"]).expect_err("version should display");
+        assert_eq!(parse_err.kind(), clap::error::ErrorKind::DisplayVersion);
+    }
+
+    #[test]
+    fn rejects_short_version_flag() {
+        let parse_err =
+            Args::try_parse_from(["mcap", "-V"]).expect_err("short version should not parse");
+        assert_eq!(parse_err.kind(), clap::error::ErrorKind::UnknownArgument);
+    }
+
+    #[test]
     fn parses_cat_subcommand_with_files() {
         let args =
             Args::try_parse_from(["mcap", "cat", "a.mcap", "b.mcap"]).expect("cat should parse");

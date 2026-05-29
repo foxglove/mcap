@@ -5,11 +5,20 @@ use clap::{ArgAction, Parser, Subcommand};
 use crate::logsetup;
 
 #[derive(Parser, Debug, PartialEq, Eq)]
-#[command(name = "mcap", bin_name = "mcap", version = env!("CARGO_PKG_VERSION"))]
+#[command(
+    name = "mcap",
+    bin_name = "mcap",
+    version = env!("CARGO_PKG_VERSION"),
+    disable_version_flag = true
+)]
 pub struct Args {
     /// Verbosity (-v, -vv, -vvv, etc.)
     #[arg(short, long, action = ArgAction::Count, global = true)]
     pub verbose: u8,
+
+    /// Print version
+    #[arg(long = "version", action = ArgAction::Version, global = true)]
+    pub version: bool,
 
     #[arg(
         short,
