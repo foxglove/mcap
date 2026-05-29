@@ -10,8 +10,6 @@ use memmap2::Mmap;
 use tempfile::NamedTempFile;
 use ureq::Agent;
 
-use crate::context::CommandContext;
-
 pub const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
@@ -141,7 +139,7 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
 }
 
-pub fn open_seekable_mcap_source(_ctx: &CommandContext, path: &Path) -> Result<Option<McapSource>> {
+pub fn open_seekable_mcap_source(path: &Path) -> Result<Option<McapSource>> {
     if is_http_url(path) {
         return Ok(HttpRangeReader::open(path)?.map(McapSource::Remote));
     }
@@ -150,8 +148,8 @@ pub fn open_seekable_mcap_source(_ctx: &CommandContext, path: &Path) -> Result<O
     Ok(Some(McapSource::Local(file)))
 }
 
-pub fn parse_mcap_from_path(ctx: &CommandContext, path: &Path) -> Result<ParsedMcap> {
-    if let Some(mut source) = open_seekable_mcap_source(ctx, path)? {
+pub fn parse_mcap_from_path(path: &Path) -> Result<ParsedMcap> {
+    if let Some(mut source) = open_seekable_mcap_source(path)? {
         let header = read_header_from_seekable(&mut source)?;
         if let Some(summary) = read_summary_from_seekable(&mut source)? {
             return Ok(parsed_mcap_from_summary_ref(header, &summary));
@@ -161,20 +159,20 @@ pub fn parse_mcap_from_path(ctx: &CommandContext, path: &Path) -> Result<ParsedM
         }
     }
 
-    let mcap = load_path(ctx, path)?;
+    let mcap = load_path(path)?;
     parse_mcap(&mcap)
 }
 
-pub fn load_path(_ctx: &CommandContext, path: &Path) -> Result<InputData> {
+pub fn load_path(path: &Path) -> Result<InputData> {
     if is_http_url(path) {
         return Ok(InputData::Buffered(read_remote_input(path)?));
     }
     Ok(InputData::Mapped(map_file(path)?))
 }
 
-pub fn load_input(ctx: &CommandContext, file: Option<&Path>) -> Result<InputData> {
+pub fn load_input(file: Option<&Path>) -> Result<InputData> {
     if let Some(path) = file {
-        return load_path(ctx, path);
+        return load_path(path);
     }
 
     let stdin = std::io::stdin();
@@ -190,7 +188,7 @@ pub fn load_input(ctx: &CommandContext, file: Option<&Path>) -> Result<InputData
     Ok(InputData::Buffered(buf))
 }
 
-pub fn materialize_input(_ctx: &CommandContext, path: &Path) -> Result<MaterializedInput> {
+pub fn materialize_input(path: &Path) -> Result<MaterializedInput> {
     if !is_http_url(path) {
         return Ok(MaterializedInput {
             temp_file: None,
@@ -304,8 +302,11 @@ impl HttpRangeReader {
         }
         validate_identity_content_encoding(response.headers(), &self.display_url)?;
         let mut bytes = Vec::with_capacity(length.min((end - offset + 1) as usize));
-        std::io::copy(&mut response.body_mut().as_reader(), &mut bytes)
-            .with_context(|| format!("failed to read range from {}", self.display_url))?;
+        std::io::copy(
+            &mut response.body_mut().as_reader().take(end - offset + 1),
+            &mut bytes,
+        )
+        .with_context(|| format!("failed to read range from {}", self.display_url))?;
         Ok(bytes)
     }
 }
@@ -402,11 +403,13 @@ fn redact_url(url: &str) -> String {
     let Some((scheme, rest)) = without_fragment_or_query.split_once("://") else {
         return without_fragment_or_query.to_string();
     };
-    let without_userinfo = rest
+    let authority_end = rest.find('/').unwrap_or(rest.len());
+    let (authority, path) = rest.split_at(authority_end);
+    let authority = authority
         .rsplit_once('@')
         .map(|(_, suffix)| suffix)
-        .unwrap_or(rest);
-    format!("{scheme}://{without_userinfo}")
+        .unwrap_or(authority);
+    format!("{scheme}://{authority}{path}")
 }
 
 fn remote_url_without_fragment_or_query(url: &str) -> &str {
@@ -838,8 +841,8 @@ mod tests {
     #[test]
     fn remote_errors_redact_query_strings() {
         let url = "http://127.0.0.1:1/demo.mcap?X-Amz-Signature=secret-token";
-        let err = load_path(&crate::context::CommandContext::default(), Path::new(url))
-            .expect_err("connection failure should report redacted URL");
+        let err =
+            load_path(Path::new(url)).expect_err("connection failure should report redacted URL");
         assert!(!err.to_string().contains("secret-token"));
         assert!(!err.to_string().contains("X-Amz-Signature"));
     }
@@ -847,8 +850,8 @@ mod tests {
     #[test]
     fn remote_errors_redact_userinfo() {
         let url = "http://AKIA:secret@127.0.0.1:1/demo.mcap";
-        let err = load_path(&crate::context::CommandContext::default(), Path::new(url))
-            .expect_err("connection failure should report redacted URL");
+        let err =
+            load_path(Path::new(url)).expect_err("connection failure should report redacted URL");
         assert!(!err.to_string().contains("AKIA"));
         assert!(!err.to_string().contains("secret"));
         assert!(err.to_string().contains("http://127.0.0.1:1/demo.mcap"));
@@ -857,16 +860,14 @@ mod tests {
     #[test]
     fn remote_http_input_reads_entire_file() {
         let url = serve_http(b"hello remote", true);
-        let input = load_path(&crate::context::CommandContext::default(), Path::new(&url))
-            .expect("remote read");
+        let input = load_path(Path::new(&url)).expect("remote read");
         assert_eq!(input.as_slice(), b"hello remote");
     }
 
     #[test]
     fn remote_http_input_rejects_gzip_content_encoding() {
         let url = serve_http_with_headers(b"hello remote", false, &[("Content-Encoding", "gzip")]);
-        let err = load_path(&crate::context::CommandContext::default(), Path::new(&url))
-            .expect_err("gzip-encoded remote read should fail");
+        let err = load_path(Path::new(&url)).expect_err("gzip-encoded remote read should fail");
         assert!(err
             .to_string()
             .contains("MCAP remote reads require identity encoding"));

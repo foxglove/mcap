@@ -13,7 +13,7 @@ use crate::context::CommandContext;
 
 const MESSAGE_PREVIEW_LEN: usize = 10;
 
-pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
+pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
     let opts = CatOptions::from_args(&args)?;
     let stdout = std::io::stdout();
     let mut writer = std::io::BufWriter::new(stdout.lock());
@@ -28,7 +28,7 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
         }
     } else {
         for file in args.files {
-            if cat_file(ctx, &mut writer, &file, &opts)? {
+            if cat_file(&mut writer, &file, &opts)? {
                 return Ok(());
             }
         }
@@ -38,20 +38,18 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
 }
 
 fn cat_file(
-    ctx: &CommandContext,
     writer: &mut impl std::io::Write,
     file: &std::path::Path,
     opts: &CatOptions,
 ) -> Result<bool> {
-    if let Some(mut remote) = common::try_open_remote_mcap(file)? {
+    if let Some(remote) = common::try_open_remote_mcap(file)? {
         let mut json_transcoders = JsonTranscoders::default();
-        if let Some(broken_pipe) =
-            cat_remote_indexed(writer, &mut remote, opts, &mut json_transcoders)?
+        if let Some(broken_pipe) = cat_remote_indexed(writer, &remote, opts, &mut json_transcoders)?
         {
             return Ok(broken_pipe);
         }
     }
-    let mcap = common::load_path(ctx, file)?;
+    let mcap = common::load_path(file)?;
     cat_mcap(writer, &mcap, opts)
 }
 
@@ -183,7 +181,7 @@ fn cat_indexed(
 
 fn cat_remote_indexed(
     writer: &mut impl std::io::Write,
-    remote: &mut common::RemoteMcap,
+    remote: &common::RemoteMcap,
     opts: &CatOptions,
     json_transcoders: &mut JsonTranscoders,
 ) -> Result<Option<bool>> {

@@ -7,8 +7,8 @@ use crate::cli::InfoCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
-pub fn run(ctx: &CommandContext, args: InfoCommand) -> Result<()> {
-    let parsed = common::parse_mcap_from_path(ctx, &args.file)?;
+pub fn run(_ctx: &CommandContext, args: InfoCommand) -> Result<()> {
+    let parsed = common::parse_mcap_from_path(&args.file)?;
     print!("{}", render_info(&parsed));
     Ok(())
 }

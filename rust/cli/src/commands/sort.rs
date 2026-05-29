@@ -16,9 +16,9 @@ struct SortOptions {
     chunked: bool,
 }
 
-pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
+pub fn run(_ctx: &CommandContext, args: SortCommand) -> Result<()> {
     let opts = build_sort_options(&args);
-    let input = common::load_path(ctx, &args.file)?;
+    let input = common::load_path(&args.file)?;
     if !common::is_http_url(&args.file) {
         ensure_distinct_input_output(&args.file, &args.output_file)?;
     }

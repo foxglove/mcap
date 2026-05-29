@@ -122,13 +122,13 @@ struct PreStartMessage {
     data: Vec<u8>,
 }
 
-pub fn run(ctx: &CommandContext, args: FilterCommand) -> Result<()> {
-    run_transcode(ctx, TranscodeCommandOptions::from(&args))
+pub fn run(_ctx: &CommandContext, args: FilterCommand) -> Result<()> {
+    run_transcode(TranscodeCommandOptions::from(&args))
 }
 
-pub(crate) fn run_transcode(ctx: &CommandContext, args: TranscodeCommandOptions) -> Result<()> {
+pub(crate) fn run_transcode(args: TranscodeCommandOptions) -> Result<()> {
     let opts = build_filter_options_from_transcode_options(&args)?;
-    let input = common::load_input(ctx, args.file.as_deref())?;
+    let input = common::load_input(args.file.as_deref())?;
 
     if let Some(output) = &opts.output {
         let writer = std::fs::File::create(output)
@@ -957,8 +957,7 @@ mod tests {
         options.use_chunks = false;
         options.output_compression = "none".to_string();
 
-        super::run_transcode(&crate::context::CommandContext::default(), options)
-            .expect("transcode should succeed");
+        super::run_transcode(options).expect("transcode should succeed");
         let output = std::fs::read(&output_path).expect("read output");
         let summary = mcap::Summary::read(&output)
             .expect("summary read should succeed")

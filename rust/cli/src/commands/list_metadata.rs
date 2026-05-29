@@ -4,8 +4,8 @@ use crate::cli::ListMetadataCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
-pub fn run(ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
-    let mcap = common::load_path(ctx, &args.file)?;
+pub fn run(_ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
+    let mcap = common::load_path(&args.file)?;
     let records = collect_metadata_records(&mcap)?;
     common::print_table(&render_metadata_rows(&records)?);
     Ok(())

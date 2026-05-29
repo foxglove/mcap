@@ -3,8 +3,8 @@ use crate::commands::common;
 use crate::context::CommandContext;
 use anyhow::Result;
 
-pub fn run(ctx: &CommandContext, args: ListSchemasCommand) -> Result<()> {
-    let parsed = common::parse_mcap_from_path(ctx, &args.file)?;
+pub fn run(_ctx: &CommandContext, args: ListSchemasCommand) -> Result<()> {
+    let parsed = common::parse_mcap_from_path(&args.file)?;
     common::print_table(&render_schema_rows(&parsed.schemas));
     Ok(())
 }
