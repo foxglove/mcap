@@ -8,12 +8,7 @@ if [ $# -ne 1 ]; then
     exit 1
 fi
 
-library_version="$("$1" version | awk -F': ' '$1 == "mcap library version" { print $2 }')"
-if [ -z "$library_version" ]; then
-    echo "failed: unable to determine MCAP library version from '$1 version'"
-    exit 1
-fi
-expected_tag="go/mcap/$library_version"
+expected_tag="go/mcap/$($1 version --library)"
 read -ra all_tags <<< "$(git tag --points-at HEAD)"
 found="false"
 for tag in "${all_tags[@]}"; do
