@@ -72,12 +72,6 @@ impl RemoteMcap {
     }
 }
 
-impl McapSource {
-    pub fn is_remote(&self) -> bool {
-        matches!(self, Self::Remote(_))
-    }
-}
-
 impl std::io::Read for McapSource {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
@@ -153,9 +147,6 @@ pub fn parse_mcap_from_path(path: &Path) -> Result<ParsedMcap> {
         let header = read_header_from_seekable(&mut source)?;
         if let Some(summary) = read_summary_from_seekable(&mut source)? {
             return Ok(parsed_mcap_from_summary_ref(header, &summary));
-        }
-        if source.is_remote() {
-            eprintln!("Warning: remote MCAP has no summary; reading entire remote file.");
         }
     }
 

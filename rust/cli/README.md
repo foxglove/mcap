@@ -100,6 +100,8 @@ port is still pre-production:
    - Current HTTP(S) range reads use the generic seek/read interface, which can
      issue several small range requests while reading MCAP headers, footers, and
      summaries.
+   - If a remote MCAP has no summary, the CLI currently attempts indexed
+     discovery with range requests and then falls back to a whole-file read.
    - Before Rust CLI 1.0, optimize summary/index reading in the underlying MCAP
      reader APIs so HTTP(S), S3, GCS, and Azure Blob Storage backends can share
      coalesced tail/summary range reads instead of each transport adding its own
