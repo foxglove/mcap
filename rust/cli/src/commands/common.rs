@@ -172,7 +172,14 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     if is_http_url(path) {
         match HttpRangeReader::open(path)? {
             Some(mut reader) => {
-                if let Some(summary) = read_summary_from_remote(&reader, options)? {
+                if let Some(summary) =
+                    read_summary_from_remote(&reader, options).with_context(|| {
+                        format!(
+                            "failed to read remote summary from {}",
+                            redacted_display(path)
+                        )
+                    })?
+                {
                     let header = read_header_from_seekable(&mut reader)?;
                     return Ok(parsed_mcap_from_summary_ref(header, &summary));
                 }
@@ -274,7 +281,13 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
         }
         return Ok(None);
     };
-    let Some(summary) = read_summary_from_remote(&reader, options)? else {
+    let Some(summary) = read_summary_from_remote(&reader, options).with_context(|| {
+        format!(
+            "failed to read remote summary from {}",
+            redacted_display(path)
+        )
+    })?
+    else {
         if !options.allow_remote_scan {
             bail!(
                 "{}: remote file has no summary section; reading without one requires --allow-remote-scan",
@@ -1176,8 +1189,9 @@ mod tests {
                 Ok(_) => panic!("oversized remote summary should require scan opt-in"),
                 Err(err) => err,
             };
-        assert!(err.to_string().contains("remote summary section"));
-        assert!(err.to_string().contains("--allow-remote-scan"));
+        let message = format!("{err:#}");
+        assert!(message.contains("remote summary section"));
+        assert!(message.contains("--allow-remote-scan"));
     }
 
     #[test]

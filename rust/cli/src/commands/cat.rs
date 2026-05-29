@@ -136,7 +136,7 @@ fn cat_indexed(
         .map(|channel| channel.topic.clone())
         .collect();
     if !opts.topics.is_empty() && included_topics.is_empty() {
-        return Ok(Some(false));
+        return Ok(None);
     }
 
     let mut indexed_opts =
@@ -203,7 +203,7 @@ fn cat_remote_indexed(
                 common::redacted_display(file)
             );
         }
-        return Ok(Some(false));
+        return Ok(None);
     }
 
     let included_topics: BTreeSet<String> = summary
@@ -222,7 +222,8 @@ fn cat_remote_indexed(
             .map(|chunk| chunk.compressed_size)
             .sum::<u64>();
         bail!(
-            "remote cat would read {} message chunks ({} compressed); pass --allow-remote-scan to continue",
+            "{}: remote cat would read {} message chunks ({} compressed); pass --allow-remote-scan to continue",
+            common::redacted_display(file),
             planned_chunks.len(),
             common::human_bytes(compressed_bytes)
         );
