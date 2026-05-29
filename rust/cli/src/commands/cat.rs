@@ -1007,8 +1007,11 @@ mod tests {
     use std::{
         borrow::Cow,
         collections::{BTreeMap, BTreeSet},
-        io::Cursor,
+        io::{Cursor, Read, Write},
+        net::TcpListener,
+        path::Path,
         sync::Arc,
+        thread,
     };
 
     use super::{
@@ -1162,6 +1165,55 @@ mod tests {
         cursor.into_inner()
     }
 
+    fn serve_http(body: &'static [u8]) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("test server addr");
+        thread::spawn(move || {
+            for stream in listener.incoming().take(64) {
+                let mut stream = stream.expect("accept test connection");
+                let mut request = [0u8; 4096];
+                let read = stream.read(&mut request).expect("read request");
+                let request = String::from_utf8_lossy(&request[..read]);
+                let requested_range = request
+                    .lines()
+                    .find_map(|line| line.strip_prefix("Range: bytes="))
+                    .or_else(|| {
+                        request
+                            .lines()
+                            .find_map(|line| line.strip_prefix("range: bytes="))
+                    })
+                    .and_then(|range| range.split_once('-'))
+                    .and_then(|(start, end)| {
+                        Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?))
+                    });
+                if let Some((start, end)) = requested_range {
+                    let end = end.min(body.len().saturating_sub(1));
+                    let start = start.min(end);
+                    let content = &body[start..=end];
+                    let response = format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        content.len(),
+                        body.len(),
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write headers");
+                    stream.write_all(content).expect("write range body");
+                } else {
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write headers");
+                    stream.write_all(body).expect("write body");
+                }
+            }
+        });
+        format!("http://{addr}/demo.mcap")
+    }
+
     fn build_multi_topic_mcap() -> Vec<u8> {
         let mut cursor = Cursor::new(Vec::new());
         {
@@ -1230,6 +1282,22 @@ mod tests {
             message_line_string(&message, 10),
             "42 /demo [no schema] [1 2 3]"
         );
+    }
+
+    #[test]
+    fn remote_cat_requires_allow_remote_scan_before_chunk_reads() {
+        let body: &'static [u8] = Box::leak(build_multi_topic_mcap().into_boxed_slice());
+        let url = serve_http(body);
+        let mut out = Vec::new();
+        let err = super::cat_file(
+            &mut out,
+            Path::new(&url),
+            &CatOptions::default(),
+            super::common::SourceOptions::default(),
+        )
+        .expect_err("remote cat should require opt-in before reading chunks");
+        assert!(err.to_string().contains("remote cat would read"));
+        assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
     #[test]

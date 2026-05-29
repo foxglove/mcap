@@ -119,7 +119,7 @@ pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     for path in &opts.files {
         let mapped = crate::commands::common::load_path(path, source_options)?;
         mapped_inputs.push(mapped);
-        input_names.push(path.display().to_string());
+        input_names.push(crate::commands::common::redacted_display(path));
     }
 
     let input_refs: Vec<InputRef<'_>> = mapped_inputs
