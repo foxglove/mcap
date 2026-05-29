@@ -96,6 +96,7 @@ func init() {
 			"Profiles will be written to files: mcap-mem.prof, mcap-cpu.prof, and mcap-block.pprof. "+
 			"Defaults to false.",
 	)
+	configureVersionOutput()
 	rootCmd.InitDefaultVersionFlag()
 }
 

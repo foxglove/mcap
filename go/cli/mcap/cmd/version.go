@@ -7,29 +7,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var Version string
-var printLibraryVersion bool
+var Version = "(devel)"
 
 // versionCmd represents the version command.
 var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Output version information",
 	Run: func(*cobra.Command, []string) {
-		if printLibraryVersion {
-			fmt.Println(mcap.Version)
-		} else {
-			fmt.Println(Version)
-		}
+		fmt.Print(versionOutput())
 	},
 }
 
+func versionOutput() string {
+	return fmt.Sprintf("mcap cli version: %s\nmcap library version: %s\n", Version, mcap.Version)
+}
+
+func configureVersionOutput() {
+	rootCmd.Version = Version
+	rootCmd.SetVersionTemplate(versionOutput())
+}
+
 func init() {
-	versionCmd.PersistentFlags().BoolVarP(
-		&printLibraryVersion,
-		"library",
-		"l",
-		false,
-		"print MCAP library version instead of CLI version",
-	)
 	rootCmd.AddCommand(versionCmd)
 }

@@ -1,39 +1,45 @@
 use anyhow::Result;
+use std::sync::OnceLock;
 
 use crate::cli::VersionCommand;
 use crate::context::CommandContext;
 
-pub fn run(_ctx: &CommandContext, args: VersionCommand) -> Result<()> {
-    println!("{}", selected_version(args));
+pub fn run(_ctx: &CommandContext, _args: VersionCommand) -> Result<()> {
+    println!("{}", version_output());
     Ok(())
 }
 
-fn selected_version(args: VersionCommand) -> &'static str {
-    if args.library {
-        mcap::VERSION
-    } else {
-        env!("CARGO_PKG_VERSION")
-    }
+pub(crate) fn clap_version() -> &'static str {
+    static VERSION: OnceLock<String> = OnceLock::new();
+    VERSION
+        .get_or_init(|| {
+            format!(
+                "cli version: {}\nmcap library version: {}",
+                env!("CARGO_PKG_VERSION"),
+                mcap::VERSION
+            )
+        })
+        .as_str()
+}
+
+fn version_output() -> String {
+    format!("mcap {}", clap_version())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::selected_version;
-    use crate::cli::VersionCommand;
+    use super::{clap_version, version_output};
 
     #[test]
-    fn selects_cli_version_by_default() {
+    fn includes_cli_and_library_versions() {
         assert_eq!(
-            selected_version(VersionCommand { library: false }),
-            env!("CARGO_PKG_VERSION")
+            clap_version(),
+            format!(
+                "cli version: {}\nmcap library version: {}",
+                env!("CARGO_PKG_VERSION"),
+                mcap::VERSION
+            )
         );
-    }
-
-    #[test]
-    fn selects_library_version_when_requested() {
-        assert_eq!(
-            selected_version(VersionCommand { library: true }),
-            mcap::VERSION
-        );
+        assert_eq!(version_output(), format!("mcap {}", clap_version()));
     }
 }

@@ -20,7 +20,7 @@ mod list_schemas;
 mod merge;
 mod recover;
 mod sort;
-mod version;
+pub(crate) mod version;
 
 use anyhow::Result;
 

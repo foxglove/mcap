@@ -58,10 +58,7 @@ mod tests {
     #[test]
     fn parses_version_subcommand() {
         let args = Args::try_parse_from(["mcap", "version"]).expect("version should parse");
-        assert_eq!(
-            args.command,
-            Command::Version(VersionCommand { library: false })
-        );
+        assert_eq!(args.command, Command::Version(VersionCommand {}));
     }
 
     #[test]

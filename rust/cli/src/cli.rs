@@ -5,7 +5,11 @@ use clap::{ArgAction, Parser, Subcommand};
 use crate::logsetup;
 
 #[derive(Parser, Debug, PartialEq, Eq)]
-#[command(name = "mcap", bin_name = "mcap", version = env!("CARGO_PKG_VERSION"))]
+#[command(
+    name = "mcap",
+    bin_name = "mcap",
+    version = crate::commands::version::clap_version()
+)]
 pub struct Args {
     /// Verbosity (-v, -vv, -vvv, etc.)
     #[arg(short, long, action = ArgAction::Count, global = true)]
@@ -267,11 +271,7 @@ pub enum ListSubcommand {
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct VersionCommand {
-    /// Print MCAP library version instead of CLI version
-    #[arg(short = 'l', long = "library", default_value_t = false)]
-    pub library: bool,
-}
+pub struct VersionCommand {}
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompressionFormat {
