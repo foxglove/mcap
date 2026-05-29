@@ -4,8 +4,7 @@ use crate::context::CommandContext;
 use anyhow::Result;
 
 pub fn run(_ctx: &CommandContext, args: ListSchemasCommand) -> Result<()> {
-    let mcap = common::map_file(&args.file)?;
-    let parsed = common::parse_mcap(&mcap)?;
+    let parsed = common::parse_mcap_from_path(&args.file)?;
     common::print_table(&render_schema_rows(&parsed.schemas));
     Ok(())
 }

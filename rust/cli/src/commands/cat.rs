@@ -28,14 +28,29 @@ pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
         }
     } else {
         for file in args.files {
-            let mcap = common::map_file(&file)?;
-            if cat_mcap(&mut writer, &mcap, &opts)? {
+            if cat_file(&mut writer, &file, &opts)? {
                 return Ok(());
             }
         }
     }
 
     flush_or_ignore_broken_pipe(&mut writer)
+}
+
+fn cat_file(
+    writer: &mut impl std::io::Write,
+    file: &std::path::Path,
+    opts: &CatOptions,
+) -> Result<bool> {
+    if let Some(remote) = common::try_open_remote_mcap(file)? {
+        let mut json_transcoders = JsonTranscoders::default();
+        if let Some(broken_pipe) = cat_remote_indexed(writer, &remote, opts, &mut json_transcoders)?
+        {
+            return Ok(broken_pipe);
+        }
+    }
+    let mcap = common::load_path(file)?;
+    cat_mcap(writer, &mcap, opts)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -141,6 +156,68 @@ fn cat_indexed(
                     anyhow::bail!("chunk read out of bounds at offset {offset} length {length}");
                 }
                 reader.insert_chunk_record_data(offset, &mcap[start..end])?;
+            }
+            mcap::sans_io::IndexedReadEvent::Message { header, data } => {
+                let channel = summary
+                    .channels
+                    .get(&header.channel_id)
+                    .ok_or_else(|| anyhow::anyhow!("unknown channel {}", header.channel_id))?;
+                let message = CatMessage {
+                    channel,
+                    sequence: header.sequence,
+                    log_time: header.log_time,
+                    publish_time: header.publish_time,
+                    data,
+                };
+                if write_message(writer, message, opts, json_transcoders)? {
+                    return Ok(Some(true));
+                }
+            }
+        }
+    }
+
+    Ok(Some(false))
+}
+
+fn cat_remote_indexed(
+    writer: &mut impl std::io::Write,
+    remote: &common::RemoteMcap,
+    opts: &CatOptions,
+    json_transcoders: &mut JsonTranscoders,
+) -> Result<Option<bool>> {
+    let summary = remote.summary();
+    if summary.chunk_indexes.is_empty() {
+        return Ok(None);
+    }
+
+    let included_topics: BTreeSet<String> = summary
+        .channels
+        .values()
+        .filter(|channel| opts.include_topic(&channel.topic))
+        .map(|channel| channel.topic.clone())
+        .collect();
+    if !opts.topics.is_empty() && included_topics.is_empty() {
+        return Ok(Some(false));
+    }
+
+    let mut indexed_opts =
+        mcap::sans_io::IndexedReaderOptions::new().with_order(ReadOrder::LogTime);
+    if opts.start != 0 {
+        indexed_opts = indexed_opts.log_time_on_or_after(opts.start);
+    }
+    if let Some(end) = opts.end {
+        indexed_opts = indexed_opts.log_time_before(end);
+    }
+    if !opts.topics.is_empty() {
+        indexed_opts = indexed_opts.include_topics(included_topics.iter().cloned());
+    }
+
+    let mut reader = mcap::sans_io::IndexedReader::new_with_options(summary, indexed_opts)?;
+    while let Some(event) = reader.next_event() {
+        match event? {
+            mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                let chunk = remote.read_range(offset, length)?;
+                reader.insert_chunk_record_data(offset, &chunk)?;
             }
             mcap::sans_io::IndexedReadEvent::Message { header, data } => {
                 let channel = summary

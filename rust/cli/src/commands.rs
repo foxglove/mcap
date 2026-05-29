@@ -2,7 +2,7 @@ mod add_attachment;
 mod add_common;
 mod add_metadata;
 mod cat;
-mod common;
+pub(crate) mod common;
 mod compress;
 mod convert;
 mod decompress;
