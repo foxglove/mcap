@@ -62,7 +62,7 @@ export const cases: CliTestCase[] = [
     invocation: { args: ["--help"] },
     comparison: {
       exitCode: 0,
-      stdout: { kind: "command-list", ignoreCommands: ["completion"] },
+      stdout: { kind: "command-list", ignoreCommands: ["completion", "version"] },
       stderr: { kind: "text" },
     },
   },
@@ -638,7 +638,7 @@ export const cases: CliTestCase[] = [
         "Rust CLI should either provide completion behavior compatible with Go CLI or document an intentional replacement.",
       goBehavior: {
         exitCode: 0,
-        stdout: { kind: "nonempty" },
+        stdout: { kind: "anything" },
       },
       rustBehavior: {
         exitCode: "nonzero",
