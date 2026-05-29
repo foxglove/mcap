@@ -199,7 +199,7 @@ fn cat_remote_indexed(
     if summary.chunk_indexes.is_empty() {
         if !source_options.allow_remote_scan {
             bail!(
-                "{}: remote file has no chunk index; reading messages requires --allow-remote-scan",
+                "{}: remote file has no chunk index; reading messages requires opt-in; pass --allow-remote-scan to continue",
                 common::redacted_display(file)
             );
         }

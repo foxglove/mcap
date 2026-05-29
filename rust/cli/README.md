@@ -105,6 +105,9 @@ port is still pre-production:
 9. Range-backed metadata and attachment transforms:
    - The CLI can read exact indexed metadata and attachment records for direct
      `get` / `list` commands without whole-file fallback for HTTP(S) inputs.
+     Single indexed attachment and metadata reads are allowed as bounded range
+     reads without a full-scan opt-in; multi-record metadata reads have a
+     conservative no-opt-in byte cap.
    - Before Rust CLI 1.0, extend this pattern to metadata/attachment-preserving
      transforms so those commands do not need whole-file fallback for HTTP(S) and
      future object-store inputs.
@@ -120,6 +123,8 @@ port is still pre-production:
 3. Remote read policy:
    - Rust CLI requires `--allow-remote-scan` for remote full-object downloads,
      linear fallbacks, remote `convert` inputs, and remote message chunk payload
-     reads such as `cat` output.
+     reads such as `cat` output. Commands with multiple remote inputs materialize
+     each remote input independently, so peak temporary disk usage can approach
+     the sum of remote input sizes.
    - Go-compatible behavior allowed those remote reads without an explicit
      opt-in.

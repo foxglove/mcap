@@ -85,7 +85,6 @@ pub struct RemoteMcap {
 
 pub enum McapSource {
     Local(std::fs::File),
-    Remote(HttpRangeReader),
 }
 
 impl RemoteMcap {
@@ -102,7 +101,6 @@ impl std::io::Read for McapSource {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
             Self::Local(file) => file.read(buf),
-            Self::Remote(reader) => reader.read(buf),
         }
     }
 }
@@ -111,7 +109,6 @@ impl std::io::Seek for McapSource {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         match self {
             Self::Local(file) => file.seek(pos),
-            Self::Remote(reader) => reader.seek(pos),
         }
     }
 }
@@ -161,7 +158,7 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
 
 pub fn open_seekable_mcap_source(path: &Path) -> Result<Option<McapSource>> {
     if is_http_url(path) {
-        return Ok(HttpRangeReader::open(path)?.map(McapSource::Remote));
+        return Ok(None);
     }
     let file =
         std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
@@ -185,15 +182,17 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
                 }
                 if !options.allow_remote_scan {
                     bail!(
-                        "{}: remote file has no summary section; reading without one requires --allow-remote-scan",
-                        redacted_display(path)
+                        "{}: remote file has no summary section; reading without one requires opt-in; {}",
+                        redacted_display(path),
+                        remote_scan_opt_in_suffix()
                     );
                 }
             }
             None if !options.allow_remote_scan => {
                 bail!(
-                    "{}: remote server does not support HTTP range requests; pass --allow-remote-scan to download the full file",
-                    redacted_display(path)
+                    "{}: remote server does not support HTTP range requests; {}",
+                    redacted_display(path),
+                    remote_scan_opt_in_suffix()
                 );
             }
             None => {}
@@ -275,8 +274,9 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
     let Some(reader) = HttpRangeReader::open(path)? else {
         if !options.allow_remote_scan {
             bail!(
-                "{}: remote server does not support HTTP range requests; pass --allow-remote-scan to download the full file",
-                redacted_display(path)
+                "{}: remote server does not support HTTP range requests; {}",
+                redacted_display(path),
+                remote_scan_opt_in_suffix()
             );
         }
         return Ok(None);
@@ -290,8 +290,9 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
     else {
         if !options.allow_remote_scan {
             bail!(
-                "{}: remote file has no summary section; reading without one requires --allow-remote-scan",
-                redacted_display(path)
+                "{}: remote file has no summary section; reading without one requires opt-in; {}",
+                redacted_display(path),
+                remote_scan_opt_in_suffix()
             );
         }
         return Ok(None);
@@ -523,6 +524,10 @@ fn validate_identity_content_encoding(
     );
 }
 
+fn remote_scan_opt_in_suffix() -> &'static str {
+    "pass --allow-remote-scan to continue"
+}
+
 pub(crate) fn require_remote_metadata_budget(
     total_bytes: u64,
     options: SourceOptions,
@@ -532,9 +537,10 @@ pub(crate) fn require_remote_metadata_budget(
         return Ok(());
     }
     bail!(
-        "remote {description} would read {} (exceeds {} cap without --allow-remote-scan); pass --allow-remote-scan to continue",
+        "remote {description} would read {} (exceeds {} cap without --allow-remote-scan); {}",
         human_bytes(total_bytes),
-        human_bytes(MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN)
+        human_bytes(MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN),
+        remote_scan_opt_in_suffix()
     );
 }
 
@@ -544,7 +550,8 @@ fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()
     }
     let display = redacted_display(path);
     bail!(
-        "remote input {display} requires --allow-remote-scan because this command must download or scan remote data"
+        "remote input {display} requires opt-in because this command must download or scan remote data; {}",
+        remote_scan_opt_in_suffix()
     );
 }
 
@@ -587,9 +594,10 @@ fn read_summary_from_remote(
         .context("remote summary section is too large to read on this platform")?;
     if summary_len > MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN && !options.allow_remote_scan {
         bail!(
-            "remote summary section is {} (exceeds {} cap without --allow-remote-scan); pass --allow-remote-scan to read it",
+            "remote summary section is {} (exceeds {} cap without --allow-remote-scan); {}",
             human_bytes(summary_len as u64),
-            human_bytes(MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN as u64)
+            human_bytes(MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN as u64),
+            remote_scan_opt_in_suffix()
         );
     }
     let summary_bytes = reader.read_range(footer.summary_start, summary_len)?;
