@@ -1283,6 +1283,25 @@ mod tests {
     }
 
     #[test]
+    fn remote_cat_with_scan_opt_in_falls_back_for_unchunked_messages() {
+        let body: &'static [u8] =
+            Box::leak(build_out_of_order_linear_mcap_without_summary().into_boxed_slice());
+        let url = serve_http(body);
+        let mut out = Vec::new();
+        let broken_pipe = super::cat_file(
+            &mut out,
+            Path::new(&url),
+            &CatOptions::default(),
+            super::common::SourceOptions::new(true),
+        )
+        .expect("remote cat should scan unchunked messages with opt-in");
+        assert!(!broken_pipe);
+        let output = String::from_utf8(out).expect("cat output should be utf8");
+        assert!(output.contains("30 /demo [Example] [1]"));
+        assert!(output.contains("10 /demo [Example] [2]"));
+    }
+
+    #[test]
     fn remote_cat_no_chunk_index_error_includes_redacted_url() {
         let mut buffer = Vec::new();
         {
