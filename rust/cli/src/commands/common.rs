@@ -31,10 +31,11 @@ const MAX_REMOTE_INDEXED_RECORD_BYTES_WITHOUT_SCAN: usize = 1024 * 1024 * 1024;
 pub enum InputData {
     Mapped(Mmap),
     TempMapped {
-        // Keep the temporary file alive for at least as long as the mmap.
+        mmap: Mmap,
+        // Keep the temporary file alive for at least as long as the mmap. Fields drop in
+        // declaration order, so this is dropped after `mmap`.
         #[allow(dead_code)]
         temp_file: NamedTempFile,
-        mmap: Mmap,
     },
     Buffered(Vec<u8>),
 }
