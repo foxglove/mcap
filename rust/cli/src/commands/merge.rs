@@ -110,9 +110,9 @@ struct IdMaps {
     next_output_channel_id: u16,
 }
 
-pub fn run(_ctx: &CommandContext, args: MergeCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     let opts = build_merge_options(args);
-    let source_options = crate::commands::common::SourceOptions::new(_ctx.allow_remote_scan());
+    let source_options = crate::commands::common::SourceOptions::new(ctx.allow_remote_scan());
 
     let mut mapped_inputs = Vec::with_capacity(opts.files.len());
     let mut input_names = Vec::with_capacity(opts.files.len());

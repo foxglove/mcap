@@ -22,7 +22,11 @@ const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_BODY_TIMEOUT: Duration = Duration::from_secs(60);
 const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = 37;
 const MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN: usize = 16 * 1024 * 1024;
-const MAX_REMOTE_INDEXED_RECORD_BYTES_WITHOUT_SCAN: usize = 64 * 1024 * 1024;
+// Exact indexed records are bounded by the remote file size, but corrupt or hostile indexes can
+// still turn a targeted attachment/metadata lookup into an unexpectedly large transfer. Keep the
+// no-opt-in path generous for legitimate large attachments while requiring explicit consent for
+// GiB-scale single-record reads.
+const MAX_REMOTE_INDEXED_RECORD_BYTES_WITHOUT_SCAN: usize = 1024 * 1024 * 1024;
 
 pub enum InputData {
     Mapped(Mmap),
@@ -1119,6 +1123,57 @@ mod tests {
         assert!(err
             .to_string()
             .contains("MCAP remote reads require identity encoding"));
+    }
+
+    #[test]
+    fn remote_summary_read_requires_scan_for_oversized_summary_section() {
+        let len = super::MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN
+            + super::FOOTER_RECORD_AND_END_MAGIC_LEN
+            + mcap::MAGIC.len()
+            + 1;
+        let mut body = vec![0u8; len];
+        body[..mcap::MAGIC.len()].copy_from_slice(mcap::MAGIC);
+        let footer_start = len - super::FOOTER_RECORD_AND_END_MAGIC_LEN;
+        body[footer_start] = records::op::FOOTER;
+        body[footer_start + 1..footer_start + 9].copy_from_slice(&20u64.to_le_bytes());
+        body[footer_start + 9..footer_start + 17]
+            .copy_from_slice(&(mcap::MAGIC.len() as u64).to_le_bytes());
+        body[footer_start + 17..footer_start + 25].copy_from_slice(&0u64.to_le_bytes());
+        body[footer_start + 25..footer_start + 29].copy_from_slice(&0u32.to_le_bytes());
+        body[len - mcap::MAGIC.len()..].copy_from_slice(mcap::MAGIC);
+
+        let url = serve_http(Box::leak(body.into_boxed_slice()), true);
+        let err =
+            match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
+                Ok(_) => panic!("oversized remote summary should require scan opt-in"),
+                Err(err) => err,
+            };
+        assert!(err.to_string().contains("remote summary section"));
+        assert!(err.to_string().contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn indexed_record_range_requires_scan_for_oversized_record() {
+        let remote = super::RemoteMcap {
+            reader: super::HttpRangeReader {
+                agent: super::remote_agent(),
+                url: "http://127.0.0.1:1/demo.mcap".to_string(),
+                display_url: "http://127.0.0.1:1/demo.mcap".to_string(),
+                size: (super::MAX_REMOTE_INDEXED_RECORD_BYTES_WITHOUT_SCAN + 1) as u64,
+                offset: 0,
+            },
+            summary: mcap::Summary::default(),
+        };
+        let err = remote
+            .read_indexed_record_range(
+                0,
+                (super::MAX_REMOTE_INDEXED_RECORD_BYTES_WITHOUT_SCAN + 1) as u64,
+                super::SourceOptions::default(),
+                "attachment record",
+            )
+            .expect_err("oversized indexed record should require opt-in");
+        assert!(err.to_string().contains("attachment record"));
+        assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
     #[test]

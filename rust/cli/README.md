@@ -98,7 +98,9 @@ port is still pre-production:
      bounded ranges without a full-scan opt-in.
    - Allowed full remote scans should continue to materialize remote inputs to a
      temporary local file before reading, rather than buffering whole remote files
-     in memory.
+     in memory. Commands with multiple remote inputs materialize each remote input
+     independently, so peak temporary disk usage can approach the sum of remote
+     input sizes.
    - Before Rust CLI 1.0, apply the same policy consistently to future
      object-store inputs such as S3, GCS, and Azure Blob Storage.
 8. Remote indexed read performance:
