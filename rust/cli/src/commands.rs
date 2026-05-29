@@ -20,7 +20,6 @@ mod list_schemas;
 mod merge;
 mod recover;
 mod sort;
-mod version;
 
 use anyhow::Result;
 
@@ -30,7 +29,6 @@ use crate::context::CommandContext;
 pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
     match command {
         Command::Info(args) => info::run(ctx, args),
-        Command::Version(args) => version::run(ctx, args),
 
         Command::Add(args) => match args.command {
             AddSubcommand::Attachment(args) => add_attachment::run(ctx, args),
