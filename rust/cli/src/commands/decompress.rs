@@ -9,9 +9,9 @@ pub fn run(ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
         .compression("none")
         .include_metadata(true)
         .include_attachments(true)
-        .use_chunks(true)
-        .source_options(crate::commands::common::SourceOptions::new(
-            ctx.allow_remote_scan(),
-        ));
-    filter::run_transcode(options)
+        .use_chunks(true);
+    filter::run_transcode(
+        options,
+        crate::commands::common::SourceOptions::new(ctx.allow_remote_scan()),
+    )
 }

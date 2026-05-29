@@ -12,9 +12,9 @@ pub fn run(ctx: &CommandContext, args: CompressCommand) -> Result<()> {
         .compression(args.compression)
         .use_chunks(!args.unchunked)
         .include_metadata(true)
-        .include_attachments(true)
-        .source_options(crate::commands::common::SourceOptions::new(
-            ctx.allow_remote_scan(),
-        ));
-    filter::run_transcode(options)
+        .include_attachments(true);
+    filter::run_transcode(
+        options,
+        crate::commands::common::SourceOptions::new(ctx.allow_remote_scan()),
+    )
 }
