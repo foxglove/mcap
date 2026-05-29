@@ -39,7 +39,6 @@ const HELP_PATHS = [
   ["merge"],
   ["recover"],
   ["sort"],
-  ["version"],
 ] as const;
 
 const EXIT_CODE_ONLY = {
@@ -63,7 +62,7 @@ export const cases: CliTestCase[] = [
     invocation: { args: ["--help"] },
     comparison: {
       exitCode: 0,
-      stdout: { kind: "command-list", ignoreCommands: ["completion"] },
+      stdout: { kind: "command-list", ignoreCommands: ["completion", "version"] },
       stderr: { kind: "text" },
     },
   },
@@ -75,12 +74,26 @@ export const cases: CliTestCase[] = [
     comparison: HELP_EXISTS,
   })),
   {
-    id: "version-command-exits-successfully",
-    description:
-      "Both CLIs expose a version command. Version strings are not compared while Rust CLI is unreleased.",
-    tags: ["surface", "version"],
-    invocation: { args: ["version"] },
-    comparison: EXIT_CODE_ONLY,
+    id: "known-difference-version-flag",
+    description: "Rust CLI exposes a --version flag; Go CLI exposes a version subcommand.",
+    tags: ["known-difference", "surface", "version"],
+    invocation: { args: ["--version"] },
+    knownDifference: {
+      id: "version-flag",
+      summary: "Rust CLI accepts 'mcap --version'; Go CLI only accepts 'mcap version'.",
+      reason:
+        "Rust CLI intentionally exposes version information through the standard --version flag instead of a dedicated subcommand.",
+      desiredBehavior:
+        "Rust CLI should continue to support --version; the 'version' subcommand remains Go-only by design.",
+      goBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "unknown flag: --version" },
+      },
+      rustBehavior: {
+        exitCode: 0,
+        stdout: { kind: "nonempty" },
+      },
+    },
   },
   {
     id: "cat-one-message",
@@ -634,6 +647,29 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "known-difference-version-subcommand",
+    description: "Go CLI exposes a 'version' subcommand; Rust CLI only exposes the --version flag.",
+    tags: ["known-difference", "surface", "version"],
+    invocation: { args: ["version"] },
+    knownDifference: {
+      id: "version-subcommand",
+      summary:
+        "Go CLI accepts 'mcap version' as a subcommand; Rust CLI only supports 'mcap --version'.",
+      reason:
+        "Rust CLI intentionally exposes version information through the standard --version flag instead of a dedicated subcommand.",
+      desiredBehavior:
+        "Rust CLI should continue to support --version; the 'version' subcommand remains Go-only by design.",
+      goBehavior: {
+        exitCode: 0,
+        stdout: { kind: "anything" },
+      },
+      rustBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "unrecognized" },
+      },
+    },
+  },
+  {
     id: "known-difference-convert-ros2-ament-help",
     description:
       "Go CLI exposes ament-based ROS 2 db3 conversion; Rust CLI intentionally supports embedded-schema db3 conversion instead.",
@@ -730,7 +766,7 @@ export const cases: CliTestCase[] = [
     description:
       "Go CLI writes pprof profiles; Rust CLI parses --pprof-profile but reports it unimplemented.",
     tags: ["known-difference", "global-options"],
-    invocation: { args: ["--pprof-profile", "version"] },
+    invocation: { args: ["--pprof-profile", "info", ONE_MESSAGE] },
     knownDifference: {
       id: "global-pprof-profile",
       summary:
@@ -800,7 +836,7 @@ export const cases: CliTestCase[] = [
     description: "Go CLI accepts a config file; Rust parses --config but reports it unimplemented.",
     tags: ["known-difference", "global-options"],
     setup: [{ type: "writeText", to: "{caseWorkDir}/config.yaml", contents: "{}\n" }],
-    invocation: { args: ["--config", "{caseWorkDir}/config.yaml", "version"] },
+    invocation: { args: ["--config", "{caseWorkDir}/config.yaml", "info", ONE_MESSAGE] },
     knownDifference: {
       id: "global-config",
       summary: "Go CLI accepts --config but Rust CLI currently bails out as unimplemented.",

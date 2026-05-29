@@ -1,16 +1,25 @@
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use clap::{ArgAction, Parser, Subcommand};
 
 use crate::logsetup;
 
-#[derive(Parser, Debug, PartialEq, Eq)]
-#[command(name = "mcap", bin_name = "mcap", version = env!("CARGO_PKG_VERSION"))]
-pub struct Args {
-    /// Verbosity (-v, -vv, -vvv, etc.)
-    #[arg(short, long, action = ArgAction::Count, global = true)]
-    pub verbose: u8,
+pub(crate) static VERSION: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "{} (mcap-rust {})",
+        env!("CARGO_PKG_VERSION"),
+        mcap::VERSION
+    )
+});
 
+#[derive(Parser, Debug, PartialEq, Eq)]
+#[command(
+    name = "mcap",
+    bin_name = "mcap",
+    version = VERSION.as_str(),
+)]
+pub struct Args {
     #[arg(
         short,
         long,
@@ -30,6 +39,10 @@ pub struct Args {
 
     #[command(subcommand)]
     pub command: Command,
+
+    /// Verbosity (-v, -vv, -vvv, etc.)
+    #[arg(short, long, action = ArgAction::Count, global = true)]
+    pub verbose: u8,
 }
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
@@ -65,8 +78,6 @@ pub enum Command {
     Recover(RecoverCommand),
     /// Read an MCAP file and write messages sorted by log time
     Sort(SortCommand),
-    /// Output version information
-    Version(VersionCommand),
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -264,13 +275,6 @@ pub enum ListSubcommand {
     Metadata(ListMetadataCommand),
     /// List schemas in an MCAP file
     Schemas(ListSchemasCommand),
-}
-
-#[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct VersionCommand {
-    /// Print MCAP library version instead of CLI version
-    #[arg(short = 'l', long = "library", default_value_t = false)]
-    pub library: bool,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]

@@ -41,7 +41,6 @@ mod tests {
         GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
         ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
         ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand, SortCommand,
-        VersionCommand,
     };
 
     #[test]
@@ -52,15 +51,6 @@ mod tests {
             Command::Info(InfoCommand {
                 file: "demo.mcap".into(),
             })
-        );
-    }
-
-    #[test]
-    fn parses_version_subcommand() {
-        let args = Args::try_parse_from(["mcap", "version"]).expect("version should parse");
-        assert_eq!(
-            args.command,
-            Command::Version(VersionCommand { library: false })
         );
     }
 
