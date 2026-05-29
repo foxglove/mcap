@@ -51,7 +51,7 @@ fn cat_file(
         {
             return Ok(broken_pipe);
         }
-        if remote.summary().chunk_indexes.is_empty() && !source_options.allow_remote_scan {
+        if !source_options.allow_remote_scan {
             bail!("remote file has no chunk index; reading messages requires --allow-remote-scan");
         }
     }

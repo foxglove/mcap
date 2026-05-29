@@ -22,6 +22,7 @@ const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_BODY_TIMEOUT: Duration = Duration::from_secs(60);
 const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = 37;
 const MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN: usize = 16 * 1024 * 1024;
+pub(crate) const MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN: u64 = 64 * 1024 * 1024;
 
 pub enum InputData {
     Mapped(Mmap),
@@ -184,6 +185,11 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
             let header = read_header_from_seekable(&mut reader)?;
             if let Some(summary) = read_summary_from_remote(&reader, options)? {
                 return Ok(parsed_mcap_from_summary_ref(header, &summary));
+            }
+            if !options.allow_remote_scan {
+                bail!(
+                    "remote file has no summary section; reading without one requires --allow-remote-scan"
+                );
             }
         }
     } else if let Some(mut source) = open_seekable_mcap_source(path)? {
@@ -484,6 +490,20 @@ fn validate_identity_content_encoding(
     }
     bail!(
         "remote server returned Content-Encoding: {value} for {display_url}; MCAP remote reads require identity encoding"
+    );
+}
+
+pub(crate) fn require_remote_metadata_budget(
+    total_bytes: u64,
+    options: SourceOptions,
+    description: &str,
+) -> Result<()> {
+    if options.allow_remote_scan || total_bytes <= MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN {
+        return Ok(());
+    }
+    bail!(
+        "remote {description} would read {}; pass --allow-remote-scan to continue",
+        human_bytes(total_bytes)
     );
 }
 
