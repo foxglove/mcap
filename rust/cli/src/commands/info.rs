@@ -7,8 +7,11 @@ use crate::cli::InfoCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
-pub fn run(_ctx: &CommandContext, args: InfoCommand) -> Result<()> {
-    let parsed = common::parse_mcap_from_path(&args.file)?;
+pub fn run(ctx: &CommandContext, args: InfoCommand) -> Result<()> {
+    let parsed = common::parse_mcap_from_path(
+        &args.file,
+        common::SourceOptions::new(ctx.allow_remote_scan()),
+    )?;
     print!("{}", render_info(&parsed));
     Ok(())
 }

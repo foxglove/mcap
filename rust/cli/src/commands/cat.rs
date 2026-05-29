@@ -13,8 +13,9 @@ use crate::context::CommandContext;
 
 const MESSAGE_PREVIEW_LEN: usize = 10;
 
-pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
     let opts = CatOptions::from_args(&args)?;
+    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
     let stdout = std::io::stdout();
     let mut writer = std::io::BufWriter::new(stdout.lock());
 
@@ -28,7 +29,7 @@ pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
         }
     } else {
         for file in args.files {
-            if cat_file(&mut writer, &file, &opts)? {
+            if cat_file(&mut writer, &file, &opts, source_options)? {
                 return Ok(());
             }
         }
@@ -41,15 +42,21 @@ fn cat_file(
     writer: &mut impl std::io::Write,
     file: &std::path::Path,
     opts: &CatOptions,
+    source_options: common::SourceOptions,
 ) -> Result<bool> {
     if let Some(remote) = common::try_open_remote_mcap(file)? {
         let mut json_transcoders = JsonTranscoders::default();
-        if let Some(broken_pipe) = cat_remote_indexed(writer, &remote, opts, &mut json_transcoders)?
-        {
+        if let Some(broken_pipe) = cat_remote_indexed(
+            writer,
+            &remote,
+            opts,
+            source_options,
+            &mut json_transcoders,
+        )? {
             return Ok(broken_pipe);
         }
     }
-    let mcap = common::load_path(file)?;
+    let mcap = common::load_path(file, source_options)?;
     cat_mcap(writer, &mcap, opts)
 }
 
@@ -183,6 +190,7 @@ fn cat_remote_indexed(
     writer: &mut impl std::io::Write,
     remote: &common::RemoteMcap,
     opts: &CatOptions,
+    source_options: common::SourceOptions,
     json_transcoders: &mut JsonTranscoders,
 ) -> Result<Option<bool>> {
     let summary = remote.summary();
@@ -198,6 +206,18 @@ fn cat_remote_indexed(
         .collect();
     if !opts.topics.is_empty() && included_topics.is_empty() {
         return Ok(Some(false));
+    }
+    let planned_chunks = planned_chunk_reads(summary, opts, &included_topics);
+    if !planned_chunks.is_empty() && !source_options.allow_remote_scan {
+        let compressed_bytes = planned_chunks
+            .iter()
+            .map(|chunk| chunk.compressed_size)
+            .sum::<u64>();
+        bail!(
+            "remote cat would read {} message chunks ({} compressed); pass --allow-remote-scan to continue",
+            planned_chunks.len(),
+            common::human_bytes(compressed_bytes)
+        );
     }
 
     let mut indexed_opts =
@@ -239,6 +259,48 @@ fn cat_remote_indexed(
     }
 
     Ok(Some(false))
+}
+
+fn planned_chunk_reads<'a>(
+    summary: &'a mcap::Summary,
+    opts: &CatOptions,
+    included_topics: &BTreeSet<String>,
+) -> Vec<&'a mcap::records::ChunkIndex> {
+    let channel_ids: BTreeSet<u16> = if opts.topics.is_empty() {
+        BTreeSet::new()
+    } else {
+        summary
+            .channels
+            .iter()
+            .filter(|(_, channel)| included_topics.contains(&channel.topic))
+            .map(|(id, _)| *id)
+            .collect()
+    };
+
+    summary
+        .chunk_indexes
+        .iter()
+        .filter(|chunk| {
+            if opts.start != 0 && chunk.message_end_time < opts.start {
+                return false;
+            }
+            if let Some(end) = opts.end {
+                if chunk.message_start_time >= end {
+                    return false;
+                }
+            }
+            if channel_ids.is_empty() {
+                return true;
+            }
+            if chunk.message_index_offsets.is_empty() {
+                return true;
+            }
+            chunk
+                .message_index_offsets
+                .keys()
+                .any(|channel_id| channel_ids.contains(channel_id))
+        })
+        .collect()
 }
 
 fn cat_linear(

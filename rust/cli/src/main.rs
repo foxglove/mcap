@@ -18,7 +18,13 @@ fn run() -> Result<()> {
     if args.pprof_profile {
         anyhow::bail!("'--pprof-profile' is not implemented yet");
     }
-    let ctx = CommandContext::new(args.verbose, args.color, args.config, args.pprof_profile);
+    let ctx = CommandContext::new(
+        args.verbose,
+        args.color,
+        args.config,
+        args.pprof_profile,
+        args.allow_remote_scan,
+    );
 
     commands::dispatch(&ctx, args.command)
 }

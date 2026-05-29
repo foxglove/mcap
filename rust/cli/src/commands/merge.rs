@@ -112,19 +112,13 @@ struct IdMaps {
 
 pub fn run(_ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     let opts = build_merge_options(args);
-    let remote_inputs = opts
-        .files
-        .iter()
-        .filter(|path| crate::commands::common::is_http_url(path))
-        .count();
-    if remote_inputs > 1 {
-        bail!("mcap merge currently supports at most one remote HTTP(S) input");
-    }
+    let source_options =
+        crate::commands::common::SourceOptions::new(_ctx.allow_remote_scan());
 
     let mut mapped_inputs = Vec::with_capacity(opts.files.len());
     let mut input_names = Vec::with_capacity(opts.files.len());
     for path in &opts.files {
-        let mapped = crate::commands::common::load_path(path)?;
+        let mapped = crate::commands::common::load_path(path, source_options)?;
         mapped_inputs.push(mapped);
         input_names.push(path.display().to_string());
     }

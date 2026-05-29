@@ -1,9 +1,13 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io::{IsTerminal as _, Read as _, SeekFrom};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
+use binrw::BinRead;
 use mcap::records::{self, Record};
 use mcap::sans_io::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};
 use memmap2::Mmap;
@@ -16,10 +20,26 @@ pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage
 const REMOTE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_BODY_TIMEOUT: Duration = Duration::from_secs(60);
+const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = 37;
 
 pub enum InputData {
     Mapped(Mmap),
+    TempMapped {
+        _temp_file: NamedTempFile,
+        mmap: Mmap,
+    },
     Buffered(Vec<u8>),
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SourceOptions {
+    pub allow_remote_scan: bool,
+}
+
+impl SourceOptions {
+    pub fn new(allow_remote_scan: bool) -> Self {
+        Self { allow_remote_scan }
+    }
 }
 
 impl std::fmt::Debug for InputData {
@@ -42,6 +62,7 @@ impl InputData {
     pub fn as_slice(&self) -> &[u8] {
         match self {
             InputData::Mapped(mmap) => mmap.as_ref(),
+            InputData::TempMapped { mmap, .. } => mmap.as_ref(),
             InputData::Buffered(buf) => buf.as_slice(),
         }
     }
@@ -142,28 +163,43 @@ pub fn open_seekable_mcap_source(path: &Path) -> Result<Option<McapSource>> {
     Ok(Some(McapSource::Local(file)))
 }
 
-pub fn parse_mcap_from_path(path: &Path) -> Result<ParsedMcap> {
-    if let Some(mut source) = open_seekable_mcap_source(path)? {
+pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<ParsedMcap> {
+    if is_http_url(path) {
+        if let Some(mut reader) = HttpRangeReader::open(path)? {
+            let header = read_header_from_seekable(&mut reader)?;
+            if let Some(summary) = read_summary_from_remote(&reader)? {
+                return Ok(parsed_mcap_from_summary_ref(header, &summary));
+            }
+        }
+    } else if let Some(mut source) = open_seekable_mcap_source(path)? {
         let header = read_header_from_seekable(&mut source)?;
         if let Some(summary) = read_summary_from_seekable(&mut source)? {
             return Ok(parsed_mcap_from_summary_ref(header, &summary));
         }
     }
 
-    let mcap = load_path(path)?;
+    let mcap = load_path(path, options)?;
     parse_mcap(&mcap)
 }
 
-pub fn load_path(path: &Path) -> Result<InputData> {
+pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
     if is_http_url(path) {
-        return Ok(InputData::Buffered(read_remote_input(path)?));
+        let materialized = materialize_input(path, options)?;
+        let mmap = map_file(materialized.path())?;
+        let temp_file = materialized
+            .temp_file
+            .expect("remote materialized input should have a temp file");
+        return Ok(InputData::TempMapped {
+            _temp_file: temp_file,
+            mmap,
+        });
     }
     Ok(InputData::Mapped(map_file(path)?))
 }
 
-pub fn load_input(file: Option<&Path>) -> Result<InputData> {
+pub fn load_input(file: Option<&Path>, options: SourceOptions) -> Result<InputData> {
     if let Some(path) = file {
-        return load_path(path);
+        return load_path(path, options);
     }
 
     let stdin = std::io::stdin();
@@ -179,7 +215,7 @@ pub fn load_input(file: Option<&Path>) -> Result<InputData> {
     Ok(InputData::Buffered(buf))
 }
 
-pub fn materialize_input(path: &Path) -> Result<MaterializedInput> {
+pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<MaterializedInput> {
     if !is_http_url(path) {
         return Ok(MaterializedInput {
             temp_file: None,
@@ -187,6 +223,7 @@ pub fn materialize_input(path: &Path) -> Result<MaterializedInput> {
         });
     }
 
+    require_remote_scan_allowed(path, options)?;
     let suffix = remote_or_local_extension(path)
         .filter(|extension| !extension.is_empty())
         .map(|extension| format!(".{extension}"));
@@ -211,10 +248,10 @@ pub fn try_open_remote_mcap(path: &Path) -> Result<Option<RemoteMcap>> {
     if !is_http_url(path) {
         return Ok(None);
     }
-    let Some(mut reader) = HttpRangeReader::open(path)? else {
+    let Some(reader) = HttpRangeReader::open(path)? else {
         return Ok(None);
     };
-    let Some(summary) = read_summary_from_seekable(&mut reader)? else {
+    let Some(summary) = read_summary_from_remote(&reader)? else {
         return Ok(None);
     };
     Ok(Some(RemoteMcap { reader, summary }))
@@ -241,12 +278,6 @@ pub fn remote_or_local_extension(path: &Path) -> Option<String> {
     path.extension()
         .and_then(|extension| extension.to_str())
         .map(str::to_string)
-}
-
-fn read_remote_input(path: &Path) -> Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    read_remote_input_to_writer(path, &mut bytes)?;
-    Ok(bytes)
 }
 
 impl HttpRangeReader {
@@ -299,6 +330,10 @@ impl HttpRangeReader {
         )
         .with_context(|| format!("failed to read range from {}", self.display_url))?;
         Ok(bytes)
+    }
+
+    fn size(&self) -> u64 {
+        self.size
     }
 }
 
@@ -438,6 +473,139 @@ fn validate_identity_content_encoding(
     bail!(
         "remote server returned Content-Encoding: {value} for {display_url}; MCAP remote reads require identity encoding"
     );
+}
+
+fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()> {
+    if options.allow_remote_scan {
+        return Ok(());
+    }
+    let display = path
+        .to_str()
+        .map(redact_url)
+        .unwrap_or_else(|| path.display().to_string());
+    bail!(
+        "remote input {display} requires --allow-remote-scan because this command must download or scan remote data"
+    );
+}
+
+fn read_summary_from_remote(reader: &HttpRangeReader) -> Result<Option<mcap::Summary>> {
+    let file_size = reader.size();
+    let tail_len = FOOTER_RECORD_AND_END_MAGIC_LEN as u64;
+    if file_size < tail_len + mcap::MAGIC.len() as u64 {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+
+    let footer_start = file_size - tail_len;
+    let tail = reader.read_range(footer_start, FOOTER_RECORD_AND_END_MAGIC_LEN)?;
+    if tail.len() != FOOTER_RECORD_AND_END_MAGIC_LEN {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+    if tail[0] != records::op::FOOTER {
+        return Err(mcap::McapError::BadFooter.into());
+    }
+    let record_len = u64::from_le_bytes(tail[1..9].try_into().expect("footer length slice"));
+    if record_len != 20 {
+        return Err(mcap::McapError::BadFooter.into());
+    }
+    if &tail[FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()..] != mcap::MAGIC {
+        return Err(mcap::McapError::BadMagic.into());
+    }
+
+    let mut cursor = std::io::Cursor::new(
+        &tail[9..FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()],
+    );
+    let footer = records::Footer::read_le(&mut cursor)?;
+    if footer.summary_start == 0 {
+        return Ok(None);
+    }
+    if footer.summary_start > footer_start {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+    let summary_len = usize::try_from(footer_start - footer.summary_start)
+        .context("remote summary section is too large to read on this platform")?;
+    let summary_bytes = reader.read_range(footer.summary_start, summary_len)?;
+    if summary_bytes.len() != summary_len {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+    Ok(Some(parse_summary_section(&summary_bytes)?))
+}
+
+fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
+    let mut out = mcap::Summary::default();
+    let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
+
+    for record in mcap::read::LinearReader::sans_magic(summary) {
+        match record? {
+            Record::AttachmentIndex(index) => out.attachment_indexes.push(index),
+            Record::MetadataIndex(index) => out.metadata_indexes.push(index),
+            Record::Statistics(statistics) => out.stats = Some(statistics),
+            Record::ChunkIndex(index) => out.chunk_indexes.push(index),
+            Record::Schema { header, data } => {
+                if header.id == 0 {
+                    return Err(mcap::McapError::InvalidSchemaId.into());
+                }
+                let schema = Arc::new(mcap::Schema {
+                    id: header.id,
+                    name: header.name,
+                    encoding: header.encoding,
+                    data: Cow::Owned(data.into_owned()),
+                });
+                match schemas.entry(schema.id) {
+                    std::collections::hash_map::Entry::Occupied(entry) => {
+                        let existing = entry.get();
+                        if existing.name != schema.name
+                            || existing.encoding != schema.encoding
+                            || existing.data.as_ref() != schema.data.as_ref()
+                        {
+                            return Err(
+                                mcap::McapError::ConflictingSchemas(schema.name.clone()).into(),
+                            );
+                        }
+                    }
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(schema);
+                    }
+                }
+            }
+            Record::Channel(channel) => {
+                let schema = if channel.schema_id == 0 {
+                    None
+                } else {
+                    Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
+                        mcap::McapError::UnknownSchema(channel.topic.clone(), channel.schema_id)
+                    })?)
+                };
+                let resolved = Arc::new(mcap::Channel {
+                    id: channel.id,
+                    topic: channel.topic,
+                    schema,
+                    message_encoding: channel.message_encoding,
+                    metadata: channel.metadata,
+                });
+                match out.channels.entry(resolved.id) {
+                    std::collections::hash_map::Entry::Occupied(entry) => {
+                        let existing = entry.get();
+                        if existing.topic != resolved.topic
+                            || existing.schema.as_ref().map(|schema| schema.id)
+                                != resolved.schema.as_ref().map(|schema| schema.id)
+                            || existing.message_encoding != resolved.message_encoding
+                            || existing.metadata != resolved.metadata
+                        {
+                            return Err(
+                                mcap::McapError::ConflictingChannels(resolved.topic.clone()).into(),
+                            );
+                        }
+                    }
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(resolved);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out.schemas = schemas;
+    Ok(out)
 }
 
 fn read_summary_from_seekable(

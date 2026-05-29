@@ -10,16 +10,31 @@ use crate::context::CommandContext;
 const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 
-pub fn run(_ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
-    let mcap = common::load_path(&args.file)?;
-    let parsed = common::parse_mcap(&mcap)?;
-    let index = select_attachment_index(&parsed.attachment_indexes, &args.name, args.offset)?;
-    let attachment = mcap::read::attachment(&mcap, index).with_context(|| {
-        format!(
-            "failed to read attachment {} at offset {}",
-            args.name, index.offset
-        )
-    })?;
+pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
+    let attachment = if let Some(remote) = common::try_open_remote_mcap(&args.file)? {
+        let index = select_attachment_index(&remote.summary().attachment_indexes, &args.name, args.offset)?;
+        let bytes = remote.read_range(index.offset, usize::try_from(index.length).context("attachment record is too large to read on this platform")?)?;
+        parse_attachment_record(&bytes).with_context(|| {
+            format!(
+                "failed to read attachment {} at offset {}",
+                args.name, index.offset
+            )
+        })?
+    } else {
+        let mcap = common::load_path(
+            &args.file,
+            common::SourceOptions::new(ctx.allow_remote_scan()),
+        )?;
+        let parsed = common::parse_mcap(&mcap)?;
+        let index = select_attachment_index(&parsed.attachment_indexes, &args.name, args.offset)?;
+        let attachment = mcap::read::attachment(&mcap, index).with_context(|| {
+            format!(
+                "failed to read attachment {} at offset {}",
+                args.name, index.offset
+            )
+        })?;
+        own_attachment(attachment)
+    };
 
     if let Some(output) = args.output {
         std::fs::write(&output, &attachment.data)
@@ -33,6 +48,36 @@ pub fn run(_ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
     }
 
     Ok(())
+}
+
+
+
+fn own_attachment(attachment: mcap::Attachment<'_>) -> mcap::Attachment<'static> {
+    mcap::Attachment {
+        log_time: attachment.log_time,
+        create_time: attachment.create_time,
+        name: attachment.name,
+        media_type: attachment.media_type,
+        data: std::borrow::Cow::Owned(attachment.data.into_owned()),
+    }
+}
+
+fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'static>> {
+    let mut reader = mcap::read::LinearReader::sans_magic(bytes);
+    let attachment = match reader.next().ok_or(mcap::McapError::BadIndex)?? {
+        mcap::records::Record::Attachment { header, data, .. } => mcap::Attachment {
+            log_time: header.log_time,
+            create_time: header.create_time,
+            name: header.name,
+            media_type: header.media_type,
+            data: std::borrow::Cow::Owned(data.into_owned()),
+        },
+        _ => return Err(mcap::McapError::BadIndex.into()),
+    };
+    if reader.next().is_some() {
+        return Err(mcap::McapError::BadIndex.into());
+    }
+    Ok(attachment)
 }
 
 fn select_attachment_index<'a>(

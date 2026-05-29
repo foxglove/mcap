@@ -45,6 +45,7 @@ pub(crate) struct TranscodeCommandOptions {
     pub(crate) output_compression: String,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
+    pub(crate) source_options: common::SourceOptions,
 }
 
 impl From<&FilterCommand> for TranscodeCommandOptions {
@@ -66,6 +67,7 @@ impl From<&FilterCommand> for TranscodeCommandOptions {
             output_compression: args.output_compression.clone(),
             chunk_size: args.chunk_size,
             use_chunks: true,
+            source_options: common::SourceOptions::default(),
         }
     }
 }
@@ -89,6 +91,7 @@ impl TranscodeCommandOptions {
             output_compression: "zstd".to_string(),
             chunk_size,
             use_chunks: true,
+            source_options: common::SourceOptions::default(),
         }
     }
 
@@ -111,6 +114,11 @@ impl TranscodeCommandOptions {
         self.include_attachments = value;
         self
     }
+
+    pub(crate) fn source_options(mut self, value: common::SourceOptions) -> Self {
+        self.source_options = value;
+        self
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -122,13 +130,16 @@ struct PreStartMessage {
     data: Vec<u8>,
 }
 
-pub fn run(_ctx: &CommandContext, args: FilterCommand) -> Result<()> {
-    run_transcode(TranscodeCommandOptions::from(&args))
+pub fn run(ctx: &CommandContext, args: FilterCommand) -> Result<()> {
+    run_transcode(
+        TranscodeCommandOptions::from(&args)
+            .source_options(common::SourceOptions::new(ctx.allow_remote_scan())),
+    )
 }
 
 pub(crate) fn run_transcode(args: TranscodeCommandOptions) -> Result<()> {
     let opts = build_filter_options_from_transcode_options(&args)?;
-    let input = common::load_input(args.file.as_deref())?;
+    let input = common::load_input(args.file.as_deref(), args.source_options)?;
 
     if let Some(output) = &opts.output {
         let writer = std::fs::File::create(output)

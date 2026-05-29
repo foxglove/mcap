@@ -39,13 +39,16 @@ struct RecoveryState {
     warned_missing_channels: BTreeSet<u16>,
 }
 
-pub fn run(_ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     let opts = RecoverOptions {
         compression: crate::commands::common::parse_output_compression(&args.compression)?,
         chunk_size: args.chunk_size,
         always_decode_chunk: args.always_decode_chunk,
     };
-    let input = crate::commands::common::load_input(args.file.as_deref())?;
+    let input = crate::commands::common::load_input(
+        args.file.as_deref(),
+        crate::commands::common::SourceOptions::new(ctx.allow_remote_scan()),
+    )?;
 
     let stats = if let Some(output) = &args.output {
         let writer = std::fs::File::create(output)

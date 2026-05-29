@@ -13,13 +13,16 @@ use crate::context::CommandContext;
 
 const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
-pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     let input = ConvertInput::detect(&args.input)?;
     let is_remote = crate::commands::common::is_http_url(&args.input);
     if !is_remote {
         reject_lfs_pointer(&args.input)?;
     }
-    let materialized_input = crate::commands::common::materialize_input(&args.input)?;
+    let materialized_input = crate::commands::common::materialize_input(
+        &args.input,
+        crate::commands::common::SourceOptions::new(ctx.allow_remote_scan()),
+    )?;
     if !is_remote {
         ensure_distinct_paths(materialized_input.path(), &args.output)?;
     }
