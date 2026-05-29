@@ -56,9 +56,6 @@ fn cat_file(
         )? {
             return Ok(broken_pipe);
         }
-        if !source_options.allow_remote_scan {
-            bail!("remote file has no chunk index; reading messages requires --allow-remote-scan");
-        }
     }
     let mcap = common::load_path(file, source_options)?;
     cat_mcap(writer, &mcap, opts)
@@ -1282,6 +1279,29 @@ mod tests {
             message_line_string(&message, 10),
             "42 /demo [no schema] [1 2 3]"
         );
+    }
+
+    #[test]
+    fn remote_cat_no_chunk_index_error_includes_redacted_url() {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::Writer::new(Cursor::new(&mut buffer)).expect("writer");
+            writer.finish().expect("finish writer");
+        }
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http(body) + "?token=secret";
+        let mut out = Vec::new();
+        let err = super::cat_file(
+            &mut out,
+            Path::new(&url),
+            &CatOptions::default(),
+            super::common::SourceOptions::default(),
+        )
+        .expect_err("remote cat without chunk indexes should require opt-in");
+        let message = err.to_string();
+        assert!(message.contains("--allow-remote-scan"));
+        assert!(message.contains("/demo.mcap"));
+        assert!(!message.contains("secret"));
     }
 
     #[test]
