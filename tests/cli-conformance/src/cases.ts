@@ -638,7 +638,7 @@ export const cases: CliTestCase[] = [
         "Rust CLI should either provide completion behavior compatible with Go CLI or document an intentional replacement.",
       goBehavior: {
         exitCode: 0,
-        stdout: { kind: "anything" },
+        stdout: { kind: "nonempty" },
       },
       rustBehavior: {
         exitCode: "nonzero",
@@ -661,7 +661,7 @@ export const cases: CliTestCase[] = [
         "Rust CLI should continue to support --version; the 'version' subcommand remains Go-only by design.",
       goBehavior: {
         exitCode: 0,
-        stdout: { kind: "nonempty" },
+        stdout: { kind: "anything" },
       },
       rustBehavior: {
         exitCode: "nonzero",
