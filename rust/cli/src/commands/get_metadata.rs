@@ -46,8 +46,7 @@ fn merged_remote_metadata_for_name(
 
     let mut output = BTreeMap::new();
     for index in matching_indexes {
-        let bytes =
-            remote.read_indexed_record_range(index.offset, index.length, "metadata record")?;
+        let bytes = remote.read_indexed_record_range(index.offset, index.length)?;
         let record = common::parse_metadata_record(&bytes)
             .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
         for (key, value) in record.metadata {

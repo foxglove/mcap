@@ -117,3 +117,10 @@ port is still pre-production:
 2. `mcap convert` ROS 2 db3 schema discovery:
    - Rust CLI converts self-contained db3 files using embedded message definitions, including non-`/msg/` topics such as service event topics. It fails the conversion if any topic is missing an embedded definition.
    - Go CLI ignores embedded db3 schemas and emulates ament resource lookup with `--ament-prefix-path`, which can miss schemas or silently use definitions from the wrong workspace.
+3. Remote read policy:
+   - Rust CLI requires `--allow-remote-scan` for remote full-object downloads,
+     linear fallbacks, remote `convert` inputs, and remote message chunk payload
+     reads such as `cat` output.
+   - Go-compatible behavior allowed those remote reads without an explicit
+     opt-in.
+

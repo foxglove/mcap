@@ -203,7 +203,7 @@ fn cat_remote_indexed(
                 common::redacted_display(file)
             );
         }
-        return Ok(None);
+        return Ok(Some(false));
     }
 
     let included_topics: BTreeSet<String> = summary

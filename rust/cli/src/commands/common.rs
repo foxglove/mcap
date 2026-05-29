@@ -97,14 +97,9 @@ impl RemoteMcap {
         self.reader.read_range(offset, length)
     }
 
-    pub fn read_indexed_record_range(
-        &self,
-        offset: u64,
-        length: u64,
-        description: &str,
-    ) -> Result<Vec<u8>> {
+    pub fn read_indexed_record_range(&self, offset: u64, length: u64) -> Result<Vec<u8>> {
         let length = usize::try_from(length)
-            .with_context(|| format!("{description} is too large to read on this platform"))?;
+            .context("indexed record is too large to read on this platform")?;
         self.reader.read_range(offset, length)
     }
 }
