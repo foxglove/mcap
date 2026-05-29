@@ -199,8 +199,9 @@ fn cat_remote_indexed(
     if summary.chunk_indexes.is_empty() {
         if !source_options.allow_remote_scan {
             bail!(
-                "{}: remote file has no chunk index; reading messages requires opt-in; pass --allow-remote-scan to continue",
-                common::redacted_display(file)
+                "{}: remote file has no chunk index; reading messages requires opt-in; {}",
+                common::redacted_display(file),
+                common::remote_scan_opt_in_suffix()
             );
         }
         return Ok(None);
@@ -222,10 +223,11 @@ fn cat_remote_indexed(
             .map(|chunk| chunk.compressed_size)
             .sum::<u64>();
         bail!(
-            "{}: remote cat would read {} message chunks ({} compressed); pass --allow-remote-scan to continue",
+            "{}: remote cat would read {} message chunks ({} compressed); {}",
             common::redacted_display(file),
             planned_chunks.len(),
-            common::human_bytes(compressed_bytes)
+            common::human_bytes(compressed_bytes),
+            common::remote_scan_opt_in_suffix()
         );
     }
 

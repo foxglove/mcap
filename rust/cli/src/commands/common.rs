@@ -524,7 +524,7 @@ fn validate_identity_content_encoding(
     );
 }
 
-fn remote_scan_opt_in_suffix() -> &'static str {
+pub(crate) fn remote_scan_opt_in_suffix() -> &'static str {
     "pass --allow-remote-scan to continue"
 }
 
