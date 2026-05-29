@@ -188,7 +188,8 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
             }
             if !options.allow_remote_scan {
                 bail!(
-                    "remote file has no summary section; reading without one requires --allow-remote-scan"
+                    "{}: remote file has no summary section; reading without one requires --allow-remote-scan",
+                    redacted_display(path)
                 );
             }
         }
@@ -272,7 +273,8 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
     let Some(summary) = read_summary_from_remote(&reader, options)? else {
         if !options.allow_remote_scan {
             bail!(
-                "remote file has no summary section; reading without one requires --allow-remote-scan"
+                "{}: remote file has no summary section; reading without one requires --allow-remote-scan",
+                redacted_display(path)
             );
         }
         return Ok(None);
@@ -415,6 +417,12 @@ fn probe_range_size(agent: &Agent, url: &str, display_url: &str) -> Result<Optio
     }
 }
 
+pub(crate) fn redacted_display(path: &Path) -> String {
+    path.to_str()
+        .map(redact_url)
+        .unwrap_or_else(|| path.display().to_string())
+}
+
 fn read_remote_input_to_writer(path: &Path, writer: &mut impl std::io::Write) -> Result<()> {
     let url = path
         .to_str()
@@ -517,10 +525,7 @@ fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()
     if options.allow_remote_scan {
         return Ok(());
     }
-    let display = path
-        .to_str()
-        .map(redact_url)
-        .unwrap_or_else(|| path.display().to_string());
+    let display = redacted_display(path);
     bail!(
         "remote input {display} requires --allow-remote-scan because this command must download or scan remote data"
     );
@@ -1165,6 +1170,21 @@ mod tests {
                 Err(err) => err,
             };
         assert!(err.to_string().contains("remote summary section"));
+        assert!(err.to_string().contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn remote_metadata_budget_requires_scan_for_oversized_total() {
+        let err = super::require_remote_metadata_budget(
+            super::MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN + 1,
+            super::SourceOptions::default(),
+            "metadata records",
+        )
+        .expect_err("oversized metadata range total should require scan opt-in");
+        assert!(err.to_string().contains("metadata records"));
+        assert!(err.to_string().contains(&super::human_bytes(
+            super::MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN
+        )));
         assert!(err.to_string().contains("--allow-remote-scan"));
     }
 

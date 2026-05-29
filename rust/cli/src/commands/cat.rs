@@ -46,9 +46,14 @@ fn cat_file(
 ) -> Result<bool> {
     if let Some(remote) = common::try_open_remote_mcap(file, source_options)? {
         let mut json_transcoders = JsonTranscoders::default();
-        if let Some(broken_pipe) =
-            cat_remote_indexed(writer, &remote, opts, source_options, &mut json_transcoders)?
-        {
+        if let Some(broken_pipe) = cat_remote_indexed(
+            writer,
+            file,
+            &remote,
+            opts,
+            source_options,
+            &mut json_transcoders,
+        )? {
             return Ok(broken_pipe);
         }
         if !source_options.allow_remote_scan {
@@ -187,6 +192,7 @@ fn cat_indexed(
 
 fn cat_remote_indexed(
     writer: &mut impl std::io::Write,
+    file: &std::path::Path,
     remote: &common::RemoteMcap,
     opts: &CatOptions,
     source_options: common::SourceOptions,
@@ -194,6 +200,12 @@ fn cat_remote_indexed(
 ) -> Result<Option<bool>> {
     let summary = remote.summary();
     if summary.chunk_indexes.is_empty() {
+        if !source_options.allow_remote_scan {
+            bail!(
+                "{}: remote file has no chunk index; reading messages requires --allow-remote-scan",
+                common::redacted_display(file)
+            );
+        }
         return Ok(None);
     }
 
