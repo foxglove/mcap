@@ -95,7 +95,9 @@ port is still pre-production:
      such as `cat` output.
    - Summary/index-only remote operations may run without the flag. Exact indexed
      non-message record reads such as attachments and metadata can also use
-     bounded ranges without a full-scan opt-in.
+     bounded ranges without a full-scan opt-in. Large remote summary sections and
+     multi-record metadata reads have conservative no-opt-in byte caps; exceeding
+     those caps requires `--allow-remote-scan`.
    - Allowed full remote scans should continue to materialize remote inputs to a
      temporary local file before reading, rather than buffering whole remote files
      in memory. Commands with multiple remote inputs materialize each remote input

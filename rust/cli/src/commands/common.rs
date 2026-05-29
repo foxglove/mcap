@@ -182,8 +182,8 @@ pub fn open_seekable_mcap_source(path: &Path) -> Result<Option<McapSource>> {
 pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<ParsedMcap> {
     if is_http_url(path) {
         if let Some(mut reader) = HttpRangeReader::open(path)? {
-            let header = read_header_from_seekable(&mut reader)?;
             if let Some(summary) = read_summary_from_remote(&reader, options)? {
+                let header = read_header_from_seekable(&mut reader)?;
                 return Ok(parsed_mcap_from_summary_ref(header, &summary));
             }
             if !options.allow_remote_scan {
@@ -270,6 +270,11 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
         return Ok(None);
     };
     let Some(summary) = read_summary_from_remote(&reader, options)? else {
+        if !options.allow_remote_scan {
+            bail!(
+                "remote file has no summary section; reading without one requires --allow-remote-scan"
+            );
+        }
         return Ok(None);
     };
     Ok(Some(RemoteMcap { reader, summary }))
@@ -502,8 +507,9 @@ pub(crate) fn require_remote_metadata_budget(
         return Ok(());
     }
     bail!(
-        "remote {description} would read {}; pass --allow-remote-scan to continue",
-        human_bytes(total_bytes)
+        "remote {description} would read {} (exceeds {} cap without --allow-remote-scan); pass --allow-remote-scan to continue",
+        human_bytes(total_bytes),
+        human_bytes(MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN)
     );
 }
 
@@ -559,8 +565,9 @@ fn read_summary_from_remote(
         .context("remote summary section is too large to read on this platform")?;
     if summary_len > MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN && !options.allow_remote_scan {
         bail!(
-            "remote summary section is {}; pass --allow-remote-scan to read it",
-            human_bytes(summary_len as u64)
+            "remote summary section is {} (exceeds {} cap without --allow-remote-scan); pass --allow-remote-scan to read it",
+            human_bytes(summary_len as u64),
+            human_bytes(MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN as u64)
         );
     }
     let summary_bytes = reader.read_range(footer.summary_start, summary_len)?;
