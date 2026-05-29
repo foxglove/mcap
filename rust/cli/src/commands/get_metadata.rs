@@ -7,13 +7,11 @@ use crate::commands::common;
 use crate::context::CommandContext;
 
 pub fn run(ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
-    let metadata = if let Some(remote) = common::try_open_remote_mcap(&args.file)? {
-        merged_remote_metadata_for_name(&remote, &args.name)?
+    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
+    let metadata = if let Some(remote) = common::try_open_remote_mcap(&args.file, source_options)? {
+        merged_remote_metadata_for_name(&remote, &args.name, source_options)?
     } else {
-        let mcap = common::load_path(
-            &args.file,
-            common::SourceOptions::new(ctx.allow_remote_scan()),
-        )?;
+        let mcap = common::load_path(&args.file, source_options)?;
         let parsed = common::parse_mcap(&mcap)?;
         merged_metadata_for_name(&mcap, &parsed.metadata_indexes, &args.name)?
     };
@@ -26,6 +24,7 @@ pub fn run(ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
 fn merged_remote_metadata_for_name(
     remote: &common::RemoteMcap,
     name: &str,
+    source_options: common::SourceOptions,
 ) -> Result<BTreeMap<String, String>> {
     let mut matching_indexes: Vec<&mcap::records::MetadataIndex> = remote
         .summary()
@@ -40,30 +39,19 @@ fn merged_remote_metadata_for_name(
 
     let mut output = BTreeMap::new();
     for index in matching_indexes {
-        let bytes = remote.read_range(
+        let bytes = remote.read_indexed_record_range(
             index.offset,
-            usize::try_from(index.length)
-                .context("metadata record is too large to read on this platform")?,
+            index.length,
+            source_options,
+            "metadata record",
         )?;
-        let record = parse_metadata_record(&bytes)
+        let record = common::parse_metadata_record(&bytes)
             .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
         for (key, value) in record.metadata {
             output.insert(key, value);
         }
     }
     Ok(output)
-}
-
-fn parse_metadata_record(bytes: &[u8]) -> Result<mcap::records::Metadata> {
-    let mut reader = mcap::read::LinearReader::sans_magic(bytes);
-    let metadata = match reader.next().ok_or(mcap::McapError::BadIndex)?? {
-        mcap::records::Record::Metadata(metadata) => metadata,
-        _ => return Err(mcap::McapError::BadIndex.into()),
-    };
-    if reader.next().is_some() {
-        return Err(mcap::McapError::BadIndex.into());
-    }
-    Ok(metadata)
 }
 
 fn merged_metadata_for_name(

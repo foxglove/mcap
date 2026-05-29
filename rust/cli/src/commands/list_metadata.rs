@@ -5,13 +5,11 @@ use crate::commands::common;
 use crate::context::CommandContext;
 
 pub fn run(ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
-    let records = if let Some(remote) = common::try_open_remote_mcap(&args.file)? {
-        collect_remote_metadata_records(&remote)?
+    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
+    let records = if let Some(remote) = common::try_open_remote_mcap(&args.file, source_options)? {
+        collect_remote_metadata_records(&remote, source_options)?
     } else {
-        let mcap = common::load_path(
-            &args.file,
-            common::SourceOptions::new(ctx.allow_remote_scan()),
-        )?;
+        let mcap = common::load_path(&args.file, source_options)?;
         collect_metadata_records(&mcap)?
     };
     common::print_table(&render_metadata_rows(&records)?);
@@ -20,31 +18,21 @@ pub fn run(ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
 
 fn collect_remote_metadata_records(
     remote: &common::RemoteMcap,
+    source_options: common::SourceOptions,
 ) -> Result<Vec<(mcap::records::MetadataIndex, mcap::records::Metadata)>> {
     let mut records = Vec::new();
-    for index in remote.summary().metadata_indexes.clone() {
-        let bytes = remote.read_range(
+    for index in &remote.summary().metadata_indexes {
+        let bytes = remote.read_indexed_record_range(
             index.offset,
-            usize::try_from(index.length)
-                .context("metadata record is too large to read on this platform")?,
+            index.length,
+            source_options,
+            "metadata record",
         )?;
-        let metadata = parse_metadata_record(&bytes)
+        let metadata = common::parse_metadata_record(&bytes)
             .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
-        records.push((index, metadata));
+        records.push((index.clone(), metadata));
     }
     Ok(records)
-}
-
-fn parse_metadata_record(bytes: &[u8]) -> Result<mcap::records::Metadata> {
-    let mut reader = mcap::read::LinearReader::sans_magic(bytes);
-    let metadata = match reader.next().ok_or(mcap::McapError::BadIndex)?? {
-        mcap::records::Record::Metadata(metadata) => metadata,
-        _ => return Err(mcap::McapError::BadIndex.into()),
-    };
-    if reader.next().is_some() {
-        return Err(mcap::McapError::BadIndex.into());
-    }
-    Ok(metadata)
 }
 
 fn collect_metadata_records(

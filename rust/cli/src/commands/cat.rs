@@ -44,12 +44,15 @@ fn cat_file(
     opts: &CatOptions,
     source_options: common::SourceOptions,
 ) -> Result<bool> {
-    if let Some(remote) = common::try_open_remote_mcap(file)? {
+    if let Some(remote) = common::try_open_remote_mcap(file, source_options)? {
         let mut json_transcoders = JsonTranscoders::default();
         if let Some(broken_pipe) =
             cat_remote_indexed(writer, &remote, opts, source_options, &mut json_transcoders)?
         {
             return Ok(broken_pipe);
+        }
+        if remote.summary().chunk_indexes.is_empty() && !source_options.allow_remote_scan {
+            bail!("remote file has no chunk index; reading messages requires --allow-remote-scan");
         }
     }
     let mcap = common::load_path(file, source_options)?;

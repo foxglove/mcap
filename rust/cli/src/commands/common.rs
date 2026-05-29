@@ -21,11 +21,15 @@ const REMOTE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_BODY_TIMEOUT: Duration = Duration::from_secs(60);
 const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = 37;
+const MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN: usize = 16 * 1024 * 1024;
+const MAX_REMOTE_INDEXED_RECORD_BYTES_WITHOUT_SCAN: usize = 64 * 1024 * 1024;
 
 pub enum InputData {
     Mapped(Mmap),
     TempMapped {
-        _temp_file: NamedTempFile,
+        // Keep the temporary file alive for at least as long as the mmap.
+        #[allow(dead_code)]
+        temp_file: NamedTempFile,
         mmap: Mmap,
     },
     Buffered(Vec<u8>),
@@ -89,6 +93,24 @@ impl RemoteMcap {
     }
 
     pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
+        self.reader.read_range(offset, length)
+    }
+
+    pub fn read_indexed_record_range(
+        &self,
+        offset: u64,
+        length: u64,
+        options: SourceOptions,
+        description: &str,
+    ) -> Result<Vec<u8>> {
+        let length = usize::try_from(length)
+            .with_context(|| format!("{description} is too large to read on this platform"))?;
+        if length > MAX_REMOTE_INDEXED_RECORD_BYTES_WITHOUT_SCAN && !options.allow_remote_scan {
+            bail!(
+                "remote {description} is {}; pass --allow-remote-scan to read it",
+                human_bytes(length as u64)
+            );
+        }
         self.reader.read_range(offset, length)
     }
 }
@@ -167,7 +189,7 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     if is_http_url(path) {
         if let Some(mut reader) = HttpRangeReader::open(path)? {
             let header = read_header_from_seekable(&mut reader)?;
-            if let Some(summary) = read_summary_from_remote(&reader)? {
+            if let Some(summary) = read_summary_from_remote(&reader, options)? {
                 return Ok(parsed_mcap_from_summary_ref(header, &summary));
             }
         }
@@ -189,10 +211,7 @@ pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
         let temp_file = materialized
             .temp_file
             .expect("remote materialized input should have a temp file");
-        return Ok(InputData::TempMapped {
-            _temp_file: temp_file,
-            mmap,
-        });
+        return Ok(InputData::TempMapped { temp_file, mmap });
     }
     Ok(InputData::Mapped(map_file(path)?))
 }
@@ -244,14 +263,14 @@ pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<Material
     })
 }
 
-pub fn try_open_remote_mcap(path: &Path) -> Result<Option<RemoteMcap>> {
+pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Option<RemoteMcap>> {
     if !is_http_url(path) {
         return Ok(None);
     }
     let Some(reader) = HttpRangeReader::open(path)? else {
         return Ok(None);
     };
-    let Some(summary) = read_summary_from_remote(&reader)? else {
+    let Some(summary) = read_summary_from_remote(&reader, options)? else {
         return Ok(None);
     };
     Ok(Some(RemoteMcap { reader, summary }))
@@ -488,7 +507,10 @@ fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()
     );
 }
 
-fn read_summary_from_remote(reader: &HttpRangeReader) -> Result<Option<mcap::Summary>> {
+fn read_summary_from_remote(
+    reader: &HttpRangeReader,
+    options: SourceOptions,
+) -> Result<Option<mcap::Summary>> {
     let file_size = reader.size();
     let tail_len = FOOTER_RECORD_AND_END_MAGIC_LEN as u64;
     if file_size < tail_len + mcap::MAGIC.len() as u64 {
@@ -522,6 +544,12 @@ fn read_summary_from_remote(reader: &HttpRangeReader) -> Result<Option<mcap::Sum
     }
     let summary_len = usize::try_from(footer_start - footer.summary_start)
         .context("remote summary section is too large to read on this platform")?;
+    if summary_len > MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN && !options.allow_remote_scan {
+        bail!(
+            "remote summary section is {}; pass --allow-remote-scan to read it",
+            human_bytes(summary_len as u64)
+        );
+    }
     let summary_bytes = reader.read_range(footer.summary_start, summary_len)?;
     if summary_bytes.len() != summary_len {
         return Err(mcap::McapError::UnexpectedEof.into());
@@ -529,6 +557,8 @@ fn read_summary_from_remote(reader: &HttpRangeReader) -> Result<Option<mcap::Sum
     Ok(Some(parse_summary_section(&summary_bytes)?))
 }
 
+// TODO: keep this in sync with mcap::sans_io::SummaryReader and mcap::read::ChannelAccumulator.
+// A future mcap crate range-summary API should replace this CLI-local parser.
 fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
     let mut out = mcap::Summary::default();
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
@@ -606,6 +636,36 @@ fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
     }
     out.schemas = schemas;
     Ok(out)
+}
+
+pub(crate) fn parse_metadata_record(bytes: &[u8]) -> Result<mcap::records::Metadata> {
+    let mut reader = mcap::read::LinearReader::sans_magic(bytes);
+    let metadata = match reader.next().ok_or(mcap::McapError::BadIndex)?? {
+        mcap::records::Record::Metadata(metadata) => metadata,
+        _ => return Err(mcap::McapError::BadIndex.into()),
+    };
+    if reader.next().is_some() {
+        return Err(mcap::McapError::BadIndex.into());
+    }
+    Ok(metadata)
+}
+
+pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'static>> {
+    let mut reader = mcap::read::LinearReader::sans_magic(bytes);
+    let attachment = match reader.next().ok_or(mcap::McapError::BadIndex)?? {
+        mcap::records::Record::Attachment { header, data, .. } => mcap::Attachment {
+            log_time: header.log_time,
+            create_time: header.create_time,
+            name: header.name,
+            media_type: header.media_type,
+            data: Cow::Owned(data.into_owned()),
+        },
+        _ => return Err(mcap::McapError::BadIndex.into()),
+    };
+    if reader.next().is_some() {
+        return Err(mcap::McapError::BadIndex.into());
+    }
+    Ok(attachment)
 }
 
 fn read_summary_from_seekable(
@@ -1051,10 +1111,11 @@ mod tests {
         }
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let url = serve_http_with_headers(body, true, &[("Content-Encoding", "gzip")]);
-        let err = match super::try_open_remote_mcap(Path::new(&url)) {
-            Ok(_) => panic!("gzip-encoded range probe should fail"),
-            Err(err) => err,
-        };
+        let err =
+            match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
+                Ok(_) => panic!("gzip-encoded range probe should fail"),
+                Err(err) => err,
+            };
         assert!(err
             .to_string()
             .contains("MCAP remote reads require identity encoding"));
@@ -1076,7 +1137,7 @@ mod tests {
         };
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let url = serve_http(body, true);
-        let remote = super::try_open_remote_mcap(Path::new(&url))
+        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
             .expect("remote summary read")
             .expect("summary should be present");
 
