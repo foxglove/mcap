@@ -74,12 +74,26 @@ export const cases: CliTestCase[] = [
     comparison: HELP_EXISTS,
   })),
   {
-    id: "version-flag-exits-successfully",
-    description:
-      "Both CLIs expose a --version flag. Version strings are not compared while Rust CLI is unreleased.",
-    tags: ["surface", "version"],
+    id: "known-difference-version-flag",
+    description: "Rust CLI exposes a --version flag; Go CLI exposes a version subcommand.",
+    tags: ["known-difference", "surface", "version"],
     invocation: { args: ["--version"] },
-    comparison: EXIT_CODE_ONLY,
+    knownDifference: {
+      id: "version-flag",
+      summary: "Rust CLI accepts 'mcap --version'; Go CLI only accepts 'mcap version'.",
+      reason:
+        "Rust CLI intentionally exposes version information through the standard --version flag instead of a dedicated subcommand.",
+      desiredBehavior:
+        "Rust CLI should continue to support --version; the 'version' subcommand remains Go-only by design.",
+      goBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "unknown flag: --version" },
+      },
+      rustBehavior: {
+        exitCode: 0,
+        stdout: { kind: "nonempty" },
+      },
+    },
   },
   {
     id: "cat-one-message",
@@ -644,7 +658,7 @@ export const cases: CliTestCase[] = [
       reason:
         "Rust CLI intentionally exposes version information through the standard --version flag instead of a dedicated subcommand.",
       desiredBehavior:
-        "Both CLIs should continue to support --version; the 'version' subcommand is Go-only by design.",
+        "Rust CLI should continue to support --version; the 'version' subcommand remains Go-only by design.",
       goBehavior: {
         exitCode: 0,
         stdout: { kind: "nonempty" },
