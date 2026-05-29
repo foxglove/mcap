@@ -136,7 +136,7 @@ fn cat_indexed(
         .map(|channel| channel.topic.clone())
         .collect();
     if !opts.topics.is_empty() && included_topics.is_empty() {
-        return Ok(None);
+        return Ok(Some(false));
     }
 
     let mut indexed_opts =

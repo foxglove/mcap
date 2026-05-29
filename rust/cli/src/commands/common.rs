@@ -21,7 +21,13 @@ const REMOTE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_BODY_TIMEOUT: Duration = Duration::from_secs(60);
 const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = 37;
+// Guards remote summary discovery against corrupt or hostile footers that point
+// `summary_start` near the beginning of a large file, which would otherwise turn
+// an index-only operation into a near-full-file range read without opt-in.
 const MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN: usize = 16 * 1024 * 1024;
+// Bounds aggregate metadata body reads for list/multi-match metadata commands.
+// Single indexed metadata/attachment records are deliberately uncapped beyond
+// the remote file size because they are explicit user-selected record reads.
 pub(crate) const MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN: u64 = 64 * 1024 * 1024;
 
 pub enum InputData {
