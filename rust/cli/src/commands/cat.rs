@@ -260,6 +260,8 @@ fn cat_remote_indexed(
     Ok(Some(false))
 }
 
+// Keep this planner conservative: it intentionally mirrors IndexedReader chunk filtering as an
+// upper bound so the remote-scan gate fires before any possible chunk payload fetch.
 fn planned_chunk_reads<'a>(
     summary: &'a mcap::Summary,
     opts: &CatOptions,
