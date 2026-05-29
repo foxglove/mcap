@@ -1,14 +1,23 @@
 use std::path::PathBuf;
+use std::sync::LazyLock;
 
 use clap::{ArgAction, Parser, Subcommand};
 
 use crate::logsetup;
 
+pub(crate) static VERSION: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "{} (mcap-rust {})",
+        env!("CARGO_PKG_VERSION"),
+        mcap::VERSION
+    )
+});
+
 #[derive(Parser, Debug, PartialEq, Eq)]
 #[command(
     name = "mcap",
     bin_name = "mcap",
-    version = crate::commands::version::clap_version()
+    version = VERSION.as_str()
 )]
 pub struct Args {
     /// Verbosity (-v, -vv, -vvv, etc.)
