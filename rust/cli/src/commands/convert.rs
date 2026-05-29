@@ -350,6 +350,25 @@ size 123\n",
     }
 
     #[test]
+    fn remote_input_requires_allow_remote_scan_before_download() {
+        let err = super::run(
+            &CommandContext::default(),
+            ConvertCommand {
+                input: PathBuf::from("https://example.com/demo.bag?token=secret"),
+                output: PathBuf::from("/tmp/mcap-cli-remote-output.mcap"),
+                compression: CompressionFormat::None,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: false,
+                chunked: true,
+            },
+        )
+        .expect_err("remote convert should require opt-in");
+
+        assert!(err.to_string().contains("--allow-remote-scan"));
+        assert!(!err.to_string().contains("token=secret"));
+    }
+
+    #[test]
     fn include_crc_false_zeros_data_end_and_footer_crc() {
         let bytes = build_sample_mcap(false);
 

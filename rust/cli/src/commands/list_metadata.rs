@@ -18,7 +18,6 @@ pub fn run(ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
     Ok(())
 }
 
-
 fn collect_remote_metadata_records(
     remote: &common::RemoteMcap,
 ) -> Result<Vec<(mcap::records::MetadataIndex, mcap::records::Metadata)>> {
@@ -26,7 +25,8 @@ fn collect_remote_metadata_records(
     for index in remote.summary().metadata_indexes.clone() {
         let bytes = remote.read_range(
             index.offset,
-            usize::try_from(index.length).context("metadata record is too large to read on this platform")?,
+            usize::try_from(index.length)
+                .context("metadata record is too large to read on this platform")?,
         )?;
         let metadata = parse_metadata_record(&bytes)
             .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;

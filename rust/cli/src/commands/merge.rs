@@ -112,8 +112,7 @@ struct IdMaps {
 
 pub fn run(_ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     let opts = build_merge_options(args);
-    let source_options =
-        crate::commands::common::SourceOptions::new(_ctx.allow_remote_scan());
+    let source_options = crate::commands::common::SourceOptions::new(_ctx.allow_remote_scan());
 
     let mut mapped_inputs = Vec::with_capacity(opts.files.len());
     let mut input_names = Vec::with_capacity(opts.files.len());
@@ -792,14 +791,11 @@ mod tests {
     }
 
     #[test]
-    fn run_rejects_multiple_remote_inputs() {
+    fn run_rejects_remote_input_without_scan_opt_in() {
         let err = run(
             &CommandContext::default(),
             MergeCommand {
-                files: vec![
-                    "http://example.com/a.mcap".into(),
-                    "https://example.com/b.mcap".into(),
-                ],
+                files: vec!["http://example.com/a.mcap".into()],
                 output_file: Some("out.mcap".into()),
                 compression: CompressionFormat::Zstd,
                 chunk_size: 1024,
@@ -809,11 +805,9 @@ mod tests {
                 coalesce_channels: CoalesceChannels::Auto,
             },
         )
-        .expect_err("multiple remote merge inputs should be rejected");
+        .expect_err("remote merge input should require opt-in");
 
-        assert!(err
-            .to_string()
-            .contains("supports at most one remote HTTP(S) input"));
+        assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
     #[test]

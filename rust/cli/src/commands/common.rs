@@ -511,9 +511,8 @@ fn read_summary_from_remote(reader: &HttpRangeReader) -> Result<Option<mcap::Sum
         return Err(mcap::McapError::BadMagic.into());
     }
 
-    let mut cursor = std::io::Cursor::new(
-        &tail[9..FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()],
-    );
+    let mut cursor =
+        std::io::Cursor::new(&tail[9..FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()]);
     let footer = records::Footer::read_le(&mut cursor)?;
     if footer.summary_start == 0 {
         return Ok(None);
@@ -558,7 +557,7 @@ fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
                             || existing.data.as_ref() != schema.data.as_ref()
                         {
                             return Err(
-                                mcap::McapError::ConflictingSchemas(schema.name.clone()).into(),
+                                mcap::McapError::ConflictingSchemas(schema.name.clone()).into()
                             );
                         }
                     }
@@ -591,9 +590,10 @@ fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
                             || existing.message_encoding != resolved.message_encoding
                             || existing.metadata != resolved.metadata
                         {
-                            return Err(
-                                mcap::McapError::ConflictingChannels(resolved.topic.clone()).into(),
-                            );
+                            return Err(mcap::McapError::ConflictingChannels(
+                                resolved.topic.clone(),
+                            )
+                            .into());
                         }
                     }
                     std::collections::hash_map::Entry::Vacant(entry) => {
@@ -1000,8 +1000,8 @@ mod tests {
     #[test]
     fn remote_errors_redact_query_strings() {
         let url = "http://127.0.0.1:1/demo.mcap?X-Amz-Signature=secret-token";
-        let err =
-            load_path(Path::new(url)).expect_err("connection failure should report redacted URL");
+        let err = load_path(Path::new(url), super::SourceOptions::default())
+            .expect_err("remote scan rejection should report redacted URL");
         assert!(!err.to_string().contains("secret-token"));
         assert!(!err.to_string().contains("X-Amz-Signature"));
     }
@@ -1009,24 +1009,34 @@ mod tests {
     #[test]
     fn remote_errors_redact_userinfo() {
         let url = "http://AKIA:secret@127.0.0.1:1/demo.mcap";
-        let err =
-            load_path(Path::new(url)).expect_err("connection failure should report redacted URL");
+        let err = load_path(Path::new(url), super::SourceOptions::default())
+            .expect_err("remote scan rejection should report redacted URL");
         assert!(!err.to_string().contains("AKIA"));
         assert!(!err.to_string().contains("secret"));
         assert!(err.to_string().contains("http://127.0.0.1:1/demo.mcap"));
     }
 
     #[test]
+    fn remote_http_input_requires_remote_scan_opt_in() {
+        let url = serve_http(b"hello remote", true);
+        let err = load_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("remote full read should require opt-in");
+        assert!(err.to_string().contains("--allow-remote-scan"));
+    }
+
+    #[test]
     fn remote_http_input_reads_entire_file() {
         let url = serve_http(b"hello remote", true);
-        let input = load_path(Path::new(&url)).expect("remote read");
+        let input =
+            load_path(Path::new(&url), super::SourceOptions::new(true)).expect("remote read");
         assert_eq!(input.as_slice(), b"hello remote");
     }
 
     #[test]
     fn remote_http_input_rejects_gzip_content_encoding() {
         let url = serve_http_with_headers(b"hello remote", false, &[("Content-Encoding", "gzip")]);
-        let err = load_path(Path::new(&url)).expect_err("gzip-encoded remote read should fail");
+        let err = load_path(Path::new(&url), super::SourceOptions::new(true))
+            .expect_err("gzip-encoded remote read should fail");
         assert!(err
             .to_string()
             .contains("MCAP remote reads require identity encoding"));

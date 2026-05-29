@@ -46,13 +46,9 @@ fn cat_file(
 ) -> Result<bool> {
     if let Some(remote) = common::try_open_remote_mcap(file)? {
         let mut json_transcoders = JsonTranscoders::default();
-        if let Some(broken_pipe) = cat_remote_indexed(
-            writer,
-            &remote,
-            opts,
-            source_options,
-            &mut json_transcoders,
-        )? {
+        if let Some(broken_pipe) =
+            cat_remote_indexed(writer, &remote, opts, source_options, &mut json_transcoders)?
+        {
             return Ok(broken_pipe);
         }
     }
@@ -991,11 +987,16 @@ fn write_payload_preview(
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, collections::BTreeMap, io::Cursor, sync::Arc};
+    use std::{
+        borrow::Cow,
+        collections::{BTreeMap, BTreeSet},
+        io::Cursor,
+        sync::Arc,
+    };
 
     use super::{
-        cat_mcap, cat_streaming, parse_ros1_field_type, write_payload_preview, write_ros1_float,
-        write_signed_decimal_time, CatOptions, JsonTranscoders, Ros1MessageDef,
+        cat_mcap, cat_streaming, parse_ros1_field_type, planned_chunk_reads, write_payload_preview,
+        write_ros1_float, write_signed_decimal_time, CatOptions, JsonTranscoders, Ros1MessageDef,
     };
 
     fn sample_message(schema_name: Option<&str>, data: Vec<u8>) -> mcap::Message<'static> {
@@ -1211,6 +1212,25 @@ mod tests {
         assert_eq!(
             message_line_string(&message, 10),
             "42 /demo [no schema] [1 2 3]"
+        );
+    }
+
+    #[test]
+    fn remote_chunk_plan_identifies_message_chunk_reads() {
+        let mcap = build_multi_topic_mcap();
+        let summary = mcap::Summary::read(&mcap)
+            .expect("summary read")
+            .expect("summary should exist");
+        let opts = CatOptions::default();
+        let included_topics: BTreeSet<String> = summary
+            .channels
+            .values()
+            .map(|channel| channel.topic.clone())
+            .collect();
+        let chunks = planned_chunk_reads(&summary, &opts, &included_topics);
+        assert!(
+            !chunks.is_empty(),
+            "cat would need remote chunk payload reads"
         );
     }
 

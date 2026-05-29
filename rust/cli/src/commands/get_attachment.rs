@@ -12,8 +12,16 @@ const PLEASE_REDIRECT: &str =
 
 pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
     let attachment = if let Some(remote) = common::try_open_remote_mcap(&args.file)? {
-        let index = select_attachment_index(&remote.summary().attachment_indexes, &args.name, args.offset)?;
-        let bytes = remote.read_range(index.offset, usize::try_from(index.length).context("attachment record is too large to read on this platform")?)?;
+        let index = select_attachment_index(
+            &remote.summary().attachment_indexes,
+            &args.name,
+            args.offset,
+        )?;
+        let bytes = remote.read_range(
+            index.offset,
+            usize::try_from(index.length)
+                .context("attachment record is too large to read on this platform")?,
+        )?;
         parse_attachment_record(&bytes).with_context(|| {
             format!(
                 "failed to read attachment {} at offset {}",
@@ -49,8 +57,6 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
 
     Ok(())
 }
-
-
 
 fn own_attachment(attachment: mcap::Attachment<'_>) -> mcap::Attachment<'static> {
     mcap::Attachment {

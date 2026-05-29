@@ -171,6 +171,23 @@ mod tests {
     }
 
     #[test]
+    fn parses_global_allow_remote_scan_flag() {
+        let args = Args::try_parse_from(["mcap", "--allow-remote-scan", "info", "demo.mcap"])
+            .expect("allow remote scan should parse before subcommand");
+        assert!(args.allow_remote_scan);
+        assert_eq!(
+            args.command,
+            Command::Info(InfoCommand {
+                file: "demo.mcap".into(),
+            })
+        );
+
+        let args = Args::try_parse_from(["mcap", "info", "--allow-remote-scan", "demo.mcap"])
+            .expect("allow remote scan should parse after subcommand");
+        assert!(args.allow_remote_scan);
+    }
+
+    #[test]
     fn parses_global_verbosity_flag() {
         let args = Args::try_parse_from(["mcap", "-vv", "info", "demo.mcap"])
             .expect("verbosity should parse");

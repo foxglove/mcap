@@ -89,23 +89,28 @@ port is still pre-production:
    - This would also allow `mcap convert` to accept multiple input paths in one
      invocation, including wildcard-expanded paths from the user's shell.
 7. Remote read policy:
-   - Current Go-compatible behavior allows remote reads without an opt-in flag,
-     including commands or inputs that require reading the entire remote file.
-   - Before Rust CLI 1.0, decide whether to keep this behavior or reintroduce an
-     explicit opt-in such as `--allow-remote-scan` for commands that cannot use
-     indexed range reads.
-   - Apply the chosen policy consistently across HTTP(S) and future object-store
-     inputs such as S3, GCS, and Azure Blob Storage.
+   - Rust CLI remote full scans now require `--allow-remote-scan`. This includes
+     full-object downloads, linear fallbacks when summary/index data is
+     unavailable, remote `convert` inputs, and remote message chunk payload reads
+     such as `cat` output.
+   - Summary/index-only remote operations may run without the flag. Exact indexed
+     non-message record reads such as attachments and metadata can also use
+     bounded ranges without a full-scan opt-in.
+   - Allowed full remote scans should continue to materialize remote inputs to a
+     temporary local file before reading, rather than buffering whole remote files
+     in memory.
+   - Before Rust CLI 1.0, apply the same policy consistently to future
+     object-store inputs such as S3, GCS, and Azure Blob Storage.
 8. Remote indexed read performance:
-   - Current HTTP(S) range reads use the generic seek/read interface, which can
-     issue several small range requests while reading MCAP headers, footers, and
-     summaries.
-   - If a remote MCAP has no summary, the CLI currently attempts indexed
-     discovery with range requests and then falls back to a whole-file read.
-   - Before Rust CLI 1.0, optimize summary/index reading in the underlying MCAP
-     reader APIs so HTTP(S), S3, GCS, and Azure Blob Storage backends can share
+   - The CLI coalesces HTTP(S) footer and summary-section range reads for remote
+     summary discovery without changing the public `mcap` crate API.
+   - Before Rust CLI 1.0, consider moving this into reusable `mcap` crate reader
+     APIs so HTTP(S), S3, GCS, and Azure Blob Storage backends can share
      coalesced tail/summary range reads instead of each transport adding its own
      read-ahead workaround.
+   - A future `mcap` crate API should also make range-backed parsing of exact
+     indexed records ergonomic without requiring callers to duplicate record
+     parsing logic in the CLI.
 9. Range-backed metadata and attachment reads:
    - Current metadata and attachment convenience helpers, such as
      `mcap::read::metadata` and `mcap::read::attachment`, require a full MCAP
