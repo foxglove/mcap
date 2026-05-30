@@ -116,6 +116,21 @@ port is still pre-production:
    - Before Rust CLI 1.0, extend this pattern to metadata/attachment-preserving
      transforms so those commands do not need whole-file fallback for HTTP(S) and
      future object-store inputs.
+10. `recover` chunk CRC passthrough:
+   - Current Go-compatible default behavior copies raw chunk bytes and message
+     indexes without rewriting chunk headers. If the input has a bad
+     `uncompressed_crc` but intact compressed payload, the recovered file keeps
+     the bad CRC.
+   - This is a side effect of the fast passthrough path added in Go PR #1372, not
+     an explicit CRC policy. The original Go `recover` implementation skipped
+     invalid-CRC chunks instead of copying them.
+   - Go's default reader does not validate chunk CRCs, so recovered files remain
+     readable there. Rust's default readers validate chunk CRCs, so the same
+     output can fail to read unless validation is disabled.
+   - The Rust CLI matches Go passthrough behavior for now. Before Rust CLI 1.0,
+     decide whether `recover` should instead recompute CRCs, set CRC to 0 where
+     the spec allows skipping validation, or require `--always-decode-chunk` for
+     a clean rewrite.
 
 ## Intentional divergences from Go CLI
 
