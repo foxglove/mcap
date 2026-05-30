@@ -7,8 +7,9 @@ use crate::logsetup;
 
 pub(crate) static VERSION: LazyLock<String> = LazyLock::new(|| {
     format!(
-        "{} (mcap-rust {})",
+        "{} ({}) mcap-rust/{}",
         env!("CARGO_PKG_VERSION"),
+        env!("GIT_SHA"),
         mcap::VERSION
     )
 });
