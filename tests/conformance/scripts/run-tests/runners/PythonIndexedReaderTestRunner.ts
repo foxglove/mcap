@@ -11,7 +11,7 @@ export default class PythonIndexedReaderTestRunner extends IndexedReadTestRunner
 
   async runReadTest(filePath: string): Promise<IndexedReadTestResult> {
     const { stdout } = await promisify(exec)(
-      `python3 tests/run_reader_test.py ${filePath} indexed`,
+      `uv run --project .. -- python3 tests/run_reader_test.py ${filePath} indexed`,
       {
         cwd: "../../python/mcap",
       },

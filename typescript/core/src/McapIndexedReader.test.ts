@@ -861,6 +861,183 @@ describe("McapIndexedReader", () => {
     }
   });
 
+  it("caches message indexes across readMessages() calls when messageIndexCacheSizeBytes > 0", async () => {
+    const channelA: TypedMcapRecord = {
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "a",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const channelB: TypedMcapRecord = {
+      type: "Channel",
+      id: 2,
+      schemaId: 0,
+      topic: "b",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const makeMessage = (channel: Channel, idx: number): TypedMcapRecords["Message"] => ({
+      type: "Message",
+      channelId: channel.id,
+      sequence: idx,
+      logTime: BigInt(idx),
+      publishTime: 0n,
+      data: new Uint8Array(),
+    });
+
+    const messageA1 = makeMessage(channelA, 1);
+    const messageA2 = makeMessage(channelA, 3);
+    const messageB1 = makeMessage(channelB, 2);
+
+    const chunk1 = new ChunkBuilder({ useMessageIndex: true });
+    chunk1.addChannel(channelA);
+    chunk1.addChannel(channelB);
+    chunk1.addMessage(messageA1);
+    chunk1.addMessage(messageB1);
+    chunk1.addMessage(messageA2);
+
+    const builder = new McapRecordBuilder();
+    builder.writeMagic();
+    builder.writeHeader({ profile: "", library: "" });
+    const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [
+      writeChunkWithMessageIndexes(builder, chunk1),
+    ];
+    builder.writeDataEnd({ dataSectionCrc: 0 });
+
+    const summaryStart = BigInt(builder.length);
+    builder.writeChannel(channelA);
+    builder.writeChannel(channelB);
+    for (const index of chunkIndexes) {
+      builder.writeChunkIndex(index);
+    }
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeMagic();
+
+    // Compute the [start, end) byte range occupied by the message index section of each chunk.
+    const messageIndexRanges = chunkIndexes.map((chunkIndex) => {
+      let start: bigint | undefined;
+      for (const offset of chunkIndex.messageIndexOffsets.values()) {
+        if (start == undefined || offset < start) {
+          start = offset;
+        }
+      }
+      if (start == undefined) {
+        throw new Error("expected chunk to have message index offsets");
+      }
+      return { start, end: start + chunkIndex.messageIndexLength };
+    });
+
+    const reads: { offset: bigint; size: bigint }[] = [];
+    const underlyingReadable = makeReadable(builder.buffer);
+    const recordingReadable = {
+      size: underlyingReadable.size.bind(underlyingReadable),
+      read: async (offset: bigint, size: bigint) => {
+        reads.push({ offset, size });
+        return await underlyingReadable.read(offset, size);
+      },
+    };
+
+    const overlapsMessageIndex = ({ offset, size }: { offset: bigint; size: bigint }) =>
+      messageIndexRanges.some(({ start, end }) => offset < end && offset + size > start);
+
+    const reader = await McapIndexedReader.Initialize({
+      readable: recordingReadable,
+      messageIndexCacheSizeBytes: 1024 * 1024,
+    });
+
+    reads.length = 0;
+    const firstPass = await collect(reader.readMessages({ topics: [channelA.topic] }));
+    expect(firstPass).toEqual([messageA1, messageA2]);
+    const firstPassReads = reads.slice();
+    expect(firstPassReads.some(overlapsMessageIndex)).toBe(true);
+
+    reads.length = 0;
+    const secondPass = await collect(reader.readMessages({ topics: [channelA.topic] }));
+    expect(secondPass).toEqual([messageA1, messageA2]);
+    expect(reads.some(overlapsMessageIndex)).toBe(false);
+
+    reads.length = 0;
+    const thirdPass = await collect(reader.readMessages({ topics: [channelB.topic] }));
+    expect(thirdPass).toEqual([messageB1]);
+    expect(reads.some(overlapsMessageIndex)).toBe(false);
+  });
+
+  it("re-reads message indexes across readMessages() calls when messageIndexCacheSizeBytes is not set", async () => {
+    const channel: TypedMcapRecord = {
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "a",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const message: TypedMcapRecords["Message"] = {
+      type: "Message",
+      channelId: channel.id,
+      sequence: 1,
+      logTime: 1n,
+      publishTime: 0n,
+      data: new Uint8Array(),
+    };
+
+    const chunk = new ChunkBuilder({ useMessageIndex: true });
+    chunk.addChannel(channel);
+    chunk.addMessage(message);
+
+    const builder = new McapRecordBuilder();
+    builder.writeMagic();
+    builder.writeHeader({ profile: "", library: "" });
+    const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [
+      writeChunkWithMessageIndexes(builder, chunk),
+    ];
+    builder.writeDataEnd({ dataSectionCrc: 0 });
+
+    const summaryStart = BigInt(builder.length);
+    builder.writeChannel(channel);
+    for (const index of chunkIndexes) {
+      builder.writeChunkIndex(index);
+    }
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeMagic();
+
+    const chunkIndex = chunkIndexes[0]!;
+    let messageIndexStart: bigint | undefined;
+    for (const offset of chunkIndex.messageIndexOffsets.values()) {
+      if (messageIndexStart == undefined || offset < messageIndexStart) {
+        messageIndexStart = offset;
+      }
+    }
+    const messageIndexRange = {
+      start: messageIndexStart!,
+      end: messageIndexStart! + chunkIndex.messageIndexLength,
+    };
+
+    const reads: { offset: bigint; size: bigint }[] = [];
+    const underlyingReadable = makeReadable(builder.buffer);
+    const recordingReadable = {
+      size: underlyingReadable.size.bind(underlyingReadable),
+      read: async (offset: bigint, size: bigint) => {
+        reads.push({ offset, size });
+        return await underlyingReadable.read(offset, size);
+      },
+    };
+    const overlapsMessageIndex = ({ offset, size }: { offset: bigint; size: bigint }) =>
+      offset < messageIndexRange.end && offset + size > messageIndexRange.start;
+
+    const reader = await McapIndexedReader.Initialize({ readable: recordingReadable });
+
+    reads.length = 0;
+    await collect(reader.readMessages());
+    expect(reads.some(overlapsMessageIndex)).toBe(true);
+
+    reads.length = 0;
+    await collect(reader.readMessages());
+    // Without caching, the message index is re-read on every call.
+    expect(reads.some(overlapsMessageIndex)).toBe(true);
+  });
+
   it("reads metadata records", async () => {
     const data = [
       ...MCAP_MAGIC,

@@ -117,3 +117,41 @@ def test_write_attachment():
     assert attachments[0].name == "test_attachment"
     assert attachments[0].media_type == "text/plain"
     assert attachments[0].data == b"test_data"
+
+
+def test_write_array_field_named_values():
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    schema = ros_writer.register_msgdef("test_msgs/Pts", "float64[] values")
+    ros_writer.write_message(
+        topic="/test",
+        schema=schema,
+        message={"values": [1.0, 2.0, 3.0]},
+        log_time=0,
+        publish_time=0,
+        sequence=0,
+    )
+    ros_writer.finish()
+
+    output.seek(0)
+    for msg in read_ros2_messages(output):
+        assert list(msg.decoded_message.values) == [1.0, 2.0, 3.0]
+
+
+def test_write_array_field_named_items():
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    schema = ros_writer.register_msgdef("test_msgs/Pts", "int32[] items")
+    ros_writer.write_message(
+        topic="/test",
+        schema=schema,
+        message={"items": [10, 20, 30]},
+        log_time=0,
+        publish_time=0,
+        sequence=0,
+    )
+    ros_writer.finish()
+
+    output.seek(0)
+    for msg in read_ros2_messages(output):
+        assert list(msg.decoded_message.items) == [10, 20, 30]

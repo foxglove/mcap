@@ -10,6 +10,12 @@ type ChunkCursorParams = {
   startTime: bigint | undefined;
   endTime: bigint | undefined;
   reverse: boolean;
+  /**
+   * When true, `loadMessageIndexes()` reads the full message index region for the chunk (not just
+   * the portion containing `relevantChannels`). This is useful when the underlying readable caches
+   * reads, since it keeps the read offset/size stable across calls with different topic filters.
+   */
+  readFullMessageIndexRange?: boolean;
 };
 
 /**
@@ -26,6 +32,7 @@ export class ChunkCursor {
   #startTime: bigint | undefined;
   #endTime: bigint | undefined;
   #reverse: boolean;
+  #readFullMessageIndexRange: boolean;
 
   // List of message offsets (across all channels) sorted by logTime.
   #orderedMessageOffsets?: [logTime: bigint, offset: bigint][];
@@ -38,6 +45,7 @@ export class ChunkCursor {
     this.#startTime = params.startTime;
     this.#endTime = params.endTime;
     this.#reverse = params.reverse;
+    this.#readFullMessageIndexRange = params.readFullMessageIndexRange ?? false;
 
     if (this.chunkIndex.messageIndexLength === 0n) {
       // Chunk has no message indexes.
@@ -113,12 +121,13 @@ export class ChunkCursor {
     const reverse = this.#reverse;
     let messageIndexStartOffset: bigint | undefined;
     let relevantMessageIndexStartOffset: bigint | undefined;
+    const readFullRange = this.#readFullMessageIndexRange;
 
     for (const [channelId, offset] of this.chunkIndex.messageIndexOffsets) {
       if (messageIndexStartOffset == undefined || offset < messageIndexStartOffset) {
         messageIndexStartOffset = offset;
       }
-      if (!this.#relevantChannels || this.#relevantChannels.has(channelId)) {
+      if (readFullRange || !this.#relevantChannels || this.#relevantChannels.has(channelId)) {
         if (
           relevantMessageIndexStartOffset == undefined ||
           offset < relevantMessageIndexStartOffset

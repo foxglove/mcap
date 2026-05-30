@@ -4,20 +4,20 @@ This package provides protobuf support for the Python MCAP file format reader.
 
 ## Installation
 
-Install via [Pipenv](https://pipenv.pypa.io/en/latest/) by adding `mcap-protobuf-support` to your `Pipfile` or via the command line:
+Install directly via pip:
 
 ```bash
-pipenv install mcap-protobuf-support
+pip install mcap-protobuf-support
 ```
 
 ## Examples
 
-Examples of use of this package can be found in the `/examples` directory. To run the examples first run
-pipenv to install dependencies:
+Examples of use of this package can be found in the `/examples` directory.
+If you are developing in this monorepo, sync the Python tooling environment with uv:
 
 ```bash
-pip install pipenv
-pipenv install
+cd /path/to/mcap/python
+uv sync --frozen
 ```
 
 Then switch to the examples directory and run the setup script there:
@@ -30,7 +30,7 @@ cd examples
 You should now be able to run the examples:
 
 ```bash
-pipenv run python point_cloud_example.py output.mcap
+uv run python point_cloud_example.py output.mcap
 ```
 
 ## Stay in touch

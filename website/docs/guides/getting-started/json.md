@@ -15,7 +15,7 @@ If you're starting from scratch, you can write code that allows you to **write y
 ### Examples
 
 - [Python](https://github.com/foxglove/mcap/tree/main/python/examples/jsonschema) - [CSV to MCAP converter](https://github.com/foxglove/mcap/blob/main/python/examples/jsonschema/pointcloud_csv_to_mcap.py)
-- [C++](https://github.com/foxglove/mcap/tree/main/cpp/examples/jsonschema) - [reader](https://github.com/foxglove/mcap/tree/main/cpp/examples/jsonschema/reader.py), [writer](https://github.com/foxglove/mcap/tree/main/cpp/examples/jsonschema/writer.py)
+- [C++](https://github.com/foxglove/mcap/tree/main/cpp/examples/jsonschema) - [reader](https://github.com/foxglove/mcap/tree/main/cpp/examples/jsonschema/reader.cpp), [writer](https://github.com/foxglove/mcap/tree/main/cpp/examples/jsonschema/writer.cpp)
 
 ## Inspect MCAP
 

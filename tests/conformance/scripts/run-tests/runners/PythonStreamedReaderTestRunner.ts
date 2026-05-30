@@ -10,7 +10,7 @@ export default class PythonStreamedReaderTestRunner extends StreamedReadTestRunn
 
   async runReadTest(filePath: string): Promise<StreamedReadTestResult> {
     const { stdout } = await promisify(exec)(
-      `python3 tests/run_reader_test.py ${filePath} streamed`,
+      `uv run --project .. -- python3 tests/run_reader_test.py ${filePath} streamed`,
       {
         cwd: "../../python/mcap",
       },

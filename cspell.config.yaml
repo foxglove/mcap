@@ -28,7 +28,7 @@ ignorePaths:
   - "*.pyc"
   - "*.svg"
   - "*.webp"
-  - Pipfile*
+  - python/uv.lock
   - mkdocs.yml
   - fathom.html
   - _vendor
@@ -41,18 +41,23 @@ words:
   - Anduril
   - bagfile
   - bfbs
+  - bytearray
   - callerid
   - cbor
+  - clippy
   - cmake
   - colcon
   - conanfile
   - conans
+  - corepack
   - crc
   - crcs
+  - cstr
   - datetime
   - DDSI
   - deserialization
   - distro
+  - dtype
   - elems
   - emerg
   - flatbuffer
@@ -60,12 +65,15 @@ words:
   - flatc
   - fwrite
   - gendeps
+  - genmsg
   - genpy
   - gentools
   - golangci
   - infima
   - inputfile
   - intrinsics
+  - isort
+  - issubdtype
   - jsonschema
   - kaitai
   - libmcap
@@ -76,6 +84,7 @@ words:
   - msgpack
   - nanos
   - nanosec
+  - ndarray
   - noenv
   - Norlab
   - nsec
@@ -83,22 +92,27 @@ words:
   - numpy
   - omgidl
   - parseable
-  - pipenv
   - pointcloud
   - pointclouds
   - proto
   - protobuf
   - protoc
+  - protos
+  - pyulog
+  - Quickstart
   - robocar
   - rosbag
   - rosmsg
   - rostime
   - RTPS
+  - rustc
+  - rustup
   - Saronic
   - schemaless
   - serde
   - sfixed
   - srgb
+  - staticmethod
   - stoull
   - struct
   - swiftformat
@@ -109,6 +123,7 @@ words:
   - ulog
   - unchunked
   - unindexed
+  - uv
   - vcpkg
   - velodyne
   - waabi
@@ -161,7 +176,7 @@ overrides:
     ignoreRegExpList:
       - "0x[0-9a-f]+n?"
 
-  - filename: "(Pipfile|README.md|pyproject.toml|setup.cfg)"
+  - filename: "(AGENTS.md|README.md|pyproject.toml|setup.cfg)"
     words:
       - pypi
       - pyright
@@ -169,7 +184,6 @@ overrides:
       - setuptools
       - addopts
       - xfail
-      - Pipfile
       - pyyaml
 
   - filename: "python/**/*.rst"

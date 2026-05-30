@@ -1,6 +1,7 @@
 import { crc32, crc32Final, crc32Init, crc32Update } from "@foxglove/crc";
 import { Heap } from "heap-js";
 
+import { CachedReadable } from "./CachedReadable.ts";
 import { ChunkCursor } from "./ChunkCursor.ts";
 import Reader from "./Reader.ts";
 import { MCAP_MAGIC } from "./constants.ts";
@@ -21,6 +22,15 @@ type McapIndexedReaderArgs = {
   footer: TypedMcapRecords["Footer"];
   dataEndOffset: bigint;
   dataSectionCrc?: number;
+  /**
+   * Maximum number of bytes of message index data to cache in memory across calls to
+   * `readMessages()`. When > 0, message indexes read on demand are cached so subsequent calls do
+   * not re-read them from the underlying readable. Defaults to 0 (no caching).
+   *
+   * When caching is enabled, each chunk's full message index region is read on first access so
+   * that later queries against different channels can be served from the cache.
+   */
+  messageIndexCacheSizeBytes?: number;
 };
 
 export class McapIndexedReader {
@@ -38,6 +48,7 @@ export class McapIndexedReader {
   readonly dataSectionCrc?: number;
 
   #readable: IReadable;
+  #messageIndexReadable: IReadable;
   #decompressHandlers?: DecompressHandlers;
 
   #messageStartTime: bigint | undefined;
@@ -59,6 +70,12 @@ export class McapIndexedReader {
     this.footer = args.footer;
     this.dataEndOffset = args.dataEndOffset;
     this.dataSectionCrc = args.dataSectionCrc;
+
+    const messageIndexCacheSizeBytes = args.messageIndexCacheSizeBytes ?? 0;
+    this.#messageIndexReadable =
+      messageIndexCacheSizeBytes > 0
+        ? new CachedReadable(this.#readable, messageIndexCacheSizeBytes)
+        : this.#readable;
 
     for (const chunk of args.chunkIndexes) {
       if (this.#messageStartTime == undefined || chunk.messageStartTime < this.#messageStartTime) {
@@ -89,6 +106,7 @@ export class McapIndexedReader {
   static async Initialize({
     readable,
     decompressHandlers,
+    messageIndexCacheSizeBytes,
   }: {
     readable: IReadable;
 
@@ -97,6 +115,15 @@ export class McapIndexedReader {
      * compression will be called to decompress the chunk data.
      */
     decompressHandlers?: DecompressHandlers;
+    /**
+     * Maximum number of bytes of message index data to cache in memory across calls to
+     * `readMessages()`. When > 0, message indexes read on demand are cached so subsequent calls do
+     * not re-read them from the underlying readable. Defaults to 0 (no caching).
+     *
+     * When caching is enabled, each chunk's full message index region is read on first access so
+     * that later queries against different channels can be served from the cache.
+     */
+    messageIndexCacheSizeBytes?: number;
   }): Promise<McapIndexedReader> {
     const size = await readable.size();
 
@@ -332,6 +359,7 @@ export class McapIndexedReader {
       footer,
       dataEndOffset,
       dataSectionCrc,
+      messageIndexCacheSizeBytes,
     });
   }
 
@@ -369,10 +397,18 @@ export class McapIndexedReader {
     const chunkCursors = new Heap<ChunkCursor>((a, b) => a.compare(b));
     let chunksOrdered = true;
     let prevChunkEndTime: bigint | undefined;
+    const readFullMessageIndexRange = this.#messageIndexReadable !== this.#readable;
     for (const chunkIndex of this.chunkIndexes) {
       if (chunkIndex.messageStartTime <= endTime && chunkIndex.messageEndTime >= startTime) {
         chunkCursors.push(
-          new ChunkCursor({ chunkIndex, relevantChannels, startTime, endTime, reverse }),
+          new ChunkCursor({
+            chunkIndex,
+            relevantChannels,
+            startTime,
+            endTime,
+            reverse,
+            readFullMessageIndexRange,
+          }),
         );
         if (chunksOrdered && prevChunkEndTime != undefined) {
           chunksOrdered = chunkIndex.messageStartTime >= prevChunkEndTime;
@@ -389,7 +425,7 @@ export class McapIndexedReader {
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
-        await cursor.loadMessageIndexes(this.#readable);
+        await cursor.loadMessageIndexes(this.#messageIndexReadable);
         if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);
         } else {

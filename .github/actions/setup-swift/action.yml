@@ -32,7 +32,7 @@ runs:
 
     - name: install deps
       shell: bash
-      run: sudo apt-get -y install libcurl4-openssl-dev
+      run: sudo apt-get update && sudo apt-get -y install libcurl4-openssl-dev
 
     - name: install swift
       shell: bash

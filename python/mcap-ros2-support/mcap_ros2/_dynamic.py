@@ -557,12 +557,13 @@ def _for_each_msgdef(
 
 
 def _get_property(obj: Any, name: str) -> Any:
-    if hasattr(obj, name):
-        return getattr(obj, name)
     try:
         return obj[name]
     except (KeyError, TypeError):
-        return None
+        pass
+    if hasattr(obj, name):
+        return getattr(obj, name)
+    return None
 
 
 def _coerce_value(
