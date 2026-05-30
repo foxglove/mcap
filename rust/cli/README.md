@@ -102,6 +102,11 @@ port is still pre-production:
    - A future `mcap` crate API should also make range-backed parsing of exact
      indexed records ergonomic without requiring callers to duplicate record
      parsing logic in the CLI.
+   - Avoid double-touching summaryless remote inputs when `--allow-remote-scan`
+     is set. Today the CLI attempts indexed discovery with a range probe and
+     footer read before falling back to full-file materialization; a future
+     implementation could share probe/footer state with materialization or skip
+     indexed discovery for commands that already know they must scan.
 9. Range-backed metadata and attachment transforms:
    - The CLI can read exact indexed metadata and attachment records for direct
      `get` / `list` commands without whole-file fallback for HTTP(S) inputs.
