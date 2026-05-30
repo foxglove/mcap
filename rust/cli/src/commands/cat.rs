@@ -13,8 +13,9 @@ use crate::context::CommandContext;
 
 const MESSAGE_PREVIEW_LEN: usize = 10;
 
-pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
     let opts = CatOptions::from_args(&args)?;
+    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
     let stdout = std::io::stdout();
     let mut writer = std::io::BufWriter::new(stdout.lock());
 
@@ -28,14 +29,38 @@ pub fn run(_ctx: &CommandContext, args: CatCommand) -> Result<()> {
         }
     } else {
         for file in args.files {
-            let mcap = common::map_file(&file)?;
-            if cat_mcap(&mut writer, &mcap, &opts)? {
+            if cat_file(&mut writer, &file, &opts, source_options)? {
                 return Ok(());
             }
         }
     }
 
     flush_or_ignore_broken_pipe(&mut writer)
+}
+
+fn cat_file(
+    writer: &mut impl std::io::Write,
+    file: &std::path::Path,
+    opts: &CatOptions,
+    source_options: common::SourceOptions,
+) -> Result<bool> {
+    if let Some(remote) = common::try_open_remote_mcap(file, source_options)? {
+        let mut json_transcoders = JsonTranscoders::default();
+        match cat_remote_indexed(
+            writer,
+            file,
+            &remote,
+            opts,
+            source_options,
+            &mut json_transcoders,
+        )? {
+            RemoteCatResult::BrokenPipe => return Ok(true),
+            RemoteCatResult::Done => return Ok(false),
+            RemoteCatResult::NeedsFullScan => {}
+        }
+    }
+    let mcap = common::load_path(file, source_options)?;
+    cat_mcap(writer, &mcap, opts)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -162,6 +187,142 @@ fn cat_indexed(
     }
 
     Ok(Some(false))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemoteCatResult {
+    BrokenPipe,
+    Done,
+    NeedsFullScan,
+}
+
+fn cat_remote_indexed(
+    writer: &mut impl std::io::Write,
+    file: &std::path::Path,
+    remote: &common::RemoteMcap,
+    opts: &CatOptions,
+    source_options: common::SourceOptions,
+    json_transcoders: &mut JsonTranscoders,
+) -> Result<RemoteCatResult> {
+    let summary = remote.summary();
+    if summary.chunk_indexes.is_empty() {
+        if !source_options.allow_remote_scan {
+            bail!(
+                "{}: remote file has no chunk index; reading messages requires opt-in; {}",
+                common::redacted_display(file),
+                common::remote_scan_opt_in_suffix()
+            );
+        }
+        return Ok(RemoteCatResult::NeedsFullScan);
+    }
+
+    let included_topics: BTreeSet<String> = summary
+        .channels
+        .values()
+        .filter(|channel| opts.include_topic(&channel.topic))
+        .map(|channel| channel.topic.clone())
+        .collect();
+    if !opts.topics.is_empty() && included_topics.is_empty() {
+        return Ok(RemoteCatResult::Done);
+    }
+    let planned_chunks = planned_chunk_reads(summary, opts, &included_topics);
+    if !planned_chunks.is_empty() && !source_options.allow_remote_scan {
+        let compressed_bytes = planned_chunks
+            .iter()
+            .map(|chunk| chunk.compressed_size)
+            .sum::<u64>();
+        bail!(
+            "{}: remote cat would read {} message chunks ({} compressed); {}",
+            common::redacted_display(file),
+            planned_chunks.len(),
+            common::human_bytes(compressed_bytes),
+            common::remote_scan_opt_in_suffix()
+        );
+    }
+
+    let mut indexed_opts =
+        mcap::sans_io::IndexedReaderOptions::new().with_order(ReadOrder::LogTime);
+    if opts.start != 0 {
+        indexed_opts = indexed_opts.log_time_on_or_after(opts.start);
+    }
+    if let Some(end) = opts.end {
+        indexed_opts = indexed_opts.log_time_before(end);
+    }
+    if !opts.topics.is_empty() {
+        indexed_opts = indexed_opts.include_topics(included_topics.iter().cloned());
+    }
+
+    let mut reader = mcap::sans_io::IndexedReader::new_with_options(summary, indexed_opts)?;
+    while let Some(event) = reader.next_event() {
+        match event? {
+            mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                let chunk = remote.read_range(offset, length)?;
+                reader.insert_chunk_record_data(offset, &chunk)?;
+            }
+            mcap::sans_io::IndexedReadEvent::Message { header, data } => {
+                let channel = summary
+                    .channels
+                    .get(&header.channel_id)
+                    .ok_or_else(|| anyhow::anyhow!("unknown channel {}", header.channel_id))?;
+                let message = CatMessage {
+                    channel,
+                    sequence: header.sequence,
+                    log_time: header.log_time,
+                    publish_time: header.publish_time,
+                    data,
+                };
+                if write_message(writer, message, opts, json_transcoders)? {
+                    return Ok(RemoteCatResult::BrokenPipe);
+                }
+            }
+        }
+    }
+
+    Ok(RemoteCatResult::Done)
+}
+
+// Keep this planner conservative: it intentionally mirrors IndexedReader chunk filtering as an
+// upper bound so the remote-scan gate fires before any possible chunk payload fetch.
+fn planned_chunk_reads<'a>(
+    summary: &'a mcap::Summary,
+    opts: &CatOptions,
+    included_topics: &BTreeSet<String>,
+) -> Vec<&'a mcap::records::ChunkIndex> {
+    let channel_ids: BTreeSet<u16> = if opts.topics.is_empty() {
+        BTreeSet::new()
+    } else {
+        summary
+            .channels
+            .iter()
+            .filter(|(_, channel)| included_topics.contains(&channel.topic))
+            .map(|(id, _)| *id)
+            .collect()
+    };
+
+    summary
+        .chunk_indexes
+        .iter()
+        .filter(|chunk| {
+            if opts.start != 0 && chunk.message_end_time < opts.start {
+                return false;
+            }
+            if let Some(end) = opts.end {
+                if chunk.message_start_time >= end {
+                    return false;
+                }
+            }
+            if channel_ids.is_empty() {
+                return true;
+            }
+            if chunk.message_index_offsets.is_empty() {
+                return true;
+            }
+            chunk
+                .message_index_offsets
+                .keys()
+                .any(|channel_id| channel_ids.contains(channel_id))
+        })
+        .collect()
 }
 
 fn cat_linear(
@@ -852,11 +1013,19 @@ fn write_payload_preview(
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, collections::BTreeMap, io::Cursor, sync::Arc};
+    use std::{
+        borrow::Cow,
+        collections::{BTreeMap, BTreeSet},
+        io::{Cursor, Read, Write},
+        net::TcpListener,
+        path::Path,
+        sync::Arc,
+        thread,
+    };
 
     use super::{
-        cat_mcap, cat_streaming, parse_ros1_field_type, write_payload_preview, write_ros1_float,
-        write_signed_decimal_time, CatOptions, JsonTranscoders, Ros1MessageDef,
+        cat_mcap, cat_streaming, parse_ros1_field_type, planned_chunk_reads, write_payload_preview,
+        write_ros1_float, write_signed_decimal_time, CatOptions, JsonTranscoders, Ros1MessageDef,
     };
 
     fn sample_message(schema_name: Option<&str>, data: Vec<u8>) -> mcap::Message<'static> {
@@ -1005,6 +1174,55 @@ mod tests {
         cursor.into_inner()
     }
 
+    fn serve_http(body: &'static [u8]) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("test server addr");
+        thread::spawn(move || {
+            for stream in listener.incoming().take(64) {
+                let mut stream = stream.expect("accept test connection");
+                let mut request = [0u8; 4096];
+                let read = stream.read(&mut request).expect("read request");
+                let request = String::from_utf8_lossy(&request[..read]);
+                let requested_range = request
+                    .lines()
+                    .find_map(|line| line.strip_prefix("Range: bytes="))
+                    .or_else(|| {
+                        request
+                            .lines()
+                            .find_map(|line| line.strip_prefix("range: bytes="))
+                    })
+                    .and_then(|range| range.split_once('-'))
+                    .and_then(|(start, end)| {
+                        Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?))
+                    });
+                if let Some((start, end)) = requested_range {
+                    let end = end.min(body.len().saturating_sub(1));
+                    let start = start.min(end);
+                    let content = &body[start..=end];
+                    let response = format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        content.len(),
+                        body.len(),
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write headers");
+                    stream.write_all(content).expect("write range body");
+                } else {
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write headers");
+                    stream.write_all(body).expect("write body");
+                }
+            }
+        });
+        format!("http://{addr}/demo.mcap")
+    }
+
     fn build_multi_topic_mcap() -> Vec<u8> {
         let mut cursor = Cursor::new(Vec::new());
         {
@@ -1072,6 +1290,141 @@ mod tests {
         assert_eq!(
             message_line_string(&message, 10),
             "42 /demo [no schema] [1 2 3]"
+        );
+    }
+
+    #[test]
+    fn remote_cat_with_scan_opt_in_falls_back_for_unchunked_messages() {
+        let body: &'static [u8] =
+            Box::leak(build_out_of_order_linear_mcap_without_summary().into_boxed_slice());
+        let url = serve_http(body);
+        let mut out = Vec::new();
+        let broken_pipe = super::cat_file(
+            &mut out,
+            Path::new(&url),
+            &CatOptions::default(),
+            super::common::SourceOptions::new(true),
+        )
+        .expect("remote cat should scan unchunked messages with opt-in");
+        assert!(!broken_pipe);
+        let output = String::from_utf8(out).expect("cat output should be utf8");
+        assert!(output.contains("30 /demo [Example] [1]"));
+        assert!(output.contains("10 /demo [Example] [2]"));
+    }
+
+    #[test]
+    fn remote_cat_no_chunk_index_error_includes_redacted_url() {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::Writer::new(Cursor::new(&mut buffer)).expect("writer");
+            writer.finish().expect("finish writer");
+        }
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http(body) + "?token=secret";
+        let mut out = Vec::new();
+        let err = super::cat_file(
+            &mut out,
+            Path::new(&url),
+            &CatOptions::default(),
+            super::common::SourceOptions::default(),
+        )
+        .expect_err("remote cat without chunk indexes should require opt-in");
+        let message = err.to_string();
+        assert!(message.contains("--allow-remote-scan"));
+        assert!(message.contains("/demo.mcap"));
+        assert!(!message.contains("secret"));
+    }
+
+    #[test]
+    fn remote_cat_requires_allow_remote_scan_before_chunk_reads() {
+        let body: &'static [u8] = Box::leak(build_multi_topic_mcap().into_boxed_slice());
+        let url = serve_http(body);
+        let mut out = Vec::new();
+        let err = super::cat_file(
+            &mut out,
+            Path::new(&url),
+            &CatOptions::default(),
+            super::common::SourceOptions::default(),
+        )
+        .expect_err("remote cat should require opt-in before reading chunks");
+        assert!(err.to_string().contains("remote cat would read"));
+        assert!(err.to_string().contains("--allow-remote-scan"));
+    }
+
+    fn planned_chunks_for_opts<'a>(
+        summary: &'a mcap::Summary,
+        opts: &CatOptions,
+    ) -> Vec<&'a mcap::records::ChunkIndex> {
+        let included_topics: BTreeSet<String> = summary
+            .channels
+            .values()
+            .filter(|channel| opts.include_topic(&channel.topic))
+            .map(|channel| channel.topic.clone())
+            .collect();
+        if !opts.topics.is_empty() && included_topics.is_empty() {
+            return Vec::new();
+        }
+        planned_chunk_reads(summary, opts, &included_topics)
+    }
+
+    #[test]
+    fn remote_chunk_plan_is_conservative_for_representative_filters() {
+        let mcap = build_multi_topic_mcap();
+        let summary = mcap::Summary::read(&mcap)
+            .expect("summary read")
+            .expect("summary should exist");
+
+        assert!(
+            !planned_chunks_for_opts(&summary, &CatOptions::default()).is_empty(),
+            "unfiltered cat would need remote chunk payload reads"
+        );
+
+        assert!(
+            !planned_chunks_for_opts(
+                &summary,
+                &CatOptions {
+                    topics: vec!["/camera".to_string()],
+                    ..CatOptions::default()
+                },
+            )
+            .is_empty(),
+            "matching topic filter would still need remote chunk payload reads"
+        );
+
+        assert!(
+            planned_chunks_for_opts(
+                &summary,
+                &CatOptions {
+                    topics: vec!["/missing".to_string()],
+                    ..CatOptions::default()
+                },
+            )
+            .is_empty(),
+            "non-matching topic filter should not plan remote chunk reads"
+        );
+
+        assert!(
+            !planned_chunks_for_opts(
+                &summary,
+                &CatOptions {
+                    start: 20,
+                    ..CatOptions::default()
+                },
+            )
+            .is_empty(),
+            "overlapping time filter would need remote chunk payload reads"
+        );
+
+        assert!(
+            planned_chunks_for_opts(
+                &summary,
+                &CatOptions {
+                    start: 100,
+                    ..CatOptions::default()
+                },
+            )
+            .is_empty(),
+            "non-overlapping time filter should not plan remote chunk reads"
         );
     }
 

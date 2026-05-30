@@ -5,9 +5,12 @@ use anyhow::{bail, Context, Result};
 use crate::cli::RecoverCommand;
 use crate::context::CommandContext;
 
-pub fn run(_ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     let compression = crate::commands::common::parse_output_compression(&args.compression)?;
-    let input = crate::commands::common::load_input(args.file.as_deref())?;
+    let input = crate::commands::common::load_input(
+        args.file.as_deref(),
+        crate::commands::common::SourceOptions::new(ctx.allow_remote_scan()),
+    )?;
 
     let stats = if let Some(output) = &args.output {
         let writer = std::fs::File::create(output)

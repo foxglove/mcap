@@ -16,14 +16,19 @@ struct SortOptions {
     chunked: bool,
 }
 
-pub fn run(_ctx: &CommandContext, args: SortCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
     let opts = build_sort_options(&args);
-    let input = common::map_file(&args.file)?;
-    ensure_distinct_input_output(&args.file, &args.output_file)?;
-    let summary = validate_sort_input(input.as_ref())?;
+    let input = common::load_path(
+        &args.file,
+        common::SourceOptions::new(ctx.allow_remote_scan()),
+    )?;
+    if !common::is_http_url(&args.file) {
+        ensure_distinct_input_output(&args.file, &args.output_file)?;
+    }
+    let summary = validate_sort_input(input.as_slice())?;
     let output = std::fs::File::create(&args.output_file)
         .with_context(|| format!("failed to open output '{}'", args.output_file.display()))?;
-    sort_to_writer(input.as_ref(), output, summary, &opts)
+    sort_to_writer(input.as_slice(), output, summary, &opts)
 }
 
 fn ensure_distinct_input_output(input: &Path, output: &Path) -> Result<()> {

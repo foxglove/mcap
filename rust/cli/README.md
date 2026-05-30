@@ -8,23 +8,23 @@ It is not ready for production use yet.
 
 Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 
-| Command      | Status | Notes                                  |
-| ------------ | ------ | -------------------------------------- |
-| `add`        | 🟢     |                                        |
-| `cat`        | 🟡     | Remote URI input is not yet supported. |
-| `compress`   | 🟢     |                                        |
-| `convert`    | 🟢     |                                        |
-| `decompress` | 🟢     |                                        |
-| `doctor`     | 🟢     |                                        |
-| `du`         | 🟢     |                                        |
-| `filter`     | 🟢     |                                        |
-| `get`        | 🟢     |                                        |
-| `info`       | 🟢     |                                        |
-| `list`       | 🟢     |                                        |
-| `merge`      | 🟢     |                                        |
-| `recover`    | 🟢     |                                        |
-| `sort`       | 🟢     |                                        |
-| `version`    | 🟢     |                                        |
+| Command      | Status | Notes |
+| ------------ | ------ | ----- |
+| `add`        | 🟢     |       |
+| `cat`        | 🟢     |       |
+| `compress`   | 🟢     |       |
+| `convert`    | 🟢     |       |
+| `decompress` | 🟢     |       |
+| `doctor`     | 🟢     |       |
+| `du`         | 🟢     |       |
+| `filter`     | 🟢     |       |
+| `get`        | 🟢     |       |
+| `info`       | 🟢     |       |
+| `list`       | 🟢     |       |
+| `merge`      | 🟢     |       |
+| `recover`    | 🟢     |       |
+| `sort`       | 🟢     |       |
+| `version`    | 🟢     |       |
 
 ## Pre-1.0 compatibility cleanup
 
@@ -88,6 +88,34 @@ port is still pre-production:
      `.mcap` when no explicit output is provided.
    - This would also allow `mcap convert` to accept multiple input paths in one
      invocation, including wildcard-expanded paths from the user's shell.
+7. Future object-store remote input policy:
+   - Before Rust CLI 1.0, apply the remote scan opt-in policy consistently to
+     future object-store inputs such as S3, GCS, and Azure Blob Storage.
+   - Preserve the current HTTP(S) behavior for those backends: summary/index-only
+     operations should not require opt-in, while full-object scans/downloads and
+     message chunk payload reads should require `--allow-remote-scan`.
+8. Shared remote range-read APIs:
+   - Before Rust CLI 1.0, consider moving the CLI-local coalesced summary range
+     reads into reusable `mcap` crate reader APIs so HTTP(S), S3, GCS, and Azure
+     Blob Storage backends can share tail/summary range reads instead of each
+     transport adding its own read-ahead workaround.
+   - A future `mcap` crate API should also make range-backed parsing of exact
+     indexed records ergonomic without requiring callers to duplicate record
+     parsing logic in the CLI.
+   - Avoid double-touching summaryless remote inputs when `--allow-remote-scan`
+     is set. Today the CLI attempts indexed discovery with a range probe and
+     footer read before falling back to full-file materialization; a future
+     implementation could share probe/footer state with materialization or skip
+     indexed discovery for commands that already know they must scan.
+9. Range-backed metadata and attachment transforms:
+   - The CLI can read exact indexed metadata and attachment records for direct
+     `get` / `list` commands without whole-file fallback for HTTP(S) inputs.
+     Single indexed attachment and metadata reads are allowed as bounded range
+     reads without a full-scan opt-in; multi-record metadata reads have a
+     conservative no-opt-in byte cap.
+   - Before Rust CLI 1.0, extend this pattern to metadata/attachment-preserving
+     transforms so those commands do not need whole-file fallback for HTTP(S) and
+     future object-store inputs.
 
 ## Intentional divergences from Go CLI
 
@@ -97,3 +125,11 @@ port is still pre-production:
 2. `mcap convert` ROS 2 db3 schema discovery:
    - Rust CLI converts self-contained db3 files using embedded message definitions, including non-`/msg/` topics such as service event topics. It fails the conversion if any topic is missing an embedded definition.
    - Go CLI ignores embedded db3 schemas and emulates ament resource lookup with `--ament-prefix-path`, which can miss schemas or silently use definitions from the wrong workspace.
+3. Remote read policy:
+   - Rust CLI requires `--allow-remote-scan` for remote full-object downloads,
+     linear fallbacks, remote `convert` inputs, and remote message chunk payload
+     reads such as `cat` output. Commands with multiple remote inputs materialize
+     each remote input independently, so peak temporary disk usage can approach
+     the sum of remote input sizes.
+   - Go-compatible behavior allowed those remote reads without an explicit
+     opt-in.

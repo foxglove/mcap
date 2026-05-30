@@ -8,7 +8,10 @@ use crate::commands::common;
 use crate::context::CommandContext;
 
 pub fn run(ctx: &CommandContext, args: DoctorCommand) -> Result<()> {
-    let mcap = common::map_file(&args.file)?;
+    let mcap = common::load_path(
+        &args.file,
+        common::SourceOptions::new(ctx.allow_remote_scan()),
+    )?;
     if ctx.verbose() > 0 {
         println!("Examining {}", args.file.display());
     }

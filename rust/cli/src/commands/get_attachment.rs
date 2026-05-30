@@ -10,28 +10,53 @@ use crate::context::CommandContext;
 const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 
-pub fn run(_ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
-    let mcap = common::map_file(&args.file)?;
-    let parsed = common::parse_mcap(&mcap)?;
-    let index = select_attachment_index(&parsed.attachment_indexes, &args.name, args.offset)?;
-    let attachment = mcap::read::attachment(&mcap, index).with_context(|| {
-        format!(
-            "failed to read attachment {} at offset {}",
-            args.name, index.offset
-        )
-    })?;
+pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
+    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
+    if let Some(remote) = common::try_open_remote_mcap(&args.file, source_options)? {
+        let index = select_attachment_index(
+            &remote.summary().attachment_indexes,
+            &args.name,
+            args.offset,
+        )?;
+        let bytes = remote.read_range(
+            index.offset,
+            usize::try_from(index.length)
+                .context("indexed record is too large to read on this platform")?,
+        )?;
+        let attachment = common::parse_attachment_record(&bytes).with_context(|| {
+            format!(
+                "failed to read attachment {} at offset {}",
+                args.name, index.offset
+            )
+        })?;
+        write_attachment_data(attachment.data.as_ref(), args.output.as_deref())?;
+    } else {
+        let mcap = common::load_path(&args.file, source_options)?;
+        let parsed = common::parse_mcap(&mcap)?;
+        let index = select_attachment_index(&parsed.attachment_indexes, &args.name, args.offset)?;
+        let attachment = mcap::read::attachment(&mcap, index).with_context(|| {
+            format!(
+                "failed to read attachment {} at offset {}",
+                args.name, index.offset
+            )
+        })?;
+        write_attachment_data(attachment.data.as_ref(), args.output.as_deref())?;
+    }
 
-    if let Some(output) = args.output {
-        std::fs::write(&output, &attachment.data)
+    Ok(())
+}
+
+fn write_attachment_data(data: &[u8], output: Option<&std::path::Path>) -> Result<()> {
+    if let Some(output) = output {
+        std::fs::write(output, data)
             .with_context(|| format!("failed to write attachment to '{}'", output.display()))?;
     } else if std::io::stdout().is_terminal() {
         anyhow::bail!("{PLEASE_REDIRECT}");
     } else {
         std::io::stdout()
-            .write_all(&attachment.data)
+            .write_all(data)
             .context("failed to write attachment to stdout")?;
     }
-
     Ok(())
 }
 

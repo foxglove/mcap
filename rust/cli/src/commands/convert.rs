@@ -3,7 +3,7 @@ mod ros2_db3;
 
 use std::fs::File;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use anyhow::{bail, ensure, Context, Result};
 use mcap::{Compression, WriteOptions};
@@ -13,9 +13,19 @@ use crate::context::CommandContext;
 
 const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
-pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
-    let input = ConvertInput::detect(args.input)?;
-    ensure_distinct_paths(input.path(), &args.output)?;
+pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
+    let input = ConvertInput::detect(&args.input)?;
+    let is_remote = crate::commands::common::is_http_url(&args.input);
+    if !is_remote {
+        reject_lfs_pointer(&args.input)?;
+    }
+    let materialized_input = crate::commands::common::materialize_input(
+        &args.input,
+        crate::commands::common::SourceOptions::new(ctx.allow_remote_scan()),
+    )?;
+    if !is_remote {
+        ensure_distinct_paths(materialized_input.path(), &args.output)?;
+    }
     let opts = build_write_options(
         args.compression,
         args.chunk_size,
@@ -24,29 +34,25 @@ pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
         input.profile(),
     );
 
-    input.convert(&args.output, opts)
+    input.convert(materialized_input.path(), &args.output, opts)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ConvertInput {
-    Ros1Bag(PathBuf),
-    Ros2Db3(PathBuf),
+    Ros1Bag,
+    Ros2Db3,
 }
 
 impl ConvertInput {
-    fn detect(path: PathBuf) -> Result<Self> {
-        let extension = path
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .unwrap_or_default();
+    fn detect(path: &Path) -> Result<Self> {
+        let extension =
+            crate::commands::common::remote_or_local_extension(path).unwrap_or_default();
 
         if extension.eq_ignore_ascii_case("bag") {
-            reject_lfs_pointer(&path)?;
-            return Ok(Self::Ros1Bag(path));
+            return Ok(Self::Ros1Bag);
         }
         if extension.eq_ignore_ascii_case("db3") {
-            reject_lfs_pointer(&path)?;
-            return Ok(Self::Ros2Db3(path));
+            return Ok(Self::Ros2Db3);
         }
 
         bail!(
@@ -55,27 +61,17 @@ impl ConvertInput {
         );
     }
 
-    fn path(&self) -> &Path {
-        match self {
-            Self::Ros1Bag(path) | Self::Ros2Db3(path) => path,
-        }
-    }
-
     fn profile(&self) -> &'static str {
         match self {
-            Self::Ros1Bag(_) => "ros1",
-            Self::Ros2Db3(_) => "ros2",
+            Self::Ros1Bag => "ros1",
+            Self::Ros2Db3 => "ros2",
         }
     }
 
-    fn convert(self, output_path: &Path, opts: WriteOptions) -> Result<()> {
+    fn convert(self, input_path: &Path, output_path: &Path, opts: WriteOptions) -> Result<()> {
         match self {
-            Self::Ros1Bag(input_path) => {
-                ros1_bag::convert_ros1_bag_file(&input_path, output_path, opts)
-            }
-            Self::Ros2Db3(input_path) => {
-                ros2_db3::convert_ros2_db3_file(&input_path, output_path, opts)
-            }
+            Self::Ros1Bag => ros1_bag::convert_ros1_bag_file(input_path, output_path, opts),
+            Self::Ros2Db3 => ros2_db3::convert_ros2_db3_file(input_path, output_path, opts),
         }
     }
 }
@@ -183,7 +179,7 @@ mod tests {
 
     use anyhow::Result;
 
-    use super::{build_write_options, ensure_distinct_paths, ConvertInput};
+    use super::{build_write_options, ensure_distinct_paths, reject_lfs_pointer, ConvertInput};
     use crate::cli::{CompressionFormat, ConvertCommand};
     use crate::context::CommandContext;
 
@@ -277,23 +273,23 @@ mod tests {
     #[test]
     fn detects_ros1_bag_extension() {
         let path = temp_input("ros1.bag", b"not validated until conversion");
-        let input = ConvertInput::detect(path.clone()).expect("detect");
+        let input = ConvertInput::detect(&path).expect("detect");
         std::fs::remove_file(path).expect("remove temp input");
-        assert!(matches!(input, ConvertInput::Ros1Bag(_)));
+        assert!(matches!(input, ConvertInput::Ros1Bag));
     }
 
     #[test]
     fn detects_ros2_db3_extension() {
         let path = temp_input("ros2.db3", b"not validated until conversion");
-        let input = ConvertInput::detect(path.clone()).expect("detect");
+        let input = ConvertInput::detect(&path).expect("detect");
         std::fs::remove_file(path).expect("remove temp input");
-        assert!(matches!(input, ConvertInput::Ros2Db3(_)));
+        assert!(matches!(input, ConvertInput::Ros2Db3));
     }
 
     #[test]
     fn rejects_unknown_extension() {
         let path = temp_input("unknown", b"not an mcap input");
-        let err = ConvertInput::detect(path.clone()).expect_err("unknown input should fail");
+        let err = ConvertInput::detect(&path).expect_err("unknown input should fail");
         std::fs::remove_file(path).expect("remove temp input");
         assert!(err.to_string().contains("unsupported input file extension"));
     }
@@ -306,7 +302,7 @@ mod tests {
 oid sha256:0000000000000000000000000000000000000000000000000000000000000000\n\
 size 123\n",
         );
-        let err = ConvertInput::detect(path.clone()).expect_err("LFS pointer should fail");
+        let err = reject_lfs_pointer(&path).expect_err("LFS pointer should fail");
         std::fs::remove_file(path).expect("remove temp input");
         assert!(err.to_string().contains("Git LFS pointer"));
         assert!(err.to_string().contains("git lfs pull"));
@@ -351,6 +347,25 @@ size 123\n",
         .expect_err("missing input should fail");
 
         assert!(err.to_string().contains("failed to open input"));
+    }
+
+    #[test]
+    fn remote_input_requires_allow_remote_scan_before_download() {
+        let err = super::run(
+            &CommandContext::default(),
+            ConvertCommand {
+                input: PathBuf::from("https://example.com/demo.bag?token=secret"),
+                output: PathBuf::from("/tmp/mcap-cli-remote-output.mcap"),
+                compression: CompressionFormat::None,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: false,
+                chunked: true,
+            },
+        )
+        .expect_err("remote convert should require opt-in");
+
+        assert!(err.to_string().contains("--allow-remote-scan"));
+        assert!(!err.to_string().contains("token=secret"));
     }
 
     #[test]

@@ -13,6 +13,7 @@ pub struct CommandContext {
     color: Color,
     config: Option<PathBuf>,
     pprof_profile: bool,
+    allow_remote_scan: bool,
 }
 
 impl Default for CommandContext {
@@ -22,18 +23,26 @@ impl Default for CommandContext {
             color: Color::Auto,
             config: None,
             pprof_profile: false,
+            allow_remote_scan: false,
         }
     }
 }
 
 #[allow(dead_code)]
 impl CommandContext {
-    pub fn new(verbose: u8, color: Color, config: Option<PathBuf>, pprof_profile: bool) -> Self {
+    pub fn new(
+        verbose: u8,
+        color: Color,
+        config: Option<PathBuf>,
+        pprof_profile: bool,
+        allow_remote_scan: bool,
+    ) -> Self {
         Self {
             verbose,
             color,
             config,
             pprof_profile,
+            allow_remote_scan,
         }
     }
 
@@ -51,5 +60,9 @@ impl CommandContext {
 
     pub fn pprof_profile(&self) -> bool {
         self.pprof_profile
+    }
+
+    pub fn allow_remote_scan(&self) -> bool {
+        self.allow_remote_scan
     }
 }

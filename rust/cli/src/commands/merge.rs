@@ -110,15 +110,16 @@ struct IdMaps {
     next_output_channel_id: u16,
 }
 
-pub fn run(_ctx: &CommandContext, args: MergeCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     let opts = build_merge_options(args);
+    let source_options = crate::commands::common::SourceOptions::new(ctx.allow_remote_scan());
 
     let mut mapped_inputs = Vec::with_capacity(opts.files.len());
     let mut input_names = Vec::with_capacity(opts.files.len());
     for path in &opts.files {
-        let mapped = crate::commands::common::map_file(path)?;
+        let mapped = crate::commands::common::load_path(path, source_options)?;
         mapped_inputs.push(mapped);
-        input_names.push(path.display().to_string());
+        input_names.push(crate::commands::common::redacted_display(path));
     }
 
     let input_refs: Vec<InputRef<'_>> = mapped_inputs
@@ -126,7 +127,7 @@ pub fn run(_ctx: &CommandContext, args: MergeCommand) -> Result<()> {
         .zip(input_names.iter())
         .map(|(mapped, name)| InputRef {
             name: name.as_str(),
-            data: mapped.as_ref(),
+            data: mapped.as_slice(),
         })
         .collect();
 
@@ -787,6 +788,26 @@ mod tests {
         assert!(!options.chunked);
         assert!(options.allow_duplicate_metadata);
         assert_eq!(options.coalesce_channels, CoalesceChannels::Force);
+    }
+
+    #[test]
+    fn run_rejects_remote_input_without_scan_opt_in() {
+        let err = run(
+            &CommandContext::default(),
+            MergeCommand {
+                files: vec!["http://example.com/a.mcap".into()],
+                output_file: Some("out.mcap".into()),
+                compression: CompressionFormat::Zstd,
+                chunk_size: 1024,
+                include_crc: true,
+                chunked: true,
+                allow_duplicate_metadata: false,
+                coalesce_channels: CoalesceChannels::Auto,
+            },
+        )
+        .expect_err("remote merge input should require opt-in");
+
+        assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
     #[test]

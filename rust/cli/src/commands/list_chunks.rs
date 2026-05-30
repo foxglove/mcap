@@ -4,9 +4,11 @@ use crate::cli::ListChunksCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
-pub fn run(_ctx: &CommandContext, args: ListChunksCommand) -> Result<()> {
-    let mcap = common::map_file(&args.file)?;
-    let parsed = common::parse_mcap(&mcap)?;
+pub fn run(ctx: &CommandContext, args: ListChunksCommand) -> Result<()> {
+    let parsed = common::parse_mcap_from_path(
+        &args.file,
+        common::SourceOptions::new(ctx.allow_remote_scan()),
+    )?;
     common::print_table(&render_chunk_rows(&parsed.chunk_indexes));
     Ok(())
 }
