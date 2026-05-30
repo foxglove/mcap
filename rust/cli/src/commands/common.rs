@@ -163,9 +163,6 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
 }
 
 pub fn open_seekable_mcap_source(path: &Path) -> Result<Option<McapSource>> {
-    if is_http_url(path) {
-        return Ok(None);
-    }
     let file =
         std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
     Ok(Some(McapSource::Local(file)))
