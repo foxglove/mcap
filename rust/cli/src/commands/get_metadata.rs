@@ -6,14 +6,58 @@ use crate::cli::GetMetadataCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
-pub fn run(_ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
-    let mcap = common::load_path(&args.file)?;
-    let parsed = common::parse_mcap(&mcap)?;
-    let metadata = merged_metadata_for_name(&mcap, &parsed.metadata_indexes, &args.name)?;
+pub fn run(ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
+    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
+    let metadata = if let Some(remote) = common::try_open_remote_mcap(&args.file, source_options)? {
+        merged_remote_metadata_for_name(&remote, &args.name, source_options)?
+    } else {
+        let mcap = common::load_path(&args.file, source_options)?;
+        let parsed = common::parse_mcap(&mcap)?;
+        merged_metadata_for_name(&mcap, &parsed.metadata_indexes, &args.name)?
+    };
     let pretty =
         serde_json::to_string_pretty(&metadata).context("failed to serialize metadata to JSON")?;
     println!("{pretty}");
     Ok(())
+}
+
+fn merged_remote_metadata_for_name(
+    remote: &common::RemoteMcap,
+    name: &str,
+    source_options: common::SourceOptions,
+) -> Result<BTreeMap<String, String>> {
+    let mut matching_indexes: Vec<&mcap::records::MetadataIndex> = remote
+        .summary()
+        .metadata_indexes
+        .iter()
+        .filter(|index| index.name == name)
+        .collect();
+    if matching_indexes.is_empty() {
+        anyhow::bail!("metadata {name} does not exist");
+    }
+    matching_indexes.sort_by_key(|index| index.offset);
+    if matching_indexes.len() > 1 {
+        let total_bytes = matching_indexes
+            .iter()
+            .map(|index| index.length)
+            .sum::<u64>();
+        common::require_remote_metadata_budget(total_bytes, source_options, "metadata records")?;
+    }
+
+    let mut output = BTreeMap::new();
+    for index in matching_indexes {
+        let bytes = remote.read_range(
+            index.offset,
+            usize::try_from(index.length)
+                .context("indexed record is too large to read on this platform")?,
+        )?;
+        let record = common::parse_metadata_record(&bytes)
+            .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
+        for (key, value) in record.metadata {
+            output.insert(key, value);
+        }
+    }
+    Ok(output)
 }
 
 fn merged_metadata_for_name(

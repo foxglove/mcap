@@ -88,33 +88,34 @@ port is still pre-production:
      `.mcap` when no explicit output is provided.
    - This would also allow `mcap convert` to accept multiple input paths in one
      invocation, including wildcard-expanded paths from the user's shell.
-7. Remote read policy:
-   - Current Go-compatible behavior allows remote reads without an opt-in flag,
-     including commands or inputs that require reading the entire remote file.
-   - Before Rust CLI 1.0, decide whether to keep this behavior or reintroduce an
-     explicit opt-in such as `--allow-remote-scan` for commands that cannot use
-     indexed range reads.
-   - Apply the chosen policy consistently across HTTP(S) and future object-store
-     inputs such as S3, GCS, and Azure Blob Storage.
-8. Remote indexed read performance:
-   - Current HTTP(S) range reads use the generic seek/read interface, which can
-     issue several small range requests while reading MCAP headers, footers, and
-     summaries.
-   - If a remote MCAP has no summary, the CLI currently attempts indexed
-     discovery with range requests and then falls back to a whole-file read.
-   - Before Rust CLI 1.0, optimize summary/index reading in the underlying MCAP
-     reader APIs so HTTP(S), S3, GCS, and Azure Blob Storage backends can share
-     coalesced tail/summary range reads instead of each transport adding its own
-     read-ahead workaround.
-9. Range-backed metadata and attachment reads:
-   - Current metadata and attachment convenience helpers, such as
-     `mcap::read::metadata` and `mcap::read::attachment`, require a full MCAP
-     byte slice.
-   - Before Rust CLI 1.0, add CLI or `mcap` crate helpers that can read
-     metadata and attachment records from indexed byte ranges so `get metadata`,
-     `list metadata`, `get attachment`, and metadata/attachment-preserving
-     transforms do not need whole-file fallback for HTTP(S) and future
-     object-store inputs.
+7. Future object-store remote input policy:
+   - Before Rust CLI 1.0, apply the remote scan opt-in policy consistently to
+     future object-store inputs such as S3, GCS, and Azure Blob Storage.
+   - Preserve the current HTTP(S) behavior for those backends: summary/index-only
+     operations should not require opt-in, while full-object scans/downloads and
+     message chunk payload reads should require `--allow-remote-scan`.
+8. Shared remote range-read APIs:
+   - Before Rust CLI 1.0, consider moving the CLI-local coalesced summary range
+     reads into reusable `mcap` crate reader APIs so HTTP(S), S3, GCS, and Azure
+     Blob Storage backends can share tail/summary range reads instead of each
+     transport adding its own read-ahead workaround.
+   - A future `mcap` crate API should also make range-backed parsing of exact
+     indexed records ergonomic without requiring callers to duplicate record
+     parsing logic in the CLI.
+   - Avoid double-touching summaryless remote inputs when `--allow-remote-scan`
+     is set. Today the CLI attempts indexed discovery with a range probe and
+     footer read before falling back to full-file materialization; a future
+     implementation could share probe/footer state with materialization or skip
+     indexed discovery for commands that already know they must scan.
+9. Range-backed metadata and attachment transforms:
+   - The CLI can read exact indexed metadata and attachment records for direct
+     `get` / `list` commands without whole-file fallback for HTTP(S) inputs.
+     Single indexed attachment and metadata reads are allowed as bounded range
+     reads without a full-scan opt-in; multi-record metadata reads have a
+     conservative no-opt-in byte cap.
+   - Before Rust CLI 1.0, extend this pattern to metadata/attachment-preserving
+     transforms so those commands do not need whole-file fallback for HTTP(S) and
+     future object-store inputs.
 
 ## Intentional divergences from Go CLI
 
@@ -124,3 +125,11 @@ port is still pre-production:
 2. `mcap convert` ROS 2 db3 schema discovery:
    - Rust CLI converts self-contained db3 files using embedded message definitions, including non-`/msg/` topics such as service event topics. It fails the conversion if any topic is missing an embedded definition.
    - Go CLI ignores embedded db3 schemas and emulates ament resource lookup with `--ament-prefix-path`, which can miss schemas or silently use definitions from the wrong workspace.
+3. Remote read policy:
+   - Rust CLI requires `--allow-remote-scan` for remote full-object downloads,
+     linear fallbacks, remote `convert` inputs, and remote message chunk payload
+     reads such as `cat` output. Commands with multiple remote inputs materialize
+     each remote input independently, so peak temporary disk usage can approach
+     the sum of remote input sizes.
+   - Go-compatible behavior allowed those remote reads without an explicit
+     opt-in.

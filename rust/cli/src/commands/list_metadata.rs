@@ -4,11 +4,42 @@ use crate::cli::ListMetadataCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
-pub fn run(_ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
-    let mcap = common::load_path(&args.file)?;
-    let records = collect_metadata_records(&mcap)?;
+pub fn run(ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
+    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
+    let records = if let Some(remote) = common::try_open_remote_mcap(&args.file, source_options)? {
+        collect_remote_metadata_records(&remote, source_options)?
+    } else {
+        let mcap = common::load_path(&args.file, source_options)?;
+        collect_metadata_records(&mcap)?
+    };
     common::print_table(&render_metadata_rows(&records)?);
     Ok(())
+}
+
+fn collect_remote_metadata_records(
+    remote: &common::RemoteMcap,
+    source_options: common::SourceOptions,
+) -> Result<Vec<(mcap::records::MetadataIndex, mcap::records::Metadata)>> {
+    let total_bytes = remote
+        .summary()
+        .metadata_indexes
+        .iter()
+        .map(|index| index.length)
+        .sum::<u64>();
+    common::require_remote_metadata_budget(total_bytes, source_options, "metadata records")?;
+
+    let mut records = Vec::new();
+    for index in &remote.summary().metadata_indexes {
+        let bytes = remote.read_range(
+            index.offset,
+            usize::try_from(index.length)
+                .context("indexed record is too large to read on this platform")?,
+        )?;
+        let metadata = common::parse_metadata_record(&bytes)
+            .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
+        records.push((index.clone(), metadata));
+    }
+    Ok(records)
 }
 
 fn collect_metadata_records(

@@ -37,6 +37,10 @@ pub struct Args {
     #[arg(long, default_value_t = false, global = true)]
     pub pprof_profile: bool,
 
+    /// Allow commands to download/scan remote inputs or fetch remote message chunk payloads
+    #[arg(long, default_value_t = false, global = true)]
+    pub allow_remote_scan: bool,
+
     #[command(subcommand)]
     pub command: Command,
 

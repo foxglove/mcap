@@ -18,7 +18,13 @@ fn run() -> Result<()> {
     if args.pprof_profile {
         anyhow::bail!("'--pprof-profile' is not implemented yet");
     }
-    let ctx = CommandContext::new(args.verbose, args.color, args.config, args.pprof_profile);
+    let ctx = CommandContext::new(
+        args.verbose,
+        args.color,
+        args.config,
+        args.pprof_profile,
+        args.allow_remote_scan,
+    );
 
     commands::dispatch(&ctx, args.command)
 }
@@ -152,6 +158,23 @@ mod tests {
             parse_err.kind(),
             clap::error::ErrorKind::DisplayHelpOnMissingArgumentOrSubcommand
         );
+    }
+
+    #[test]
+    fn parses_global_allow_remote_scan_flag() {
+        let args = Args::try_parse_from(["mcap", "--allow-remote-scan", "info", "demo.mcap"])
+            .expect("allow remote scan should parse before subcommand");
+        assert!(args.allow_remote_scan);
+        assert_eq!(
+            args.command,
+            Command::Info(InfoCommand {
+                file: "demo.mcap".into(),
+            })
+        );
+
+        let args = Args::try_parse_from(["mcap", "info", "--allow-remote-scan", "demo.mcap"])
+            .expect("allow remote scan should parse after subcommand");
+        assert!(args.allow_remote_scan);
     }
 
     #[test]

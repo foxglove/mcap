@@ -16,9 +16,12 @@ struct SortOptions {
     chunked: bool,
 }
 
-pub fn run(_ctx: &CommandContext, args: SortCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
     let opts = build_sort_options(&args);
-    let input = common::load_path(&args.file)?;
+    let input = common::load_path(
+        &args.file,
+        common::SourceOptions::new(ctx.allow_remote_scan()),
+    )?;
     if !common::is_http_url(&args.file) {
         ensure_distinct_input_output(&args.file, &args.output_file)?;
     }

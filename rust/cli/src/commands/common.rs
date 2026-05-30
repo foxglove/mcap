@@ -1,9 +1,13 @@
+use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io::{IsTerminal as _, Read as _, SeekFrom};
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
+use binrw::BinRead;
 use mcap::records::{self, Record};
 use mcap::sans_io::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};
 use memmap2::Mmap;
@@ -16,10 +20,37 @@ pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage
 const REMOTE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
 const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_BODY_TIMEOUT: Duration = Duration::from_secs(60);
+const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = 37;
+// Guards remote summary discovery against corrupt or hostile footers that point
+// `summary_start` near the beginning of a large file, which would otherwise turn
+// an index-only operation into a near-full-file range read without opt-in.
+const MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN: usize = 16 * 1024 * 1024;
+// Bounds aggregate metadata body reads for list/multi-match metadata commands.
+// Single indexed metadata/attachment records are deliberately uncapped beyond
+// the remote file size because they are explicit user-selected record reads.
+pub(crate) const MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN: u64 = 64 * 1024 * 1024;
 
 pub enum InputData {
     Mapped(Mmap),
+    TempMapped {
+        mmap: Mmap,
+        // Keep the temporary file alive for at least as long as the mmap. Fields drop in
+        // declaration order, so this is dropped after `mmap`.
+        #[allow(dead_code)]
+        temp_file: NamedTempFile,
+    },
     Buffered(Vec<u8>),
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SourceOptions {
+    pub allow_remote_scan: bool,
+}
+
+impl SourceOptions {
+    pub fn new(allow_remote_scan: bool) -> Self {
+        Self { allow_remote_scan }
+    }
 }
 
 impl std::fmt::Debug for InputData {
@@ -42,6 +73,7 @@ impl InputData {
     pub fn as_slice(&self) -> &[u8] {
         match self {
             InputData::Mapped(mmap) => mmap.as_ref(),
+            InputData::TempMapped { mmap, .. } => mmap.as_ref(),
             InputData::Buffered(buf) => buf.as_slice(),
         }
     }
@@ -57,11 +89,6 @@ pub struct RemoteMcap {
     summary: mcap::Summary,
 }
 
-pub enum McapSource {
-    Local(std::fs::File),
-    Remote(HttpRangeReader),
-}
-
 impl RemoteMcap {
     pub fn summary(&self) -> &mcap::Summary {
         &self.summary
@@ -69,24 +96,6 @@ impl RemoteMcap {
 
     pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         self.reader.read_range(offset, length)
-    }
-}
-
-impl std::io::Read for McapSource {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            Self::Local(file) => file.read(buf),
-            Self::Remote(reader) => reader.read(buf),
-        }
-    }
-}
-
-impl std::io::Seek for McapSource {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        match self {
-            Self::Local(file) => file.seek(pos),
-            Self::Remote(reader) => reader.seek(pos),
-        }
     }
 }
 
@@ -133,37 +142,69 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
 }
 
-pub fn open_seekable_mcap_source(path: &Path) -> Result<Option<McapSource>> {
-    if is_http_url(path) {
-        return Ok(HttpRangeReader::open(path)?.map(McapSource::Remote));
-    }
-    let file =
-        std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
-    Ok(Some(McapSource::Local(file)))
+pub fn open_seekable_mcap_source(path: &Path) -> Result<std::fs::File> {
+    std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))
 }
 
-pub fn parse_mcap_from_path(path: &Path) -> Result<ParsedMcap> {
-    if let Some(mut source) = open_seekable_mcap_source(path)? {
+pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<ParsedMcap> {
+    if is_http_url(path) {
+        match HttpRangeReader::open(path)? {
+            Some(mut reader) => {
+                if let Some(summary) =
+                    read_summary_from_remote(&reader, options).with_context(|| {
+                        format!(
+                            "failed to read remote summary from {}",
+                            redacted_display(path)
+                        )
+                    })?
+                {
+                    let header = read_header_from_seekable(&mut reader)?;
+                    return Ok(parsed_mcap_from_summary_ref(header, &summary));
+                }
+                if !options.allow_remote_scan {
+                    bail!(
+                        "{}: remote file has no summary section; reading without one requires opt-in; {}",
+                        redacted_display(path),
+                        remote_scan_opt_in_suffix()
+                    );
+                }
+            }
+            None if !options.allow_remote_scan => {
+                bail!(
+                    "{}: remote server does not support HTTP range requests; {}",
+                    redacted_display(path),
+                    remote_scan_opt_in_suffix()
+                );
+            }
+            None => {}
+        }
+    } else {
+        let mut source = open_seekable_mcap_source(path)?;
         let header = read_header_from_seekable(&mut source)?;
         if let Some(summary) = read_summary_from_seekable(&mut source)? {
             return Ok(parsed_mcap_from_summary_ref(header, &summary));
         }
     }
 
-    let mcap = load_path(path)?;
+    let mcap = load_path(path, options)?;
     parse_mcap(&mcap)
 }
 
-pub fn load_path(path: &Path) -> Result<InputData> {
+pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
     if is_http_url(path) {
-        return Ok(InputData::Buffered(read_remote_input(path)?));
+        let materialized = materialize_input(path, options)?;
+        let mmap = map_file(materialized.path())?;
+        let temp_file = materialized
+            .temp_file
+            .expect("remote materialized input should have a temp file");
+        return Ok(InputData::TempMapped { temp_file, mmap });
     }
     Ok(InputData::Mapped(map_file(path)?))
 }
 
-pub fn load_input(file: Option<&Path>) -> Result<InputData> {
+pub fn load_input(file: Option<&Path>, options: SourceOptions) -> Result<InputData> {
     if let Some(path) = file {
-        return load_path(path);
+        return load_path(path, options);
     }
 
     let stdin = std::io::stdin();
@@ -179,7 +220,7 @@ pub fn load_input(file: Option<&Path>) -> Result<InputData> {
     Ok(InputData::Buffered(buf))
 }
 
-pub fn materialize_input(path: &Path) -> Result<MaterializedInput> {
+pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<MaterializedInput> {
     if !is_http_url(path) {
         return Ok(MaterializedInput {
             temp_file: None,
@@ -187,6 +228,7 @@ pub fn materialize_input(path: &Path) -> Result<MaterializedInput> {
         });
     }
 
+    require_remote_scan_allowed(path, options)?;
     let suffix = remote_or_local_extension(path)
         .filter(|extension| !extension.is_empty())
         .map(|extension| format!(".{extension}"));
@@ -207,14 +249,34 @@ pub fn materialize_input(path: &Path) -> Result<MaterializedInput> {
     })
 }
 
-pub fn try_open_remote_mcap(path: &Path) -> Result<Option<RemoteMcap>> {
+pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Option<RemoteMcap>> {
     if !is_http_url(path) {
         return Ok(None);
     }
-    let Some(mut reader) = HttpRangeReader::open(path)? else {
+    let Some(reader) = HttpRangeReader::open(path)? else {
+        if !options.allow_remote_scan {
+            bail!(
+                "{}: remote server does not support HTTP range requests; {}",
+                redacted_display(path),
+                remote_scan_opt_in_suffix()
+            );
+        }
         return Ok(None);
     };
-    let Some(summary) = read_summary_from_seekable(&mut reader)? else {
+    let Some(summary) = read_summary_from_remote(&reader, options).with_context(|| {
+        format!(
+            "failed to read remote summary from {}",
+            redacted_display(path)
+        )
+    })?
+    else {
+        if !options.allow_remote_scan {
+            bail!(
+                "{}: remote file has no summary section; reading without one requires opt-in; {}",
+                redacted_display(path),
+                remote_scan_opt_in_suffix()
+            );
+        }
         return Ok(None);
     };
     Ok(Some(RemoteMcap { reader, summary }))
@@ -241,12 +303,6 @@ pub fn remote_or_local_extension(path: &Path) -> Option<String> {
     path.extension()
         .and_then(|extension| extension.to_str())
         .map(str::to_string)
-}
-
-fn read_remote_input(path: &Path) -> Result<Vec<u8>> {
-    let mut bytes = Vec::new();
-    read_remote_input_to_writer(path, &mut bytes)?;
-    Ok(bytes)
 }
 
 impl HttpRangeReader {
@@ -299,6 +355,10 @@ impl HttpRangeReader {
         )
         .with_context(|| format!("failed to read range from {}", self.display_url))?;
         Ok(bytes)
+    }
+
+    fn size(&self) -> u64 {
+        self.size
     }
 }
 
@@ -355,6 +415,12 @@ fn probe_range_size(agent: &Agent, url: &str, display_url: &str) -> Result<Optio
         }
         status => bail!("failed to fetch {display_url}: HTTP {status}"),
     }
+}
+
+pub(crate) fn redacted_display(path: &Path) -> String {
+    path.to_str()
+        .map(redact_url)
+        .unwrap_or_else(|| path.display().to_string())
 }
 
 fn read_remote_input_to_writer(path: &Path, writer: &mut impl std::io::Write) -> Result<()> {
@@ -438,6 +504,203 @@ fn validate_identity_content_encoding(
     bail!(
         "remote server returned Content-Encoding: {value} for {display_url}; MCAP remote reads require identity encoding"
     );
+}
+
+pub(crate) fn remote_scan_opt_in_suffix() -> &'static str {
+    "pass --allow-remote-scan to continue"
+}
+
+pub(crate) fn require_remote_metadata_budget(
+    total_bytes: u64,
+    options: SourceOptions,
+    description: &str,
+) -> Result<()> {
+    if options.allow_remote_scan || total_bytes <= MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN {
+        return Ok(());
+    }
+    bail!(
+        "remote {description} would read {} (exceeds {} cap without --allow-remote-scan); {}",
+        human_bytes(total_bytes),
+        human_bytes(MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN),
+        remote_scan_opt_in_suffix()
+    );
+}
+
+fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()> {
+    if options.allow_remote_scan {
+        return Ok(());
+    }
+    let display = redacted_display(path);
+    bail!(
+        "remote input {display} requires opt-in because this command must download or scan remote data; {}",
+        remote_scan_opt_in_suffix()
+    );
+}
+
+fn read_summary_from_remote(
+    reader: &HttpRangeReader,
+    options: SourceOptions,
+) -> Result<Option<mcap::Summary>> {
+    let file_size = reader.size();
+    let tail_len = FOOTER_RECORD_AND_END_MAGIC_LEN as u64;
+    if file_size < tail_len + mcap::MAGIC.len() as u64 {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+
+    let footer_start = file_size - tail_len;
+    let tail = reader.read_range(footer_start, FOOTER_RECORD_AND_END_MAGIC_LEN)?;
+    if tail.len() != FOOTER_RECORD_AND_END_MAGIC_LEN {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+    if tail[0] != records::op::FOOTER {
+        return Err(mcap::McapError::BadFooter.into());
+    }
+    let record_len = u64::from_le_bytes(tail[1..9].try_into().expect("footer length slice"));
+    if record_len != 20 {
+        return Err(mcap::McapError::BadFooter.into());
+    }
+    if &tail[FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()..] != mcap::MAGIC {
+        return Err(mcap::McapError::BadMagic.into());
+    }
+
+    let mut cursor =
+        std::io::Cursor::new(&tail[9..FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()]);
+    let footer = records::Footer::read_le(&mut cursor)?;
+    if footer.summary_start == 0 {
+        return Ok(None);
+    }
+    if footer.summary_start > footer_start {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+    let summary_len = usize::try_from(footer_start - footer.summary_start)
+        .context("remote summary section is too large to read on this platform")?;
+    if summary_len > MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN && !options.allow_remote_scan {
+        bail!(
+            "remote summary section is {} (exceeds {} cap without --allow-remote-scan); {}",
+            human_bytes(summary_len as u64),
+            human_bytes(MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN as u64),
+            remote_scan_opt_in_suffix()
+        );
+    }
+    let summary_bytes = reader.read_range(footer.summary_start, summary_len)?;
+    if summary_bytes.len() != summary_len {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+    Ok(Some(parse_summary_section(&summary_bytes)?))
+}
+
+// TODO: keep this in sync with mcap::sans_io::SummaryReader and mcap::read::ChannelAccumulator.
+// A future mcap crate range-summary API should replace this CLI-local parser.
+fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
+    let mut out = mcap::Summary::default();
+    let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
+
+    for record in mcap::read::LinearReader::sans_magic(summary) {
+        match record? {
+            Record::AttachmentIndex(index) => out.attachment_indexes.push(index),
+            Record::MetadataIndex(index) => out.metadata_indexes.push(index),
+            Record::Statistics(statistics) => out.stats = Some(statistics),
+            Record::ChunkIndex(index) => out.chunk_indexes.push(index),
+            Record::Schema { header, data } => {
+                if header.id == 0 {
+                    return Err(mcap::McapError::InvalidSchemaId.into());
+                }
+                let schema = Arc::new(mcap::Schema {
+                    id: header.id,
+                    name: header.name,
+                    encoding: header.encoding,
+                    data: Cow::Owned(data.into_owned()),
+                });
+                match schemas.entry(schema.id) {
+                    std::collections::hash_map::Entry::Occupied(entry) => {
+                        let existing = entry.get();
+                        if existing.name != schema.name
+                            || existing.encoding != schema.encoding
+                            || existing.data.as_ref() != schema.data.as_ref()
+                        {
+                            return Err(
+                                mcap::McapError::ConflictingSchemas(schema.name.clone()).into()
+                            );
+                        }
+                    }
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(schema);
+                    }
+                }
+            }
+            Record::Channel(channel) => {
+                let schema = if channel.schema_id == 0 {
+                    None
+                } else {
+                    Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
+                        mcap::McapError::UnknownSchema(channel.topic.clone(), channel.schema_id)
+                    })?)
+                };
+                let resolved = Arc::new(mcap::Channel {
+                    id: channel.id,
+                    topic: channel.topic,
+                    schema,
+                    message_encoding: channel.message_encoding,
+                    metadata: channel.metadata,
+                });
+                match out.channels.entry(resolved.id) {
+                    std::collections::hash_map::Entry::Occupied(entry) => {
+                        let existing = entry.get();
+                        if existing.topic != resolved.topic
+                            || existing.schema.as_ref().map(|schema| schema.id)
+                                != resolved.schema.as_ref().map(|schema| schema.id)
+                            || existing.message_encoding != resolved.message_encoding
+                            || existing.metadata != resolved.metadata
+                        {
+                            return Err(mcap::McapError::ConflictingChannels(
+                                resolved.topic.clone(),
+                            )
+                            .into());
+                        }
+                    }
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(resolved);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out.schemas = schemas;
+    Ok(out)
+}
+
+// TODO: keep these exact-record parsers in sync with mcap::read::metadata and
+// mcap::read::attachment. They duplicate the mcap crate helpers so remote range callers can
+// parse owned records without holding a full-file byte slice alive.
+pub(crate) fn parse_metadata_record(bytes: &[u8]) -> Result<mcap::records::Metadata> {
+    let mut reader = mcap::read::LinearReader::sans_magic(bytes);
+    let metadata = match reader.next().ok_or(mcap::McapError::BadIndex)?? {
+        mcap::records::Record::Metadata(metadata) => metadata,
+        _ => return Err(mcap::McapError::BadIndex.into()),
+    };
+    if reader.next().is_some() {
+        return Err(mcap::McapError::BadIndex.into());
+    }
+    Ok(metadata)
+}
+
+pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'static>> {
+    let mut reader = mcap::read::LinearReader::sans_magic(bytes);
+    let attachment = match reader.next().ok_or(mcap::McapError::BadIndex)?? {
+        mcap::records::Record::Attachment { header, data, .. } => mcap::Attachment {
+            log_time: header.log_time,
+            create_time: header.create_time,
+            name: header.name,
+            media_type: header.media_type,
+            data: Cow::Owned(data.into_owned()),
+        },
+        _ => return Err(mcap::McapError::BadIndex.into()),
+    };
+    if reader.next().is_some() {
+        return Err(mcap::McapError::BadIndex.into());
+    }
+    Ok(attachment)
 }
 
 fn read_summary_from_seekable(
@@ -832,8 +1095,8 @@ mod tests {
     #[test]
     fn remote_errors_redact_query_strings() {
         let url = "http://127.0.0.1:1/demo.mcap?X-Amz-Signature=secret-token";
-        let err =
-            load_path(Path::new(url)).expect_err("connection failure should report redacted URL");
+        let err = load_path(Path::new(url), super::SourceOptions::default())
+            .expect_err("remote scan rejection should report redacted URL");
         assert!(!err.to_string().contains("secret-token"));
         assert!(!err.to_string().contains("X-Amz-Signature"));
     }
@@ -841,24 +1104,34 @@ mod tests {
     #[test]
     fn remote_errors_redact_userinfo() {
         let url = "http://AKIA:secret@127.0.0.1:1/demo.mcap";
-        let err =
-            load_path(Path::new(url)).expect_err("connection failure should report redacted URL");
+        let err = load_path(Path::new(url), super::SourceOptions::default())
+            .expect_err("remote scan rejection should report redacted URL");
         assert!(!err.to_string().contains("AKIA"));
         assert!(!err.to_string().contains("secret"));
         assert!(err.to_string().contains("http://127.0.0.1:1/demo.mcap"));
     }
 
     #[test]
+    fn remote_http_input_requires_remote_scan_opt_in() {
+        let url = serve_http(b"hello remote", true);
+        let err = load_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("remote full read should require opt-in");
+        assert!(err.to_string().contains("--allow-remote-scan"));
+    }
+
+    #[test]
     fn remote_http_input_reads_entire_file() {
         let url = serve_http(b"hello remote", true);
-        let input = load_path(Path::new(&url)).expect("remote read");
+        let input =
+            load_path(Path::new(&url), super::SourceOptions::new(true)).expect("remote read");
         assert_eq!(input.as_slice(), b"hello remote");
     }
 
     #[test]
     fn remote_http_input_rejects_gzip_content_encoding() {
         let url = serve_http_with_headers(b"hello remote", false, &[("Content-Encoding", "gzip")]);
-        let err = load_path(Path::new(&url)).expect_err("gzip-encoded remote read should fail");
+        let err = load_path(Path::new(&url), super::SourceOptions::new(true))
+            .expect_err("gzip-encoded remote read should fail");
         assert!(err
             .to_string()
             .contains("MCAP remote reads require identity encoding"));
@@ -873,13 +1146,57 @@ mod tests {
         }
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let url = serve_http_with_headers(body, true, &[("Content-Encoding", "gzip")]);
-        let err = match super::try_open_remote_mcap(Path::new(&url)) {
-            Ok(_) => panic!("gzip-encoded range probe should fail"),
-            Err(err) => err,
-        };
+        let err =
+            match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
+                Ok(_) => panic!("gzip-encoded range probe should fail"),
+                Err(err) => err,
+            };
         assert!(err
             .to_string()
             .contains("MCAP remote reads require identity encoding"));
+    }
+
+    #[test]
+    fn remote_summary_read_requires_scan_for_oversized_summary_section() {
+        let len = super::MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN
+            + super::FOOTER_RECORD_AND_END_MAGIC_LEN
+            + mcap::MAGIC.len()
+            + 1;
+        let mut body = vec![0u8; len];
+        body[..mcap::MAGIC.len()].copy_from_slice(mcap::MAGIC);
+        let footer_start = len - super::FOOTER_RECORD_AND_END_MAGIC_LEN;
+        body[footer_start] = records::op::FOOTER;
+        body[footer_start + 1..footer_start + 9].copy_from_slice(&20u64.to_le_bytes());
+        body[footer_start + 9..footer_start + 17]
+            .copy_from_slice(&(mcap::MAGIC.len() as u64).to_le_bytes());
+        body[footer_start + 17..footer_start + 25].copy_from_slice(&0u64.to_le_bytes());
+        body[footer_start + 25..footer_start + 29].copy_from_slice(&0u32.to_le_bytes());
+        body[len - mcap::MAGIC.len()..].copy_from_slice(mcap::MAGIC);
+
+        let url = serve_http(Box::leak(body.into_boxed_slice()), true);
+        let err =
+            match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
+                Ok(_) => panic!("oversized remote summary should require scan opt-in"),
+                Err(err) => err,
+            };
+        let message = format!("{err:#}");
+        assert!(message.contains("remote summary section"));
+        assert!(message.contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn remote_metadata_budget_requires_scan_for_oversized_total() {
+        let err = super::require_remote_metadata_budget(
+            super::MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN + 1,
+            super::SourceOptions::default(),
+            "metadata records",
+        )
+        .expect_err("oversized metadata range total should require scan opt-in");
+        assert!(err.to_string().contains("metadata records"));
+        assert!(err.to_string().contains(&super::human_bytes(
+            super::MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN
+        )));
+        assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
     #[test]
@@ -898,7 +1215,7 @@ mod tests {
         };
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let url = serve_http(body, true);
-        let remote = super::try_open_remote_mcap(Path::new(&url))
+        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
             .expect("remote summary read")
             .expect("summary should be present");
 

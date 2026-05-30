@@ -13,13 +13,16 @@ use crate::context::CommandContext;
 
 const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
-pub fn run(_ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     let input = ConvertInput::detect(&args.input)?;
     let is_remote = crate::commands::common::is_http_url(&args.input);
     if !is_remote {
         reject_lfs_pointer(&args.input)?;
     }
-    let materialized_input = crate::commands::common::materialize_input(&args.input)?;
+    let materialized_input = crate::commands::common::materialize_input(
+        &args.input,
+        crate::commands::common::SourceOptions::new(ctx.allow_remote_scan()),
+    )?;
     if !is_remote {
         ensure_distinct_paths(materialized_input.path(), &args.output)?;
     }
@@ -344,6 +347,25 @@ size 123\n",
         .expect_err("missing input should fail");
 
         assert!(err.to_string().contains("failed to open input"));
+    }
+
+    #[test]
+    fn remote_input_requires_allow_remote_scan_before_download() {
+        let err = super::run(
+            &CommandContext::default(),
+            ConvertCommand {
+                input: PathBuf::from("https://example.com/demo.bag?token=secret"),
+                output: PathBuf::from("/tmp/mcap-cli-remote-output.mcap"),
+                compression: CompressionFormat::None,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: false,
+                chunked: true,
+            },
+        )
+        .expect_err("remote convert should require opt-in");
+
+        assert!(err.to_string().contains("--allow-remote-scan"));
+        assert!(!err.to_string().contains("token=secret"));
     }
 
     #[test]

@@ -4,8 +4,11 @@ use crate::cli::ListAttachmentsCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
-pub fn run(_ctx: &CommandContext, args: ListAttachmentsCommand) -> Result<()> {
-    let parsed = common::parse_mcap_from_path(&args.file)?;
+pub fn run(ctx: &CommandContext, args: ListAttachmentsCommand) -> Result<()> {
+    let parsed = common::parse_mcap_from_path(
+        &args.file,
+        common::SourceOptions::new(ctx.allow_remote_scan()),
+    )?;
     let mut indexes = parsed.attachment_indexes;
     indexes.sort_by_key(|index| index.offset);
     common::print_table(&render_attachment_rows(&indexes));
