@@ -15,12 +15,10 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     let stats = if let Some(output) = &args.output {
         let writer = std::fs::File::create(output)
             .with_context(|| format!("failed to open '{}' for writing", output.display()))?;
-        let opts = mcap::recover::RecoverOptions {
-            compression,
-            chunk_size: args.chunk_size,
-            always_decode_chunk: args.always_decode_chunk,
-            disable_seeking: false,
-        };
+        let opts = mcap::recover::RecoverOptions::new()
+            .compression(compression)
+            .chunk_size(args.chunk_size)
+            .always_decode_chunk(args.always_decode_chunk);
         let (stats, writer) = mcap::recover::recover_to_sink(input.as_slice(), writer, &opts)
             .context("failed to recover MCAP")?;
         writer
@@ -33,12 +31,11 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
         }
         let stdout = std::io::stdout();
         let writer = mcap::write::NoSeek::new(stdout.lock());
-        let opts = mcap::recover::RecoverOptions {
-            compression,
-            chunk_size: args.chunk_size,
-            always_decode_chunk: args.always_decode_chunk,
-            disable_seeking: true,
-        };
+        let opts = mcap::recover::RecoverOptions::new()
+            .compression(compression)
+            .chunk_size(args.chunk_size)
+            .always_decode_chunk(args.always_decode_chunk)
+            .disable_seeking(true);
         let (stats, _) = mcap::recover::recover_to_sink(input.as_slice(), writer, &opts)
             .context("failed to recover MCAP")?;
         stats
@@ -121,7 +118,7 @@ mod tests {
                 .create(&mut output)
                 .expect("writer");
             let channel = writer
-                .add_channel(0, "multi", "json", &BTreeMap::new())
+                .add_channel_with_id(2, 0, "multi", "json", &BTreeMap::new())
                 .expect("channel");
             for i in 0..100 {
                 writer
@@ -267,12 +264,7 @@ mod tests {
     }
 
     fn default_options() -> RecoverOptions {
-        RecoverOptions {
-            compression: Some(mcap::Compression::Zstd),
-            chunk_size: 4 * 1024 * 1024,
-            always_decode_chunk: false,
-            disable_seeking: false,
-        }
+        RecoverOptions::new()
     }
 
     fn corrupt_first_chunk_crc(input: &mut [u8]) {
@@ -314,10 +306,7 @@ mod tests {
     #[test]
     fn preserves_raw_chunks_by_default() {
         let input = write_test_input();
-        let opts = RecoverOptions {
-            compression: None,
-            ..default_options()
-        };
+        let opts = default_options().compression(None);
 
         let (output, stats) = recover_to_vec(&input, &opts);
         assert_eq!(collect_chunks(&output), collect_chunks(&input));
@@ -359,11 +348,9 @@ mod tests {
     #[test]
     fn always_decode_chunk_rewrites_chunks_with_requested_compression() {
         let input = write_test_input();
-        let opts = RecoverOptions {
-            compression: None,
-            always_decode_chunk: true,
-            ..default_options()
-        };
+        let opts = default_options()
+            .compression(None)
+            .always_decode_chunk(true);
 
         let (output, stats) = recover_to_vec(&input, &opts);
         let chunks = collect_chunks(&output);
@@ -387,6 +374,19 @@ mod tests {
         let summary = mcap::Summary::read(&output)
             .expect("summary should parse")
             .expect("summary should be present");
+        let topics_by_id = summary
+            .channels
+            .iter()
+            .map(|(id, channel)| (*id, channel.topic.as_str()))
+            .collect::<BTreeMap<_, _>>();
+        assert_eq!(topics_by_id.get(&1), Some(&"plain"));
+        assert_eq!(topics_by_id.get(&2), Some(&"multi"));
+        let summary_stats = summary.stats.as_ref().expect("stats should be present");
+        assert_eq!(summary_stats.channel_message_counts.get(&1), Some(&1));
+        assert!(summary_stats
+            .channel_message_counts
+            .get(&2)
+            .is_some_and(|count| *count > 0));
         let raw_chunk_index = summary
             .chunk_indexes
             .last()

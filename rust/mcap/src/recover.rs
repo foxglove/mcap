@@ -1,4 +1,7 @@
 //! Best-effort recovery for damaged MCAP files.
+//!
+//! Recovery currently takes a fully buffered input (`&[u8]`) and emits best-effort warnings to
+//! stderr while salvaging records.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Seek, Write};
@@ -8,6 +11,7 @@ use crate::sans_io::{LinearReadEvent, LinearReader, LinearReaderOptions};
 use crate::{Compression, McapError, McapResult, WriteOptions, Writer, MAGIC};
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct RecoverOptions {
     pub compression: Option<Compression>,
     pub chunk_size: u64,
@@ -15,7 +19,53 @@ pub struct RecoverOptions {
     pub disable_seeking: bool,
 }
 
+impl Default for RecoverOptions {
+    fn default() -> Self {
+        Self {
+            #[cfg(feature = "zstd")]
+            compression: Some(Compression::Zstd),
+            #[cfg(not(feature = "zstd"))]
+            compression: None,
+            chunk_size: 4 * 1024 * 1024,
+            always_decode_chunk: false,
+            disable_seeking: false,
+        }
+    }
+}
+
+impl RecoverOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn compression(self, compression: Option<Compression>) -> Self {
+        Self {
+            compression,
+            ..self
+        }
+    }
+
+    pub fn chunk_size(self, chunk_size: u64) -> Self {
+        Self { chunk_size, ..self }
+    }
+
+    pub fn always_decode_chunk(self, always_decode_chunk: bool) -> Self {
+        Self {
+            always_decode_chunk,
+            ..self
+        }
+    }
+
+    pub fn disable_seeking(self, disable_seeking: bool) -> Self {
+        Self {
+            disable_seeking,
+            ..self
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RecoverStats {
     pub messages: u64,
     pub attachments: u64,
@@ -68,6 +118,10 @@ struct RecoveryState {
     warned_missing_channels: BTreeSet<u16>,
 }
 
+/// Recover records from a possibly damaged MCAP buffer into `sink`.
+///
+/// The entire input must already be buffered in memory. This is suitable for callers that have
+/// mapped or loaded a file; streaming recovery is not currently exposed by this API.
 pub fn recover_to_sink<W: Write + Seek>(
     input: &[u8],
     sink: W,
@@ -145,7 +199,7 @@ fn recover_records<W: Write + Seek>(
     let mut saw_any_record = false;
     let mut pending_chunk: Option<RawChunk> = None;
     let mut pending_indexes = Vec::new();
-    let mut decode_chunks = opts.always_decode_chunk;
+    let mut rebuild_chunk_indexes = opts.always_decode_chunk;
 
     while let Some(event) = reader.next_event() {
         match event {
@@ -158,7 +212,7 @@ fn recover_records<W: Write + Seek>(
             }
             Ok(LinearReadEvent::Record { opcode, data }) => {
                 saw_any_record = true;
-                if !decode_chunks && opcode != op::MESSAGE_INDEX {
+                if !rebuild_chunk_indexes && opcode != op::MESSAGE_INDEX {
                     flush_pending_chunk(
                         writer,
                         &mut state,
@@ -179,7 +233,7 @@ fn recover_records<W: Write + Seek>(
                     }
                 };
 
-                if !decode_chunks {
+                if !rebuild_chunk_indexes {
                     match record {
                         Record::Chunk { header, data } => {
                             pending_chunk = Some(RawChunk {
@@ -206,7 +260,7 @@ fn recover_records<W: Write + Seek>(
                             // channel, or message proves the input is not fully chunked,
                             // subsequent chunk records are still copied raw but their indexes are
                             // rebuilt from chunk contents.
-                            decode_chunks = true;
+                            rebuild_chunk_indexes = true;
                         }
                         _ => {}
                     }
@@ -226,6 +280,13 @@ fn recover_records<W: Write + Seek>(
                                 &mut indexes,
                                 true,
                             )?;
+                            continue;
+                        }
+                        Record::MessageIndex(index) => {
+                            eprintln!(
+                                "Warning: got message index for channel {} outside a copied raw chunk; skipping",
+                                index.channel_id
+                            );
                             continue;
                         }
                         Record::DataEnd(_) | Record::Footer(_) => break,
@@ -310,16 +371,7 @@ fn flush_pending_chunk<W: Write + Seek>(
         }
     };
 
-    if let Err(err) = writer.write_chunk_with_indexes(&chunk.header, &chunk.data, &indexes) {
-        match err {
-            err @ (McapError::BadChunkLength { .. } | McapError::BadIndex) => {
-                eprintln!("Failed to write chunk, skipping: {err:#}");
-                pending_indexes.clear();
-                return Ok(());
-            }
-            err => return Err(err),
-        }
-    }
+    writer.write_chunk_with_indexes(&chunk.header, &chunk.data, &indexes)?;
     stats.messages += indexes
         .iter()
         .map(|index| index.records.len() as u64)
@@ -377,11 +429,15 @@ fn update_info_from_chunk<W: Write + Seek>(
 
     // If indexes were supplied, the scan above is only needed for schema/channel side effects.
     // The supplied index offsets remain authoritative for the copied raw chunk.
-    Ok(match supplied_indexes {
-        Some(indexes) if indexes.iter().any(|index| !index.records.is_empty()) => indexes.to_vec(),
-        None => rebuilt_indexes.unwrap_or_default(),
-        Some(_) => rebuilt_indexes.unwrap_or_default(),
-    })
+    if let Some(indexes) = supplied_indexes {
+        if indexes.iter().any(|index| !index.records.is_empty()) {
+            return Ok(indexes.to_vec());
+        }
+    }
+
+    // All-empty supplied indexes are treated as incomplete and replaced by indexes rebuilt from
+    // chunk contents. Truly message-free chunks do not need message indexes.
+    Ok(rebuilt_indexes.unwrap_or_default())
 }
 
 fn apply_chunk_definitions<W: Write + Seek>(
