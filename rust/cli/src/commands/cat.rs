@@ -46,7 +46,7 @@ fn cat_file(
 ) -> Result<bool> {
     if let Some(remote) = common::try_open_remote_mcap(file, source_options)? {
         let mut json_transcoders = JsonTranscoders::default();
-        if let Some(broken_pipe) = cat_remote_indexed(
+        match cat_remote_indexed(
             writer,
             file,
             &remote,
@@ -54,7 +54,9 @@ fn cat_file(
             source_options,
             &mut json_transcoders,
         )? {
-            return Ok(broken_pipe);
+            RemoteCatResult::BrokenPipe => return Ok(true),
+            RemoteCatResult::Done => return Ok(false),
+            RemoteCatResult::NeedsFullScan => {}
         }
     }
     let mcap = common::load_path(file, source_options)?;
@@ -187,6 +189,13 @@ fn cat_indexed(
     Ok(Some(false))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemoteCatResult {
+    BrokenPipe,
+    Done,
+    NeedsFullScan,
+}
+
 fn cat_remote_indexed(
     writer: &mut impl std::io::Write,
     file: &std::path::Path,
@@ -194,7 +203,7 @@ fn cat_remote_indexed(
     opts: &CatOptions,
     source_options: common::SourceOptions,
     json_transcoders: &mut JsonTranscoders,
-) -> Result<Option<bool>> {
+) -> Result<RemoteCatResult> {
     let summary = remote.summary();
     if summary.chunk_indexes.is_empty() {
         if !source_options.allow_remote_scan {
@@ -204,7 +213,7 @@ fn cat_remote_indexed(
                 common::remote_scan_opt_in_suffix()
             );
         }
-        return Ok(None);
+        return Ok(RemoteCatResult::NeedsFullScan);
     }
 
     let included_topics: BTreeSet<String> = summary
@@ -214,7 +223,7 @@ fn cat_remote_indexed(
         .map(|channel| channel.topic.clone())
         .collect();
     if !opts.topics.is_empty() && included_topics.is_empty() {
-        return Ok(Some(false));
+        return Ok(RemoteCatResult::Done);
     }
     let planned_chunks = planned_chunk_reads(summary, opts, &included_topics);
     if !planned_chunks.is_empty() && !source_options.allow_remote_scan {
@@ -263,13 +272,13 @@ fn cat_remote_indexed(
                     data,
                 };
                 if write_message(writer, message, opts, json_transcoders)? {
-                    return Ok(Some(true));
+                    return Ok(RemoteCatResult::BrokenPipe);
                 }
             }
         }
     }
 
-    Ok(Some(false))
+    Ok(RemoteCatResult::Done)
 }
 
 // Keep this planner conservative: it intentionally mirrors IndexedReader chunk filtering as an
