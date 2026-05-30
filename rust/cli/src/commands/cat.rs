@@ -1351,22 +1351,80 @@ mod tests {
         assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
+    fn planned_chunks_for_opts<'a>(
+        summary: &'a mcap::Summary,
+        opts: &CatOptions,
+    ) -> Vec<&'a mcap::records::ChunkIndex> {
+        let included_topics: BTreeSet<String> = summary
+            .channels
+            .values()
+            .filter(|channel| opts.include_topic(&channel.topic))
+            .map(|channel| channel.topic.clone())
+            .collect();
+        if !opts.topics.is_empty() && included_topics.is_empty() {
+            return Vec::new();
+        }
+        planned_chunk_reads(summary, opts, &included_topics)
+    }
+
     #[test]
-    fn remote_chunk_plan_identifies_message_chunk_reads() {
+    fn remote_chunk_plan_is_conservative_for_representative_filters() {
         let mcap = build_multi_topic_mcap();
         let summary = mcap::Summary::read(&mcap)
             .expect("summary read")
             .expect("summary should exist");
-        let opts = CatOptions::default();
-        let included_topics: BTreeSet<String> = summary
-            .channels
-            .values()
-            .map(|channel| channel.topic.clone())
-            .collect();
-        let chunks = planned_chunk_reads(&summary, &opts, &included_topics);
+
         assert!(
-            !chunks.is_empty(),
-            "cat would need remote chunk payload reads"
+            !planned_chunks_for_opts(&summary, &CatOptions::default()).is_empty(),
+            "unfiltered cat would need remote chunk payload reads"
+        );
+
+        assert!(
+            !planned_chunks_for_opts(
+                &summary,
+                &CatOptions {
+                    topics: vec!["/camera".to_string()],
+                    ..CatOptions::default()
+                },
+            )
+            .is_empty(),
+            "matching topic filter would still need remote chunk payload reads"
+        );
+
+        assert!(
+            planned_chunks_for_opts(
+                &summary,
+                &CatOptions {
+                    topics: vec!["/missing".to_string()],
+                    ..CatOptions::default()
+                },
+            )
+            .is_empty(),
+            "non-matching topic filter should not plan remote chunk reads"
+        );
+
+        assert!(
+            !planned_chunks_for_opts(
+                &summary,
+                &CatOptions {
+                    start: 20,
+                    ..CatOptions::default()
+                },
+            )
+            .is_empty(),
+            "overlapping time filter would need remote chunk payload reads"
+        );
+
+        assert!(
+            planned_chunks_for_opts(
+                &summary,
+                &CatOptions {
+                    start: 100,
+                    ..CatOptions::default()
+                },
+            )
+            .is_empty(),
+            "non-overlapping time filter should not plan remote chunk reads"
         );
     }
 
