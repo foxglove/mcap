@@ -12,8 +12,7 @@ const PLEASE_REDIRECT: &str =
 
 pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
     let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
-    let attachment = if let Some(remote) = common::try_open_remote_mcap(&args.file, source_options)?
-    {
+    if let Some(remote) = common::try_open_remote_mcap(&args.file, source_options)? {
         let index = select_attachment_index(
             &remote.summary().attachment_indexes,
             &args.name,
@@ -24,12 +23,13 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
             usize::try_from(index.length)
                 .context("indexed record is too large to read on this platform")?,
         )?;
-        common::parse_attachment_record(&bytes).with_context(|| {
+        let attachment = common::parse_attachment_record(&bytes).with_context(|| {
             format!(
                 "failed to read attachment {} at offset {}",
                 args.name, index.offset
             )
-        })?
+        })?;
+        write_attachment_data(attachment.data.as_ref(), args.output.as_deref())?;
     } else {
         let mcap = common::load_path(&args.file, source_options)?;
         let parsed = common::parse_mcap(&mcap)?;
@@ -40,31 +40,24 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
                 args.name, index.offset
             )
         })?;
-        own_attachment(attachment)
-    };
-
-    if let Some(output) = args.output {
-        std::fs::write(&output, &attachment.data)
-            .with_context(|| format!("failed to write attachment to '{}'", output.display()))?;
-    } else if std::io::stdout().is_terminal() {
-        anyhow::bail!("{PLEASE_REDIRECT}");
-    } else {
-        std::io::stdout()
-            .write_all(&attachment.data)
-            .context("failed to write attachment to stdout")?;
+        write_attachment_data(attachment.data.as_ref(), args.output.as_deref())?;
     }
 
     Ok(())
 }
 
-fn own_attachment(attachment: mcap::Attachment<'_>) -> mcap::Attachment<'static> {
-    mcap::Attachment {
-        log_time: attachment.log_time,
-        create_time: attachment.create_time,
-        name: attachment.name,
-        media_type: attachment.media_type,
-        data: std::borrow::Cow::Owned(attachment.data.into_owned()),
+fn write_attachment_data(data: &[u8], output: Option<&std::path::Path>) -> Result<()> {
+    if let Some(output) = output {
+        std::fs::write(output, data)
+            .with_context(|| format!("failed to write attachment to '{}'", output.display()))?;
+    } else if std::io::stdout().is_terminal() {
+        anyhow::bail!("{PLEASE_REDIRECT}");
+    } else {
+        std::io::stdout()
+            .write_all(data)
+            .context("failed to write attachment to stdout")?;
     }
+    Ok(())
 }
 
 fn select_attachment_index<'a>(
