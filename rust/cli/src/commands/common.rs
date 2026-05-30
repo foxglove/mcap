@@ -89,10 +89,6 @@ pub struct RemoteMcap {
     summary: mcap::Summary,
 }
 
-pub enum McapSource {
-    Local(std::fs::File),
-}
-
 impl RemoteMcap {
     pub fn summary(&self) -> &mcap::Summary {
         &self.summary
@@ -100,22 +96,6 @@ impl RemoteMcap {
 
     pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         self.reader.read_range(offset, length)
-    }
-}
-
-impl std::io::Read for McapSource {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            Self::Local(file) => file.read(buf),
-        }
-    }
-}
-
-impl std::io::Seek for McapSource {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        match self {
-            Self::Local(file) => file.seek(pos),
-        }
     }
 }
 
@@ -162,10 +142,8 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
 }
 
-pub fn open_seekable_mcap_source(path: &Path) -> Result<Option<McapSource>> {
-    let file =
-        std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
-    Ok(Some(McapSource::Local(file)))
+pub fn open_seekable_mcap_source(path: &Path) -> Result<std::fs::File> {
+    std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))
 }
 
 pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<ParsedMcap> {
@@ -200,7 +178,8 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
             }
             None => {}
         }
-    } else if let Some(mut source) = open_seekable_mcap_source(path)? {
+    } else {
+        let mut source = open_seekable_mcap_source(path)?;
         let header = read_header_from_seekable(&mut source)?;
         if let Some(summary) = read_summary_from_seekable(&mut source)? {
             return Ok(parsed_mcap_from_summary_ref(header, &summary));
