@@ -1,4 +1,4 @@
-use std::io::{IsTerminal as _, Seek, Write};
+use std::io::{IsTerminal as _, Read, Seek, Write};
 
 use anyhow::{bail, Context, Result};
 use log::{info, warn};
@@ -13,6 +13,12 @@ use crate::context::CommandContext;
 
 // EX_DATAERR from sysexits.h: recovery completed, but input data was corrupt/truncated.
 const EXIT_LOSSY_RECOVERY: i32 = 65;
+
+#[derive(Debug, Clone, Copy)]
+enum CompressionSelection {
+    Preserve,
+    Explicit(Option<Compression>),
+}
 
 // Recovery status model:
 // - info!: non-lossy recovery decisions or metadata fallback. These may explain output differences
@@ -101,17 +107,16 @@ impl RecoverStats {
 }
 
 pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
-    let input = common::load_input(
+    let input = common::open_streaming_input(
         args.file.as_deref(),
         common::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
-    let bytes = input.as_slice();
-    let compression = resolve_compression(&args.compression, bytes)?;
+    let compression = resolve_compression(&args.compression)?;
 
     let stats = if let Some(output) = &args.output {
         let file = std::fs::File::create(output)
             .with_context(|| format!("failed to open '{}' for writing", output.display()))?;
-        let (stats, file) = recover_to_sink(bytes, file, compression, args.chunk_size, false)?;
+        let (stats, file) = recover_to_sink(input, file, compression, args.chunk_size, false)?;
         file.sync_all()
             .context("failed to flush output file contents")?;
         stats
@@ -121,7 +126,7 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
         }
         let stdout = std::io::stdout();
         let writer = mcap::write::NoSeek::new(stdout.lock());
-        let (stats, _) = recover_to_sink(bytes, writer, compression, args.chunk_size, true)?;
+        let (stats, _) = recover_to_sink(input, writer, compression, args.chunk_size, true)?;
         stats
     };
 
@@ -165,36 +170,18 @@ fn count(n: u64, noun: &str) -> String {
     }
 }
 
-/// Resolves the requested output compression. `preserve` keeps the input file's compression
-/// (detected from its first chunk; uncompressed if the input is unchunked).
-fn resolve_compression(spec: &str, input: &[u8]) -> Result<Option<Compression>> {
+/// Resolves the requested output compression. `preserve` lazily keeps the first chunk's compression
+/// when recovery reaches it, or uncompressed output if the input is unchunked.
+fn resolve_compression(spec: &str) -> Result<CompressionSelection> {
     match spec {
-        "preserve" => Ok(detect_source_compression(input)),
-        "none" | "" => Ok(None),
-        "zstd" => Ok(Some(Compression::Zstd)),
-        "lz4" => Ok(Some(Compression::Lz4)),
+        "preserve" => Ok(CompressionSelection::Preserve),
+        "none" | "" => Ok(CompressionSelection::Explicit(None)),
+        "zstd" => Ok(CompressionSelection::Explicit(Some(Compression::Zstd))),
+        "lz4" => Ok(CompressionSelection::Explicit(Some(Compression::Lz4))),
         other => bail!(
             "unrecognized compression '{other}': valid options are 'preserve', 'none', 'zstd', or 'lz4'"
         ),
     }
-}
-
-fn detect_source_compression(input: &[u8]) -> Option<Compression> {
-    // `read::LinearReader` yields chunk records without decompressing them, so this only needs to
-    // parse the first chunk header.
-    let reader = mcap::read::LinearReader::new_with_options(
-        input,
-        mcap::read::Options::IgnoreEndMagic.into(),
-    )
-    .ok()?;
-    for record in reader {
-        match record {
-            Ok(Record::Chunk { header, .. }) => return compression_from_str(&header.compression),
-            Ok(_) => continue,
-            Err(_) => break,
-        }
-    }
-    None
 }
 
 fn compression_from_str(name: &str) -> Option<Compression> {
@@ -207,65 +194,97 @@ fn compression_from_str(name: &str) -> Option<Compression> {
     }
 }
 
-fn recover_to_sink<W: Write + Seek>(
-    input: &[u8],
+fn recover_to_sink<R: Read, W: Write + Seek>(
+    input: R,
     sink: W,
-    compression: Option<Compression>,
+    compression: CompressionSelection,
     chunk_size: u64,
     disable_seeking: bool,
 ) -> Result<(RecoverStats, W)> {
+    let (stats, mut writer) =
+        recover_records(input, sink, compression, chunk_size, disable_seeking)?;
+    writer.finish().context("failed to finish mcap writer")?;
+    Ok((stats, writer.into_inner()))
+}
+
+fn build_writer<W: Write + Seek>(
+    sink: W,
+    header: Option<mcap::records::Header>,
+    compression: Option<Compression>,
+    chunk_size: u64,
+    disable_seeking: bool,
+) -> Result<mcap::Writer<W>> {
     let mut write_options = WriteOptions::new()
         .chunk_size(Some(chunk_size))
         .compression(compression)
         .disable_seeking(disable_seeking);
 
-    if let Some(header) = read_header(input)? {
+    if let Some(header) = header {
         write_options = write_options
             .profile(header.profile)
             .library(header.library);
     }
 
-    let mut writer = write_options
+    write_options
         .create(sink)
-        .context("failed to create mcap writer")?;
-    let stats = recover_records(input, &mut writer)?;
-    writer.finish().context("failed to finish mcap writer")?;
-    Ok((stats, writer.into_inner()))
+        .context("failed to create mcap writer")
 }
 
-fn read_header(input: &[u8]) -> Result<Option<mcap::records::Header>> {
-    let mut reader = mcap::read::LinearReader::new_with_options(
-        input,
-        mcap::read::Options::IgnoreEndMagic.into(),
-    )?;
-    match reader.next() {
-        Some(Ok(Record::Header(header))) => Ok(Some(header)),
-        Some(Ok(_)) | None => Ok(None),
-        Some(Err(err)) => {
-            // This early pass only preserves output profile/library. The main salvage scan will
-            // count the corrupt header as warning-level loss when it reaches the same bytes.
-            info!("failed to parse input header: {err:#}; using a default output header");
-            Ok(None)
-        }
+fn compression_for_writer(
+    selection: CompressionSelection,
+    first_chunk_compression: Option<&str>,
+) -> Option<Compression> {
+    match selection {
+        CompressionSelection::Explicit(compression) => compression,
+        CompressionSelection::Preserve => first_chunk_compression.and_then(compression_from_str),
     }
 }
 
-/// Reads every record from a (possibly damaged) MCAP, decoding chunks, and re-writes the records
+fn ensure_writer<'a, W: Write + Seek>(
+    writer: &'a mut Option<mcap::Writer<W>>,
+    sink: &mut Option<W>,
+    header: &Option<mcap::records::Header>,
+    compression: CompressionSelection,
+    first_chunk_compression: Option<&str>,
+    chunk_size: u64,
+    disable_seeking: bool,
+) -> Result<&'a mut mcap::Writer<W>> {
+    if writer.is_none() {
+        let sink = sink
+            .take()
+            .expect("sink should be available until writer is initialized");
+        *writer = Some(build_writer(
+            sink,
+            header.clone(),
+            compression_for_writer(compression, first_chunk_compression),
+            chunk_size,
+            disable_seeking,
+        )?);
+    }
+    Ok(writer.as_mut().expect("writer should be initialized"))
+}
+
+/// Streams every record from a (possibly damaged) MCAP, decoding chunks, and re-writes the records
 /// through the writer. The writer rebuilds chunks, indexes, the summary section, and CRCs, so the
 /// output is always a valid MCAP.
-fn recover_records<W: Write + Seek>(
-    input: &[u8],
-    writer: &mut mcap::Writer<W>,
-) -> Result<RecoverStats> {
+fn recover_records<R: Read, W: Write + Seek>(
+    mut input: R,
+    sink: W,
+    compression: CompressionSelection,
+    chunk_size: u64,
+    disable_seeking: bool,
+) -> Result<(RecoverStats, mcap::Writer<W>)> {
     let mut reader = SansIoReader::new_with_options(
         LinearReaderOptions::default()
             .with_skip_end_magic(true)
+            .with_emit_chunks(true)
             // Recover decodes chunk payloads even when the stored chunk CRC is wrong.
-            .with_validate_chunk_crcs(false)
-            .with_record_length_limit(input.len()),
+            .with_validate_chunk_crcs(false),
     );
 
-    let mut remaining = input;
+    let mut sink = Some(sink);
+    let mut writer = None;
+    let mut header = None;
     let mut stats = RecoverStats::default();
     let mut saw_any_record = false;
     // Channels successfully registered with the writer; messages for other channels are dropped.
@@ -274,11 +293,22 @@ fn recover_records<W: Write + Seek>(
     while let Some(event) = reader.next_event() {
         match event {
             Ok(LinearReadEvent::ReadRequest(need)) => {
-                let read = need.min(remaining.len());
-                let dst = reader.insert(read);
-                dst.copy_from_slice(&remaining[..read]);
+                let read = {
+                    let dst = reader.insert(need);
+                    match input.read(dst) {
+                        Ok(read) => read,
+                        Err(err) if saw_any_record => {
+                            warn!("{err:#} -- stopping recovery scan");
+                            stats.truncated = true;
+                            break;
+                        }
+                        Err(err) => return Err(err).context("failed to read input"),
+                    }
+                };
+                if read == 0 && !saw_any_record {
+                    return Err(mcap::McapError::UnexpectedEof.into());
+                }
                 reader.notify_read(read);
-                remaining = &remaining[read..];
             }
             Ok(LinearReadEvent::Record { opcode, data }) => {
                 saw_any_record = true;
@@ -292,82 +322,50 @@ fn recover_records<W: Write + Seek>(
                 };
 
                 match record {
-                    Record::Header(_) => {
+                    Record::Header(parsed_header) => {
+                        if writer.is_none() {
+                            header = Some(parsed_header);
+                        }
                         stats.headers.recovered += 1;
                     }
-                    Record::Schema { header, data } => {
-                        if let Err(err) = writer.add_schema_with_id(
-                            header.id,
-                            &header.name,
-                            &header.encoding,
+                    Record::Chunk {
+                        header: chunk_header,
+                        data,
+                    } => {
+                        let writer = ensure_writer(
+                            &mut writer,
+                            &mut sink,
+                            &header,
+                            compression,
+                            Some(&chunk_header.compression),
+                            chunk_size,
+                            disable_seeking,
+                        )?;
+                        if !recover_chunk_records(
+                            writer,
+                            &mut known_channels,
+                            &mut stats,
+                            chunk_header,
                             data.as_ref(),
-                        ) {
-                            warn!(
-                                "skipping schema id {} ({}): {err:#}",
-                                header.id, header.name
-                            );
-                            stats.schemas.discarded += 1;
-                        } else {
-                            stats.schemas.recovered += 1;
+                        )? {
+                            break;
                         }
                     }
-                    Record::Channel(channel) => {
-                        match writer.add_channel_with_id(
-                            channel.id,
-                            channel.schema_id,
-                            &channel.topic,
-                            &channel.message_encoding,
-                            &channel.metadata,
-                        ) {
-                            Ok(_) => {
-                                known_channels.insert(channel.id);
-                                stats.channels.recovered += 1;
-                            }
-                            Err(err) => {
-                                warn!(
-                                    "skipping channel id {} ({}): {err:#}",
-                                    channel.id, channel.topic
-                                );
-                                stats.channels.discarded += 1;
-                            }
-                        }
-                    }
-                    Record::Message { header, data } => {
-                        if !known_channels.contains(&header.channel_id) {
-                            warn!(
-                                "skipping message for unknown channel id {}",
-                                header.channel_id
-                            );
-                            stats.messages.discarded += 1;
-                            continue;
-                        }
-                        writer
-                            .write_to_known_channel(&header, data.as_ref())
-                            .context("failed to write recovered message")?;
-                        stats.messages.recovered += 1;
-                    }
-                    Record::Attachment { header, data, .. } => {
-                        writer
-                            .attach(&mcap::Attachment {
-                                log_time: header.log_time,
-                                create_time: header.create_time,
-                                name: header.name,
-                                media_type: header.media_type,
-                                data,
-                            })
-                            .context("failed to write recovered attachment")?;
-                        stats.attachments.recovered += 1;
-                    }
-                    Record::Metadata(metadata) => {
-                        writer
-                            .write_metadata(&metadata)
-                            .context("failed to write recovered metadata")?;
-                        stats.metadata.recovered += 1;
-                    }
-                    // The data section is over; the summary section (if any) is not recovered.
                     Record::DataEnd(_) | Record::Footer(_) => break,
-                    // Header is applied at writer construction; indexes/statistics are regenerated.
-                    _ => {}
+                    record => {
+                        let writer = ensure_writer(
+                            &mut writer,
+                            &mut sink,
+                            &header,
+                            compression,
+                            None,
+                            chunk_size,
+                            disable_seeking,
+                        )?;
+                        if !recover_record(writer, &mut known_channels, &mut stats, record)? {
+                            break;
+                        }
+                    }
                 }
             }
             Err(err) => {
@@ -375,24 +373,157 @@ fn recover_records<W: Write + Seek>(
                     return Err(err).context("failed to read any records from input");
                 }
                 // Warning-level data loss: the sans-io reader has no resync primitive after a
-                // stream-level decode failure (truncation, corrupt compressed chunk payload), so
-                // stop and keep what we have.
+                // stream-level decode failure (truncation, corrupt top-level framing), so stop and
+                // keep what we have.
                 warn!("{err:#} -- stopping recovery scan");
-                if matches!(
-                    err,
-                    mcap::McapError::UnexpectedEoc
-                        | mcap::McapError::BadChunkCrc { .. }
-                        | mcap::McapError::DecompressionError(_)
-                ) {
-                    stats.chunks.discarded += 1;
-                }
                 stats.truncated = true;
                 break;
             }
         }
     }
 
-    Ok(stats)
+    let writer = match writer {
+        Some(writer) => writer,
+        None => build_writer(
+            sink.expect("sink should be available if writer was never initialized"),
+            header,
+            compression_for_writer(compression, None),
+            chunk_size,
+            disable_seeking,
+        )?,
+    };
+
+    Ok((stats, writer))
+}
+
+fn recover_chunk_records<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
+    known_channels: &mut std::collections::BTreeSet<u16>,
+    stats: &mut RecoverStats,
+    chunk_header: mcap::records::ChunkHeader,
+    chunk_data: &[u8],
+) -> Result<bool> {
+    let mut chunk_reader = match mcap::read::ChunkReader::new(chunk_header, chunk_data) {
+        Ok(reader) => reader,
+        Err(err) => {
+            warn!("failed to decode chunk: {err:#}; stopping recovery scan");
+            stats.chunks.discarded += 1;
+            stats.truncated = true;
+            return Ok(false);
+        }
+    };
+
+    loop {
+        match chunk_reader.next() {
+            Some(Ok(record)) => {
+                if !recover_record(writer, known_channels, stats, record)? {
+                    return Ok(false);
+                }
+            }
+            Some(Err(mcap::McapError::BadChunkCrc { saved, calculated })) => {
+                info!(
+                    "chunk CRC mismatch (expected {saved:08X}, got {calculated:08X}); records were decoded and CRC will be recomputed"
+                );
+                stats.chunks.recovered += 1;
+                return Ok(true);
+            }
+            Some(Err(err)) => {
+                warn!("{err:#} -- stopping recovery scan");
+                stats.chunks.discarded += 1;
+                stats.truncated = true;
+                return Ok(false);
+            }
+            None => {
+                stats.chunks.recovered += 1;
+                return Ok(true);
+            }
+        }
+    }
+}
+
+fn recover_record<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
+    known_channels: &mut std::collections::BTreeSet<u16>,
+    stats: &mut RecoverStats,
+    record: Record<'_>,
+) -> Result<bool> {
+    match record {
+        Record::Header(_) => {
+            stats.headers.recovered += 1;
+        }
+        Record::Schema { header, data } => {
+            if let Err(err) =
+                writer.add_schema_with_id(header.id, &header.name, &header.encoding, data.as_ref())
+            {
+                warn!(
+                    "skipping schema id {} ({}): {err:#}",
+                    header.id, header.name
+                );
+                stats.schemas.discarded += 1;
+            } else {
+                stats.schemas.recovered += 1;
+            }
+        }
+        Record::Channel(channel) => {
+            match writer.add_channel_with_id(
+                channel.id,
+                channel.schema_id,
+                &channel.topic,
+                &channel.message_encoding,
+                &channel.metadata,
+            ) {
+                Ok(_) => {
+                    known_channels.insert(channel.id);
+                    stats.channels.recovered += 1;
+                }
+                Err(err) => {
+                    warn!(
+                        "skipping channel id {} ({}): {err:#}",
+                        channel.id, channel.topic
+                    );
+                    stats.channels.discarded += 1;
+                }
+            }
+        }
+        Record::Message { header, data } => {
+            if !known_channels.contains(&header.channel_id) {
+                warn!(
+                    "skipping message for unknown channel id {}",
+                    header.channel_id
+                );
+                stats.messages.discarded += 1;
+                return Ok(true);
+            }
+            writer
+                .write_to_known_channel(&header, data.as_ref())
+                .context("failed to write recovered message")?;
+            stats.messages.recovered += 1;
+        }
+        Record::Attachment { header, data, .. } => {
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: header.log_time,
+                    create_time: header.create_time,
+                    name: header.name,
+                    media_type: header.media_type,
+                    data,
+                })
+                .context("failed to write recovered attachment")?;
+            stats.attachments.recovered += 1;
+        }
+        Record::Metadata(metadata) => {
+            writer
+                .write_metadata(&metadata)
+                .context("failed to write recovered metadata")?;
+            stats.metadata.recovered += 1;
+        }
+        // The data section is over; the summary section (if any) is not recovered.
+        Record::DataEnd(_) | Record::Footer(_) => return Ok(false),
+        // Header is applied at writer construction; indexes/statistics are regenerated.
+        _ => {}
+    }
+
+    Ok(true)
 }
 
 #[cfg(test)]
@@ -482,7 +613,7 @@ mod tests {
     }
 
     fn recover_to_vec(input: &[u8], compression: &str) -> (Vec<u8>, RecoverStats) {
-        let target = super::resolve_compression(compression, input).expect("compression");
+        let target = super::resolve_compression(compression).expect("compression");
         let (stats, output) =
             recover_to_sink(input, Cursor::new(Vec::new()), target, 1024 * 1024, false)
                 .expect("recover should succeed");
@@ -588,8 +719,8 @@ mod tests {
 
     #[test]
     fn rejects_unknown_compression_with_preserve_in_message() {
-        let err = super::resolve_compression("snappy", &[])
-            .expect_err("unknown codec should be rejected");
+        let err =
+            super::resolve_compression("snappy").expect_err("unknown codec should be rejected");
         let message = err.to_string();
         assert!(message.contains("preserve"), "message was: {message}");
         assert!(message.contains("zstd"), "message was: {message}");
