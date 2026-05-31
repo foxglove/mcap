@@ -35,11 +35,6 @@ impl RecoverStats {
     }
 }
 
-/// Exit code for a lossy-but-successful recovery (data was discarded). `0` (clean) and `1` (hard
-/// failure, via the normal error path) are the other outcomes. Diverges from the Go CLI, which
-/// always exits `0` once recovery starts.
-const EXIT_LOSSY: i32 = 2;
-
 pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     let input = common::load_input(
         args.file.as_deref(),
@@ -73,7 +68,10 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     );
 
     // Exit codes: 0 = clean (all records recovered; rebuilt indexes/CRCs are fine), 1 = hard
-    // failure / nothing recovered (the error path in main), 2 = recovered but lossy.
+    // failure / nothing recovered (the error path in `main`), 2 = recovered but lossy. Both
+    // non-zero codes originate outside this block (1 from `main`'s error handler), so only the
+    // lossy code is emitted here. This diverges from the Go CLI, which always exits 0 once
+    // recovery starts.
     if stats.is_lossy() {
         let mut discarded = Vec::new();
         if stats.discarded_messages > 0 {
@@ -87,12 +85,10 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
             parts.push(format!("discarded {}", discarded.join(" and ")));
         }
         if stats.truncated {
-            parts.push(
-                "stopped early (input truncated), so trailing data may be lost".to_string(),
-            );
+            parts.push("stopped early (input truncated), so trailing data may be lost".to_string());
         }
         eprintln!("Recovery was lossy: {}.", parts.join("; "));
-        std::process::exit(EXIT_LOSSY);
+        std::process::exit(2);
     }
     Ok(())
 }
