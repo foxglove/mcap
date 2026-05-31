@@ -93,7 +93,7 @@ jobs:
         with:
           node-version: 24.x
           cache: yarn
-      - uses: astral-sh/setup-uv@v8.0.0
+      - uses: astral-sh/setup-uv@v8.1.0
       - run: uv sync --frozen --directory python
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
@@ -327,7 +327,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           lfs: true
-      - uses: astral-sh/setup-uv@v8.0.0
+      - uses: astral-sh/setup-uv@v8.1.0
       - run: make lint
       - run: make test
       - run: make examples
@@ -496,7 +496,7 @@ jobs:
           git log --oneline --no-merges --first-parent --grep CLI --decorate-refs=refs $(git describe --tags $(git rev-list --tags=releases/mcap-cli --max-count=1))..HEAD > ${{ github.workspace }}-CHANGELOG.txt
       - name: Release
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ./go/cli/mcap/bin/*
           body_path: ${{ github.workspace }}-CHANGELOG.txt
