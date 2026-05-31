@@ -454,6 +454,11 @@ fn recover_records<R: Read, W: Write + Seek>(
                             pending_records.push(record.into_owned());
                             continue;
                         }
+                        // For `preserve` without a pre-detected source compression, loose
+                        // schemas/channels/attachments/metadata are buffered above until a chunk
+                        // can choose the codec. Reaching this path before a writer exists means
+                        // either compression is already known, or a loose message/other record has
+                        // proven we should start with uncompressed output.
                         let writer = ensure_writer(
                             &mut writer,
                             &mut sink,
@@ -665,7 +670,7 @@ fn recover_record<W: Write + Seek>(
         }
         // The data section is over; the summary section (if any) is not recovered.
         Record::DataEnd(_) | Record::Footer(_) => return Ok(false),
-        // Header is applied at writer construction; indexes/statistics are regenerated.
+        // Indexes/statistics are regenerated.
         _ => {}
     }
 
