@@ -14,10 +14,22 @@ use crate::context::CommandContext;
 // EX_DATAERR from sysexits.h: recovery completed, but input data was corrupt/truncated.
 const EXIT_LOSSY_RECOVERY: i32 = 65;
 
-/// Statistics describing what `recover` salvaged and what it had to discard.
+// Recovery status model:
+// - info!: non-lossy recovery decisions or metadata fallback. These may explain output differences
+//   (for example, a corrupt leading header means the output gets a default profile/library) but do
+//   not imply message/attachment/metadata loss by themselves.
+// - warn!: corrupt or malformed input records that are skipped, messages dropped because their
+//   channel could not be recovered, or an early stop caused by truncation/corrupt chunk payloads.
+//   Every warning corresponds to data loss and therefore to exit code 65.
+// - Err: output/write/setup failures, invalid CLI options, or inputs too broken to recover at all.
+//   These are handled by `main` as hard failures and exit 1.
+//
+// Human-readable summaries, warnings, and errors go to stderr. Stdout is reserved exclusively for
+// MCAP bytes when the user writes recovered output to stdout.
+
+/// Statistics for one MCAP record kind.
 ///
-/// Discarded counts and `truncated` cover only *real data* loss. Rebuilt indexes, summary
-/// sections, and duplicate schema/channel definitions are not counted as loss.
+/// `discarded` records are the concrete source for warning-level reporting and lossy exit status.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct RecordRecoveryStats {
     recovered: u64,
@@ -120,10 +132,10 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
         count(stats.metadata.recovered, "metadata record"),
     );
 
-    // Exit codes: 0 = clean (all records recovered; rebuilt indexes/CRCs are fine), 1 = hard
-    // failure / nothing recovered (the error path in `main`), 65 = recovered but lossy. Code 1
-    // comes from `main`'s error handler; only the lossy code is emitted here. This diverges from
-    // the Go CLI, which always exits 0 once recovery starts.
+    // Exit codes: 0 = clean (all recoverable records were recovered; regenerated
+    // indexes/summary/CRCs are fine), 1 = hard failure via `main`'s error handler, and 65 =
+    // completed with warning-level data loss. This diverges from the Go CLI, which always exits 0
+    // once recovery starts.
     if stats.is_lossy() {
         let discarded: Vec<_> = stats
             .discarded_counts()
@@ -230,6 +242,8 @@ fn read_header(input: &[u8]) -> Result<Option<mcap::records::Header>> {
         Some(Ok(Record::Header(header))) => Ok(Some(header)),
         Some(Ok(_)) | None => Ok(None),
         Some(Err(err)) => {
+            // This early pass only preserves output profile/library. The main salvage scan will
+            // count the corrupt header as warning-level loss when it reaches the same bytes.
             info!("failed to parse input header: {err:#}; using a default output header");
             Ok(None)
         }
@@ -360,8 +374,9 @@ fn recover_records<W: Write + Seek>(
                 if !saw_any_record {
                     return Err(err).context("failed to read any records from input");
                 }
-                // The sans-io reader has no resync primitive after a stream-level decode failure
-                // (truncation, corrupt compressed chunk payload), so stop and keep what we have.
+                // Warning-level data loss: the sans-io reader has no resync primitive after a
+                // stream-level decode failure (truncation, corrupt compressed chunk payload), so
+                // stop and keep what we have.
                 warn!("{err:#} -- stopping recovery scan");
                 if matches!(
                     err,
