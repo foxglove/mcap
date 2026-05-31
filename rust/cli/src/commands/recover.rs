@@ -72,7 +72,12 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
 fn resolve_compression(spec: &str, input: &[u8]) -> Result<Option<Compression>> {
     match spec {
         "preserve" => Ok(detect_source_compression(input)),
-        other => common::parse_output_compression(other),
+        "none" | "" => Ok(None),
+        "zstd" => Ok(Some(Compression::Zstd)),
+        "lz4" => Ok(Some(Compression::Lz4)),
+        other => bail!(
+            "unrecognized compression '{other}': valid options are 'preserve', 'none', 'zstd', or 'lz4'"
+        ),
     }
 }
 
@@ -428,6 +433,14 @@ mod tests {
         let compressions = chunk_compressions(&output);
         assert!(!compressions.is_empty());
         assert!(compressions.iter().all(|name| name.is_empty()));
+    }
+
+    #[test]
+    fn rejects_unknown_compression_with_preserve_in_message() {
+        let err = super::resolve_compression("presrve", &[]).expect_err("typo should be rejected");
+        let message = err.to_string();
+        assert!(message.contains("preserve"), "message was: {message}");
+        assert!(message.contains("zstd"), "message was: {message}");
     }
 
     #[test]

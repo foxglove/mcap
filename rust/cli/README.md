@@ -146,6 +146,19 @@ port is still pre-production:
       duplicate loose records, and optionally a public standalone-chunk decoder.
       Adding this later is purely additive, so we ship the always-re-encode
       version now and revisit if recompression cost matters in practice.
+11. `recover` exit code on lossy recovery:
+    - `recover` currently exits 0 whenever anything is salvaged and prints
+      `Recovered N messages…`, matching Go (which also returns success on a
+      truncated or partially recovered file). The only signal of data loss today
+      is a `warn!` line on stderr.
+    - The CLI already tracks loss internally (`RecoverStats::is_lossy`): a
+      non-zero `discarded_messages`/`discarded_records` count, or `truncated`
+      when the scan stopped before a clean end (mid-record EOF or a mid-stream
+      decode error).
+    - Before Rust CLI 1.0, adopt a clearer outcome so a partial salvage is not
+      silently reported as success: exit non-zero when recovery was lossy and/or
+      include discarded/truncated counts in the summary. A reasonable model is
+      `0` clean, `2` recovered-but-lossy, `1` hard failure (nothing recovered).
 
 ## Intentional divergences from Go CLI
 
