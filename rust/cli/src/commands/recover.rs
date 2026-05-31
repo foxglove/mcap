@@ -437,7 +437,8 @@ mod tests {
 
     #[test]
     fn rejects_unknown_compression_with_preserve_in_message() {
-        let err = super::resolve_compression("presrve", &[]).expect_err("typo should be rejected");
+        let err = super::resolve_compression("snappy", &[])
+            .expect_err("unknown codec should be rejected");
         let message = err.to_string();
         assert!(message.contains("preserve"), "message was: {message}");
         assert!(message.contains("zstd"), "message was: {message}");
