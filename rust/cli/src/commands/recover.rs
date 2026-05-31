@@ -12,8 +12,13 @@ use crate::cli::RecoverCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
-// EX_DATAERR from sysexits.h: recovery completed, but input data was corrupt/truncated.
-const EXIT_LOSSY_RECOVERY: i32 = 65;
+// Recovery completed, but input data was corrupt/truncated
+// - Exit code 0: successful recovery, no data loss
+// - Exit code 1: hard failure
+// - Exit code 2: used by clap to indicate a command line parsing error
+// - Exit code 3: successful recovery with data loss
+const EXIT_LOSSY_RECOVERY: i32 = 3;
+
 // Bound record/chunk allocations while scanning corrupt streams. Valid MCAPs with individual
 // records larger than this should use another tool path or raise this limit in a follow-up flag.
 const RECOVER_RECORD_LENGTH_LIMIT: usize = 1024 * 1024 * 1024;
@@ -30,7 +35,7 @@ enum CompressionSelection {
 //   not imply message/attachment/metadata loss by themselves.
 // - warn!: corrupt or malformed input records that are skipped, messages dropped because their
 //   channel could not be recovered, or an early stop caused by truncation/corrupt chunk payloads.
-//   Every warning corresponds to data loss and therefore to exit code 65.
+//   Every warning corresponds to data loss and therefore to exit code 3.
 // - Err: output/write/setup failures, invalid CLI options, or inputs too broken to recover at all.
 //   These are handled by `main` as hard failures and exit 1.
 //
@@ -145,7 +150,7 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     );
 
     // Exit codes: 0 = clean (all recoverable records were recovered; regenerated
-    // indexes/summary/CRCs are fine), 1 = hard failure via `main`'s error handler, and 65 =
+    // indexes/summary/CRCs are fine), 1 = hard failure via `main`'s error handler, and 3 =
     // completed with warning-level data loss. This diverges from the Go CLI, which always exits 0
     // once recovery starts.
     if stats.is_lossy() {
