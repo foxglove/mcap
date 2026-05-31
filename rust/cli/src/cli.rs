@@ -14,8 +14,6 @@ pub(crate) static VERSION: LazyLock<String> = LazyLock::new(|| {
     )
 });
 
-pub(crate) const DEFAULT_CHUNK_SIZE: u64 = 1024 * 1024;
-
 #[derive(Parser, Debug, PartialEq, Eq)]
 #[command(
     name = "mcap",
@@ -97,7 +95,7 @@ pub struct CompressCommand {
     pub output: Option<PathBuf>,
 
     /// Target uncompressed chunk size for output
-    #[arg(long = "chunk-size", default_value_t = DEFAULT_CHUNK_SIZE)]
+    #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
     /// Compression algorithm for output file: zstd, lz4, or none
@@ -119,7 +117,7 @@ pub struct DecompressCommand {
     pub output: Option<PathBuf>,
 
     /// Target uncompressed chunk size for output
-    #[arg(long = "chunk-size", default_value_t = DEFAULT_CHUNK_SIZE)]
+    #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 }
 
@@ -304,7 +302,7 @@ pub struct ConvertCommand {
     pub compression: CompressionFormat,
 
     /// Target uncompressed chunk size in bytes
-    #[arg(long, default_value_t = DEFAULT_CHUNK_SIZE)]
+    #[arg(long, default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
     /// Include chunk CRC checksums in output MCAP.
@@ -357,7 +355,7 @@ pub struct MergeCommand {
     pub compression: CompressionFormat,
 
     /// Target uncompressed chunk size in bytes
-    #[arg(long, default_value_t = DEFAULT_CHUNK_SIZE)]
+    #[arg(long, default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
     /// Include chunk CRC checksums in output MCAP.
@@ -489,7 +487,7 @@ pub struct FilterCommand {
     pub output_compression: String,
 
     /// Target uncompressed chunk size for output
-    #[arg(long = "chunk-size", default_value_t = DEFAULT_CHUNK_SIZE)]
+    #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 }
 
@@ -519,7 +517,7 @@ pub struct RecoverCommand {
     pub always_decode_chunk: bool,
 
     /// Target uncompressed chunk size for output MCAP
-    #[arg(long = "chunk-size", default_value_t = DEFAULT_CHUNK_SIZE)]
+    #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
     /// Compression algorithm for output file: zstd, lz4, or none
@@ -541,7 +539,7 @@ pub struct SortCommand {
     pub compression: CompressionFormat,
 
     /// Target uncompressed chunk size in bytes
-    #[arg(long, default_value_t = DEFAULT_CHUNK_SIZE)]
+    #[arg(long, default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
     /// Include chunk CRC checksums in output MCAP.

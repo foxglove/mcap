@@ -27,8 +27,6 @@ pub use binrw::io::NoSeek;
 
 pub use records::Metadata;
 
-const DEFAULT_CHUNK_SIZE: u64 = 1024 * 1024;
-
 enum WriteMode<W: Write + Seek> {
     Raw(CountingCrcWriter<W>),
     Chunk(ChunkWriter<W>),
@@ -149,7 +147,7 @@ impl Default for WriteOptions {
             compression: None,
             profile: String::new(),
             library: String::from("mcap-rs-") + env!("CARGO_PKG_VERSION"),
-            chunk_size: Some(DEFAULT_CHUNK_SIZE),
+            chunk_size: Some(Self::DEFAULT_CHUNK_SIZE),
             use_chunks: true,
             disable_seeking: false,
             emit_statistics: true,
@@ -173,6 +171,9 @@ impl Default for WriteOptions {
 }
 
 impl WriteOptions {
+    /// Default target uncompressed chunk size used by [`WriteOptions`].
+    pub const DEFAULT_CHUNK_SIZE: u64 = 1024 * 1024;
+
     pub fn new() -> Self {
         Self::default()
     }

@@ -590,7 +590,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             output_compression: "zstd".to_string(),
-            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
         }
     }
 
@@ -752,7 +752,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             compression: Some(mcap::Compression::Zstd),
-            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         assert!(include_topic("camera_a", &opts));
@@ -796,7 +796,7 @@ mod tests {
             include_metadata: true,
             include_attachments: true,
             compression: Some(mcap::Compression::Lz4),
-            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let output = run_filter(&input, &opts);
@@ -821,7 +821,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             compression: Some(mcap::Compression::Lz4),
-            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let output = run_filter(&input, &opts);
@@ -844,7 +844,7 @@ mod tests {
             include_metadata: false,
             include_attachments: true,
             compression: Some(mcap::Compression::Lz4),
-            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let output = run_filter(&input, &opts);
@@ -869,7 +869,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             compression: Some(mcap::Compression::Zstd),
-            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let output = run_filter(&input, &opts);
@@ -895,7 +895,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             compression: Some(mcap::Compression::Zstd),
-            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let mut output = Cursor::new(Vec::new());
@@ -919,7 +919,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             compression: Some(mcap::Compression::Lz4),
-            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let output = run_filter(&input, &opts);
