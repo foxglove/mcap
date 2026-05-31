@@ -1,0 +1,5 @@
+cpp/xl
+go/xl
+rust/target/
+__pycache__/
+node_modules/

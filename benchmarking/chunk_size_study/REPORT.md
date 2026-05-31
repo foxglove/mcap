@@ -330,6 +330,50 @@ index cost is set by how many messages you log, not how you group them — so
 there is no storage argument for large chunks (and only a negligible one against
 very small chunks).
 
+## 8. Cross-language read/write correlation
+
+The study above is C++-only. To confirm the C++ read/write numbers are
+*representative* and not an artifact of one implementation, a separate
+cross-language micro-benchmark (`crosslang/`) writes and reads the same
+fixed-payload corpus with the C++, Rust, Go, Python and TypeScript libraries
+from this repo (4 MiB chunks; a single reused payload generated outside the
+timed loop, so this isolates library/codec throughput rather than payload
+generation). zstd is run for the four languages with a native zstd codec;
+TypeScript is run uncompressed because `@mcap/core` ships no zstd *compressor*,
+and an uncompressed pass is run for all five so TypeScript can be compared.
+
+![Cross-language throughput](crosslang/results/fig_crosslang_throughput.png)
+
+Large messages (50 KB), the regime relevant to point-cloud/image robotics data:
+
+| language | write MB/s | read MB/s | read/write | (uncompressed) write | read |
+| --- | --- | --- | --- | --- | --- |
+| C++ | 1741 | 10531 | 6.0× | 718 | 7365 |
+| Rust | 1686 | 7777 | 4.6× | 2469 | 7962 |
+| Go | 2977 | 6171 | 2.1× | 2082 | 3782 |
+| Python | 1079 | 4697 | 4.4× | 709 | 3206 |
+| TypeScript | — | — | — | 405 | 780 |
+
+Takeaways:
+
+- **Reads are several× faster than writes in every language** — the same
+  qualitative relationship the C++ study reports.
+- **C++ is not an outlier**: for large messages it tracks Rust and Go within
+  ~2×, and the three compiled languages cluster together (multi-GB/s reads,
+  1–3 GB/s writes). Python and TypeScript are slower in absolute terms but show
+  the same read-faster-than-write pattern.
+- So the C++ read/write behavior the study relies on (reads cheap, writes the
+  bottleneck, both far above typical sensor data rates) **correlates across
+  languages**, and the chunk-size conclusions — which are about the *format*
+  (compression ratio, bytes fetched, index overhead), not C++ specifics — carry
+  over.
+
+Caveats for this comparison: timings are single-threaded medians of 3 runs on
+the same VM; the reused payload is highly compressible, so the zstd numbers
+measure library/codec overhead rather than realistic compression CPU; the
+small-message regime (`crosslang/results/xl_summary.md`) is dominated by
+per-message overhead and is noisier; TypeScript writes are uncompressed only.
+
 ## Recommendation
 
 **The recommended default is 4 MiB.** The supporting numbers (zstd):

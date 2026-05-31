@@ -1,0 +1,14 @@
+[package]
+name = "xlbench"
+version = "0.0.0"
+edition = "2021"
+
+[[bin]]
+name = "xlbench"
+path = "main.rs"
+
+[dependencies]
+mcap = { path = "../../../../rust/mcap", default-features = false, features = ["zstd"] }
+
+[profile.release]
+opt-level = 3
