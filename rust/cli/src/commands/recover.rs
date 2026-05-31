@@ -13,6 +13,9 @@ use crate::context::CommandContext;
 
 // EX_DATAERR from sysexits.h: recovery completed, but input data was corrupt/truncated.
 const EXIT_LOSSY_RECOVERY: i32 = 65;
+// Bound record/chunk allocations while scanning corrupt streams. Valid MCAPs with individual
+// records larger than this should use another tool path or raise this limit in a follow-up flag.
+const RECOVER_RECORD_LENGTH_LIMIT: usize = 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy)]
 enum CompressionSelection {
@@ -279,7 +282,8 @@ fn recover_records<R: Read, W: Write + Seek>(
             .with_skip_end_magic(true)
             .with_emit_chunks(true)
             // Recover decodes chunk payloads even when the stored chunk CRC is wrong.
-            .with_validate_chunk_crcs(false),
+            .with_validate_chunk_crcs(false)
+            .with_record_length_limit(RECOVER_RECORD_LENGTH_LIMIT),
     );
 
     let mut sink = Some(sink);
@@ -612,6 +616,23 @@ mod tests {
         corrupted
     }
 
+    fn input_with_huge_record_after_header() -> Vec<u8> {
+        let input = write_test_input(None);
+        let header_offset = mcap::MAGIC.len();
+        assert_eq!(input[header_offset], op::HEADER);
+        let header_len = u64::from_le_bytes(
+            input[header_offset + 1..header_offset + OPCODE_LEN_SIZE]
+                .try_into()
+                .expect("header length bytes"),
+        ) as usize;
+        let records_after_header = header_offset + OPCODE_LEN_SIZE + header_len;
+
+        let mut corrupted = input[..records_after_header].to_vec();
+        corrupted.push(op::MESSAGE);
+        corrupted.extend_from_slice(&u64::MAX.to_le_bytes());
+        corrupted
+    }
+
     fn recover_to_vec(input: &[u8], compression: &str) -> (Vec<u8>, RecoverStats) {
         let target = super::resolve_compression(compression).expect("compression");
         let (stats, output) =
@@ -696,6 +717,18 @@ mod tests {
         assert_eq!(metadata, 1);
         assert_eq!(stats.messages.recovered, 300);
         assert_eq!(stats.headers.discarded, 1);
+        assert!(stats.is_lossy());
+    }
+
+    #[test]
+    fn huge_record_length_after_header_is_lossy_not_oom() {
+        let input = input_with_huge_record_after_header();
+        let (output, stats) = recover_to_vec(&input, "preserve");
+        let (messages, attachments, metadata) = count_output_records(&output);
+        assert_eq!(messages, 0);
+        assert_eq!(attachments, 0);
+        assert_eq!(metadata, 0);
+        assert!(stats.truncated);
         assert!(stats.is_lossy());
     }
 

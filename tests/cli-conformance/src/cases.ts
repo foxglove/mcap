@@ -628,7 +628,7 @@ export const cases: CliTestCase[] = [
   {
     id: "known-difference-recover-lossy-exit-code",
     description:
-      "On a truncated MCAP, Rust recover exits 2 (recovered but lossy); Go recover exits 0.",
+      "On a truncated MCAP, Rust recover exits 65 (recovered but lossy); Go recover exits 0.",
     tags: ["known-difference", "recover"],
     setup: [
       { type: "copy", from: TEN_MESSAGES, to: "{caseWorkDir}/truncated.mcap" },
@@ -640,17 +640,17 @@ export const cases: CliTestCase[] = [
     knownDifference: {
       id: "recover-lossy-exit-code",
       summary:
-        "Rust recover exits non-zero (2) when recovery is lossy; Go recover exits 0 once recovery starts.",
+        "Rust recover exits non-zero (65) when recovery is lossy; Go recover exits 0 once recovery starts.",
       reason:
-        "Rust recover signals data loss through the exit code (0 = clean, 1 = nothing recovered, 2 = recovered but lossy) so a partial salvage is not silently reported as success. Go recover returns success on any started recovery, including truncated input.",
+        "Rust recover signals data loss through the exit code (0 = clean, 1 = nothing recovered, 65 = recovered but lossy) so a partial salvage is not silently reported as success. Go recover returns success on any started recovery, including truncated input.",
       desiredBehavior:
-        "Rust recover should exit 2 when one or more messages/records are discarded or the input is truncated mid-record; a clean recovery exits 0 and nothing-recovered exits 1.",
+        "Rust recover should exit 65 when one or more messages/records are discarded or the input is truncated mid-record; a clean recovery exits 0 and nothing-recovered exits 1.",
       goBehavior: {
         exitCode: 0,
         files: [{ path: "recovered.mcap", exists: true }],
       },
       rustBehavior: {
-        exitCode: 2,
+        exitCode: 65,
         files: [{ path: "recovered.mcap", exists: true }],
       },
     },
