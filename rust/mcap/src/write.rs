@@ -27,6 +27,8 @@ pub use binrw::io::NoSeek;
 
 pub use records::Metadata;
 
+const DEFAULT_CHUNK_SIZE: u64 = 1024 * 1024;
+
 enum WriteMode<W: Write + Seek> {
     Raw(CountingCrcWriter<W>),
     Chunk(ChunkWriter<W>),
@@ -147,7 +149,7 @@ impl Default for WriteOptions {
             compression: None,
             profile: String::new(),
             library: String::from("mcap-rs-") + env!("CARGO_PKG_VERSION"),
-            chunk_size: Some(1024 * 768),
+            chunk_size: Some(DEFAULT_CHUNK_SIZE),
             use_chunks: true,
             disable_seeking: false,
             emit_statistics: true,
@@ -1894,6 +1896,12 @@ mod tests {
     use crate::read::LinearReader;
 
     use super::*;
+
+    #[test]
+    fn default_chunk_size_is_one_mib() {
+        assert_eq!(WriteOptions::default().chunk_size, Some(1024 * 1024));
+    }
+
     #[test]
     fn writes_all_channel_ids() {
         let file = std::io::Cursor::new(Vec::new());

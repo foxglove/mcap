@@ -1,6 +1,8 @@
 import CRC
 import struct Foundation.Data
 
+private let defaultChunkSize: UInt64 = 1024 * 1024
+
 public protocol IWritable {
   func position() -> UInt64
   mutating func write(_ data: Data) async
@@ -49,7 +51,7 @@ public final class MCAPWriter {
       useMessageIndex: Bool = true,
       useChunkIndex: Bool = true,
       startChannelID: ChannelID = 0,
-      chunkSize: UInt64 = 10 * 1024 * 1024,
+      chunkSize: UInt64 = defaultChunkSize,
       compressChunk: ((_ chunkData: Data) -> (compression: String, compressedData: Data))? = nil
     ) {
       self.useStatistics = useStatistics

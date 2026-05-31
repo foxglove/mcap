@@ -27,7 +27,7 @@ using ProblemCallback = std::function<void(const Status&)>;
 constexpr char SpecVersion = '0';
 constexpr char LibraryVersion[] = MCAP_LIBRARY_VERSION;
 constexpr uint8_t Magic[] = {137, 77, 67, 65, 80, SpecVersion, 13, 10};  // "\x89MCAP0\r\n"
-constexpr uint64_t DefaultChunkSize = 1024 * 768;
+constexpr uint64_t DefaultChunkSize = 1024 * 1024;
 constexpr ByteOffset EndOffset = std::numeric_limits<ByteOffset>::max();
 constexpr Timestamp MaxTime = std::numeric_limits<Timestamp>::max();
 
