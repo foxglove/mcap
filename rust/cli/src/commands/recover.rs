@@ -356,6 +356,7 @@ fn recover_records<R: Read, W: Write + Seek>(
     let mut sink = Some(sink);
     let mut writer = None;
     let mut header = None;
+    let mut pending_records: Vec<Record<'static>> = Vec::new();
     let mut stats = RecoverStats::default();
     let mut saw_any_record = false;
     // Channels successfully registered with the writer; messages for other channels are dropped.
@@ -412,6 +413,14 @@ fn recover_records<R: Read, W: Write + Seek>(
                             chunk_size,
                             disable_seeking,
                         )?;
+                        if !flush_pending_records(
+                            writer,
+                            &mut known_channels,
+                            &mut stats,
+                            &mut pending_records,
+                        )? {
+                            break;
+                        }
                         if !recover_chunk_records(
                             writer,
                             &mut known_channels,
@@ -422,8 +431,7 @@ fn recover_records<R: Read, W: Write + Seek>(
                             break;
                         }
                     }
-                    Record::DataEnd(_) | Record::Footer(_) => break,
-                    record => {
+                    Record::DataEnd(_) | Record::Footer(_) => {
                         let writer = ensure_writer(
                             &mut writer,
                             &mut sink,
@@ -433,6 +441,36 @@ fn recover_records<R: Read, W: Write + Seek>(
                             chunk_size,
                             disable_seeking,
                         )?;
+                        let _ = flush_pending_records(
+                            writer,
+                            &mut known_channels,
+                            &mut stats,
+                            &mut pending_records,
+                        )?;
+                        break;
+                    }
+                    record => {
+                        if should_buffer_until_compression_known(compression, &writer, &record) {
+                            pending_records.push(record.into_owned());
+                            continue;
+                        }
+                        let writer = ensure_writer(
+                            &mut writer,
+                            &mut sink,
+                            &header,
+                            compression,
+                            None,
+                            chunk_size,
+                            disable_seeking,
+                        )?;
+                        if !flush_pending_records(
+                            writer,
+                            &mut known_channels,
+                            &mut stats,
+                            &mut pending_records,
+                        )? {
+                            break;
+                        }
                         if !recover_record(writer, &mut known_channels, &mut stats, record)? {
                             break;
                         }
@@ -463,8 +501,45 @@ fn recover_records<R: Read, W: Write + Seek>(
             disable_seeking,
         )?,
     };
+    let mut writer = writer;
+    let _ = flush_pending_records(
+        &mut writer,
+        &mut known_channels,
+        &mut stats,
+        &mut pending_records,
+    )?;
 
     Ok((stats, writer))
+}
+
+fn should_buffer_until_compression_known<W: Write + Seek>(
+    compression: CompressionSelection,
+    writer: &Option<mcap::Writer<W>>,
+    record: &Record<'_>,
+) -> bool {
+    matches!(compression, CompressionSelection::Preserve(None))
+        && writer.is_none()
+        && matches!(
+            record,
+            Record::Schema { .. }
+                | Record::Channel(_)
+                | Record::Attachment { .. }
+                | Record::Metadata(_)
+        )
+}
+
+fn flush_pending_records<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
+    known_channels: &mut std::collections::BTreeSet<u16>,
+    stats: &mut RecoverStats,
+    pending_records: &mut Vec<Record<'static>>,
+) -> Result<bool> {
+    for record in std::mem::take(pending_records) {
+        if !recover_record(writer, known_channels, stats, record)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
 
 fn recover_chunk_records<W: Write + Seek>(
@@ -763,9 +838,21 @@ mod tests {
             super::detect_source_compression_from_reader(Cursor::new(input)).expect("compression");
         let target =
             super::resolve_compression(compression, source_compression).expect("compression");
-        let (stats, output) =
-            recover_to_sink(input, Cursor::new(Vec::new()), target, 1024 * 1024, false)
-                .expect("recover should succeed");
+        recover_to_vec_with_selection(input, target)
+    }
+
+    fn recover_to_vec_with_selection(
+        input: &[u8],
+        compression: super::CompressionSelection,
+    ) -> (Vec<u8>, RecoverStats) {
+        let (stats, output) = recover_to_sink(
+            input,
+            Cursor::new(Vec::new()),
+            compression,
+            1024 * 1024,
+            false,
+        )
+        .expect("recover should succeed");
         (output.into_inner(), stats)
     }
 
@@ -873,6 +960,16 @@ mod tests {
     fn preserve_uses_first_chunk_compression_after_loose_metadata() {
         let input = write_metadata_then_zstd_chunk_input();
         let (output, _) = recover_to_vec(&input, "preserve");
+        let compressions = chunk_compressions(&output);
+        assert!(!compressions.is_empty());
+        assert!(compressions.iter().all(|name| name == "zstd"));
+    }
+
+    #[test]
+    fn streaming_preserve_buffers_loose_metadata_until_first_chunk() {
+        let input = write_metadata_then_zstd_chunk_input();
+        let (output, _) =
+            recover_to_vec_with_selection(&input, super::CompressionSelection::Preserve(None));
         let compressions = chunk_compressions(&output);
         assert!(!compressions.is_empty());
         assert!(compressions.iter().all(|name| name == "zstd"));
