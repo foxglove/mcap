@@ -23,7 +23,7 @@ struct FilterOptions {
     include_metadata: bool,
     include_attachments: bool,
     compression: Option<mcap::Compression>,
-    chunk_size: Option<u64>,
+    chunk_size: u64,
     use_chunks: bool,
 }
 
@@ -43,7 +43,7 @@ pub(crate) struct TranscodeCommandOptions {
     pub(crate) include_metadata: bool,
     pub(crate) include_attachments: bool,
     pub(crate) output_compression: String,
-    pub(crate) chunk_size: Option<u64>,
+    pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
 }
 
@@ -71,11 +71,7 @@ impl From<&FilterCommand> for TranscodeCommandOptions {
 }
 
 impl TranscodeCommandOptions {
-    pub(crate) fn new(
-        file: Option<PathBuf>,
-        output: Option<PathBuf>,
-        chunk_size: Option<u64>,
-    ) -> Self {
+    pub(crate) fn new(file: Option<PathBuf>, output: Option<PathBuf>, chunk_size: u64) -> Self {
         Self {
             file,
             output,
@@ -253,11 +249,9 @@ fn filter_to_writer<W: Write + Seek>(
 ) -> Result<()> {
     let mut write_options = mcap::WriteOptions::new()
         .use_chunks(opts.use_chunks)
+        .chunk_size(Some(opts.chunk_size))
         .compression(opts.compression)
         .disable_seeking(disable_seeking);
-    if let Some(chunk_size) = opts.chunk_size {
-        write_options = write_options.chunk_size(Some(chunk_size));
-    }
 
     if let Some(header) = read_header(input)? {
         write_options = write_options
@@ -596,7 +590,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             output_compression: "zstd".to_string(),
-            chunk_size: None,
+            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
         }
     }
 
@@ -758,7 +752,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             compression: Some(mcap::Compression::Zstd),
-            chunk_size: None,
+            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         assert!(include_topic("camera_a", &opts));
@@ -802,7 +796,7 @@ mod tests {
             include_metadata: true,
             include_attachments: true,
             compression: Some(mcap::Compression::Lz4),
-            chunk_size: None,
+            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let output = run_filter(&input, &opts);
@@ -827,7 +821,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             compression: Some(mcap::Compression::Lz4),
-            chunk_size: None,
+            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let output = run_filter(&input, &opts);
@@ -850,7 +844,7 @@ mod tests {
             include_metadata: false,
             include_attachments: true,
             compression: Some(mcap::Compression::Lz4),
-            chunk_size: None,
+            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let output = run_filter(&input, &opts);
@@ -875,7 +869,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             compression: Some(mcap::Compression::Zstd),
-            chunk_size: None,
+            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let output = run_filter(&input, &opts);
@@ -901,7 +895,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             compression: Some(mcap::Compression::Zstd),
-            chunk_size: None,
+            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let mut output = Cursor::new(Vec::new());
@@ -925,7 +919,7 @@ mod tests {
             include_metadata: false,
             include_attachments: false,
             compression: Some(mcap::Compression::Lz4),
-            chunk_size: None,
+            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
         let output = run_filter(&input, &opts);
@@ -962,7 +956,7 @@ mod tests {
         let mut options = super::TranscodeCommandOptions::new(
             Some(input_path.clone()),
             Some(output_path.clone()),
-            Some(1024),
+            1024,
         );
         options.include_metadata = true;
         options.include_attachments = true;

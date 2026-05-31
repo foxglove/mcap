@@ -564,7 +564,7 @@ func init() {
 		&mergeChunkSize,
 		"chunk-size",
 		"",
-		0,
+		defaultCLIChunkSize,
 		"chunk size to target",
 	)
 	mergeCmd.PersistentFlags().BoolVarP(

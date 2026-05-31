@@ -15,7 +15,7 @@ struct MergeOptions {
     files: Vec<PathBuf>,
     output_file: Option<PathBuf>,
     compression: Option<mcap::Compression>,
-    chunk_size: Option<u64>,
+    chunk_size: u64,
     include_crc: bool,
     chunked: bool,
     allow_duplicate_metadata: bool,
@@ -179,15 +179,13 @@ fn merge_inputs<W: Write + Seek>(
     let mut write_options = mcap::WriteOptions::new()
         .profile(output_profile)
         .use_chunks(opts.chunked)
+        .chunk_size(Some(opts.chunk_size))
         .compression(opts.compression)
         .calculate_chunk_crcs(opts.include_crc)
         .calculate_data_section_crc(opts.include_crc)
         .calculate_summary_section_crc(opts.include_crc)
         .calculate_attachment_crcs(opts.include_crc)
         .disable_seeking(disable_seeking);
-    if let Some(chunk_size) = opts.chunk_size {
-        write_options = write_options.chunk_size(Some(chunk_size));
-    }
 
     if !opts.chunked {
         write_options = write_options.emit_message_indexes(false);
@@ -750,7 +748,7 @@ mod tests {
             files: Vec::new(),
             output_file: None,
             compression: None,
-            chunk_size: Some(1024),
+            chunk_size: 1024,
             include_crc: true,
             chunked: true,
             allow_duplicate_metadata,
@@ -772,7 +770,7 @@ mod tests {
             files: vec!["a.mcap".into(), "b.mcap".into()],
             output_file: Some("out.mcap".into()),
             compression: CompressionFormat::Lz4,
-            chunk_size: Some(4096),
+            chunk_size: 4096,
             include_crc: false,
             chunked: false,
             allow_duplicate_metadata: true,
@@ -785,7 +783,7 @@ mod tests {
         );
         assert_eq!(options.output_file, Some(PathBuf::from("out.mcap")));
         assert!(matches!(options.compression, Some(mcap::Compression::Lz4)));
-        assert_eq!(options.chunk_size, Some(4096));
+        assert_eq!(options.chunk_size, 4096);
         assert!(!options.include_crc);
         assert!(!options.chunked);
         assert!(options.allow_duplicate_metadata);
@@ -800,7 +798,7 @@ mod tests {
                 files: vec!["http://example.com/a.mcap".into()],
                 output_file: Some("out.mcap".into()),
                 compression: CompressionFormat::Zstd,
-                chunk_size: Some(1024),
+                chunk_size: 1024,
                 include_crc: true,
                 chunked: true,
                 allow_duplicate_metadata: false,

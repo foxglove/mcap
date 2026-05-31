@@ -253,7 +253,7 @@ usage:
 		false,
 		"always decode chunks, even if the file is not chunked",
 	)
-	chunkSize := recoverCmd.PersistentFlags().Int64P("chunk-size", "", 0, "chunk size of output file")
+	chunkSize := recoverCmd.PersistentFlags().Int64P("chunk-size", "", defaultCLIChunkSize, "chunk size of output file")
 	compression := recoverCmd.PersistentFlags().String(
 		"compression",
 		"zstd",

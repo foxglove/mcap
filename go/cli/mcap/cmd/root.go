@@ -14,6 +14,8 @@ import (
 var cfgFile string
 var pprofProfile bool
 
+const defaultCLIChunkSize int64 = 1024 * 1024
+
 var profileCloser func()
 
 func makeProfileCloser(pprofProfile bool) func() {

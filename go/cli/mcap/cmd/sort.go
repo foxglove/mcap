@@ -188,7 +188,7 @@ var sortCmd = &cobra.Command{
 func init() {
 	rootCmd.AddCommand(sortCmd)
 	sortCmd.PersistentFlags().StringVarP(&sortOutputFile, "output-file", "o", "", "output file")
-	sortCmd.PersistentFlags().Int64VarP(&sortChunkSize, "chunk-size", "", 0, "chunk size")
+	sortCmd.PersistentFlags().Int64VarP(&sortChunkSize, "chunk-size", "", defaultCLIChunkSize, "chunk size")
 	sortCmd.PersistentFlags().StringVarP(&sortCompression, "compression", "", "zstd", "chunk compression algorithm")
 	sortCmd.PersistentFlags().BoolVarP(&sortIncludeCRC, "include-crc", "", true, "include chunk CRCs in output")
 	sortCmd.PersistentFlags().BoolVarP(&sortChunked, "chunked", "", true, "create an indexed and chunk-compressed output")
