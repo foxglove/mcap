@@ -775,7 +775,9 @@ usage:
   mcap decompress in.mcap -o out.mcap`,
 		}
 		output := decompressCmd.PersistentFlags().StringP("output", "o", "", "output filename")
-		chunkSize := decompressCmd.PersistentFlags().Int64P("chunk-size", "", defaultCLIChunkSize, "chunk size of output file")
+		chunkSize := decompressCmd.PersistentFlags().Int64P(
+			"chunk-size", "", defaultCLIChunkSize, "chunk size of output file",
+		)
 		decompressCmd.Run = func(_ *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(&filterFlags{
 				output:             *output,
