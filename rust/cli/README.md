@@ -117,37 +117,35 @@ port is still pre-production:
      transforms so those commands do not need whole-file fallback for HTTP(S) and
      future object-store inputs.
 10. `recover` chunk recompression optimization (deferred for valid chunks):
-   - `recover` currently decodes every chunk, validates its records, and re-writes
-     all records through the writer (which rebuilds chunks, indexes, the summary
-     section, and CRCs). This guarantees a valid, readable output, and is
-     implemented entirely in the CLI with **no new `mcap` crate public API**.
-   - The cost is that valid chunks are recompressed even when their compression
-     already matches the requested output compression. Go's `recover` avoids this
-     by copying compressed chunk bytes through verbatim (the fast passthrough path
-     from Go PR #1372, https://github.com/foxglove/mcap/pull/1372).
-   - We deliberately do NOT do blind passthrough: it was a performance
-     optimization that never validated chunk contents, so a chunk with a corrupt
-     compressed payload (or a bad `uncompressed_crc`) is copied through and can
-     produce an unreadable file. Always-valid output is treated as a hard
-     invariant.
-   - Discovered while designing this: a safe "avoid recompression" optimization
-     still has to decode + strictly scan every chunk (you can't prove a chunk
-     decodes without decoding it; the CRC is over the uncompressed data), and may
-     only reuse the original compressed bytes when (a) the chunk's records frame
-     and parse cleanly and (b) its compression already matches the target. It
-     would also recompute and fix the stored CRC rather than propagate a bad one.
-   - Before Rust CLI 1.0, decide whether to add this optimization. It requires new
-     **public `mcap` crate API** (a compatibility commitment), at minimum:
-     - `Writer::write_chunk(header: &ChunkHeader, data: &[u8], indexes: &[MessageIndex])`
-       to append an already-compressed chunk plus its message indexes, updating
-       the chunk index and statistics;
-     - summary-only schema/channel registration (e.g. `register_schema` /
-       `register_channel`) so schemas/channels that live inside a copied chunk
-       still appear in the summary section without writing duplicate loose records;
-     - optionally a public standalone-chunk decoder (otherwise the caller decodes
-       chunk bodies itself).
-     Adding this later is purely additive, so we ship the always-re-encode version
-     now and revisit if recompression cost matters in practice.
+    - `recover` currently decodes every chunk, validates its records, and
+      re-writes all records through the writer (which rebuilds chunks, indexes,
+      the summary section, and CRCs). This guarantees a valid, readable output
+      and is implemented entirely in the CLI with no new `mcap` crate public API.
+    - The cost is that valid chunks are recompressed even when their compression
+      already matches the requested output compression. Go's `recover` avoids
+      this by copying compressed chunk bytes through verbatim (the fast
+      passthrough path from Go PR #1372,
+      https://github.com/foxglove/mcap/pull/1372).
+    - We deliberately do NOT do blind passthrough: it was a performance
+      optimization that never validated chunk contents, so a chunk with a
+      corrupt compressed payload (or a bad `uncompressed_crc`) is copied through
+      and can produce an unreadable file. Always-valid output is a hard
+      invariant.
+    - A safe "avoid recompression" optimization still has to decode and strictly
+      scan every chunk (you cannot prove a chunk decodes without decoding it; the
+      CRC is over the uncompressed data), and may reuse the original compressed
+      bytes only when the chunk's records frame and parse cleanly and its
+      compression already matches the target. It would also recompute and fix the
+      stored CRC rather than propagate a bad one.
+    - Before Rust CLI 1.0, decide whether to add this optimization. It requires
+      new public `mcap` crate API (a compatibility commitment): a
+      `Writer::write_chunk(header, data, &[MessageIndex])` to append an
+      already-compressed chunk plus its message indexes (updating the chunk index
+      and statistics), summary-only schema/channel registration so
+      schemas/channels inside a copied chunk still appear in the summary without
+      duplicate loose records, and optionally a public standalone-chunk decoder.
+      Adding this later is purely additive, so we ship the always-re-encode
+      version now and revisit if recompression cost matters in practice.
 
 ## Intentional divergences from Go CLI
 
