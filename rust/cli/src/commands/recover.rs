@@ -66,26 +66,45 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     };
 
     eprintln!(
-        "Recovered {} messages, {} attachments, and {} metadata records.",
-        stats.messages, stats.attachments, stats.metadata
+        "Recovered {}, {}, and {}.",
+        count(stats.messages, "message"),
+        count(stats.attachments, "attachment"),
+        count(stats.metadata, "metadata record"),
     );
 
     // Exit codes: 0 = clean (all records recovered; rebuilt indexes/CRCs are fine), 1 = hard
     // failure / nothing recovered (the error path in main), 2 = recovered but lossy.
     if stats.is_lossy() {
-        eprintln!(
-            "Warning: recovery discarded data ({} messages, {} other records{}); exiting {EXIT_LOSSY}.",
-            stats.discarded_messages,
-            stats.discarded_records,
-            if stats.truncated {
-                ", input truncated"
-            } else {
-                ""
-            }
-        );
+        let mut discarded = Vec::new();
+        if stats.discarded_messages > 0 {
+            discarded.push(count(stats.discarded_messages, "message"));
+        }
+        if stats.discarded_records > 0 {
+            discarded.push(count(stats.discarded_records, "other record"));
+        }
+        let mut parts = Vec::new();
+        if !discarded.is_empty() {
+            parts.push(format!("discarded {}", discarded.join(" and ")));
+        }
+        if stats.truncated {
+            parts.push(
+                "stopped early (input truncated), so trailing data may be lost".to_string(),
+            );
+        }
+        eprintln!("Recovery was lossy: {}.", parts.join("; "));
         std::process::exit(EXIT_LOSSY);
     }
     Ok(())
+}
+
+/// Formats a count with a naive plural (`1 message`, `0 messages`); nouns pluralize with a
+/// trailing `s` (`metadata record` -> `metadata records`).
+fn count(n: u64, noun: &str) -> String {
+    if n == 1 {
+        format!("{n} {noun}")
+    } else {
+        format!("{n} {noun}s")
+    }
 }
 
 /// Resolves the requested output compression. `preserve` keeps the input file's compression

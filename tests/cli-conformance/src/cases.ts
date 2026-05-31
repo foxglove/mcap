@@ -632,9 +632,9 @@ export const cases: CliTestCase[] = [
     tags: ["known-difference", "recover"],
     setup: [
       { type: "copy", from: TEN_MESSAGES, to: "{caseWorkDir}/truncated.mcap" },
-      // Cut mid-chunk so a partial message is dropped (TEN_MESSAGES is ~1083 bytes; the chunk
-      // data spans roughly bytes 50-700, so 500 lands inside it).
-      { type: "truncate", path: "{caseWorkDir}/truncated.mcap", size: 500 },
+      // Cut mid-chunk so only some of the messages are recovered and the data section never
+      // reaches a clean DataEnd (TEN_MESSAGES is ~1083 bytes; the chunk spans past byte 300).
+      { type: "truncate", path: "{caseWorkDir}/truncated.mcap", size: 300 },
     ],
     invocation: { args: ["recover", "truncated.mcap", "-o", "recovered.mcap"] },
     knownDifference: {
