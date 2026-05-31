@@ -180,7 +180,7 @@ port is still pre-production:
      always decoded, and `--compression` alone determines the output codec.
 6. `mcap recover` exit codes signal data loss:
    - Rust CLI `recover` exits `0` when all records were recovered (rebuilding
-     indexes/CRCs does not count as loss), `2` when recovery was lossy (one or
+     indexes/CRCs does not count as loss), `65` when recovery was lossy (one or
      more messages/records were discarded, or the input was truncated mid-record),
      and `1` on hard failure (nothing recovered).
    - Go `recover` exits `0` once recovery starts, even for a truncated or

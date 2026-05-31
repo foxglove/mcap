@@ -11,6 +11,8 @@ use crate::cli::RecoverCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
+const LOSSY_RECOVERY_EXIT_CODE: i32 = 65;
+
 /// Statistics describing what `recover` salvaged and what it had to discard.
 ///
 /// Discarded counts and `truncated` cover only *real data* loss. Rebuilt indexes, summary
@@ -68,10 +70,9 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     );
 
     // Exit codes: 0 = clean (all records recovered; rebuilt indexes/CRCs are fine), 1 = hard
-    // failure / nothing recovered (the error path in `main`), 2 = recovered but lossy. Both
-    // non-zero codes originate outside this block (1 from `main`'s error handler), so only the
-    // lossy code is emitted here. This diverges from the Go CLI, which always exits 0 once
-    // recovery starts.
+    // failure / nothing recovered (the error path in `main`), 65 = recovered but lossy. Code 1
+    // comes from `main`'s error handler; only the lossy code is emitted here. This diverges from
+    // the Go CLI, which always exits 0 once recovery starts.
     if stats.is_lossy() {
         let mut discarded = Vec::new();
         if stats.discarded_messages > 0 {
@@ -88,7 +89,7 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
             parts.push("stopped early (input truncated), so trailing data may be lost".to_string());
         }
         eprintln!("Recovery was lossy: {}.", parts.join("; "));
-        std::process::exit(2);
+        std::process::exit(LOSSY_RECOVERY_EXIT_CODE);
     }
     Ok(())
 }
@@ -179,7 +180,10 @@ fn read_header(input: &[u8]) -> Result<Option<mcap::records::Header>> {
     match reader.next() {
         Some(Ok(Record::Header(header))) => Ok(Some(header)),
         Some(Ok(_)) | None => Ok(None),
-        Some(Err(err)) => Err(err.into()),
+        Some(Err(err)) => {
+            warn!("failed to parse input header: {err:#}; using a default output header");
+            Ok(None)
+        }
     }
 }
 
@@ -380,6 +384,25 @@ mod tests {
         output.into_inner()
     }
 
+    fn corrupt_leading_header_body(input: &[u8]) -> Vec<u8> {
+        let header_offset = mcap::MAGIC.len();
+        assert_eq!(input[header_offset], op::HEADER);
+        let header_len = u64::from_le_bytes(
+            input[header_offset + 1..header_offset + OPCODE_LEN_SIZE]
+                .try_into()
+                .expect("header length bytes"),
+        ) as usize;
+        let records_after_header = header_offset + OPCODE_LEN_SIZE + header_len;
+
+        let mut corrupted = Vec::new();
+        corrupted.extend_from_slice(mcap::MAGIC);
+        corrupted.push(op::HEADER);
+        corrupted.extend_from_slice(&1u64.to_le_bytes());
+        corrupted.push(0);
+        corrupted.extend_from_slice(&input[records_after_header..]);
+        corrupted
+    }
+
     fn recover_to_vec(input: &[u8], compression: &str) -> (Vec<u8>, RecoverStats) {
         let target = super::resolve_compression(compression, input).expect("compression");
         let (stats, output) =
@@ -451,6 +474,19 @@ mod tests {
         assert_eq!(stats.attachments, 1);
         assert_eq!(stats.metadata, 1);
         assert!(!stats.is_lossy());
+    }
+
+    #[test]
+    fn recovers_data_after_corrupt_leading_header() {
+        let input = corrupt_leading_header_body(&write_test_input(None));
+        let (output, stats) = recover_to_vec(&input, "preserve");
+        let (messages, attachments, metadata) = count_output_records(&output);
+        assert_eq!(messages, 300);
+        assert_eq!(attachments, 1);
+        assert_eq!(metadata, 1);
+        assert_eq!(stats.messages, 300);
+        assert_eq!(stats.discarded_records, 1);
+        assert!(stats.is_lossy());
     }
 
     #[test]
