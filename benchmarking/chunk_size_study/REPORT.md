@@ -36,6 +36,61 @@ VM with the file in page cache.
   defensible upper bound for streaming-heavy, point-cloud-heavy, remote-served
   workloads**, but is a poor universal default. **≥16 MiB is not recommended.**
 
+## Current defaults across languages
+
+The MCAP spec does not mandate a chunk size, and each implementation picked its
+own writer default independently. They fall into three clusters:
+
+| Language | Default chunk size | Bytes | Source |
+| --- | --- | --- | --- |
+| C++ | 768 KiB | `1024 * 768` | `cpp/mcap/include/mcap/types.hpp` (`DefaultChunkSize`) |
+| Rust | 768 KiB | `1024 * 768` | `rust/mcap/src/write.rs` |
+| Go | 1 MiB | `1024 * 1024` | `go/mcap/writer.go` |
+| Python | 1 MiB | `1024 * 1024` | `python/mcap/mcap/writer.py` |
+| TypeScript | 1 MiB | `1024 * 1024` | `typescript/core/src/McapWriter.ts` |
+| Swift | 10 MiB | `10 * 1024 * 1024` | `swift/mcap/MCAPWriter.swift` |
+
+The CLIs that re-chunk files use their own, larger defaults: the Go CLI uses
+4 MiB (`filter`/`compress`/`decompress`/`recover`/`sort`), and the Rust CLI uses
+4 MiB (filter/merge/recover) and 8 MiB (convert).
+
+Note that "chunk size" is a target for the *uncompressed* chunk and is treated
+as a soft ceiling: a chunk is closed once adding the next message would exceed
+it, and a single message larger than the target is isolated in its own chunk
+(see history below). So the on-disk compressed chunk is smaller than the target
+by roughly the compression ratio.
+
+## History of the chunk-size defaults
+
+There has never been a benchmark or analysis establishing an "optimal" chunk
+size — this study is the first. The existing defaults were chosen for
+consistency with neighboring implementations or to avoid a data-loss footgun:
+
+- **TS 1 MiB default ([#254](https://github.com/foxglove/mcap/pull/254), 2022).**
+  The closest thing to a discussion of the value itself. A reviewer noted
+  *"1MB feels small in this day and age (especially if images are involved),"*
+  and the author responded that *"1MB is in line with defaults for Go and Python
+  writers currently (C++ defaults to 768k)."* So 1 MiB was chosen for
+  cross-language consistency, and the "too small for images" concern was
+  acknowledged but not acted on.
+- **Rust auto-chunking ([#754](https://github.com/foxglove/mcap/pull/754), 2022).**
+  Added size-based chunk breaking. The original Rust writer author noted that
+  the "right" criterion is workload-dependent (Anduril used uncompressed size
+  and/or elapsed time depending on context).
+- **Rust 768 KiB default ([#777](https://github.com/foxglove/mcap/pull/777), 2023).**
+  Changed the Rust default from `None` (unbounded — *"a footgun [that] can lead
+  to a situation where a user loses all of their MCAP data if they never break
+  chunks"*) to `Some(1024 * 768)`. The motivation was safety, not performance,
+  and it matched C++ (768 KiB) rather than the 1 MiB used by Go/Python/TS.
+- **Soft-ceiling semantics ([#1291](https://github.com/foxglove/mcap/pull/1291), 2025).**
+  Changed chunk size from a floor (close *after* exceeding) to a soft ceiling
+  (close *before* exceeding), and made oversized messages get their own chunk.
+  This is why, for the point-cloud corpus below, chunk sizes smaller than the
+  ~1.5 MB message are degenerate.
+
+The result is the three-way split above (768 KiB / 1 MiB / 10 MiB) with no
+empirical basis — which is what motivated this study.
+
 ## Setup
 
 | Dimension | Values |
