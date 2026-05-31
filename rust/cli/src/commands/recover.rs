@@ -19,8 +19,8 @@ use crate::context::CommandContext;
 // - Exit code 3: successful recovery with data loss
 const EXIT_LOSSY_RECOVERY: i32 = 3;
 
-// Bound record/chunk allocations while scanning corrupt streams. Valid MCAPs with individual
-// records larger than this should use another tool path or raise this limit in a follow-up flag.
+// 1 GiB upper limit on record/chunk allocations while scanning streams.
+// If we want to support recovering files with records larger than this, we could introduce a flag.
 const RECOVER_RECORD_LENGTH_LIMIT: usize = 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy)]
