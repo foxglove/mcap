@@ -252,8 +252,8 @@ maps to round trips depends on the reader:
 
 - A **naive reader that issues one ranged GET per chunk** does fewer round trips
   with larger chunks, so its windowed-read latency falls as chunks grow (662 ms
-  → 257 ms regional, 1 MiB → 8 MiB). This is the only place large chunks "win",
-  and it is the curve the earlier draft of this report leaned on.
+  → 257 ms regional, 1 MiB → 8 MiB). This is the only access pattern in the whole
+  study where large chunks are faster, and only for this reader design.
 - A **coalescing/buffering reader that fetches the contiguous span in one ranged
   GET** does *not* care about chunk count. Its latency is flat — and actually
   rises slightly with bigger chunks, because the window snaps to coarser chunk
@@ -266,12 +266,10 @@ leaving performance on the table; the correct fix is to coalesce requests, not
 to inflate chunk size. With a good reader, smaller chunks are as fast or faster
 for streaming *and* much faster for random access.
 
-(The earlier `fig5_remote_crossover.png` plots the naive-reader model for point
-vs streaming; it is retained for reference but the naive streaming curve should
-be read with the above caveat.)
+(`fig5_remote_crossover.png` plots the naive-reader model for point vs
+streaming; its naive streaming curve should be read with the above caveat.)
 
-So the remote picture, contrary to the intuition that "8 MB trades off well for
-streaming", actually favors **smaller** chunks: random access strictly prefers
+So the remote picture favors **smaller** chunks: random access strictly prefers
 them, full scans are indifferent, and streaming only prefers large chunks under
 a naive non-coalescing reader.
 
