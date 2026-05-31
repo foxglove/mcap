@@ -455,7 +455,7 @@ mod tests {
     fn default_options() -> RecoverOptions {
         RecoverOptions {
             compression: Some(mcap::Compression::Zstd),
-            chunk_size: 4 * 1024 * 1024,
+            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
             always_decode_chunk: false,
         }
     }

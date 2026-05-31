@@ -47,6 +47,7 @@ mod tests {
         GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
         ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
         ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand, SortCommand,
+        DEFAULT_CHUNK_SIZE,
     };
 
     #[test]
@@ -386,7 +387,7 @@ mod tests {
                 input: "input.bag".into(),
                 output: "output.mcap".into(),
                 compression: CompressionFormat::Zstd,
-                chunk_size: 8 * 1024 * 1024,
+                chunk_size: DEFAULT_CHUNK_SIZE,
                 include_crc: true,
                 chunked: true,
             })
@@ -438,7 +439,7 @@ mod tests {
                 input: "input.bag".into(),
                 output: "output.mcap".into(),
                 compression: CompressionFormat::Zstd,
-                chunk_size: 8 * 1024 * 1024,
+                chunk_size: DEFAULT_CHUNK_SIZE,
                 include_crc: true,
                 chunked: true,
             })
@@ -495,7 +496,7 @@ mod tests {
             Command::Compress(CompressCommand {
                 file: Some("in.mcap".into()),
                 output: None,
-                chunk_size: 4 * 1024 * 1024,
+                chunk_size: DEFAULT_CHUNK_SIZE,
                 compression: "zstd".to_string(),
                 unchunked: false,
             })
@@ -538,7 +539,7 @@ mod tests {
             Command::Decompress(DecompressCommand {
                 file: Some("in.mcap".into()),
                 output: None,
-                chunk_size: 4 * 1024 * 1024,
+                chunk_size: DEFAULT_CHUNK_SIZE,
             })
         );
     }
@@ -621,7 +622,7 @@ mod tests {
                 file: Some("input.mcap".into()),
                 output: None,
                 always_decode_chunk: false,
-                chunk_size: 4 * 1024 * 1024,
+                chunk_size: DEFAULT_CHUNK_SIZE,
                 compression: "zstd".to_string(),
             })
         );
@@ -636,7 +637,7 @@ mod tests {
             Command::Sort(SortCommand {
                 file: "in.mcap".into(),
                 output_file: "out.mcap".into(),
-                chunk_size: 4 * 1024 * 1024,
+                chunk_size: DEFAULT_CHUNK_SIZE,
                 compression: CompressionFormat::Zstd,
                 include_crc: true,
                 chunked: true,
@@ -717,7 +718,7 @@ mod tests {
             Command::Sort(SortCommand {
                 file: "in.mcap".into(),
                 output_file: "out.mcap".into(),
-                chunk_size: 4 * 1024 * 1024,
+                chunk_size: DEFAULT_CHUNK_SIZE,
                 compression: CompressionFormat::Zstd,
                 include_crc: true,
                 chunked: true,
@@ -751,7 +752,7 @@ mod tests {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
                 output_file: None,
                 compression: CompressionFormat::Zstd,
-                chunk_size: 8 * 1024 * 1024,
+                chunk_size: DEFAULT_CHUNK_SIZE,
                 include_crc: true,
                 chunked: true,
                 allow_duplicate_metadata: false,
@@ -812,7 +813,7 @@ mod tests {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
                 output_file: None,
                 compression: CompressionFormat::Zstd,
-                chunk_size: 8 * 1024 * 1024,
+                chunk_size: DEFAULT_CHUNK_SIZE,
                 include_crc: true,
                 chunked: true,
                 allow_duplicate_metadata: false,
@@ -845,7 +846,7 @@ mod tests {
                 ],
                 output_file: None,
                 compression: CompressionFormat::Zstd,
-                chunk_size: 8 * 1024 * 1024,
+                chunk_size: DEFAULT_CHUNK_SIZE,
                 include_crc: true,
                 chunked: true,
                 allow_duplicate_metadata: false,

@@ -249,7 +249,7 @@ mod tests {
     fn default_sort_options() -> SortOptions {
         SortOptions {
             compression: Some(mcap::Compression::Zstd),
-            chunk_size: 4 * 1024 * 1024,
+            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
             include_crc: true,
             chunked: true,
         }
@@ -428,7 +428,7 @@ mod tests {
                 file: input_path.clone(),
                 output_file: output_path.clone(),
                 compression: CompressionFormat::Zstd,
-                chunk_size: 4 * 1024 * 1024,
+                chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
                 include_crc: true,
                 chunked: true,
             },
@@ -458,7 +458,7 @@ mod tests {
                 file: file_path.clone(),
                 output_file: file_path.clone(),
                 compression: CompressionFormat::Zstd,
-                chunk_size: 4 * 1024 * 1024,
+                chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
                 include_crc: true,
                 chunked: true,
             },
