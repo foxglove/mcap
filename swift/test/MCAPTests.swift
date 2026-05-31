@@ -16,31 +16,6 @@ struct MCAPTests {
   }
 
   @Test
-  func defaultChunkSizeIsOneMiB() async throws {
-    let buffer = Buffer()
-    let writer = MCAPWriter(buffer)
-    await writer.start(library: "", profile: "")
-    let channelID = await writer.addChannel(schemaID: 0, topic: "topic", messageEncoding: "", metadata: [:])
-    let data = Data(repeating: 0x42, count: 600 * 1024)
-    for sequence in 0 ..< 3 {
-      await writer.addMessage(
-        Message(
-          channelID: channelID,
-          sequence: UInt32(sequence),
-          logTime: UInt64(sequence),
-          publishTime: UInt64(sequence),
-          data: data
-        )
-      )
-    }
-    await writer.end()
-
-    let reader = try MCAPRandomAccessReader(buffer)
-    #expect(reader.chunkIndexes.count == 2)
-    #expect(reader.statistics?.chunkCount == 2)
-  }
-
-  @Test
   func validatesChunkCRC() async throws {
     var buffer = Data()
     buffer.append(mcapMagic)

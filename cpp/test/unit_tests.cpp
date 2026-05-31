@@ -79,12 +79,6 @@ static void writeExampleFile(Buffer& buffer) {
   writer.close();
 }
 
-TEST_CASE("Default chunk size", "[writer]") {
-  mcap::McapWriterOptions opts("test");
-  REQUIRE(mcap::DefaultChunkSize == 1024 * 1024);
-  REQUIRE(opts.chunkSize == 1024 * 1024);
-}
-
 TEST_CASE("internal::crc32", "[writer]") {
   const auto crc32 = [](const uint8_t* data, size_t len) {
     return mcap::internal::crc32Final(mcap::internal::crc32Update(

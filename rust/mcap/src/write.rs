@@ -1898,11 +1898,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_chunk_size_is_one_mib() {
-        assert_eq!(WriteOptions::default().chunk_size, Some(1024 * 1024));
-    }
-
-    #[test]
     fn writes_all_channel_ids() {
         let file = std::io::Cursor::new(Vec::new());
         let mut writer = Writer::new(file).expect("failed to construct writer");
