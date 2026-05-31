@@ -147,6 +147,9 @@ port is still pre-production:
       and statistics), summary-only schema/channel registration so
       schemas/channels inside a copied chunk still appear in the summary without
       duplicate loose records, and optionally a public standalone-chunk decoder.
+      The same work could make `--compression preserve` preserve compression per
+      chunk instead of normalizing output to the first recovered chunk's
+      compression.
       Adding this later is purely additive, so we ship the always-re-encode
       version now and revisit if recompression cost matters in practice.
 
