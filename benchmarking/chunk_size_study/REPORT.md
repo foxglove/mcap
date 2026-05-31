@@ -31,7 +31,8 @@ VM with the file in page cache.
   This benefit is real (2–4×) but is mostly realized by ~4–8 MiB and saturates
   after that.
 - **Recommended default: 4 MiB.** It is the knee of every curve: it captures
-  100% of the compression ratio and write throughput, cuts remote streaming
+  all of the compression ratio and (within run-to-run noise) the full write
+  throughput, cuts remote streaming
   latency 39–62% vs 1 MiB, and costs only +3.6 MiB reader RSS and +6 ms
   single-message read latency vs 1 MiB. Going to 8 MiB buys less additional
   streaming gain while memory (+64%) and random-read latency (+33%) climb
@@ -232,11 +233,11 @@ choice.
 | 1 MiB → 4 MiB → 8 MiB | 1 MiB | 4 MiB | 8 MiB |
 | --- | --- | --- | --- |
 | compression ratio (point cloud) | 2.15 | 2.15 | 2.15 |
-| write throughput (mixed) | 164 MB/s | 167 MB/s | 167 MB/s |
+| write throughput (mixed) | 164 MB/s | 156 MB/s | 157 MB/s |
 | reader peak RSS (mixed, full) | 7.4 MiB | 11.0 MiB | 17.9 MiB |
 | point read latency, regional (point cloud) | 46 ms | 52 ms | 69 ms |
-| streaming latency, regional (mixed) | 1067 ms | 403 ms | 295 ms |
-| streaming latency, high-latency remote (point cloud) | 3074 ms | 1786 ms | 1008 ms |
+| streaming latency, regional (mixed) | 1068 ms | 402 ms | 295 ms |
+| streaming latency, high-latency remote (point cloud) | 3074 ms | 1785 ms | 1008 ms |
 
 4 MiB is where the streaming benefit is largely realized (−40 to −62% vs 1 MiB)
 while random-read latency and reader memory are still close to the 1 MiB
