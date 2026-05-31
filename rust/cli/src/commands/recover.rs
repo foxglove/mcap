@@ -1,7 +1,7 @@
 use std::io::{IsTerminal as _, Seek, Write};
 
 use anyhow::{bail, Context, Result};
-use log::warn;
+use log::{info, warn};
 
 use mcap::records::Record;
 use mcap::sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions};
@@ -19,12 +19,25 @@ const EXIT_LOSSY_RECOVERY: i32 = 65;
 /// Discarded counts and `truncated` cover only *real data* loss. Rebuilt indexes, summary
 /// sections, and duplicate schema/channel definitions are not counted as loss.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
+struct RecordRecoveryStats {
+    recovered: u64,
+    discarded: u64,
+}
+
+/// Statistics describing what `recover` salvaged and what it had to discard.
+///
+/// Discarded counts and `truncated` cover real input data loss. Rebuilt indexes/CRCs and missing
+/// records are not counted as loss.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct RecoverStats {
-    messages: u64,
-    attachments: u64,
-    metadata: u64,
-    discarded_messages: u64,
-    discarded_records: u64,
+    headers: RecordRecoveryStats,
+    schemas: RecordRecoveryStats,
+    channels: RecordRecoveryStats,
+    chunks: RecordRecoveryStats,
+    messages: RecordRecoveryStats,
+    attachments: RecordRecoveryStats,
+    metadata: RecordRecoveryStats,
+    other_records: RecordRecoveryStats,
     /// Recovery stopped before a clean end (truncated mid-record, or a mid-stream decode error
     /// halted the scan), so trailing data was lost.
     truncated: bool,
@@ -34,7 +47,44 @@ impl RecoverStats {
     /// True if any real data was lost (a complete record/message was discarded, or the scan
     /// stopped before a clean end so a partial trailing message was dropped).
     fn is_lossy(&self) -> bool {
-        self.truncated || self.discarded_messages > 0 || self.discarded_records > 0
+        self.truncated
+            || self.headers.discarded > 0
+            || self.schemas.discarded > 0
+            || self.channels.discarded > 0
+            || self.chunks.discarded > 0
+            || self.messages.discarded > 0
+            || self.attachments.discarded > 0
+            || self.metadata.discarded > 0
+            || self.other_records.discarded > 0
+    }
+
+    fn discarded_counts(&self) -> Vec<(u64, &'static str)> {
+        [
+            (self.headers.discarded, "header"),
+            (self.schemas.discarded, "schema"),
+            (self.channels.discarded, "channel"),
+            (self.chunks.discarded, "chunk"),
+            (self.messages.discarded, "message"),
+            (self.attachments.discarded, "attachment"),
+            (self.metadata.discarded, "metadata record"),
+            (self.other_records.discarded, "other record"),
+        ]
+        .into_iter()
+        .filter(|(count, _)| *count > 0)
+        .collect()
+    }
+
+    fn record_kind_mut(&mut self, opcode: u8) -> &mut RecordRecoveryStats {
+        match opcode {
+            mcap::records::op::HEADER => &mut self.headers,
+            mcap::records::op::SCHEMA => &mut self.schemas,
+            mcap::records::op::CHANNEL => &mut self.channels,
+            mcap::records::op::CHUNK => &mut self.chunks,
+            mcap::records::op::MESSAGE => &mut self.messages,
+            mcap::records::op::ATTACHMENT => &mut self.attachments,
+            mcap::records::op::METADATA => &mut self.metadata,
+            _ => &mut self.other_records,
+        }
     }
 }
 
@@ -65,9 +115,9 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
 
     eprintln!(
         "Recovered {}, {}, and {}.",
-        count(stats.messages, "message"),
-        count(stats.attachments, "attachment"),
-        count(stats.metadata, "metadata record"),
+        count(stats.messages.recovered, "message"),
+        count(stats.attachments.recovered, "attachment"),
+        count(stats.metadata.recovered, "metadata record"),
     );
 
     // Exit codes: 0 = clean (all records recovered; rebuilt indexes/CRCs are fine), 1 = hard
@@ -75,13 +125,11 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     // comes from `main`'s error handler; only the lossy code is emitted here. This diverges from
     // the Go CLI, which always exits 0 once recovery starts.
     if stats.is_lossy() {
-        let mut discarded = Vec::new();
-        if stats.discarded_messages > 0 {
-            discarded.push(count(stats.discarded_messages, "message"));
-        }
-        if stats.discarded_records > 0 {
-            discarded.push(count(stats.discarded_records, "other record"));
-        }
+        let discarded: Vec<_> = stats
+            .discarded_counts()
+            .into_iter()
+            .map(|(n, noun)| count(n, noun))
+            .collect();
         let mut parts = Vec::new();
         if !discarded.is_empty() {
             parts.push(format!("discarded {}", discarded.join(" and ")));
@@ -182,7 +230,7 @@ fn read_header(input: &[u8]) -> Result<Option<mcap::records::Header>> {
         Some(Ok(Record::Header(header))) => Ok(Some(header)),
         Some(Ok(_)) | None => Ok(None),
         Some(Err(err)) => {
-            warn!("failed to parse input header: {err:#}; using a default output header");
+            info!("failed to parse input header: {err:#}; using a default output header");
             Ok(None)
         }
     }
@@ -224,12 +272,15 @@ fn recover_records<W: Write + Seek>(
                     Ok(record) => record,
                     Err(err) => {
                         warn!("failed to parse record opcode 0x{opcode:02x}: {err:#}; skipping");
-                        stats.discarded_records += 1;
+                        stats.record_kind_mut(opcode).discarded += 1;
                         continue;
                     }
                 };
 
                 match record {
+                    Record::Header(_) => {
+                        stats.headers.recovered += 1;
+                    }
                     Record::Schema { header, data } => {
                         if let Err(err) = writer.add_schema_with_id(
                             header.id,
@@ -241,7 +292,9 @@ fn recover_records<W: Write + Seek>(
                                 "skipping schema id {} ({}): {err:#}",
                                 header.id, header.name
                             );
-                            stats.discarded_records += 1;
+                            stats.schemas.discarded += 1;
+                        } else {
+                            stats.schemas.recovered += 1;
                         }
                     }
                     Record::Channel(channel) => {
@@ -254,13 +307,14 @@ fn recover_records<W: Write + Seek>(
                         ) {
                             Ok(_) => {
                                 known_channels.insert(channel.id);
+                                stats.channels.recovered += 1;
                             }
                             Err(err) => {
                                 warn!(
                                     "skipping channel id {} ({}): {err:#}",
                                     channel.id, channel.topic
                                 );
-                                stats.discarded_records += 1;
+                                stats.channels.discarded += 1;
                             }
                         }
                     }
@@ -270,13 +324,13 @@ fn recover_records<W: Write + Seek>(
                                 "skipping message for unknown channel id {}",
                                 header.channel_id
                             );
-                            stats.discarded_messages += 1;
+                            stats.messages.discarded += 1;
                             continue;
                         }
                         writer
                             .write_to_known_channel(&header, data.as_ref())
                             .context("failed to write recovered message")?;
-                        stats.messages += 1;
+                        stats.messages.recovered += 1;
                     }
                     Record::Attachment { header, data, .. } => {
                         writer
@@ -288,13 +342,13 @@ fn recover_records<W: Write + Seek>(
                                 data,
                             })
                             .context("failed to write recovered attachment")?;
-                        stats.attachments += 1;
+                        stats.attachments.recovered += 1;
                     }
                     Record::Metadata(metadata) => {
                         writer
                             .write_metadata(&metadata)
                             .context("failed to write recovered metadata")?;
-                        stats.metadata += 1;
+                        stats.metadata.recovered += 1;
                     }
                     // The data section is over; the summary section (if any) is not recovered.
                     Record::DataEnd(_) | Record::Footer(_) => break,
@@ -309,6 +363,14 @@ fn recover_records<W: Write + Seek>(
                 // The sans-io reader has no resync primitive after a stream-level decode failure
                 // (truncation, corrupt compressed chunk payload), so stop and keep what we have.
                 warn!("{err:#} -- stopping recovery scan");
+                if matches!(
+                    err,
+                    mcap::McapError::UnexpectedEoc
+                        | mcap::McapError::BadChunkCrc { .. }
+                        | mcap::McapError::DecompressionError(_)
+                ) {
+                    stats.chunks.discarded += 1;
+                }
                 stats.truncated = true;
                 break;
             }
@@ -471,9 +533,10 @@ mod tests {
         assert_eq!(messages, 300);
         assert_eq!(attachments, 1);
         assert_eq!(metadata, 1);
-        assert_eq!(stats.messages, 300);
-        assert_eq!(stats.attachments, 1);
-        assert_eq!(stats.metadata, 1);
+        assert_eq!(stats.headers.recovered, 1);
+        assert_eq!(stats.messages.recovered, 300);
+        assert_eq!(stats.attachments.recovered, 1);
+        assert_eq!(stats.metadata.recovered, 1);
         assert!(!stats.is_lossy());
     }
 
@@ -485,8 +548,8 @@ mod tests {
         assert_eq!(messages, 300);
         assert_eq!(attachments, 1);
         assert_eq!(metadata, 1);
-        assert_eq!(stats.messages, 300);
-        assert_eq!(stats.discarded_records, 1);
+        assert_eq!(stats.messages.recovered, 300);
+        assert_eq!(stats.headers.discarded, 1);
         assert!(stats.is_lossy());
     }
 
@@ -565,7 +628,7 @@ mod tests {
         let (messages, _, _) = count_output_records(&output);
         assert!(messages > 0);
         assert!(messages < 100);
-        assert_eq!(stats.messages as usize, messages);
+        assert_eq!(stats.messages.recovered as usize, messages);
         assert!(stats.truncated);
         assert!(stats.is_lossy());
     }
@@ -583,7 +646,7 @@ mod tests {
         assert_eq!(messages, 300);
         assert_eq!(attachments, 1);
         assert_eq!(metadata, 1);
-        assert_eq!(stats.messages, 300);
+        assert_eq!(stats.messages.recovered, 300);
         assert!(!stats.is_lossy());
     }
 }
