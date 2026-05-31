@@ -96,7 +96,7 @@ empirical basis — which is what motivated this study.
 | Dimension | Values |
 | --- | --- |
 | Chunk size (target uncompressed) | 256 KiB, 768 KiB, 1 MiB, 4 MiB, 8 MiB, 16 MiB, 32 MiB |
-| Message class | `small` (~100 B telemetry), `jpeg` (~150 KB incompressible image), `pointcloud` (~1.5 MB semi-compressible), `mixed` (5-channel robot recording) |
+| Message class | `small` (~100 B telemetry), `jpeg` (~150 KB incompressible image), `pointcloud` (~1.5 MB semi-compressible), `mixed` (5-channel robot recording, rate-driven so all channels run concurrently over one duration) |
 | Compression | zstd (primary), lz4 (sensitivity) |
 | Read patterns | `full`, `point` (1 message), `range` (1% window), `streaming` (15% window), `topic` (mixed only) |
 
@@ -123,7 +123,7 @@ Profiles: **local NVMe** (~50 µs, 2 GB/s), **regional object store** (20 ms,
 | small | 1.35 | 1.37 | 1.37 | 1.37 | 1.37 | 1.37 | 1.37 |
 | jpeg | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 | 1.00 |
 | pointcloud | 2.15 | 2.15 | 2.15 | 2.15 | 2.15 | 2.15 | 2.15 |
-| mixed | 1.95 | 1.95 | 1.95 | 1.94 | 1.93 | 1.93 | 1.93 |
+| mixed | 1.87 | 1.87 | 1.87 | 1.86 | 1.86 | 1.86 | 1.86 |
 
 Beyond 256 KiB the ratio is flat (and the `mixed` corpus actually gets slightly
 *worse* at large chunks, as incompressible camera data shares a zstd stream with
@@ -151,8 +151,8 @@ whole (de)compressed chunk:
 
 | class | 1M | 4M | 8M | 16M | 32M |
 | --- | --- | --- | --- | --- | --- |
-| pointcloud | 7.2 MiB | 9.9 MiB | 18.0 MiB | 34.6 MiB | 64.9 MiB |
-| mixed | 7.3 MiB | 11.0 MiB | 21.7 MiB | 43.1 MiB | 69.7 MiB |
+| pointcloud | 7.1 MiB | 9.7 MiB | 17.9 MiB | 34.6 MiB | 64.8 MiB |
+| mixed | 7.4 MiB | 11.0 MiB | 17.9 MiB | 35.4 MiB | 69.5 MiB |
 
 Going from 1 MiB to 8 MiB roughly triples reader memory; 32 MiB is ~10×. This
 matters for memory-constrained robots and for servers running many concurrent
@@ -239,6 +239,13 @@ standardize on one value, **1 MiB (already shared by Go/Python/TypeScript) is
 the best-supported choice**, with an option to raise it for remote-streaming
 deployments.
 
+**Proposed action:** this study and PR change **no** library default — it exists
+to document the tradeoffs and give the defaults an empirical basis. The existing
+768 KiB–1 MiB defaults are already near-optimal, so no urgent change is needed.
+If maintainers want to act on it, the natural follow-ups (each its own PR) are
+(1) lower Swift's 10 MiB toward the 1–4 MiB range, and (2) optionally unify all
+languages on 1 MiB. Those are intentionally left out of this PR.
+
 ## Caveats
 
 - Results reflect the C++ implementation; absolute throughput/RSS are
@@ -246,6 +253,13 @@ deployments.
   remote crossover) generalize across languages.
 - The remote model is analytic (idealized one-GET-per-chunk reader); real
   clients add request overhead and may coalesce or parallelize differently.
+- The model's compute term is the measured local decode wall time, taken with
+  the file in page cache, so it folds local read I/O into "decode." This is
+  negligible for the decode-bound patterns studied here but slightly
+  double-counts I/O for trivially small reads. The supplementary
+  `raw_fetched`/`raw_reads` columns in `raw.tsv` record the C++ reader's actual
+  record-granular I/O; the model intentionally ignores them so it reflects the
+  format rather than that reader's I/O granularity.
 - At 32 MiB the ~256 MiB corpora hold only ~8 chunks, so the largest-chunk
   selective-read points are coarser; this does not affect the ratio, write, or
   memory conclusions.
