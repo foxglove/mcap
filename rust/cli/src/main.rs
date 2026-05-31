@@ -620,9 +620,8 @@ mod tests {
             Command::Recover(RecoverCommand {
                 file: Some("input.mcap".into()),
                 output: None,
-                always_decode_chunk: false,
                 chunk_size: 4 * 1024 * 1024,
-                compression: "zstd".to_string(),
+                compression: "preserve".to_string(),
             })
         );
     }
@@ -652,7 +651,6 @@ mod tests {
             "input.mcap",
             "-o",
             "out.mcap",
-            "-a",
             "--chunk-size",
             "2048",
             "--compression",
@@ -664,7 +662,6 @@ mod tests {
             Command::Recover(RecoverCommand {
                 file: Some("input.mcap".into()),
                 output: Some("out.mcap".into()),
-                always_decode_chunk: true,
                 chunk_size: 2048,
                 compression: "none".to_string(),
             })

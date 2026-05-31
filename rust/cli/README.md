@@ -116,21 +116,38 @@ port is still pre-production:
    - Before Rust CLI 1.0, extend this pattern to metadata/attachment-preserving
      transforms so those commands do not need whole-file fallback for HTTP(S) and
      future object-store inputs.
-10. `recover` chunk CRC passthrough:
-   - Current Go-compatible default behavior copies raw chunk bytes and message
-     indexes without rewriting chunk headers. If the input has a bad
-     `uncompressed_crc` but intact compressed payload, the recovered file keeps
-     the bad CRC.
-   - This is a side effect of the fast passthrough path added in Go PR #1372, not
-     an explicit CRC policy. The original Go `recover` implementation skipped
-     invalid-CRC chunks instead of copying them.
-   - Go's default reader does not validate chunk CRCs, so recovered files remain
-     readable there. Rust's default readers validate chunk CRCs, so the same
-     output can fail to read unless validation is disabled.
-   - The Rust CLI matches Go passthrough behavior for now. Before Rust CLI 1.0,
-     decide whether `recover` should instead recompute CRCs, set CRC to 0 where
-     the spec allows skipping validation, or require `--always-decode-chunk` for
-     a clean rewrite.
+10. `recover` chunk recompression optimization (deferred for valid chunks):
+   - `recover` currently decodes every chunk, validates its records, and re-writes
+     all records through the writer (which rebuilds chunks, indexes, the summary
+     section, and CRCs). This guarantees a valid, readable output, and is
+     implemented entirely in the CLI with **no new `mcap` crate public API**.
+   - The cost is that valid chunks are recompressed even when their compression
+     already matches the requested output compression. Go's `recover` avoids this
+     by copying compressed chunk bytes through verbatim (the fast passthrough path
+     from Go PR #1372, https://github.com/foxglove/mcap/pull/1372).
+   - We deliberately do NOT do blind passthrough: it was a performance
+     optimization that never validated chunk contents, so a chunk with a corrupt
+     compressed payload (or a bad `uncompressed_crc`) is copied through and can
+     produce an unreadable file. Always-valid output is treated as a hard
+     invariant.
+   - Discovered while designing this: a safe "avoid recompression" optimization
+     still has to decode + strictly scan every chunk (you can't prove a chunk
+     decodes without decoding it; the CRC is over the uncompressed data), and may
+     only reuse the original compressed bytes when (a) the chunk's records frame
+     and parse cleanly and (b) its compression already matches the target. It
+     would also recompute and fix the stored CRC rather than propagate a bad one.
+   - Before Rust CLI 1.0, decide whether to add this optimization. It requires new
+     **public `mcap` crate API** (a compatibility commitment), at minimum:
+     - `Writer::write_chunk(header: &ChunkHeader, data: &[u8], indexes: &[MessageIndex])`
+       to append an already-compressed chunk plus its message indexes, updating
+       the chunk index and statistics;
+     - summary-only schema/channel registration (e.g. `register_schema` /
+       `register_channel`) so schemas/channels that live inside a copied chunk
+       still appear in the summary section without writing duplicate loose records;
+     - optionally a public standalone-chunk decoder (otherwise the caller decodes
+       chunk bodies itself).
+     Adding this later is purely additive, so we ship the always-re-encode version
+     now and revisit if recompression cost matters in practice.
 
 ## Intentional divergences from Go CLI
 
@@ -148,3 +165,18 @@ port is still pre-production:
      the sum of remote input sizes.
    - Go-compatible behavior allowed those remote reads without an explicit
      opt-in.
+4. `mcap recover` always produces a valid output:
+   - Rust CLI `recover` decodes and validates every chunk and re-writes records
+     through the writer, so the output is always a readable MCAP with correct
+     CRCs and rebuilt indexes. Undecodable/corrupt chunk payloads stop the scan
+     (keeping what was recovered) rather than being copied through.
+   - Go `recover` copies chunk bytes through verbatim by default and can emit
+     corrupt or bad-CRC chunks, producing files that strict readers reject.
+5. `mcap recover` compression is opt-in (`--compression preserve` by default):
+   - Rust CLI `recover` defaults to `--compression preserve`, keeping the input
+     file's compression (uncompressed if the input is unchunked). Pass
+     `--compression zstd|lz4|none` to choose explicitly.
+   - Go `recover` defaults to `zstd` and compresses uncompressed/loose input by
+     default.
+   - The Rust CLI also has no `--always-decode-chunk` flag (Go does): chunks are
+     always decoded, and `--compression` alone determines the output codec.

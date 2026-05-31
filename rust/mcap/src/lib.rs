@@ -68,7 +68,6 @@
 
 pub mod read;
 pub mod records;
-pub mod recover;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 pub mod write;

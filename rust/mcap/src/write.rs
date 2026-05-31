@@ -2,7 +2,7 @@
 
 use std::{
     borrow::Cow,
-    collections::{btree_map::Entry, BTreeMap, BTreeSet, HashMap},
+    collections::{btree_map::Entry, BTreeMap, HashMap},
     io::{self, prelude::*, Cursor, SeekFrom},
     mem::{size_of, take},
     sync::Arc,
@@ -110,21 +110,6 @@ fn write_record<W: Write>(mut w: &mut W, r: &Record) -> io::Result<()> {
         }
     };
     Ok(())
-}
-
-fn write_chunk_record<W: Write>(
-    w: &mut W,
-    header: &records::ChunkHeader,
-    data: &[u8],
-) -> io::Result<u64> {
-    let mut header_buf = Vec::new();
-    Cursor::new(&mut header_buf).write_le(header).unwrap();
-
-    let body_len = (header_buf.len() + data.len()) as u64;
-    op_and_len(w, op::CHUNK, body_len)?;
-    w.write_all(&header_buf)?;
-    w.write_all(data)?;
-    Ok(records::OPCODE_LEN_SIZE as u64 + body_len)
 }
 
 #[derive(Debug, Clone)]
@@ -567,17 +552,6 @@ impl<W: Write + Seek> Writer<W> {
         encoding: &str,
         data: &[u8],
     ) -> McapResult<u16> {
-        self.add_schema_with_id_inner(id, name, encoding, data, true)
-    }
-
-    fn add_schema_with_id_inner(
-        &mut self,
-        id: u16,
-        name: &str,
-        encoding: &str,
-        data: &[u8],
-        write_record: bool,
-    ) -> McapResult<u16> {
         if id == 0 {
             return Err(McapError::InvalidSchemaId);
         }
@@ -599,14 +573,12 @@ impl<W: Write + Seek> Writer<W> {
             return Ok(id);
         }
 
-        if write_record {
-            self.write_schema(Schema {
-                id,
-                name: name.into(),
-                encoding: encoding.into(),
-                data: Cow::Owned(data.into()),
-            })?;
-        }
+        self.write_schema(Schema {
+            id,
+            name: name.into(),
+            encoding: encoding.into(),
+            data: Cow::Owned(data.into()),
+        })?;
 
         if let Some(canonical_id) = self.canonical_schemas.get_by_left(&content).copied() {
             self.all_schema_ids.insert(id, canonical_id);
@@ -618,21 +590,6 @@ impl<W: Write + Seek> Writer<W> {
         }
 
         Ok(id)
-    }
-
-    /// Registers a schema for summary/statistics output without writing a schema record.
-    ///
-    /// This is useful when copying raw chunks from an existing MCAP: the schema record remains
-    /// inside the copied chunk, but the writer still needs to know about it when building the
-    /// summary section.
-    pub(crate) fn register_schema_with_id(
-        &mut self,
-        id: u16,
-        name: &str,
-        encoding: &str,
-        data: &[u8],
-    ) -> McapResult<u16> {
-        self.add_schema_with_id_inner(id, name, encoding, data, false)
     }
 
     /// Write a schema record into the MCAP.
@@ -733,18 +690,6 @@ impl<W: Write + Seek> Writer<W> {
         message_encoding: &str,
         metadata: &BTreeMap<String, String>,
     ) -> McapResult<u16> {
-        self.add_channel_with_id_inner(id, schema_id, topic, message_encoding, metadata, true)
-    }
-
-    fn add_channel_with_id_inner(
-        &mut self,
-        id: u16,
-        schema_id: u16,
-        topic: &str,
-        message_encoding: &str,
-        metadata: &BTreeMap<String, String>,
-        write_record: bool,
-    ) -> McapResult<u16> {
         if schema_id != 0 && !self.all_schema_ids.contains_key(&schema_id) {
             return Err(McapError::UnknownSchema(topic.into(), schema_id));
         }
@@ -767,15 +712,13 @@ impl<W: Write + Seek> Writer<W> {
             return Ok(id);
         }
 
-        if write_record {
-            self.write_channel(records::Channel {
-                id,
-                schema_id,
-                topic: topic.into(),
-                message_encoding: message_encoding.into(),
-                metadata: metadata.clone(),
-            })?;
-        }
+        self.write_channel(records::Channel {
+            id,
+            schema_id,
+            topic: topic.into(),
+            message_encoding: message_encoding.into(),
+            metadata: metadata.clone(),
+        })?;
 
         if let Some(canonical_id) = self.canonical_channels.get_by_left(&content).copied() {
             self.all_channel_ids.insert(id, canonical_id);
@@ -787,21 +730,6 @@ impl<W: Write + Seek> Writer<W> {
         }
 
         Ok(id)
-    }
-
-    /// Registers a channel for summary/statistics output without writing a channel record.
-    ///
-    /// This pairs with [`Self::register_schema_with_id`] for raw chunk passthrough, where the
-    /// channel record is preserved inside a copied chunk.
-    pub(crate) fn register_channel_with_id(
-        &mut self,
-        id: u16,
-        schema_id: u16,
-        topic: &str,
-        message_encoding: &str,
-        metadata: &BTreeMap<String, String>,
-    ) -> McapResult<u16> {
-        self.add_channel_with_id_inner(id, schema_id, topic, message_encoding, metadata, false)
     }
 
     /// Write a channel record into the MCAP.
@@ -971,100 +899,6 @@ impl<W: Write + Seek> Writer<W> {
         } else {
             write_record(self.finish_chunk()?, &record)?;
         }
-
-        Ok(())
-    }
-
-    /// Write an already-serialized chunk and its message indexes directly to the data section.
-    ///
-    /// The chunk payload is copied as-is; it is not decompressed, recompressed, or rewritten. The
-    /// caller is responsible for ensuring that `header.compressed_size`, `header.uncompressed_size`,
-    /// and `header.uncompressed_crc` describe `data`.
-    ///
-    /// The supplied message indexes are written verbatim immediately after the chunk. Their offsets
-    /// must be relative to the uncompressed chunk content, as in a normal MCAP `MessageIndex`
-    /// record. The indexes are also used to update writer statistics and chunk indexes for the
-    /// output summary.
-    ///
-    /// This method does not inspect the chunk payload for schemas or channels. Callers that need a
-    /// complete summary section should register those records separately with
-    /// [`Self::register_schema_with_id`] and [`Self::register_channel_with_id`] before finishing the
-    /// writer.
-    pub(crate) fn write_chunk_with_indexes(
-        &mut self,
-        header: &records::ChunkHeader,
-        data: &[u8],
-        indexes: &[records::MessageIndex],
-    ) -> McapResult<()> {
-        self.assert_not_finished();
-        if header.compressed_size != data.len() as u64 {
-            return Err(McapError::BadChunkLength {
-                header: header.compressed_size,
-                available: data.len() as u64,
-            });
-        }
-        let mut seen_index_channels = BTreeSet::new();
-        for index in indexes {
-            if !seen_index_channels.insert(index.channel_id) {
-                return Err(McapError::BadIndex);
-            }
-        }
-
-        let (chunk_start_offset, chunk_length, message_index_offsets, message_index_length) = {
-            let writer = self.finish_chunk()?;
-            let chunk_start_offset = writer.stream_position()?;
-            let chunk_length = write_chunk_record(writer, header, data)?;
-
-            let message_indexes_start = writer.stream_position()?;
-            let mut message_index_offsets = BTreeMap::new();
-            let mut index_buf = Vec::new();
-            for index in indexes {
-                let position = writer.stream_position()?;
-                message_index_offsets.insert(index.channel_id, position);
-
-                index_buf.clear();
-                Cursor::new(&mut index_buf).write_le(index)?;
-                op_and_len(writer, op::MESSAGE_INDEX, index_buf.len() as _)?;
-                writer.write_all(&index_buf)?;
-            }
-            let message_index_length = writer.stream_position()? - message_indexes_start;
-
-            (
-                chunk_start_offset,
-                chunk_length,
-                message_index_offsets,
-                message_index_length,
-            )
-        };
-
-        for index in indexes {
-            let message_count = index.records.len() as u64;
-            if message_count == 0 {
-                continue;
-            }
-            *self
-                .channel_message_counts
-                .entry(index.channel_id)
-                .or_insert(0) += message_count;
-            for entry in &index.records {
-                self.message_bounds = Some(match self.message_bounds {
-                    None => (entry.log_time, entry.log_time),
-                    Some((start, end)) => (start.min(entry.log_time), end.max(entry.log_time)),
-                });
-            }
-        }
-
-        self.chunk_indexes.push(records::ChunkIndex {
-            message_start_time: header.message_start_time,
-            message_end_time: header.message_end_time,
-            chunk_start_offset,
-            chunk_length,
-            message_index_offsets,
-            message_index_length,
-            compression: header.compression.clone(),
-            compressed_size: header.compressed_size,
-            uncompressed_size: header.uncompressed_size,
-        });
 
         Ok(())
     }
@@ -2060,37 +1894,6 @@ mod tests {
     use crate::read::LinearReader;
 
     use super::*;
-
-    fn raw_message_chunk(
-        channel_id: u16,
-        log_time: u64,
-        data: &[u8],
-    ) -> (records::ChunkHeader, Vec<u8>) {
-        let mut chunk_data = Vec::new();
-        write_record(
-            &mut chunk_data,
-            &Record::Message {
-                header: MessageHeader {
-                    channel_id,
-                    sequence: 0,
-                    log_time,
-                    publish_time: log_time,
-                },
-                data: Cow::Borrowed(data),
-            },
-        )
-        .expect("failed to serialize message record");
-        let header = records::ChunkHeader {
-            message_start_time: log_time,
-            message_end_time: log_time,
-            uncompressed_size: chunk_data.len() as u64,
-            uncompressed_crc: 0,
-            compression: String::new(),
-            compressed_size: chunk_data.len() as u64,
-        };
-        (header, chunk_data)
-    }
-
     #[test]
     fn writes_all_channel_ids() {
         let file = std::io::Cursor::new(Vec::new());
@@ -2497,30 +2300,6 @@ mod tests {
     }
 
     #[test]
-    fn register_schema_with_id_reuses_add_schema_validation() {
-        let file = std::io::Cursor::new(Vec::new());
-        let mut writer = Writer::new(file).expect("failed to construct writer");
-
-        let err = writer
-            .register_schema_with_id(0, "schema", "jsonschema", br#"{}"#)
-            .expect_err("schema id 0 should fail");
-        assert_matches!(err, McapError::InvalidSchemaId);
-
-        writer
-            .register_schema_with_id(7, "schema", "jsonschema", br#"{}"#)
-            .expect("failed to register schema");
-        let err = writer
-            .register_schema_with_id(7, "schema", "jsonschema", br#"{"type":"object"}"#)
-            .expect_err("conflicting schema id should fail");
-        assert_matches!(err, McapError::ConflictingSchemas(_));
-
-        let auto = writer
-            .add_schema("schema", "jsonschema", br#"{}"#)
-            .expect("failed to add automatic schema");
-        assert_eq!(auto, 7);
-    }
-
-    #[test]
     fn add_schema_with_id_sets_canonical_id_for_add_schema() {
         let file = std::io::Cursor::new(Vec::new());
         let mut writer = Writer::new(file).expect("failed to construct writer");
@@ -2719,36 +2498,6 @@ mod tests {
     }
 
     #[test]
-    fn register_channel_with_id_reuses_add_channel_validation() {
-        let file = std::io::Cursor::new(Vec::new());
-        let mut writer = Writer::new(file).expect("failed to construct writer");
-        let schema_id = writer
-            .register_schema_with_id(3, "schema", "jsonschema", br#"{}"#)
-            .expect("failed to register schema");
-
-        writer
-            .register_channel_with_id(0, schema_id, "/zero", "json", &BTreeMap::new())
-            .expect("channel id 0 should be accepted");
-        let unknown_schema = writer
-            .register_channel_with_id(1, 99, "/bad", "json", &BTreeMap::new())
-            .expect_err("unknown schema id should fail");
-        assert_matches!(unknown_schema, McapError::UnknownSchema(_, 99));
-
-        writer
-            .register_channel_with_id(7, schema_id, "/topic", "json", &BTreeMap::new())
-            .expect("failed to register channel");
-        let err = writer
-            .register_channel_with_id(7, schema_id, "/other", "json", &BTreeMap::new())
-            .expect_err("conflicting channel id should fail");
-        assert_matches!(err, McapError::ConflictingChannels(_));
-
-        let auto = writer
-            .add_channel(schema_id, "/topic", "json", &BTreeMap::new())
-            .expect("failed to add automatic channel");
-        assert_eq!(auto, 7);
-    }
-
-    #[test]
     fn add_channel_with_id_sets_canonical_id_for_add_channel() {
         let file = std::io::Cursor::new(Vec::new());
         let mut writer = Writer::new(file).expect("failed to construct writer");
@@ -2896,91 +2645,6 @@ mod tests {
             .add_channel(schema_id, "/next-auto", "json", &BTreeMap::new())
             .expect("failed to add next auto channel");
         assert_eq!(next_auto_id, 2);
-    }
-
-    #[test]
-    fn write_chunk_with_indexes_updates_summary_and_allows_followup_writes() {
-        let file = std::io::Cursor::new(Vec::new());
-        let mut writer = Writer::new(file).expect("failed to construct writer");
-        let channel_id = writer
-            .register_channel_with_id(5, 0, "/raw", "json", &BTreeMap::new())
-            .expect("failed to register channel");
-        let (chunk_header, chunk_data) = raw_message_chunk(channel_id, 10, &[1, 2, 3]);
-
-        writer
-            .write_chunk_with_indexes(
-                &chunk_header,
-                &chunk_data,
-                &[records::MessageIndex {
-                    channel_id,
-                    records: vec![records::MessageIndexEntry {
-                        log_time: 10,
-                        offset: 0,
-                    }],
-                }],
-            )
-            .expect("failed to write raw chunk");
-        writer
-            .write_to_known_channel(
-                &MessageHeader {
-                    channel_id,
-                    sequence: 1,
-                    log_time: 20,
-                    publish_time: 20,
-                },
-                &[4, 5, 6],
-            )
-            .expect("failed to write followup message");
-
-        writer.finish().expect("failed to finish");
-        let mcap = writer.into_inner().into_inner();
-        let summary = crate::Summary::read(&mcap)
-            .expect("failed to read summary")
-            .expect("summary should be present");
-        let stats = summary.stats.expect("summary stats should be present");
-        assert_eq!(stats.message_count, 2);
-        assert_eq!(stats.channel_message_counts.get(&channel_id), Some(&2));
-        assert_eq!(summary.chunk_indexes.len(), 2);
-        assert_eq!(
-            summary.chunk_indexes[0]
-                .message_index_offsets
-                .keys()
-                .copied()
-                .collect::<Vec<_>>(),
-            vec![channel_id]
-        );
-    }
-
-    #[test]
-    fn write_chunk_with_indexes_rejects_bad_lengths_and_duplicate_indexes() {
-        let file = std::io::Cursor::new(Vec::new());
-        let mut writer = Writer::new(file).expect("failed to construct writer");
-        let (mut chunk_header, chunk_data) = raw_message_chunk(1, 10, &[1, 2, 3]);
-
-        chunk_header.compressed_size += 1;
-        let err = writer
-            .write_chunk_with_indexes(&chunk_header, &chunk_data, &[])
-            .expect_err("bad compressed size should fail");
-        assert_matches!(err, McapError::BadChunkLength { .. });
-
-        chunk_header.compressed_size = chunk_data.len() as u64;
-        let err = writer
-            .write_chunk_with_indexes(
-                &chunk_header,
-                &chunk_data,
-                &[
-                    records::MessageIndex {
-                        channel_id: 1,
-                        records: Vec::new(),
-                    },
-                    records::MessageIndex {
-                        channel_id: 1,
-                        records: Vec::new(),
-                    },
-                ],
-            )
-            .expect_err("duplicate indexes should fail");
-        assert_matches!(err, McapError::BadIndex);
     }
 
     #[test]

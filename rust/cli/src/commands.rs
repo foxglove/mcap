@@ -221,9 +221,8 @@ mod tests {
             Command::Recover(RecoverCommand {
                 file: Some(PathBuf::from("does-not-exist.mcap")),
                 output: Some(PathBuf::from("recovered.mcap")),
-                always_decode_chunk: false,
                 chunk_size: 4 * 1024 * 1024,
-                compression: "zstd".to_string(),
+                compression: "preserve".to_string(),
             }),
         )
         .expect_err("recover should fail on missing file");

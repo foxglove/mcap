@@ -12,9 +12,6 @@ use binrw::*;
 
 use crate::{McapError, McapResult};
 
-/// MCAP records start with an opcode (1 byte) and a 64-bit length (8 bytes).
-pub const OPCODE_LEN_SIZE: usize = 1 + 8;
-
 /// Opcodes for MCAP file records.
 ///
 /// "Records are identified by a single-byte opcode.
