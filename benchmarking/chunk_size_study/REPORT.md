@@ -43,8 +43,9 @@ VM with the file in page cache.
 
 ## Current defaults across languages
 
-The MCAP spec does not mandate a chunk size, and each implementation picked its
-own writer default independently. They fall into three clusters:
+The MCAP spec does not mandate a chunk size. The defaults fall into three
+clusters, and the 768 KiB–1 MiB cluster traces back to ROS 1 `rosbag` (see
+[History](#history-of-the-chunk-size-defaults) below):
 
 | Language | Default chunk size | Bytes | Source |
 | --- | --- | --- | --- |
@@ -68,9 +69,20 @@ by roughly the compression ratio.
 ## History of the chunk-size defaults
 
 There has never been a benchmark or analysis establishing an "optimal" chunk
-size — this study is the first. The existing defaults were chosen for
-consistency with neighboring implementations or to avoid a data-loss footgun:
+size — this study is the first. The existing defaults trace back to ROS 1 and
+were otherwise chosen for consistency with neighboring implementations or to
+avoid a data-loss footgun:
 
+- **768 KiB comes from ROS 1 `rosbag`.** MCAP's first C++ writer
+  ([#50](https://github.com/foxglove/mcap/pull/50), Jan 2022, built around the
+  `ros1` profile) defined `constexpr uint64_t DefaultChunkSize = 1024 * 768`
+  — 786,432 bytes, byte-for-byte identical to ROS 1 `rosbag`'s default
+  `chunk_threshold_(768 * 1024)  // 768KB chunks` (see `ros_comm`
+  `tools/rosbag/src/bag.cpp`; the Python `rosbag.Bag` default is likewise
+  `chunk_threshold=786432`). So the 768 KiB value was inherited from the ROS 1
+  bag format rather than chosen from first principles. Rust later adopted the
+  same 768 KiB explicitly to match C++ (#777), and the Go/Python/TypeScript
+  1 MiB defaults are a round-number variant of the same ballpark.
 - **TS 1 MiB default ([#254](https://github.com/foxglove/mcap/pull/254), 2022).**
   The closest thing to a discussion of the value itself. A reviewer noted
   *"1MB feels small in this day and age (especially if images are involved),"*
