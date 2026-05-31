@@ -11,7 +11,7 @@ use crate::context::CommandContext;
 #[derive(Debug, Clone)]
 struct SortOptions {
     compression: Option<mcap::Compression>,
-    chunk_size: u64,
+    chunk_size: Option<u64>,
     include_crc: bool,
     chunked: bool,
 }
@@ -75,12 +75,14 @@ fn sort_to_writer<W: Write + Seek>(
     let header = common::read_header(input)?;
     let mut write_options = mcap::WriteOptions::new()
         .use_chunks(opts.chunked)
-        .chunk_size(Some(opts.chunk_size))
         .compression(opts.compression)
         .calculate_chunk_crcs(opts.include_crc)
         .calculate_data_section_crc(opts.include_crc)
         .calculate_summary_section_crc(opts.include_crc)
         .calculate_attachment_crcs(opts.include_crc);
+    if let Some(chunk_size) = opts.chunk_size {
+        write_options = write_options.chunk_size(Some(chunk_size));
+    }
     if let Some(header) = header {
         write_options = write_options
             .profile(header.profile)
@@ -249,7 +251,7 @@ mod tests {
     fn default_sort_options() -> SortOptions {
         SortOptions {
             compression: Some(mcap::Compression::Zstd),
-            chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
+            chunk_size: None,
             include_crc: true,
             chunked: true,
         }
@@ -428,7 +430,7 @@ mod tests {
                 file: input_path.clone(),
                 output_file: output_path.clone(),
                 compression: CompressionFormat::Zstd,
-                chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
+                chunk_size: None,
                 include_crc: true,
                 chunked: true,
             },
@@ -458,7 +460,7 @@ mod tests {
                 file: file_path.clone(),
                 output_file: file_path.clone(),
                 compression: CompressionFormat::Zstd,
-                chunk_size: crate::cli::DEFAULT_CHUNK_SIZE,
+                chunk_size: None,
                 include_crc: true,
                 chunked: true,
             },

@@ -78,7 +78,7 @@ impl ConvertInput {
 
 fn build_write_options(
     compression: CompressionFormat,
-    chunk_size: u64,
+    chunk_size: Option<u64>,
     include_crc: bool,
     chunked: bool,
     profile: &str,
@@ -89,15 +89,18 @@ fn build_write_options(
         CompressionFormat::None => None,
     };
 
-    WriteOptions::new()
+    let mut options = WriteOptions::new()
         .profile(profile)
         .use_chunks(chunked)
-        .chunk_size(Some(chunk_size))
         .compression(compression)
         .calculate_chunk_crcs(include_crc)
         .calculate_data_section_crc(include_crc)
         .calculate_summary_section_crc(include_crc)
-        .calculate_attachment_crcs(include_crc)
+        .calculate_attachment_crcs(include_crc);
+    if let Some(chunk_size) = chunk_size {
+        options = options.chunk_size(Some(chunk_size));
+    }
+    options
 }
 
 fn reject_lfs_pointer(path: &Path) -> Result<()> {
@@ -201,7 +204,13 @@ mod tests {
 
     fn build_sample_mcap(include_crc: bool) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
-        let opts = build_write_options(CompressionFormat::None, 1024, include_crc, true, "ros1");
+        let opts = build_write_options(
+            CompressionFormat::None,
+            Some(1024),
+            include_crc,
+            true,
+            "ros1",
+        );
         {
             let mut writer = opts.create(&mut output).expect("writer");
             let schema_id = writer
@@ -339,7 +348,7 @@ size 123\n",
                 input: PathBuf::from("/tmp/mcap-cli-missing-input-does-not-exist.db3"),
                 output: PathBuf::from("/tmp/mcap-cli-missing-output.mcap"),
                 compression: CompressionFormat::None,
-                chunk_size: 8 * 1024 * 1024,
+                chunk_size: None,
                 include_crc: false,
                 chunked: true,
             },
@@ -357,7 +366,7 @@ size 123\n",
                 input: PathBuf::from("https://example.com/demo.bag?token=secret"),
                 output: PathBuf::from("/tmp/mcap-cli-remote-output.mcap"),
                 compression: CompressionFormat::None,
-                chunk_size: 8 * 1024 * 1024,
+                chunk_size: None,
                 include_crc: false,
                 chunked: true,
             },
@@ -396,7 +405,7 @@ size 123\n",
                 input: input_path.clone(),
                 output: output_path.clone(),
                 compression: CompressionFormat::None,
-                chunk_size: 8 * 1024 * 1024,
+                chunk_size: None,
                 include_crc: false,
                 chunked: true,
             },
@@ -431,7 +440,7 @@ size 123\n",
                     input: input.clone(),
                     output: output.path.clone(),
                     compression: CompressionFormat::None,
-                    chunk_size: 8 * 1024 * 1024,
+                    chunk_size: None,
                     include_crc: false,
                     chunked: true,
                 },
