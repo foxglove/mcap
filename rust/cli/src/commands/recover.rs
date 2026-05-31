@@ -11,7 +11,8 @@ use crate::cli::RecoverCommand;
 use crate::commands::common;
 use crate::context::CommandContext;
 
-const LOSSY_RECOVERY_EXIT_CODE: i32 = 65;
+// EX_DATAERR from sysexits.h: recovery completed, but input data was corrupt/truncated.
+const EXIT_LOSSY_RECOVERY: i32 = 65;
 
 /// Statistics describing what `recover` salvaged and what it had to discard.
 ///
@@ -89,7 +90,7 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
             parts.push("stopped early (input truncated), so trailing data may be lost".to_string());
         }
         eprintln!("Recovery was lossy: {}.", parts.join("; "));
-        std::process::exit(LOSSY_RECOVERY_EXIT_CODE);
+        std::process::exit(EXIT_LOSSY_RECOVERY);
     }
     Ok(())
 }
