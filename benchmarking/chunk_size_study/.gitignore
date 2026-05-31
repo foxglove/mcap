@@ -1,2 +1,3 @@
 bench
 *.o
+__pycache__/
