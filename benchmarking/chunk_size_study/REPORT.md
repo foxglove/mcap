@@ -30,11 +30,15 @@ VM with the file in page cache.
   remote storage**, where fewer, larger ranged GETs cut round-trip overhead.
   This benefit is real (2–4×) but is mostly realized by ~4–8 MiB and saturates
   after that.
-- **Recommended default: 1–4 MiB.** It captures all of the compression ratio
-  and write throughput, keeps reader memory and random-read latency low, and
-  already captures most of the remote-streaming round-trip benefit. **8 MiB is a
-  defensible upper bound for streaming-heavy, point-cloud-heavy, remote-served
-  workloads**, but is a poor universal default. **≥16 MiB is not recommended.**
+- **Recommended default: 4 MiB.** It is the knee of every curve: it captures
+  100% of the compression ratio and write throughput, cuts remote streaming
+  latency 39–62% vs 1 MiB, and costs only +3.6 MiB reader RSS and +6 ms
+  single-message read latency vs 1 MiB. Going to 8 MiB buys less additional
+  streaming gain while memory (+64%) and random-read latency (+33%) climb
+  faster; **≥16 MiB is not recommended.** Use 1 MiB instead only for
+  memory-constrained/embedded readers or pure random-access workloads, and 8 MiB
+  only for deployments that are overwhelmingly bulk/streaming reads from
+  high-latency remote storage.
 
 ## Current defaults across languages
 
@@ -223,28 +227,47 @@ choice.
 
 ## Recommendation
 
-| Workload | Suggested chunk size |
-| --- | --- |
-| **General default** | **1–4 MiB** |
-| Random access / point queries, or memory-constrained | 256 KiB – 1 MiB |
-| Bulk/streaming reads from remote object storage (e.g. cloud-served point-cloud playback) | 4–8 MiB |
-| Anything | avoid ≥16 MiB as a default |
+**The recommended default is 4 MiB.** The supporting numbers (zstd):
 
-Relating this back to the current per-language defaults (C++/Rust 768 KiB; Go,
-Python, TypeScript 1 MiB; Swift 10 MiB): the 768 KiB–1 MiB cluster is already in
-the sweet spot. Swift's 10 MiB is on the high side — fine for streaming-heavy
-remote use, but it pays ~3× reader memory and materially higher random-read
-latency for no compression or write-speed benefit. If the libraries were to
-standardize on one value, **1 MiB (already shared by Go/Python/TypeScript) is
-the best-supported choice**, with an option to raise it for remote-streaming
-deployments.
+| 1 MiB → 4 MiB → 8 MiB | 1 MiB | 4 MiB | 8 MiB |
+| --- | --- | --- | --- |
+| compression ratio (point cloud) | 2.15 | 2.15 | 2.15 |
+| write throughput (mixed) | 164 MB/s | 167 MB/s | 167 MB/s |
+| reader peak RSS (mixed, full) | 7.4 MiB | 11.0 MiB | 17.9 MiB |
+| point read latency, regional (point cloud) | 46 ms | 52 ms | 69 ms |
+| streaming latency, regional (mixed) | 1067 ms | 403 ms | 295 ms |
+| streaming latency, high-latency remote (point cloud) | 3074 ms | 1786 ms | 1008 ms |
+
+4 MiB is where the streaming benefit is largely realized (−40 to −62% vs 1 MiB)
+while random-read latency and reader memory are still close to the 1 MiB
+baseline. Past 4 MiB the streaming gains shrink while the random-read and memory
+costs accelerate.
+
+Use a different value only for a known-narrow workload:
+
+| Workload | Chunk size |
+| --- | --- |
+| **General-purpose default** | **4 MiB** |
+| Memory-constrained / embedded readers, or pure random-access (e.g. heavy scrubbing) | 1 MiB |
+| Overwhelmingly bulk/streaming reads from high-latency remote storage | 8 MiB |
+| Any workload | do not exceed 8 MiB; ≥16 MiB only hurts |
+
+Relating this to the current per-language defaults (C++/Rust 768 KiB; Go,
+Python, TypeScript 1 MiB; Swift 10 MiB): the 768 KiB–1 MiB cluster is *safe and
+conservative* — lowest memory and random-read latency — but it leaves
+substantial remote-streaming throughput on the table (e.g. ~2.6× slower mixed
+streaming on a regional object store than 4 MiB). Swift's 10 MiB is too high: it
+pays ~2.4× the reader memory and materially higher random-read latency for no
+compression or write benefit. The data-optimal single default for all six
+libraries is **4 MiB**.
 
 **Proposed action:** this study and PR change **no** library default — it exists
-to document the tradeoffs and give the defaults an empirical basis. The existing
-768 KiB–1 MiB defaults are already near-optimal, so no urgent change is needed.
-If maintainers want to act on it, the natural follow-ups (each its own PR) are
-(1) lower Swift's 10 MiB toward the 1–4 MiB range, and (2) optionally unify all
-languages on 1 MiB. Those are intentionally left out of this PR.
+to document the tradeoffs and give the defaults an empirical basis. If
+maintainers want to act on it, the natural follow-ups (each its own PR) are
+(1) raise the C++/Rust/Go/Python/TypeScript defaults to 4 MiB and lower Swift's
+10 MiB to 4 MiB, unifying on the data-optimal value, or (2) if a more
+conservative change is preferred, at minimum lower Swift's 10 MiB. These are
+intentionally left out of this PR.
 
 ## Caveats
 
