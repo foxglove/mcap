@@ -1,4 +1,5 @@
 use std::io::{IsTerminal as _, Read, Seek, Write};
+use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use log::{info, warn};
@@ -19,7 +20,7 @@ const RECOVER_RECORD_LENGTH_LIMIT: usize = 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy)]
 enum CompressionSelection {
-    Preserve,
+    Preserve(Option<Compression>),
     Explicit(Option<Compression>),
 }
 
@@ -110,11 +111,14 @@ impl RecoverStats {
 }
 
 pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
-    let input = common::open_streaming_input(
-        args.file.as_deref(),
-        common::SourceOptions::new(ctx.allow_remote_scan()),
-    )?;
-    let compression = resolve_compression(&args.compression)?;
+    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
+    let source_compression = if args.compression == "preserve" {
+        detect_source_compression(args.file.as_deref(), source_options)?
+    } else {
+        None
+    };
+    let input = common::open_streaming_input(args.file.as_deref(), source_options)?;
+    let compression = resolve_compression(&args.compression, source_compression)?;
 
     let stats = if let Some(output) = &args.output {
         let file = std::fs::File::create(output)
@@ -173,11 +177,15 @@ fn count(n: u64, noun: &str) -> String {
     }
 }
 
-/// Resolves the requested output compression. `preserve` lazily keeps the first chunk's compression
-/// when recovery reaches it, or uncompressed output if the input is unchunked.
-fn resolve_compression(spec: &str) -> Result<CompressionSelection> {
+/// Resolves the requested output compression. `preserve` keeps the first detected chunk's
+/// compression when available, falls back to a streaming first-chunk decision for stdin and
+/// non-range remotes, and otherwise uses uncompressed output.
+fn resolve_compression(
+    spec: &str,
+    source_compression: Option<Compression>,
+) -> Result<CompressionSelection> {
     match spec {
-        "preserve" => Ok(CompressionSelection::Preserve),
+        "preserve" => Ok(CompressionSelection::Preserve(source_compression)),
         "none" | "" => Ok(CompressionSelection::Explicit(None)),
         "zstd" => Ok(CompressionSelection::Explicit(Some(Compression::Zstd))),
         "lz4" => Ok(CompressionSelection::Explicit(Some(Compression::Lz4))),
@@ -195,6 +203,63 @@ fn compression_from_str(name: &str) -> Option<Compression> {
         // to uncompressed output for the re-encoded data.
         _ => None,
     }
+}
+
+fn detect_source_compression(
+    file: Option<&Path>,
+    options: common::SourceOptions,
+) -> Result<Option<Compression>> {
+    let Some(path) = file else {
+        return Ok(None);
+    };
+    if common::is_http_url(path) {
+        if !options.allow_remote_scan {
+            return Ok(None);
+        }
+        let Some(reader) = common::HttpRangeReader::open(path)? else {
+            return Ok(None);
+        };
+        return detect_source_compression_from_reader(reader);
+    }
+    detect_source_compression_from_reader(common::open_seekable_mcap_source(path)?)
+}
+
+fn detect_source_compression_from_reader(mut input: impl Read) -> Result<Option<Compression>> {
+    let mut reader = SansIoReader::new_with_options(
+        LinearReaderOptions::default()
+            .with_skip_end_magic(true)
+            .with_emit_chunks(true)
+            .with_validate_chunk_crcs(false)
+            .with_record_length_limit(RECOVER_RECORD_LENGTH_LIMIT),
+    );
+
+    while let Some(event) = reader.next_event() {
+        match event {
+            Ok(LinearReadEvent::ReadRequest(need)) => {
+                let read = input
+                    .read(reader.insert(need))
+                    .context("failed to read input while detecting source compression")?;
+                if read == 0 {
+                    return Ok(None);
+                }
+                reader.notify_read(read);
+            }
+            Ok(LinearReadEvent::Record { opcode, data }) => {
+                if opcode == mcap::records::op::CHUNK {
+                    return match mcap::parse_record(opcode, data) {
+                        Ok(Record::Chunk { header, .. }) => {
+                            Ok(compression_from_str(&header.compression))
+                        }
+                        Ok(_) => Ok(None),
+                        Err(_) => Ok(None),
+                    };
+                }
+            }
+            Err(_) => return Ok(None),
+        }
+    }
+
+    Ok(None)
 }
 
 fn recover_to_sink<R: Read, W: Write + Seek>(
@@ -239,7 +304,9 @@ fn compression_for_writer(
 ) -> Option<Compression> {
     match selection {
         CompressionSelection::Explicit(compression) => compression,
-        CompressionSelection::Preserve => first_chunk_compression.and_then(compression_from_str),
+        CompressionSelection::Preserve(source_compression) => {
+            source_compression.or_else(|| first_chunk_compression.and_then(compression_from_str))
+        }
     }
 }
 
@@ -633,8 +700,69 @@ mod tests {
         corrupted
     }
 
+    fn bytes_before_data_end(bytes: &[u8]) -> &[u8] {
+        let mut offset = mcap::MAGIC.len();
+        let limit = bytes.len().saturating_sub(mcap::MAGIC.len());
+        while offset + OPCODE_LEN_SIZE <= limit {
+            let opcode = bytes[offset];
+            let length = u64::from_le_bytes(
+                bytes[offset + 1..offset + OPCODE_LEN_SIZE]
+                    .try_into()
+                    .expect("record length bytes"),
+            ) as usize;
+            if opcode == op::DATA_END {
+                return &bytes[..offset];
+            }
+            offset += OPCODE_LEN_SIZE + length;
+        }
+        panic!("no DataEnd found");
+    }
+
+    fn append_chunks_from(source: &[u8], target: &mut Vec<u8>) {
+        let mut offset = mcap::MAGIC.len();
+        let limit = source.len().saturating_sub(mcap::MAGIC.len());
+        while offset + OPCODE_LEN_SIZE <= limit {
+            let opcode = source[offset];
+            let length = u64::from_le_bytes(
+                source[offset + 1..offset + OPCODE_LEN_SIZE]
+                    .try_into()
+                    .expect("record length bytes"),
+            ) as usize;
+            let end = offset + OPCODE_LEN_SIZE + length;
+            if opcode == op::CHUNK {
+                target.extend_from_slice(&source[offset..end]);
+            }
+            offset = end;
+        }
+    }
+
+    fn write_metadata_then_zstd_chunk_input() -> Vec<u8> {
+        let mut metadata_only = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .use_chunks(false)
+                .create(&mut metadata_only)
+                .expect("writer");
+            writer
+                .write_metadata(&mcap::records::Metadata {
+                    name: "before-chunk".to_string(),
+                    metadata: BTreeMap::from([("source".to_string(), "metadata".to_string())]),
+                })
+                .expect("metadata");
+            writer.finish().expect("finish");
+        }
+
+        let zstd_chunked = write_test_input(Some(mcap::Compression::Zstd));
+        let mut mixed = bytes_before_data_end(metadata_only.get_ref()).to_vec();
+        append_chunks_from(&zstd_chunked, &mut mixed);
+        mixed
+    }
+
     fn recover_to_vec(input: &[u8], compression: &str) -> (Vec<u8>, RecoverStats) {
-        let target = super::resolve_compression(compression).expect("compression");
+        let source_compression =
+            super::detect_source_compression_from_reader(Cursor::new(input)).expect("compression");
+        let target =
+            super::resolve_compression(compression, source_compression).expect("compression");
         let (stats, output) =
             recover_to_sink(input, Cursor::new(Vec::new()), target, 1024 * 1024, false)
                 .expect("recover should succeed");
@@ -742,6 +870,15 @@ mod tests {
     }
 
     #[test]
+    fn preserve_uses_first_chunk_compression_after_loose_metadata() {
+        let input = write_metadata_then_zstd_chunk_input();
+        let (output, _) = recover_to_vec(&input, "preserve");
+        let compressions = chunk_compressions(&output);
+        assert!(!compressions.is_empty());
+        assert!(compressions.iter().all(|name| name == "zstd"));
+    }
+
+    #[test]
     fn preserve_keeps_uncompressed_source_uncompressed() {
         let input = write_test_input(None);
         let (output, _) = recover_to_vec(&input, "preserve");
@@ -752,8 +889,8 @@ mod tests {
 
     #[test]
     fn rejects_unknown_compression_with_preserve_in_message() {
-        let err =
-            super::resolve_compression("snappy").expect_err("unknown codec should be rejected");
+        let err = super::resolve_compression("snappy", None)
+            .expect_err("unknown codec should be rejected");
         let message = err.to_string();
         assert!(message.contains("preserve"), "message was: {message}");
         assert!(message.contains("zstd"), "message was: {message}");
