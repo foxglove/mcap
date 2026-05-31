@@ -63,6 +63,9 @@ port is still pre-production:
      when the output path exists unless the user passes `--force` / `-f`.
    - Decide whether Rust CLI output paths should standardize on positional
      arguments or `-o` / `--output` flags, then apply that consistently.
+   - Decide whether stdin/stdout should use explicit `-` path arguments instead
+     of Go-compatible implicit stdin/stdout behavior (for example, omitted
+     output path plus redirected stdout).
    - Write output-producing commands through a temporary sibling file and rename
      it into place only after successful completion, so failures do not leave a
      partial output at the requested path.
