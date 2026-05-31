@@ -15,6 +15,7 @@
 #include "mcap/reader.hpp"
 #include "mcap/writer.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -213,27 +214,32 @@ int do_write(const char* file, const std::string& cls, uint64_t chunk_bytes, uin
       writer.addChannel(r.channel);
       regs.push_back(r);
     }
-    // Generate a sorted (timestamp, channel) schedule, looping the pattern
-    // until the target uncompressed payload size is reached.
+    // Rate-driven schedule: every channel runs concurrently at its own period
+    // over a single recording duration, like a real robot log. The duration is
+    // chosen so the total uncompressed payload is ~target_bytes.
     struct Entry {
       uint64_t ts;
       uint32_t ch;
       uint32_t seq;
       size_t size;
     };
+    double bytes_per_ns = 0.0;
+    for (const auto& d : defs) {
+      double avg = 0.0;
+      for (auto s : d.payload_sizes) avg += static_cast<double>(s);
+      avg /= static_cast<double>(d.payload_sizes.size());
+      bytes_per_ns += avg / static_cast<double>(d.period_ns);
+    }
+    uint64_t duration_ns = static_cast<uint64_t>(static_cast<double>(target_bytes) / bytes_per_ns);
     std::vector<Entry> schedule;
-    std::vector<uint64_t> seq(defs.size(), 0);
-    uint64_t cycle = 0;
-    while (total_payload < target_bytes) {
-      for (uint32_t c = 0; c < defs.size(); c++) {
-        const auto& d = defs[c];
-        uint64_t ts = cycle * 0 + seq[c] * d.period_ns;
-        size_t size = d.payload_sizes[seq[c] % d.payload_sizes.size()];
-        schedule.push_back({ts, c, static_cast<uint32_t>(seq[c]), size});
+    for (uint32_t c = 0; c < defs.size(); c++) {
+      const auto& d = defs[c];
+      uint64_t k = 0;
+      for (uint64_t ts = 0; ts < duration_ns; ts += d.period_ns, k++) {
+        size_t size = d.payload_sizes[k % d.payload_sizes.size()];
+        schedule.push_back({ts, c, static_cast<uint32_t>(k), size});
         total_payload += size;
-        seq[c]++;
       }
-      cycle++;
     }
     std::sort(schedule.begin(), schedule.end(),
               [](const Entry& a, const Entry& b) { return a.ts < b.ts; });

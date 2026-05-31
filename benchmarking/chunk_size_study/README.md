@@ -45,13 +45,16 @@ modeled_read_latency = (chunks_touched + 1) * RTT
 ```
 
 i.e. an idealized object-store reader issuing one ranged GET per overlapping
-chunk plus one GET for the index.
+chunk plus one GET for the index. (`raw_fetched`/`raw_reads` from the actual
+`CountingReadable` wrapper are also recorded in `raw.tsv` as supplementary data,
+but the model deliberately uses the index-derived figures so it does not depend
+on the C++ reader's record-by-record I/O granularity.)
 
 ## Running
 
 ```sh
 sudo apt-get install -y libzstd-dev liblz4-dev   # build deps
-pip3 install matplotlib numpy                     # analysis deps
+pip3 install matplotlib                           # analysis dep
 
 make                 # builds ./bench against ../../cpp/mcap/include
 ./run.sh             # full sweep -> results/raw.tsv (a few minutes)
