@@ -477,6 +477,65 @@ int do_read(const char* file, const std::string& cls, uint64_t chunk_bytes, cons
   return 0;
 }
 
+// ---------------------------------------------------------------------------
+// Stats: break an existing file down into compressed payload vs. structural
+// overhead (chunk framing, message index records, summary/index section), so
+// the per-chunk index cost can be measured directly.
+// ---------------------------------------------------------------------------
+int do_stats(const char* file) {
+  std::FILE* fp = std::fopen(file, "rb");
+  if (!fp) {
+    fprintf(stderr, "fopen failed: %s\n", file);
+    return 1;
+  }
+  mcap::FileReader source(fp);
+  mcap::McapReader reader;
+  if (!reader.open(source).ok()) {
+    fprintf(stderr, "open failed\n");
+    std::fclose(fp);
+    return 1;
+  }
+  if (!reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan).ok()) {
+    fprintf(stderr, "summary failed\n");
+    reader.close();
+    std::fclose(fp);
+    return 1;
+  }
+  uint64_t nchunks = 0, sum_chunk_len = 0, sum_compressed = 0, sum_uncompressed = 0,
+           sum_msgidx = 0;
+  for (const auto& ci : reader.chunkIndexes()) {
+    nchunks++;
+    sum_chunk_len += ci.chunkLength;            // chunk record incl. opcode+length
+    sum_compressed += ci.compressedSize;        // compressed `records` payload
+    sum_uncompressed += ci.uncompressedSize;    // uncompressed `records`
+    sum_msgidx += ci.messageIndexLength;        // message index records after chunk
+  }
+  long fsize = file_size_bytes(file);
+  uint64_t summary_bytes = 0;
+  const auto& footer = reader.footer();
+  if (footer && footer->summaryStart != 0 && fsize > 0) {
+    summary_bytes = static_cast<uint64_t>(fsize) - footer->summaryStart;
+  }
+  uint64_t msgs = 0, channels = 0;
+  const auto& stats = reader.statistics();
+  if (stats) {
+    msgs = stats->messageCount;
+    channels = stats->channelCount;
+  }
+  uint64_t chunk_framing = sum_chunk_len > sum_compressed ? sum_chunk_len - sum_compressed : 0;
+
+  reader.close();
+  std::fclose(fp);
+
+  // TSV: stats file_size msgs channels nchunks compressed uncompressed chunk_framing msgidx_bytes summary_bytes
+  printf("stats\t%ld\t%llu\t%llu\t%llu\t%llu\t%llu\t%llu\t%llu\t%llu\n", fsize,
+         (unsigned long long)msgs, (unsigned long long)channels, (unsigned long long)nchunks,
+         (unsigned long long)sum_compressed, (unsigned long long)sum_uncompressed,
+         (unsigned long long)chunk_framing, (unsigned long long)sum_msgidx,
+         (unsigned long long)summary_bytes);
+  return 0;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
@@ -503,6 +562,12 @@ int main(int argc, char* argv[]) {
       return 1;
     }
     return do_read(argv[2], argv[3], strtoull(argv[4], nullptr, 10), argv[5], argv[6]);
+  } else if (op == "stats") {
+    if (argc != 3) {
+      fprintf(stderr, "stats needs <file>\n");
+      return 1;
+    }
+    return do_stats(argv[2]);
   }
   fprintf(stderr, "unknown op: %s\n", op.c_str());
   return 1;

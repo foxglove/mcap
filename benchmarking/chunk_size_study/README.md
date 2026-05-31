@@ -63,3 +63,11 @@ python3 analyze.py   # -> results/*.png and results/summary.md
 
 Configure via env vars, e.g. `TARGET_BYTES`, `CHUNKS`, `CLASSES`, `COMP_LIST`,
 `ITERS_W`, `ITERS_R` (see `run.sh`).
+
+To inspect the storage-overhead breakdown of a single file (compressed payload
+vs. chunk framing, message index, and summary/index bytes):
+
+```sh
+./bench stats <file.mcap>
+```
+

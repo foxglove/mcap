@@ -22,6 +22,11 @@ VM with the file in page cache.
   a small chunk; making chunks bigger buys almost nothing. The common "bigger
   chunks compress better" intuition does **not** hold in this range.
 - **Write throughput is also flat** across chunk size.
+- **Storage overhead from indexes is set by message count, not chunk size.** The
+  message index costs ~16 uncompressed bytes/message regardless of chunking, so
+  it is ~22% of the file for tiny high-rate topics but **<0.03% for point
+  clouds** — even in the degenerate one-cloud-per-chunk case. Chunk size barely
+  moves total file size.
 - **Bigger chunks have real, monotonic costs:** reader peak memory grows ~10×
   (≈7 MiB → ≈65 MiB from 1 MiB → 32 MiB), and single-message / random reads get
   linearly more expensive because the reader must fetch and decompress a whole
@@ -261,6 +266,69 @@ Orthogonal to chunk size: zstd compresses better (point cloud 2.15× vs lz4
 1.87×) but decodes ~2× slower (~260 ms vs ~115 ms full scan). Both are flat
 across chunk size, so the chunk-size conclusions hold regardless of compression
 choice.
+
+## 7. Storage overhead: chunk and message indexes
+
+Beyond the compressed payload, an indexed MCAP file carries structural overhead
+that lives *outside* the compressed chunks and is therefore stored uncompressed:
+
+- **Message Index record** — one per channel per chunk, written right after each
+  chunk. ~15 bytes of framing plus a **16-byte entry (log_time + offset) per
+  message**.
+- **Chunk Index record** — one per chunk, in the summary section. ~85–95 bytes
+  each (timestamps, offsets, sizes, per-channel index offsets, compression name).
+- **Chunk framing** — each chunk record's own header (~50–57 bytes) wrapping the
+  compressed `records` blob.
+
+Measured breakdown (zstd, ~24 MB payload per corpus), bytes:
+
+| corpus | chunk | msgs | chunks | compressed payload | chunk framing | message index | summary (chunk index etc.) | overhead % of file |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| point cloud | 256 KiB | 16 | 17 | 11,125,438 | 897 | 496 | 1,766 | **0.028%** |
+| point cloud | 8 MiB | 16 | 4 | 11,126,607 | 212 | 316 | 649 | 0.011% |
+| small telemetry | 256 KiB | 240,000 | 120 | 13,931,523 | 6,360 | **3,841,800** | 10,731 | **21.7%** |
+| small telemetry | 1 MiB | 240,000 | 30 | 13,588,578 | 1,590 | 3,840,450 | 2,901 | 22.0% |
+| mixed | 1 MiB | 521 | 29 | 12,966,434 | 1,521 | 9,446 | 3,675 | 0.11% |
+
+### Answering the degenerate point-cloud case
+
+When each point cloud is its own chunk, the *per-cloud* extra cost is roughly:
+
+```
+~53 B chunk framing  +  ~31 B message index record  +  ~90 B chunk index record  ≈  ~175 B/cloud
+```
+
+all uncompressed. On a 0.5–8 MB cloud that is **0.002%–0.035%** — negligible.
+The measurement above (16 clouds in 17 chunks) totals 3,159 bytes of overhead on
+an 11.1 MB file: **0.028%**. So index/framing overhead is a non-issue for point
+clouds, in the degenerate case or otherwise.
+
+### What actually drives index overhead
+
+- **Message count is the dominant factor**, because the message index costs a
+  fixed **~16 bytes per message** and is *not compressed*. Note it is essentially
+  **independent of chunk size** — the small-telemetry overhead is ~21.7% at
+  256 KiB and ~22.0% at 1 MiB. This is why tiny high-rate topics (IMU, TF) carry
+  large relative overhead while a handful of big point clouds carry almost none.
+- **Chunk count** drives the chunk-index records (summary) and chunk framing
+  (~140–150 B per chunk combined). Smaller chunks → more chunks → more of this,
+  but it is an order of magnitude smaller than the message-index cost and stays
+  well under ~0.1% except for pathologically tiny chunks. (Halving from 1 MiB to
+  256 KiB on the small corpus raised summary+framing from ~4.5 KB to ~17 KB —
+  still ~0.1% of the file.)
+- **Active channels per chunk** adds one message-index record (~15 B framing +
+  its entries) per channel per chunk.
+- **Compression** does not touch the indexes (they live outside the chunk), so
+  it cannot reduce this overhead; only the per-message record headers inside the
+  chunk are compressed.
+- **Writer options** are the real lever: `SkipMessageIndexing` removes the
+  per-message 16-byte cost entirely (at the price of fast random access), and
+  `SkipStatistics` / `SkipRepeatedSchemas` trim the summary.
+
+Net for the chunk-size question: chunk size barely affects total storage. The
+index cost is set by how many messages you log, not how you group them — so
+there is no storage argument for large chunks (and only a negligible one against
+very small chunks).
 
 ## Recommendation
 
