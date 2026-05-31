@@ -155,34 +155,45 @@ port is still pre-production:
 
 ## Intentional divergences from Go CLI
 
-1. `mcap convert` remote read policy:
-   - Rust CLI requires `--allow-remote-scan` for remote full-object downloads
-     and remote `convert` inputs.
-   - Go-compatible behavior allowed those remote reads without an explicit
-     opt-in.
-2. `mcap convert` ROS 2 db3 schema discovery:
-   - Rust CLI converts self-contained db3 files using embedded message
-     definitions, including non-`/msg/` topics such as service event topics. It
-     fails the conversion if any topic is missing an embedded definition.
-   - Go CLI ignores embedded db3 schemas and emulates ament resource lookup with `--ament-prefix-path`, which can miss schemas or silently use definitions from the wrong workspace.
-3. `mcap cat` remote read policy:
+### `mcap cat`
+
+1. Remote read policy:
    - Rust CLI requires `--allow-remote-scan` for remote linear fallbacks and
      remote message chunk payload reads.
    - Go-compatible behavior allowed those remote reads without an explicit
      opt-in.
-4. `mcap du` attachment accounting:
+
+### `mcap convert`
+
+1. Remote read policy:
+   - Rust CLI requires `--allow-remote-scan` for remote full-object downloads
+     and remote `convert` inputs.
+   - Go-compatible behavior allowed those remote reads without an explicit
+     opt-in.
+2. ROS 2 db3 schema discovery:
+   - Rust CLI converts self-contained db3 files using embedded message
+     definitions, including non-`/msg/` topics such as service event topics. It
+     fails the conversion if any topic is missing an embedded definition.
+   - Go CLI ignores embedded db3 schemas and emulates ament resource lookup with `--ament-prefix-path`, which can miss schemas or silently use definitions from the wrong workspace.
+
+### `mcap du`
+
+1. Attachment accounting:
    - Rust CLI includes `attachment` record bytes in the top-level record stats
      table.
    - Go CLI currently skips attachment records in `du` record-kind accounting due
      to lexer behavior.
-5. `mcap recover` always produces a valid output:
+
+### `mcap recover`
+
+1. Always produces a valid output:
    - Rust CLI `recover` decodes and validates every chunk and re-writes records
      through the writer, so the output is always a readable MCAP with correct
      CRCs and rebuilt indexes. Undecodable/corrupt chunk payloads stop the scan
      (keeping what was recovered) rather than being copied through.
    - Go `recover` copies chunk bytes through verbatim by default and can emit
      corrupt or bad-CRC chunks, producing files that strict readers reject.
-6. `mcap recover` compression is opt-in (`--compression preserve` by default):
+2. Compression is opt-in (`--compression preserve` by default):
    - Rust CLI `recover` defaults to `--compression preserve`, keeping the input
      file's compression (uncompressed if the input is unchunked). Pass
      `--compression zstd|lz4|none` to choose explicitly.
@@ -190,14 +201,17 @@ port is still pre-production:
      default.
    - The Rust CLI also has no `--always-decode-chunk` flag (Go does): chunks are
      always decoded, and `--compression` alone determines the output codec.
-7. `mcap recover` exit codes signal data loss:
+3. Exit codes signal data loss:
    - Rust CLI `recover` exits `0` when all records were recovered (rebuilding
      indexes/CRCs does not count as loss), `65` when recovery was lossy (one or
      more messages/records were discarded, or the input was truncated mid-record),
      and `1` on hard failure (nothing recovered).
    - Go `recover` exits `0` once recovery starts, even for a truncated or
      partially recovered file; data loss is only visible in its stderr output.
-8. Multi-input commands remote materialization:
+
+### General
+
+1. Multi-input commands remote materialization:
    - Commands with multiple remote inputs materialize each remote input
      independently, so peak temporary disk usage can approach the sum of remote
      input sizes.
