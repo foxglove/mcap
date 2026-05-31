@@ -56,6 +56,11 @@ export type FixtureAction =
   | {
       type: "mkdir";
       path: string;
+    }
+  | {
+      type: "truncate";
+      path: string;
+      size: number;
     };
 
 export type CliInvocation = {

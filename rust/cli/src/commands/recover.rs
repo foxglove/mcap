@@ -28,12 +28,17 @@ struct RecoverStats {
 }
 
 impl RecoverStats {
-    /// True if any real data was lost.
-    #[allow(dead_code)] // Wired to a non-zero exit code in a future change (see README pre-1.0).
+    /// True if any real data was lost (a complete record/message was discarded, or the scan
+    /// stopped before a clean end so a partial trailing message was dropped).
     fn is_lossy(&self) -> bool {
         self.truncated || self.discarded_messages > 0 || self.discarded_records > 0
     }
 }
+
+/// Exit code for a lossy-but-successful recovery (data was discarded). `0` (clean) and `1` (hard
+/// failure, via the normal error path) are the other outcomes. Diverges from the Go CLI, which
+/// always exits `0` once recovery starts.
+const EXIT_LOSSY: i32 = 2;
 
 pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
     let input = common::load_input(
@@ -64,6 +69,22 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
         "Recovered {} messages, {} attachments, and {} metadata records.",
         stats.messages, stats.attachments, stats.metadata
     );
+
+    // Exit codes: 0 = clean (all records recovered; rebuilt indexes/CRCs are fine), 1 = hard
+    // failure / nothing recovered (the error path in main), 2 = recovered but lossy.
+    if stats.is_lossy() {
+        eprintln!(
+            "Warning: recovery discarded data ({} messages, {} other records{}); exiting {EXIT_LOSSY}.",
+            stats.discarded_messages,
+            stats.discarded_records,
+            if stats.truncated {
+                ", input truncated"
+            } else {
+                ""
+            }
+        );
+        std::process::exit(EXIT_LOSSY);
+    }
     Ok(())
 }
 
