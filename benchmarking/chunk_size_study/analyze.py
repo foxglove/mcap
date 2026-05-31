@@ -174,15 +174,49 @@ def fig_amplification(reads):
     plt.close(fig)
 
 
-def modeled_time(rows, rtt, bw):
-    # Idealized object-store reader: one ranged GET per chunk that overlaps the
-    # query window, plus one GET for the summary/index section. Transfer volume
-    # is the compressed bytes of those chunks plus the index. Compute is the
-    # measured local decode/iterate wall time.
-    n_gets = med(rows, "chunks_touched") + 1
+def modeled_time(rows, rtt, bw, coalesce=False):
+    # Object-store read cost model. Transfer volume is the compressed bytes of
+    # the overlapping chunks plus the index; compute is the measured local
+    # decode/iterate wall time. The number of round trips depends on the reader:
+    #   naive:     one ranged GET per overlapping chunk (+1 for the index)
+    #   coalescing: one ranged GET for the whole contiguous chunk span (+1)
+    # A time-range query selects a contiguous run of chunks, so a buffering
+    # reader can coalesce it into a single request regardless of chunk size.
     fetched = med(rows, "chunk_fetched_bytes") + med(rows, "summary_bytes")
     compute = med(rows, "wall")
+    n_gets = 2 if coalesce else med(rows, "chunks_touched") + 1
     return n_gets * rtt + fetched / bw + compute
+
+
+def fig_reader_model(reads):
+    # Point-cloud streaming latency under a naive (one GET per chunk) vs a
+    # coalescing (one ranged GET for the contiguous span) reader. Shows the
+    # large-chunk "streaming benefit" only exists for the naive reader.
+    cls = "pointcloud"
+    profiles = [
+        ("regional object store (20 ms, 300 MB/s)", PROFILES["regional object store (20 ms, 300 MB/s)"]),
+        ("high-latency remote (100 ms, 80 MB/s)", PROFILES["high-latency remote (100 ms, 80 MB/s)"]),
+    ]
+    fig, axes = plt.subplots(1, len(profiles), figsize=(13, 4.6))
+    for ax, (pname, (rtt, bw)) in zip(axes, profiles):
+        for coalesce, mk, lbl in [(False, "o-", "naive (GET per chunk)"), (True, "s-", "coalescing reader")]:
+            xs, ys = [], []
+            for c in CHUNKS:
+                rows = reads.get((PRIMARY_COMP, cls, c, "streaming"))
+                if not rows:
+                    continue
+                xs.append(c)
+                ys.append(modeled_time(rows, rtt, bw, coalesce=coalesce) * 1000.0)
+            if xs:
+                ax.plot(xs, ys, mk, label=lbl)
+        xaxis(ax)
+        ax.set_title(pname, fontsize=9)
+        ax.legend(fontsize=9)
+    axes[0].set_ylabel("modeled streaming-window latency (ms)")
+    fig.suptitle("Streaming a time window — naive vs coalescing remote reader (point cloud, zstd)")
+    fig.tight_layout()
+    fig.savefig(os.path.join(RESULTS, "fig8_reader_model.png"))
+    plt.close(fig)
 
 
 def fig_crossover(reads):
@@ -305,6 +339,7 @@ def main():
     fig_amplification(reads)
     fig_crossover(reads)
     fig_remote_point(reads)
+    fig_reader_model(reads)
     fig_comp_compare(writes, reads)
     write_summary(writes, reads)
     print("Wrote figures and summary.md to", RESULTS)

@@ -31,20 +31,17 @@ VM with the file in page cache.
   (≈7 MiB → ≈65 MiB from 1 MiB → 32 MiB), and single-message / random reads get
   linearly more expensive because the reader must fetch and decompress a whole
   chunk to extract one message.
-- **The one place bigger chunks help is bulk/streaming reads over high-latency
-  remote storage**, where fewer, larger ranged GETs cut round-trip overhead.
-  This benefit is real (2–4×) but is mostly realized by ~4–8 MiB and saturates
-  after that.
-- **Recommended default: 4 MiB.** It is the knee of every curve: it captures
-  all of the compression ratio and (within run-to-run noise) the full write
-  throughput, cuts remote streaming
-  latency 39–62% vs 1 MiB, and costs only +3.6 MiB reader RSS and +6 ms
-  single-message read latency vs 1 MiB. Going to 8 MiB buys less additional
-  streaming gain while memory (+64%) and random-read latency (+33%) climb
-  faster; **≥16 MiB is not recommended.** Use 1 MiB instead only for
-  memory-constrained/embedded readers or pure random-access workloads, and 8 MiB
-  only for deployments that are overwhelmingly bulk/streaming reads from
-  high-latency remote storage.
+- **Bigger chunks do not robustly help remote reads.** Full scans are
+  chunk-size-independent; random/point access is strictly *worse* with big
+  chunks (you fetch a whole chunk per message); and the apparent streaming
+  benefit only appears for a naive reader that issues one GET per chunk — a
+  coalescing/buffering reader is flat-to-faster with *small* chunks (see §5).
+- **Recommended default: 1 MiB.** Every metric that varies with chunk size is
+  either flat (compression ratio, write throughput) or favors smaller chunks
+  (reader memory, random-read latency, remote read cost with a proper reader).
+  1 MiB captures all the compression ratio with negligible per-chunk overhead.
+  **≥8 MiB only adds cost; ≥16 MiB clearly hurts.** This matches the existing
+  Go/Python/TypeScript defaults.
 
 ## Current defaults across languages
 
@@ -225,38 +222,58 @@ Single message fetched per point read (zstd):
 message already occupies its own chunk, so 256K/768K/1M behave identically. The
 chunk-size knob only gains leverage once a chunk holds several messages.)
 
-## 5. The remote crossover: where bigger chunks help
+## 5. Remote reads: random access favors small chunks; streaming is reader-dependent
 
-![Point vs streaming read latency](results/fig5_remote_crossover.png)
+It is tempting to argue that large chunks help reads from high-latency remote
+storage. That is only true for one specific (and avoidable) reader design.
+Breaking it down by access pattern:
 
-This is the heart of the local-vs-remote question. On **local NVMe**, latency is
-dominated by decompression, so chunk size barely matters (and large chunks
-slightly hurt streaming by decompressing wasted bytes). On **remote** profiles,
-the per-request round trip dominates, and the two access patterns diverge:
+**Full scan — chunk size is irrelevant.** You transfer the whole data section
+either way, and any reader streams it in large sequential fetches independent of
+chunk boundaries. No round-trip or transfer difference.
 
-- **Point / random reads get worse** with bigger chunks — you pay to transfer a
-  whole large chunk for one message. Regional single-message latency:
-  ~46 ms at ≤1 MiB → ~70 ms at 8 MiB → ~135 ms at 32 MiB (point cloud).
+**Random / point / scattered access — smaller chunks are genuinely better, for
+any reader.** To read one message you must fetch and decompress the entire chunk
+containing it. That cost is reader-independent and grows linearly with chunk
+size:
 
-  ![Point read latency, regional](results/fig6_remote_point_read.png)
+![Point read latency, regional](results/fig6_remote_point_read.png)
 
-- **Streaming / bulk reads get better** with bigger chunks — fewer round trips.
-  Point-cloud `streaming` (15% window) latency:
+Bytes fetched for one point-cloud message: 0.66 MiB at ≤1 MiB chunks → 3.3 MiB
+at 8 MiB → 14.6 MiB at 32 MiB. Regional single-message latency: ~46 ms at
+≤1 MiB → ~70 ms at 8 MiB → ~135 ms at 32 MiB. This is the real, robust remote
+effect of chunk size, and it points to **smaller** chunks.
 
-  | profile | 1M | 4M | 8M | 16M | 32M |
-  | --- | --- | --- | --- | --- | --- |
-  | regional (20 ms) | 662 ms | 406 ms | 258 ms | 273 ms | 242 ms |
-  | high-latency (100 ms) | 3074 ms | 1785 ms | 1009 ms | 954 ms | 763 ms |
+**Streaming a time window — depends entirely on the reader, and the "benefit" is
+an artifact.** A time-range query selects a *contiguous run* of chunks. How that
+maps to round trips depends on the reader:
 
-  The streaming win is substantial (~2.5–3× from 1 MiB to 8 MiB) but **most of
-  it is captured by 4–8 MiB**; going from 8 MiB to 32 MiB adds little while
-  quadrupling the point-read penalty and reader memory.
+![Streaming: naive vs coalescing reader](results/fig8_reader_model.png)
 
-So the intuition that "8 MB trades off well" is correct **specifically for
-streaming visualization / point-cloud playback served from remote storage** —
-that is exactly the regime where larger chunks pay off, and 8 MiB sits near the
-knee of the streaming curve. It is not a good default for workloads that do
-random access, run locally, or are memory-sensitive.
+- A **naive reader that issues one ranged GET per chunk** does fewer round trips
+  with larger chunks, so its windowed-read latency falls as chunks grow (662 ms
+  → 257 ms regional, 1 MiB → 8 MiB). This is the only place large chunks "win",
+  and it is the curve the earlier draft of this report leaned on.
+- A **coalescing/buffering reader that fetches the contiguous span in one ranged
+  GET** does *not* care about chunk count. Its latency is flat — and actually
+  rises slightly with bigger chunks, because the window snaps to coarser chunk
+  boundaries and transfers more overhang (17.9 MiB at 1 MiB chunks → 29 MiB at
+  32 MiB). Crucially, the coalescing reader is **much faster than the naive
+  reader at small chunks** (142 ms vs 662 ms regional at 1 MiB).
+
+In other words, large chunks only speed up streaming for a reader that is
+leaving performance on the table; the correct fix is to coalesce requests, not
+to inflate chunk size. With a good reader, smaller chunks are as fast or faster
+for streaming *and* much faster for random access.
+
+(The earlier `fig5_remote_crossover.png` plots the naive-reader model for point
+vs streaming; it is retained for reference but the naive streaming curve should
+be read with the above caveat.)
+
+So the remote picture, contrary to the intuition that "8 MB trades off well for
+streaming", actually favors **smaller** chunks: random access strictly prefers
+them, full scans are indifferent, and streaming only prefers large chunks under
+a naive non-coalescing reader.
 
 ## 6. zstd vs lz4
 
@@ -376,55 +393,64 @@ per-message overhead and is noisier; TypeScript writes are uncompressed only.
 
 ## Recommendation
 
-**The recommended default is 4 MiB.** The supporting numbers (zstd):
+**The recommended default is 1 MiB.** Every metric that actually varies with
+chunk size either is flat or favors smaller chunks, once the remote-streaming
+"benefit" of large chunks is correctly attributed to naive readers (see §5). The
+supporting numbers (zstd):
 
-| 1 MiB → 4 MiB → 8 MiB | 1 MiB | 4 MiB | 8 MiB |
-| --- | --- | --- | --- |
-| compression ratio (point cloud) | 2.15 | 2.15 | 2.15 |
-| write throughput (mixed) | 164 MB/s | 156 MB/s | 157 MB/s |
-| reader peak RSS (mixed, full) | 7.4 MiB | 11.0 MiB | 17.9 MiB |
-| point read latency, regional (point cloud) | 46 ms | 52 ms | 69 ms |
-| streaming latency, regional (mixed) | 1068 ms | 402 ms | 295 ms |
-| streaming latency, high-latency remote (point cloud) | 3074 ms | 1785 ms | 1008 ms |
+| metric | 1 MiB | 4 MiB | 8 MiB | direction |
+| --- | --- | --- | --- | --- |
+| compression ratio (point cloud) | 2.15 | 2.15 | 2.15 | flat |
+| write throughput (mixed) | 164 MB/s | 156 MB/s | 157 MB/s | flat |
+| reader peak RSS (mixed, full) | 7.4 MiB | 11.0 MiB | 17.9 MiB | smaller better |
+| point read latency, regional (point cloud) | 46 ms | 52 ms | 69 ms | smaller better |
+| streaming, regional, **coalescing reader** (point cloud) | 142 ms | 146 ms | 157 ms | smaller better |
+| streaming, regional, **naive reader** (point cloud) | 662 ms | 406 ms | 257 ms | larger better* |
 
-4 MiB is where the streaming benefit is largely realized (−40 to −62% vs 1 MiB)
-while random-read latency and reader memory are still close to the 1 MiB
-baseline. Past 4 MiB the streaming gains shrink while the random-read and memory
-costs accelerate.
+\* The only column favoring large chunks assumes a reader that issues one GET
+per chunk; a coalescing reader (the row above) removes that effect entirely and
+is far faster at 1 MiB. So large chunks do not robustly help any access pattern.
+
+1 MiB sits at the point where compression ratio has fully saturated and
+per-chunk overhead (chunk-index records, decompression setup) is already
+negligible, while keeping reader memory low and random/remote reads cheap.
+Smaller still (256 KiB) is fine for compression and random access but starts to
+add chunk-count overhead and is below ROS 1's historical value; 1 MiB is the
+natural, well-supported choice.
 
 Use a different value only for a known-narrow workload:
 
 | Workload | Chunk size |
 | --- | --- |
-| **General-purpose default** | **4 MiB** |
-| Memory-constrained / embedded readers, or pure random-access (e.g. heavy scrubbing) | 1 MiB |
-| Overwhelmingly bulk/streaming reads from high-latency remote storage | 8 MiB |
+| **General-purpose default** | **1 MiB** |
+| Heavy random access / scrubbing, or memory-constrained readers | 256 KiB – 1 MiB |
+| Bulk reads behind a naive (non-coalescing) high-latency remote reader | up to 4 MiB |
 | Any workload | do not exceed 8 MiB; ≥16 MiB only hurts |
 
 Relating this to the current per-language defaults (C++/Rust 768 KiB; Go,
-Python, TypeScript 1 MiB; Swift 10 MiB): the 768 KiB–1 MiB cluster is *safe and
-conservative* — lowest memory and random-read latency — but it leaves
-substantial remote-streaming throughput on the table (e.g. ~2.6× slower mixed
-streaming on a regional object store than 4 MiB). Swift's 10 MiB is too high: it
-pays ~2.4× the reader memory and materially higher random-read latency for no
-compression or write benefit. The data-optimal single default for all six
-libraries is **4 MiB**.
+Python, TypeScript 1 MiB; Swift 10 MiB): the **768 KiB–1 MiB cluster is already
+right** — it has all the compression ratio, lowest memory, and best random/remote
+read behavior. Swift's 10 MiB is the outlier: it pays ~2.4× the reader memory and
+materially higher random-read latency for no compression, write, or (with a
+proper reader) streaming benefit.
 
 **Proposed action:** this study and PR change **no** library default — it exists
-to document the tradeoffs and give the defaults an empirical basis. If
-maintainers want to act on it, the natural follow-ups (each its own PR) are
-(1) raise the C++/Rust/Go/Python/TypeScript defaults to 4 MiB and lower Swift's
-10 MiB to 4 MiB, unifying on the data-optimal value, or (2) if a more
-conservative change is preferred, at minimum lower Swift's 10 MiB. These are
-intentionally left out of this PR.
+to document the tradeoffs and give the defaults an empirical basis. The main
+finding is that the existing 768 KiB–1 MiB defaults are well chosen and need no
+change. The one defensible follow-up (its own PR) is to **lower Swift's 10 MiB
+toward 1 MiB** to bring it in line; unifying the others on 1 MiB would be a
+tidy-up but is not performance-critical. These are intentionally left out of this
+PR.
 
 ## Caveats
 
 - Results reflect the C++ implementation; absolute throughput/RSS are
   C++-specific, but the format-level conclusions (flat ratio, read amplification,
-  remote crossover) generalize across languages.
-- The remote model is analytic (idealized one-GET-per-chunk reader); real
-  clients add request overhead and may coalesce or parallelize differently.
+  remote behavior) generalize across languages.
+- The remote model is analytic. It is reported for both a naive reader (one GET
+  per chunk) and a coalescing reader (one ranged GET per contiguous span); real
+  clients sit between these but a competent remote reader coalesces, so the
+  coalescing model is the one to design against.
 - The model's compute term is the measured local decode wall time, taken with
   the file in page cache, so it folds local read I/O into "decode." This is
   negligible for the decode-bound patterns studied here but slightly
