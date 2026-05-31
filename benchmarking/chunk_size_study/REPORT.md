@@ -131,6 +131,30 @@ modeled_latency = (chunks_touched + 1) * RTT
 Profiles: **local NVMe** (~50 µs, 2 GB/s), **regional object store** (20 ms,
 300 MB/s), **high-latency remote** (100 ms, 80 MB/s).
 
+## Environment
+
+The benchmark was run inside a cloud Linux VM (KVM full virtualization), so the
+CPU model string is masked/generic and absolute throughput/latency numbers are
+specific to this machine — the *trends and ratios* are what matter, not the
+absolute values. Details determined from `lscpu`, `/proc/meminfo`, `uname`, and
+package metadata:
+
+| Component | Value |
+| --- | --- |
+| CPU | Intel Xeon (generic model string under KVM); flags include AVX-512 + AMX/`avx512_fp16`/`avx_vnni`/`bf16`, i.e. a 4th-gen Xeon Scalable ("Sapphire Rapids")-class core |
+| vCPUs | 4 (1 socket × 4 cores × 1 thread) |
+| Caches (as exposed) | L1d 192 KiB, L1i 128 KiB, L2 8 MiB, L3 320 MiB |
+| Virtualization | KVM, full |
+| Memory | ~16 GB (`MemTotal` 16,402,092 kB) |
+| OS | Ubuntu 24.04.4 LTS |
+| Kernel | Linux 6.1.147, x86_64 |
+| Storage | overlay filesystem (252 GB volume); benchmark files in page cache during reads |
+| Compiler | g++ 13.3.0 (Ubuntu 13.3.0), `-O2` (see `Makefile`) |
+| Compression libs | libzstd 1.5.5, liblz4 1.9.4 |
+
+The benchmark is single-threaded for the timed write/read loops; the 4 vCPUs
+mainly help the OS and the harness around the measured sections.
+
 ## 1. Compression ratio is flat across chunk size
 
 ![Compression ratio vs chunk size](results/fig1_compression_ratio.png)
