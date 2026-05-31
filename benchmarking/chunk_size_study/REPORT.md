@@ -119,19 +119,65 @@ empirical basis — which is what motivated this study.
 | Compression | zstd (primary), lz4 (sensitivity) |
 | Read patterns | `full`, `point` (1 message), `range` (1% window), `streaming` (15% window), `topic` (mixed only) |
 
-Read cost for remote storage is modeled analytically from the chunk index — one
-ranged GET per chunk overlapping the query window plus one GET for the
-summary/index — so it reflects the format, not the C++ reader's record-by-record
-I/O granularity:
+Read cost for remote storage is modeled analytically from the chunk index, so it
+reflects the format rather than the C++ reader's record-by-record I/O
+granularity. The round-trip count depends on the reader (see §5): a *naive*
+reader issues one ranged GET per overlapping chunk, while a *coalescing* reader
+fetches the contiguous chunk span in a single GET. Both are reported:
 
 ```
-modeled_latency = (chunks_touched + 1) * RTT
-                + (compressed_bytes_of_those_chunks + summary_bytes) / bandwidth
+modeled_latency = n_gets * RTT
+                + (compressed_bytes_of_overlapping_chunks + summary_bytes) / bandwidth
                 + local_decode_time
+  where n_gets = chunks_touched + 1   (naive reader)
+              or 2                     (coalescing reader: one GET for the
+                                        contiguous span + one for the index)
 ```
 
 Profiles: **local NVMe** (~50 µs, 2 GB/s), **regional object store** (20 ms,
 300 MB/s), **high-latency remote** (100 ms, 80 MB/s).
+
+### Point cloud sizes in practice
+
+The `pointcloud` corpus uses ~1.5 MB messages; that is mid-range for real
+sensors, so it is worth knowing the span. Both the ROS `sensor_msgs/PointCloud2`
+and the [Foxglove `PointCloud`](https://docs.foxglove.dev/docs/sdk/schemas/point-cloud)
+schemas store points as one packed binary blob, so:
+
+```
+message_size ≈ num_points × point_stride + small_header
+```
+
+`point_stride` is the bytes per point set by the field layout — typically 12 B
+(XYZ float32), 16 B (XYZ + intensity), 22–32 B (XYZ + intensity + ring + time,
+the common Velodyne/Ouster ROS layouts), ~48 B (full Ouster fields), or 16–32 B
+(XYZRGB for organized depth/RGBD clouds). For a spinning lidar,
+`num_points = channels × horizontal_columns` per revolution (one message at the
+10/20 Hz rotation rate).
+
+| Source | Points / scan | Size @16 B | Size @32 B |
+| --- | --- | --- | --- |
+| Downsampled / ROI / 2D-converted | 1k–10k | 16–160 KB | 32–320 KB |
+| VLP-16 (16-beam) | ~30k | ~0.5 MB | ~0.9 MB |
+| 32-beam (HDL-32E, VLP-32C, Ouster OS-32 @1024) | ~33k–58k | ~0.5–0.9 MB | ~1–1.8 MB |
+| 64-beam (HDL-64E, Ouster OS1-64 @1024–2048) | ~65k–131k | ~1–2 MB | ~2–4 MB |
+| 128-beam (Ouster OS1/OS2-128, Hesai/Robosense 128 @1024–2048) | ~131k–262k | ~2–4 MB | ~4–8 MB |
+| 128-beam @2048 rich fields / Ouster rev8 @4096 | ~262k–524k | — | ~8–25 MB |
+| Organized RGBD / depth-camera clouds (1280×720 → 1920×1080) | ~0.9M–2M | ~14–32 MB | up to ~64 MB |
+| Accumulated SLAM maps / merged multi-lidar | millions–10s of millions | tens of MB → GB | — |
+
+(Anchors verified against Ouster datasheets: OS1/OS2 emit 655k / 1.31M / 2.62M
+points/sec for 32 / 64 / 128 channels at 1024×10 Hz, and the rev8 OS1 reaches
+10.49M points/sec at 4096 columns.)
+
+This sharpens the chunk-size picture. Because chunk size is a soft ceiling and an
+oversized message is isolated in its own chunk, **a single dense point cloud
+already exceeds any reasonable chunk size**: a 128-beam or RGBD cloud (4–32 MB)
+is larger than even a 4 MiB chunk, so each cloud occupies its own chunk
+regardless of the setting and the chunk-size knob has no leverage above the
+per-message size. So for point-cloud-dominated logs, "chunk size" effectively
+means "one cloud per chunk", and there is no benefit to a chunk size larger than
+roughly a single cloud.
 
 ## Environment
 
