@@ -3,13 +3,14 @@ mod commands;
 mod context;
 mod logsetup;
 
-use std::process;
+use std::process::ExitCode;
 
 use anyhow::Result;
 use clap::Parser;
+use commands::CommandOutcome;
 use context::CommandContext;
 
-fn run() -> Result<()> {
+fn run() -> Result<CommandOutcome> {
     let args = cli::Args::parse();
     logsetup::init_logger(args.verbose, args.color)?;
     if args.config.is_some() {
@@ -29,11 +30,16 @@ fn run() -> Result<()> {
     commands::dispatch(&ctx, args.command)
 }
 
-fn main() {
-    run().unwrap_or_else(|e| {
-        eprintln!("Error: {e:#}");
-        process::exit(1);
-    });
+fn main() -> ExitCode {
+    // `main` is the single place that turns an outcome into a process exit code, so it runs only
+    // after every command has returned and its output sinks have been dropped/flushed.
+    match run() {
+        Ok(outcome) => ExitCode::from(outcome.exit_code()),
+        Err(e) => {
+            eprintln!("Error: {e:#}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 #[cfg(test)]

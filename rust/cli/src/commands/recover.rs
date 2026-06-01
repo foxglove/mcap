@@ -10,14 +10,8 @@ use mcap::{Compression, WriteOptions};
 
 use crate::cli::RecoverCommand;
 use crate::commands::common;
+use crate::commands::CommandOutcome;
 use crate::context::CommandContext;
-
-// Recovery completed, but input data was corrupt/truncated
-// - Exit code 0: successful recovery, no data loss
-// - Exit code 1: hard failure
-// - Exit code 2: used by clap to indicate a command line parsing error
-// - Exit code 3: successful recovery with data loss
-const EXIT_LOSSY_RECOVERY: i32 = 3;
 
 // 1 GiB upper limit on top-level record lengths while scanning the stream. This only bounds
 // records read by the linear reader (including a compressed chunk record's own length); it does
@@ -116,7 +110,14 @@ impl RecoverStats {
     }
 }
 
-pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
+/// Recovers as much data as possible from a (possibly damaged) MCAP, writing a valid output.
+///
+/// Exit codes (mapped centrally by `CommandOutcome` in `main`):
+/// - 0: successful recovery, no data loss (`CommandOutcome::Success`)
+/// - 1: hard failure (`Err`, handled by `main`)
+/// - 2: command-line parsing error (owned by clap)
+/// - 3: successful recovery with warning-level data loss (`CommandOutcome::Warnings`)
+pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome> {
     let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
     let source_compression = if args.compression == "preserve" {
         detect_source_compression(args.file.as_deref(), source_options)?
@@ -150,10 +151,9 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
         count(stats.metadata.recovered, "metadata record"),
     );
 
-    // Exit codes: 0 = clean (all recoverable records were recovered; regenerated
-    // indexes/summary/CRCs are fine), 1 = hard failure via `main`'s error handler, and 3 =
-    // completed with warning-level data loss. This diverges from the Go CLI, which always exits 0
-    // once recovery starts.
+    // A clean recovery exits 0; warning-level data loss reports `CommandOutcome::Warnings` (exit 3)
+    // so `main` sets the exit code only after every output sink has been flushed and dropped. This
+    // diverges from the Go CLI, which always exits 0 once recovery starts.
     if stats.is_lossy() {
         let discarded: Vec<_> = stats
             .discarded_counts()
@@ -168,9 +168,9 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<()> {
             parts.push("stopped early (input truncated), so trailing data may be lost".to_string());
         }
         eprintln!("Recovery was lossy: {}.", parts.join("; "));
-        std::process::exit(EXIT_LOSSY_RECOVERY);
+        return Ok(CommandOutcome::Warnings);
     }
-    Ok(())
+    Ok(CommandOutcome::Success)
 }
 
 /// Formats a count with a naive plural (`1 message`, `0 messages`); nouns pluralize with a
