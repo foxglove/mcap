@@ -212,6 +212,14 @@ port is still pre-production:
      default.
    - The Rust CLI also has no `--always-decode-chunk` flag (Go does): chunks are
      always decoded, and `--compression` alone determines the output codec.
+   - With `preserve` on a non-seekable streaming input (stdin or a remote without
+     range support), the codec is only known once the first chunk is reached.
+     Schema/channel/metadata records seen before that chunk are buffered so the
+     output can match it. Attachments are not buffered (per the spec they never
+     appear inside a chunk, so they carry no codec signal and may be large): an
+     attachment before the first chunk commits the output to uncompressed. The
+     attachment itself is preserved byte-for-byte regardless. Seekable local
+     files are pre-scanned, so they preserve the original codec exactly.
 3. Exit codes signal data loss:
    - Rust CLI `recover` exits `0` when all records were recovered (rebuilding
      indexes/CRCs does not count as loss), `3` when recovery was lossy (one or

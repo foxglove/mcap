@@ -461,10 +461,11 @@ fn recover_records<R: Read, W: Write + Seek>(
                             continue;
                         }
                         // For `preserve` without a pre-detected source compression, loose
-                        // schemas/channels/attachments/metadata are buffered above until a chunk
-                        // can choose the codec. Reaching this path before a writer exists means
-                        // either compression is already known, or a loose message/other record has
-                        // proven we should start with uncompressed output.
+                        // schemas/channels/metadata are buffered above until a chunk can choose the
+                        // codec. Reaching this path before a writer exists means either compression
+                        // is already known, or a loose record that carries no codec signal (a
+                        // message, attachment, or other record) has proven we should start with
+                        // uncompressed output.
                         let writer = ensure_writer(
                             &mut writer,
                             &mut sink,
@@ -523,6 +524,16 @@ fn recover_records<R: Read, W: Write + Seek>(
     Ok((stats, writer))
 }
 
+/// For streaming `preserve` (no pre-detected source compression), the output codec is only knowable
+/// once we see a chunk. We defer creating the writer by buffering the small, structural records that
+/// the spec allows ahead of the first chunk (`[Header][Schema/Channel/Metadata...][Chunk]`).
+///
+/// Attachments are deliberately *not* buffered: per the spec they never appear inside a chunk
+/// (op=0x09 "Attachment records must not appear within a chunk"), so a loose attachment carries no
+/// signal about the following chunks' compression, yet it can be arbitrarily large. Buffering it
+/// would risk holding the whole attachment in memory to learn nothing. If an attachment precedes
+/// the first chunk we instead commit to uncompressed output; the attachment is byte-identical
+/// regardless of file compression, so preservation only differs for the (rare) chunks after it.
 fn should_buffer_until_compression_known<W: Write + Seek>(
     compression: CompressionSelection,
     writer: &Option<mcap::Writer<W>>,
@@ -532,10 +543,7 @@ fn should_buffer_until_compression_known<W: Write + Seek>(
         && writer.is_none()
         && matches!(
             record,
-            Record::Schema { .. }
-                | Record::Channel(_)
-                | Record::Attachment { .. }
-                | Record::Metadata(_)
+            Record::Schema { .. } | Record::Channel(_) | Record::Metadata(_)
         )
 }
 
@@ -849,6 +857,31 @@ mod tests {
         mixed
     }
 
+    fn write_attachment_then_zstd_chunk_input(attachment_size: usize) -> Vec<u8> {
+        let mut attachment_only = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .use_chunks(false)
+                .create(&mut attachment_only)
+                .expect("writer");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 1,
+                    create_time: 1,
+                    name: "before-chunk".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: Cow::Owned(vec![0xAB; attachment_size]),
+                })
+                .expect("attachment");
+            writer.finish().expect("finish");
+        }
+
+        let zstd_chunked = write_test_input(Some(mcap::Compression::Zstd));
+        let mut mixed = bytes_before_data_end(attachment_only.get_ref()).to_vec();
+        append_chunks_from(&zstd_chunked, &mut mixed);
+        mixed
+    }
+
     fn recover_to_vec(input: &[u8], compression: &str) -> (Vec<u8>, RecoverStats) {
         let source_compression =
             super::detect_source_compression_from_reader(Cursor::new(input)).expect("compression");
@@ -989,6 +1022,23 @@ mod tests {
         let compressions = chunk_compressions(&output);
         assert!(!compressions.is_empty());
         assert!(compressions.iter().all(|name| name == "zstd"));
+    }
+
+    #[test]
+    fn streaming_preserve_does_not_buffer_attachment_before_first_chunk() {
+        // An attachment is never inside a chunk (spec op=0x09), so it carries no codec signal and
+        // must not be buffered in memory. Under streaming `preserve` it commits the output to
+        // uncompressed, yet the attachment itself is still recovered intact.
+        let input = write_attachment_then_zstd_chunk_input(4 * 1024 * 1024);
+        let (output, stats) =
+            recover_to_vec_with_selection(&input, super::CompressionSelection::Preserve(None));
+        let (_, attachments, _) = count_output_records(&output);
+        assert_eq!(attachments, 1);
+        assert_eq!(stats.attachments.recovered, 1);
+        assert!(!stats.is_lossy());
+        let compressions = chunk_compressions(&output);
+        assert!(!compressions.is_empty());
+        assert!(compressions.iter().all(|name| name.is_empty()));
     }
 
     #[test]
