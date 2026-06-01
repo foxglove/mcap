@@ -26,36 +26,60 @@ use anyhow::Result;
 use crate::cli::{AddSubcommand, Command, GetSubcommand, ListSubcommand};
 use crate::context::CommandContext;
 
-pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<()> {
+/// How a command finished, for commands that complete successfully but still want to influence the
+/// process exit code. Hard failures are reported via `Err` and handled by `main` (exit 1); clap
+/// owns exit 2 for argument-parsing errors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandOutcome {
+    /// Completed cleanly. Exit 0.
+    Success,
+    /// Completed, but with warning-level data loss (for example, `recover` discarding records or
+    /// stopping early on a truncated input). Exit 3.
+    Warnings,
+}
+
+impl CommandOutcome {
+    pub fn exit_code(self) -> u8 {
+        match self {
+            CommandOutcome::Success => 0,
+            CommandOutcome::Warnings => 3,
+        }
+    }
+}
+
+pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<CommandOutcome> {
     match command {
-        Command::Info(args) => info::run(ctx, args),
+        Command::Info(args) => info::run(ctx, args).map(|()| CommandOutcome::Success),
 
         Command::Add(args) => match args.command {
             AddSubcommand::Attachment(args) => add_attachment::run(ctx, args),
             AddSubcommand::Metadata(args) => add_metadata::run(ctx, args),
-        },
+        }
+        .map(|()| CommandOutcome::Success),
         Command::Get(args) => match args.command {
             GetSubcommand::Attachment(args) => get_attachment::run(ctx, args),
             GetSubcommand::Metadata(args) => get_metadata::run(ctx, args),
-        },
+        }
+        .map(|()| CommandOutcome::Success),
         Command::List(args) => match args.command {
             ListSubcommand::Attachments(args) => list_attachments::run(ctx, args),
             ListSubcommand::Channels(args) => list_channels::run(ctx, args),
             ListSubcommand::Chunks(args) => list_chunks::run(ctx, args),
             ListSubcommand::Metadata(args) => list_metadata::run(ctx, args),
             ListSubcommand::Schemas(args) => list_schemas::run(ctx, args),
-        },
+        }
+        .map(|()| CommandOutcome::Success),
 
-        Command::Cat(args) => cat::run(ctx, args),
-        Command::Compress(args) => compress::run(ctx, args),
-        Command::Convert(args) => convert::run(ctx, args),
-        Command::Decompress(args) => decompress::run(ctx, args),
-        Command::Doctor(args) => doctor::run(ctx, args),
-        Command::Du(args) => du::run(ctx, args),
-        Command::Filter(args) => filter::run(ctx, args),
-        Command::Merge(args) => merge::run(ctx, args),
+        Command::Cat(args) => cat::run(ctx, args).map(|()| CommandOutcome::Success),
+        Command::Compress(args) => compress::run(ctx, args).map(|()| CommandOutcome::Success),
+        Command::Convert(args) => convert::run(ctx, args).map(|()| CommandOutcome::Success),
+        Command::Decompress(args) => decompress::run(ctx, args).map(|()| CommandOutcome::Success),
+        Command::Doctor(args) => doctor::run(ctx, args).map(|()| CommandOutcome::Success),
+        Command::Du(args) => du::run(ctx, args).map(|()| CommandOutcome::Success),
+        Command::Filter(args) => filter::run(ctx, args).map(|()| CommandOutcome::Success),
+        Command::Merge(args) => merge::run(ctx, args).map(|()| CommandOutcome::Success),
         Command::Recover(args) => recover::run(ctx, args),
-        Command::Sort(args) => sort::run(ctx, args),
+        Command::Sort(args) => sort::run(ctx, args).map(|()| CommandOutcome::Success),
     }
 }
 
@@ -221,9 +245,8 @@ mod tests {
             Command::Recover(RecoverCommand {
                 file: Some(PathBuf::from("does-not-exist.mcap")),
                 output: Some(PathBuf::from("recovered.mcap")),
-                always_decode_chunk: false,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                compression: "zstd".to_string(),
+                compression: "preserve".to_string(),
             }),
         )
         .expect_err("recover should fail on missing file");

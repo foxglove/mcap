@@ -62,6 +62,10 @@ export async function applyFixtureActions(
         await fs.mkdir(resolvePlaceholders(action.path, context), { recursive: true });
         break;
       }
+      case "truncate": {
+        await fs.truncate(resolvePlaceholders(action.path, context), action.size);
+        break;
+      }
     }
   }
 }

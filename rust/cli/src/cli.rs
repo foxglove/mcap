@@ -510,18 +510,15 @@ pub struct RecoverCommand {
     #[arg(short = 'o', long = "output")]
     pub output: Option<PathBuf>,
 
-    /// Always decode chunks, even for chunked input.
-    ///
-    /// This flag is accepted for compatibility with the Go CLI.
-    #[arg(short = 'a', long = "always-decode-chunk", default_value_t = false)]
-    pub always_decode_chunk: bool,
-
     /// Target uncompressed chunk size for output MCAP
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Compression algorithm for output file: zstd, lz4, or none
-    #[arg(long = "compression", default_value = "zstd")]
+    /// Compression for the output file: preserve, none, zstd, or lz4.
+    ///
+    /// `preserve` (the default) keeps the input file's compression (uncompressed if the input is
+    /// unchunked).
+    #[arg(long = "compression", default_value = "preserve")]
     pub compression: String,
 }
 

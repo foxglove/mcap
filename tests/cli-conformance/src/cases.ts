@@ -626,6 +626,61 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "known-difference-recover-lossy-exit-code",
+    description:
+      "On a truncated MCAP, Rust recover exits 3 (recovered but lossy); Go recover exits 0.",
+    tags: ["known-difference", "recover"],
+    setup: [
+      { type: "copy", from: TEN_MESSAGES, to: "{caseWorkDir}/truncated.mcap" },
+      // Cut mid-chunk so only some of the messages are recovered and the data section never
+      // reaches a clean DataEnd (TEN_MESSAGES is ~1083 bytes; the chunk spans past byte 300).
+      { type: "truncate", path: "{caseWorkDir}/truncated.mcap", size: 300 },
+    ],
+    invocation: { args: ["recover", "truncated.mcap", "-o", "recovered.mcap"] },
+    knownDifference: {
+      id: "recover-lossy-exit-code",
+      summary:
+        "Rust recover exits non-zero (3) when recovery is lossy; Go recover exits 0 once recovery starts.",
+      reason:
+        "Rust recover signals data loss through the exit code (0 = clean, 1 = nothing recovered, 3 = recovered but lossy) so a partial salvage is not silently reported as success. Go recover returns success on any started recovery, including truncated input.",
+      desiredBehavior:
+        "Rust recover should exit 3 when one or more messages/records are discarded or the input is truncated mid-record; a clean recovery exits 0 and nothing-recovered exits 1.",
+      goBehavior: {
+        exitCode: 0,
+        files: [{ path: "recovered.mcap", exists: true }],
+      },
+      rustBehavior: {
+        exitCode: 3,
+        files: [{ path: "recovered.mcap", exists: true }],
+      },
+    },
+  },
+  {
+    id: "known-difference-recover-always-decode-chunk-flag",
+    description:
+      "Go recover accepts --always-decode-chunk; Rust recover removed the flag because it always decodes and re-encodes chunks.",
+    tags: ["known-difference", "recover", "surface"],
+    invocation: {
+      args: ["recover", TEN_MESSAGES, "-o", "recovered.mcap", "--always-decode-chunk"],
+    },
+    knownDifference: {
+      id: "recover-always-decode-chunk-flag",
+      summary: "Go recover accepts an --always-decode-chunk flag; Rust recover does not expose it.",
+      reason:
+        "Rust recover always decodes and validates every chunk and re-encodes records through the writer, so a decode toggle is unnecessary; the --compression flag alone selects the output codec. Rust recover also guarantees a valid, readable output and defaults to --compression preserve, whereas Go copies chunk bytes through verbatim and defaults to zstd.",
+      desiredBehavior:
+        "Rust recover should keep decoding chunks unconditionally; the --always-decode-chunk flag remains Go-only.",
+      goBehavior: {
+        exitCode: 0,
+        files: [{ path: "recovered.mcap", exists: true }],
+      },
+      rustBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "--always-decode-chunk" },
+      },
+    },
+  },
+  {
     id: "known-difference-completion-command",
     description: "The Go CLI exposes Cobra-generated shell completion; Rust CLI does not yet.",
     tags: ["known-difference", "surface"],

@@ -3,13 +3,14 @@ mod commands;
 mod context;
 mod logsetup;
 
-use std::process;
+use std::process::ExitCode;
 
 use anyhow::Result;
 use clap::Parser;
+use commands::CommandOutcome;
 use context::CommandContext;
 
-fn run() -> Result<()> {
+fn run() -> Result<CommandOutcome> {
     let args = cli::Args::parse();
     logsetup::init_logger(args.verbose, args.color)?;
     if args.config.is_some() {
@@ -29,11 +30,16 @@ fn run() -> Result<()> {
     commands::dispatch(&ctx, args.command)
 }
 
-fn main() {
-    run().unwrap_or_else(|e| {
-        eprintln!("Error: {e:#}");
-        process::exit(1);
-    });
+fn main() -> ExitCode {
+    // `main` is the single place that turns an outcome into a process exit code, so it runs only
+    // after every command has returned and its output sinks have been dropped/flushed.
+    match run() {
+        Ok(outcome) => ExitCode::from(outcome.exit_code()),
+        Err(e) => {
+            eprintln!("Error: {e:#}");
+            ExitCode::from(1)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -620,9 +626,8 @@ mod tests {
             Command::Recover(RecoverCommand {
                 file: Some("input.mcap".into()),
                 output: None,
-                always_decode_chunk: false,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                compression: "zstd".to_string(),
+                compression: "preserve".to_string(),
             })
         );
     }
@@ -652,7 +657,6 @@ mod tests {
             "input.mcap",
             "-o",
             "out.mcap",
-            "-a",
             "--chunk-size",
             "2048",
             "--compression",
@@ -664,7 +668,6 @@ mod tests {
             Command::Recover(RecoverCommand {
                 file: Some("input.mcap".into()),
                 output: Some("out.mcap".into()),
-                always_decode_chunk: true,
                 chunk_size: 2048,
                 compression: "none".to_string(),
             })

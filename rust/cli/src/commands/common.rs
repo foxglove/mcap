@@ -107,6 +107,17 @@ pub struct HttpRangeReader {
     offset: u64,
 }
 
+pub(crate) enum StreamingInput {
+    Local(std::fs::File),
+    Stdin(std::io::Stdin),
+    Remote(HttpBodyReader),
+}
+
+pub(crate) struct HttpBodyReader {
+    response: ureq::http::Response<ureq::Body>,
+    display_url: String,
+}
+
 impl MaterializedInput {
     pub fn path(&self) -> &Path {
         if let Some(temp_file) = &self.temp_file {
@@ -218,6 +229,26 @@ pub fn load_input(file: Option<&Path>, options: SourceOptions) -> Result<InputDa
         .read_to_end(&mut buf)
         .context("failed to read input from stdin")?;
     Ok(InputData::Buffered(buf))
+}
+
+pub(crate) fn open_streaming_input(
+    file: Option<&Path>,
+    options: SourceOptions,
+) -> Result<StreamingInput> {
+    if let Some(path) = file {
+        if is_http_url(path) {
+            return Ok(StreamingInput::Remote(open_remote_body_reader(
+                path, options,
+            )?));
+        }
+        return Ok(StreamingInput::Local(open_seekable_mcap_source(path)?));
+    }
+
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        bail!("{PLEASE_SUPPLY_FILE}");
+    }
+    Ok(StreamingInput::Stdin(stdin))
 }
 
 pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<MaterializedInput> {
@@ -376,6 +407,31 @@ impl std::io::Read for HttpRangeReader {
     }
 }
 
+impl std::io::Read for StreamingInput {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            StreamingInput::Local(file) => file.read(buf),
+            StreamingInput::Stdin(stdin) => stdin.read(buf),
+            StreamingInput::Remote(reader) => reader.read(buf),
+        }
+    }
+}
+
+impl std::io::Read for HttpBodyReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.response
+            .body_mut()
+            .as_reader()
+            .read(buf)
+            .map_err(|err| {
+                std::io::Error::new(
+                    err.kind(),
+                    format!("failed to read remote input {}: {err}", self.display_url),
+                )
+            })
+    }
+}
+
 impl std::io::Seek for HttpRangeReader {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         let target = match pos {
@@ -443,6 +499,30 @@ fn read_remote_input_to_writer(path: &Path, writer: &mut impl std::io::Write) ->
     validate_identity_content_encoding(response.headers(), &display_url)?;
     copy_response(&mut response, writer, &display_url)?;
     Ok(())
+}
+
+fn open_remote_body_reader(path: &Path, options: SourceOptions) -> Result<HttpBodyReader> {
+    require_remote_scan_allowed(path, options)?;
+    let url = path
+        .to_str()
+        .ok_or_else(|| anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display()))?;
+    let display_url = redact_url(url);
+    let agent = remote_agent();
+    eprintln!("Warning: reading entire remote file {display_url}");
+
+    let response = agent
+        .get(url)
+        .call()
+        .with_context(|| format!("failed to read remote input {display_url}"))?;
+    let status = response.status();
+    if !status.is_success() {
+        bail!("failed to read remote input {display_url}: HTTP {status}");
+    }
+    validate_identity_content_encoding(response.headers(), &display_url)?;
+    Ok(HttpBodyReader {
+        response,
+        display_url,
+    })
 }
 
 fn remote_agent() -> Agent {
