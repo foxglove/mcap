@@ -200,7 +200,7 @@ func init() {
 		&convertChunkSize,
 		"chunk-size",
 		"",
-		8*1024*1024,
+		defaultCLIChunkSize,
 		"chunk size to target",
 	)
 	convertCmd.PersistentFlags().BoolVarP(

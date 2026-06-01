@@ -222,7 +222,7 @@ mod tests {
                 file: Some(PathBuf::from("does-not-exist.mcap")),
                 output: Some(PathBuf::from("recovered.mcap")),
                 always_decode_chunk: false,
-                chunk_size: 4 * 1024 * 1024,
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 compression: "zstd".to_string(),
             }),
         )
@@ -237,7 +237,7 @@ mod tests {
             Command::Compress(CompressCommand {
                 file: None,
                 output: None,
-                chunk_size: 4 * 1024 * 1024,
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 compression: "invalid".to_string(),
                 unchunked: false,
             }),
@@ -253,7 +253,7 @@ mod tests {
             Command::Sort(SortCommand {
                 file: PathBuf::from("does-not-exist.mcap"),
                 output_file: PathBuf::from("sorted.mcap"),
-                chunk_size: 4 * 1024 * 1024,
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 compression: crate::cli::CompressionFormat::Zstd,
                 include_crc: true,
                 chunked: true,

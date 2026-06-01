@@ -147,7 +147,7 @@ impl Default for WriteOptions {
             compression: None,
             profile: String::new(),
             library: String::from("mcap-rs-") + env!("CARGO_PKG_VERSION"),
-            chunk_size: Some(1024 * 768),
+            chunk_size: Some(Self::DEFAULT_CHUNK_SIZE),
             use_chunks: true,
             disable_seeking: false,
             emit_statistics: true,
@@ -171,6 +171,9 @@ impl Default for WriteOptions {
 }
 
 impl WriteOptions {
+    /// Default target uncompressed chunk size used by [`WriteOptions`].
+    pub const DEFAULT_CHUNK_SIZE: u64 = 1024 * 1024;
+
     pub fn new() -> Self {
         Self::default()
     }
@@ -1894,6 +1897,7 @@ mod tests {
     use crate::read::LinearReader;
 
     use super::*;
+
     #[test]
     fn writes_all_channel_ids() {
         let file = std::io::Cursor::new(Vec::new());
