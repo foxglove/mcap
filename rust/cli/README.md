@@ -209,14 +209,14 @@ After the Rust CLI is in production, the following is a list of potential improv
 
 1. Remote read opt-in:
    - The Rust CLI requires `--allow-remote-scan` whenever a command would scan or
-     download a remote (HTTP/S3) file in full, rather than a bounded indexe read.
-     This covers whole-file commands such as `merge`, `filter`, and `convert`, as
-     well as scan fallbacks for otherwise-indexed commands (for example, a remote
-     file with no summary section, a server without range-request support, or
-     `cat` falling back to a linear scan). Bounded indexed reads — a summary-section
-     read, or a single attachment/metadata range read under the no-opt-in caps — do
-     not require the flag. The per-command sections above document the
-     command-specific nuances.
+     download a remote (HTTP/S3) file in full, rather than a bounded indexed read.
+     This covers whole-file commands such as `merge`, `filter`, and `convert`
+     (including remote `convert` inputs and full-object downloads), as well as scan
+     fallbacks for otherwise-indexed commands (for example, a remote file with no
+     summary section, a server without range-request support, or `cat` falling back
+     to a linear scan or reading remote message chunk payloads). Bounded indexed
+     reads — a summary-section read, or a single attachment/metadata range read
+     under the no-opt-in caps — do not require the flag.
    - Go-compatible behavior allowed those remote reads without an explicit
      opt-in.
 2. Multi-input commands remote materialization:
@@ -224,22 +224,9 @@ After the Rust CLI is in production, the following is a list of potential improv
      independently, so peak temporary disk usage can approach the sum of remote
      input sizes.
 
-### `mcap cat`
-
-1. Remote read policy:
-   - Rust CLI requires `--allow-remote-scan` for remote linear fallbacks and
-     remote message chunk payload reads.
-   - Go-compatible behavior allowed those remote reads without an explicit
-     opt-in.
-
 ### `mcap convert`
 
-1. Remote read policy:
-   - Rust CLI requires `--allow-remote-scan` for remote full-object downloads
-     and remote `convert` inputs.
-   - Go-compatible behavior allowed those remote reads without an explicit
-     opt-in.
-2. ROS 2 db3 schema discovery:
+1. ROS 2 db3 schema discovery:
    - Rust CLI converts self-contained db3 files using embedded message
      definitions, including non-`/msg/` topics such as service event topics. It
      fails the conversion if any topic is missing an embedded definition.
