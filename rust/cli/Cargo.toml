@@ -29,6 +29,6 @@ rusqlite = { version = "0.39.0", features = ["bundled"] }
 ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
 tempfile = "3.27.0"
 object_store = { version = "0.13.2", features = ["aws", "gcp", "azure"] }
-tokio = { version = "1.52.3", features = ["rt"] }
+tokio = { version = "1.52.3", features = ["net", "rt", "time"] }
 url = "2.5.8"
 futures-util = "0.3.32"

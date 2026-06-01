@@ -268,6 +268,10 @@ pub(crate) fn open_streaming_input(
             )?));
         }
         if is_object_store_url(path) {
+            // Object store clients are async, while recover's reader pipeline is synchronous.
+            // Materializing keeps the recovery path simple and consistent with other full-scan
+            // object-store commands. Like every full remote scan, this is gated by
+            // `--allow-remote-scan` in `materialize_input`.
             let materialized = materialize_input(path, options)?;
             let file = open_seekable_mcap_source(materialized.path())?;
             let temp_file = materialized
@@ -452,8 +456,9 @@ impl ObjectStoreSource {
         })?;
         let display_url = redact_url(url);
         let url = Url::parse(url).with_context(|| format!("failed to parse {display_url}"))?;
-        let (store, object_path) = object_store::parse_url_opts(&url, std::env::vars())
-            .with_context(|| format!("failed to configure object store for {display_url}"))?;
+        let (store, object_path) =
+            object_store::parse_url_opts(&url, object_store_env_options())
+                .with_context(|| format!("failed to configure object store for {display_url}"))?;
         Ok(Self {
             runtime: Arc::new(object_store_runtime()?),
             store: Arc::from(store),
@@ -461,6 +466,18 @@ impl ObjectStoreSource {
             display_url,
         })
     }
+}
+
+fn object_store_env_options() -> Vec<(String, String)> {
+    object_store_options_from_env_vars(std::env::vars_os())
+}
+
+fn object_store_options_from_env_vars(
+    vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+) -> Vec<(String, String)> {
+    vars.into_iter()
+        .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
+        .collect()
 }
 
 impl ObjectStoreRangeReader {
@@ -1345,6 +1362,37 @@ mod tests {
             .expect("put memory object");
         super::ObjectStoreRangeReader::new_for_test(store, path, bytes.len() as u64)
             .expect("memory range reader")
+    }
+
+    #[test]
+    fn object_store_source_open_uses_url_parser() {
+        let source = super::ObjectStoreSource::open(Path::new("memory:///demo.mcap?token=secret"))
+            .expect("memory object store URL should parse");
+        assert_eq!(source.path.as_ref(), "demo.mcap");
+        assert_eq!(source.display_url, "memory:///demo.mcap");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn object_store_env_options_ignore_non_utf8_values() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let options = super::object_store_options_from_env_vars([
+            (OsString::from("AWS_REGION"), OsString::from("us-east-1")),
+            (
+                OsString::from_vec(vec![0xFF, b'B', b'A', b'D']),
+                OsString::from("ignored-key"),
+            ),
+            (
+                OsString::from("IGNORED_VALUE"),
+                OsString::from_vec(vec![0xFF, b'v']),
+            ),
+        ]);
+        assert_eq!(
+            options,
+            vec![("AWS_REGION".to_string(), "us-east-1".to_string())]
+        );
     }
 
     fn serve_http_with_headers(
