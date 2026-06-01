@@ -183,6 +183,25 @@ After the Rust CLI is in production, the following is a list of potential improv
       `mcap::sans_io`), keeping summary validation and the write path
       command-specific. This would remove the most error-prone duplication and
       force the `doctor`/`recover` policy differences to be stated explicitly.
+13. `recover` attachment-CRC tolerance:
+    - `recover` tolerates a bad chunk CRC (`with_validate_chunk_crcs(false)`, plus
+      explicit `BadChunkCrc` handling) and recomputes a correct CRC on re-encode,
+      but it has no equivalent path for a loose attachment: `mcap::parse_record`
+      validates the attachment's stored CRC and returns `BadAttachmentCrc` on
+      mismatch, so `recover` currently discards the whole attachment (counted as
+      lossy, exit 3) even when the payload is intact. The output stays valid; the
+      attachment is simply dropped.
+    - Closing this consistently needs an `mcap` crate read option, not a CLI hack:
+      the CLI-only workaround is to copy the record body and zero its trailing
+      4-byte CRC so the `crc != 0` guard is skipped, but that duplicates the whole
+      (potentially large) attachment in memory just to bypass validation and leans
+      on the body layout rather than a supported API.
+    - Before Rust CLI 1.0, add a first-class read option (for example a
+      `LinearReaderOptions::with_validate_attachment_crcs` toggle mirroring
+      `with_validate_chunk_crcs`, or a `parse_record` variant that surfaces the bad
+      CRC without erroring) and have `recover` salvage the payload through it,
+      recomputing the CRC on write so attachments match the lenient chunk
+      behavior.
 
 ## Intentional divergences from Go CLI
 
