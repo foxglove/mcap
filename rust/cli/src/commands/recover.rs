@@ -19,8 +19,9 @@ use crate::context::CommandContext;
 // - Exit code 3: successful recovery with data loss
 const EXIT_LOSSY_RECOVERY: i32 = 3;
 
-// 1 GiB upper limit on record/chunk allocations while scanning streams.
-// If we want to support recovering files with records larger than this, we could introduce a flag.
+// 1 GiB upper limit on top-level record lengths while scanning the stream. This only bounds
+// records read by the linear reader (including a compressed chunk record's own length); it does
+// not bound chunk decompression, so a chunk's decoded `uncompressed_size` can still exceed this.
 const RECOVER_RECORD_LENGTH_LIMIT: usize = 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy)]
