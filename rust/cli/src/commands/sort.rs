@@ -22,7 +22,7 @@ pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
         &args.file,
         common::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
-    if !common::is_http_url(&args.file) {
+    if !common::is_remote_url(&args.file) {
         ensure_distinct_input_output(&args.file, &args.output_file)?;
     }
     let summary = validate_sort_input(input.as_slice())?;
@@ -239,6 +239,7 @@ fn checked_slice(input: &[u8], offset: u64, length: usize) -> Result<&[u8]> {
 mod tests {
     use std::collections::BTreeMap;
     use std::io::Cursor;
+    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{sort_to_writer, validate_sort_input, SortOptions};
@@ -469,6 +470,24 @@ mod tests {
             .contains("input and output paths resolve to the same file"));
 
         let _ = std::fs::remove_file(file_path);
+    }
+
+    #[test]
+    fn run_treats_cloud_input_as_remote() {
+        let err = super::run(
+            &CommandContext::default(),
+            SortCommand {
+                file: PathBuf::from("s3://bucket/input.mcap?token=secret"),
+                output_file: PathBuf::from("/tmp/mcap-cli-cloud-sort-output.mcap"),
+                compression: CompressionFormat::Zstd,
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                include_crc: true,
+                chunked: true,
+            },
+        )
+        .expect_err("cloud input should require scan opt-in before download");
+        assert!(err.to_string().contains("--allow-remote-scan"));
+        assert!(!err.to_string().contains("token=secret"));
     }
 
     #[test]
