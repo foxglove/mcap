@@ -577,6 +577,11 @@ fn recover_chunk_records<W: Write + Seek>(
                     return Ok(false);
                 }
             }
+            // Terminal value for a chunk whose stored CRC doesn't match its (decodable) bytes.
+            // `ChunkReader` post-validates, yielding every record before reporting this, so all
+            // records were already recovered -- not lossy. The bad input CRC is ignored: the writer
+            // recomputes a correct CRC on re-encode. (A payload that fails to decode instead raises
+            // a different mid-stream error, handled as loss below.)
             Some(Err(mcap::McapError::BadChunkCrc { saved, calculated })) => {
                 info!(
                     "chunk CRC mismatch (expected {saved:08X}, got {calculated:08X}); records were decoded and CRC will be recomputed"
