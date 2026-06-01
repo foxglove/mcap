@@ -26,11 +26,11 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | `sort`       | 🟢     |       |
 | `version`    | 🟢     |       |
 
-## Pre-1.0 compatibility cleanup
+## Pre-1.0 improvements
 
-The Rust CLI is currently prioritizing Go CLI parity. Before declaring a Rust CLI
-1.0, revisit compatibility behaviors that are awkward enough to change while the
-port is still pre-production:
+The Rust CLI is currently prioritizing Go CLI parity. Once we reach parity, we will publish the first Rust-powered release of the MCAP CLI (likely tagged as v0.1.0), and remove the legacy Go CLI.
+
+After the Rust CLI is in production, the following is a list of potential improvements discovered during the port that we may wish to address prior to CLI v1.0.0:
 
 1. Time range arguments:
    - Current Go-compatible behavior treats bare numeric `--start` / `--end`
@@ -186,6 +186,25 @@ port is still pre-production:
 
 ## Intentional divergences from Go CLI
 
+### General
+
+1. Remote read opt-in:
+   - The Rust CLI requires `--allow-remote-scan` whenever a command would scan or
+     download a remote (HTTP/S3) file in full, rather than a bounded indexe read.
+     This covers whole-file commands such as `merge`, `filter`, and `convert`, as
+     well as scan fallbacks for otherwise-indexed commands (for example, a remote
+     file with no summary section, a server without range-request support, or
+     `cat` falling back to a linear scan). Bounded indexed reads — a summary-section
+     read, or a single attachment/metadata range read under the no-opt-in caps — do
+     not require the flag. The per-command sections above document the
+     command-specific nuances.
+   - Go-compatible behavior allowed those remote reads without an explicit
+     opt-in.
+2. Multi-input commands remote materialization:
+   - Commands with multiple remote inputs materialize each remote input
+     independently, so peak temporary disk usage can approach the sum of remote
+     input sizes.
+
 ### `mcap cat`
 
 1. Remote read policy:
@@ -247,12 +266,3 @@ port is still pre-production:
      and `1` on hard failure (nothing recovered).
    - Go `recover` exits `0` once recovery starts, even for a truncated or
      partially recovered file; data loss is only visible in its stderr output.
-
-### General
-
-1. Multi-input commands remote materialization:
-   - Commands with multiple remote inputs materialize each remote input
-     independently, so peak temporary disk usage can approach the sum of remote
-     input sizes.
-   - Go-compatible behavior allowed those remote reads without an explicit
-     opt-in.
