@@ -163,6 +163,26 @@ port is still pre-production:
     - Before Rust CLI 1.0, decide whether `recover` should buffer channels with a
       not-yet-seen schema id and flush them once the schema is recovered, rather
       than discarding them on first sight.
+12. Shared lenient-scan infrastructure for `recover` and `doctor`:
+    - `recover` and `doctor` independently implement the same lenient, single-pass
+      scan of the data section: same permissive `LinearReader` options
+      (`emit_chunks`, record-length limit), the same chunk decode via
+      `ChunkReader`, the same `BadChunkCrc`/truncation handling, the same
+      stop-at-`DataEnd`/`Footer` boundary, and the same per-record-kind dispatch
+      (`recover::recover_records`/`recover_chunk_records` vs
+      `doctor::scan_top_level`/`examine_chunk`).
+    - The two commands diverge in intent: `doctor` is a read-only validator that
+      also cross-checks the summary section and treats a chunk CRC mismatch as an
+      error, while `recover` rebuilds output, ignores the summary, and treats a
+      CRC mismatch as benign (it recomputes one on re-encode). They currently make
+      these choices independently, so the differences are accidental rather than
+      explicit.
+    - Before Rust CLI 1.0, decide whether to factor the lenient chunk-decoding
+      scan into one place (a `commands::common` scanner that both commands drive
+      with their own per-record visitors, or a lower-level primitive in
+      `mcap::sans_io`), keeping summary validation and the write path
+      command-specific. This would remove the most error-prone duplication and
+      force the `doctor`/`recover` policy differences to be stated explicitly.
 
 ## Intentional divergences from Go CLI
 
