@@ -152,6 +152,17 @@ port is still pre-production:
       compression.
       Adding this later is purely additive, so we ship the always-re-encode
       version now and revisit if recompression cost matters in practice.
+11. `recover` out-of-order schema/channel handling:
+    - `recover` registers each channel with the writer as soon as it is read, so a
+      channel that appears before the schema it references is dropped (along with
+      every message on that channel) and the recovery is reported as lossy.
+    - Well-formed MCAP always writes a schema before any channel that references
+      it, so this is fine in practice, but `recover` exists for malformed inputs
+      and the previous implementation buffered such channels until their schema
+      arrived.
+    - Before Rust CLI 1.0, decide whether `recover` should buffer channels with a
+      not-yet-seen schema id and flush them once the schema is recovered, rather
+      than discarding them on first sight.
 
 ## Intentional divergences from Go CLI
 
