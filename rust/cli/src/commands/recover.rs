@@ -1,5 +1,4 @@
 use std::io::{IsTerminal as _, Read, Seek, Write};
-use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 use log::{info, warn};
@@ -20,7 +19,9 @@ const RECOVER_RECORD_LENGTH_LIMIT: usize = 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy)]
 enum CompressionSelection {
-    Preserve(Option<Compression>),
+    /// Match the input: reuse the first chunk's compression, or stay uncompressed if a
+    /// message/attachment/other record is reached before any chunk.
+    Preserve,
     Explicit(Option<Compression>),
 }
 
@@ -119,13 +120,8 @@ impl RecoverStats {
 /// - 3: successful recovery with warning-level data loss (`CommandOutcome::Warnings`)
 pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome> {
     let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
-    let source_compression = if args.compression == "preserve" {
-        detect_source_compression(args.file.as_deref(), source_options)?
-    } else {
-        None
-    };
     let input = common::open_streaming_input(args.file.as_deref(), source_options)?;
-    let compression = resolve_compression(&args.compression, source_compression)?;
+    let compression = resolve_compression(&args.compression)?;
 
     let stats = if let Some(output) = &args.output {
         let file = std::fs::File::create(output)
@@ -183,15 +179,11 @@ fn count(n: u64, noun: &str) -> String {
     }
 }
 
-/// Resolves the requested output compression. `preserve` keeps the first detected chunk's
-/// compression when available, falls back to a streaming first-chunk decision for stdin and
-/// non-range remotes, and otherwise uses uncompressed output.
-fn resolve_compression(
-    spec: &str,
-    source_compression: Option<Compression>,
-) -> Result<CompressionSelection> {
+/// Resolves the requested output compression. `preserve` decides the codec from the input stream
+/// (see [`CompressionSelection::Preserve`]); the explicit codecs map straight through.
+fn resolve_compression(spec: &str) -> Result<CompressionSelection> {
     match spec {
-        "preserve" => Ok(CompressionSelection::Preserve(source_compression)),
+        "preserve" => Ok(CompressionSelection::Preserve),
         "none" | "" => Ok(CompressionSelection::Explicit(None)),
         "zstd" => Ok(CompressionSelection::Explicit(Some(Compression::Zstd))),
         "lz4" => Ok(CompressionSelection::Explicit(Some(Compression::Lz4))),
@@ -209,63 +201,6 @@ fn compression_from_str(name: &str) -> Option<Compression> {
         // to uncompressed output for the re-encoded data.
         _ => None,
     }
-}
-
-fn detect_source_compression(
-    file: Option<&Path>,
-    options: common::SourceOptions,
-) -> Result<Option<Compression>> {
-    let Some(path) = file else {
-        return Ok(None);
-    };
-    if common::is_http_url(path) {
-        if !options.allow_remote_scan {
-            return Ok(None);
-        }
-        let Some(reader) = common::HttpRangeReader::open(path)? else {
-            return Ok(None);
-        };
-        return detect_source_compression_from_reader(reader);
-    }
-    detect_source_compression_from_reader(common::open_seekable_mcap_source(path)?)
-}
-
-fn detect_source_compression_from_reader(mut input: impl Read) -> Result<Option<Compression>> {
-    let mut reader = SansIoReader::new_with_options(
-        LinearReaderOptions::default()
-            .with_skip_end_magic(true)
-            .with_emit_chunks(true)
-            .with_validate_chunk_crcs(false)
-            .with_record_length_limit(RECOVER_RECORD_LENGTH_LIMIT),
-    );
-
-    while let Some(event) = reader.next_event() {
-        match event {
-            Ok(LinearReadEvent::ReadRequest(need)) => {
-                let read = input
-                    .read(reader.insert(need))
-                    .context("failed to read input while detecting source compression")?;
-                if read == 0 {
-                    return Ok(None);
-                }
-                reader.notify_read(read);
-            }
-            Ok(LinearReadEvent::Record { opcode, data }) => {
-                if opcode == mcap::records::op::CHUNK {
-                    return match mcap::parse_record(opcode, data) {
-                        Ok(Record::Chunk { header, .. }) => {
-                            Ok(compression_from_str(&header.compression))
-                        }
-                        Ok(_) => Ok(None),
-                        Err(_) => Ok(None),
-                    };
-                }
-            }
-            Err(_) => return Ok(None),
-        }
-    }
-
-    Ok(None)
 }
 
 fn recover_to_sink<R: Read, W: Write + Seek>(
@@ -310,9 +245,7 @@ fn compression_for_writer(
 ) -> Option<Compression> {
     match selection {
         CompressionSelection::Explicit(compression) => compression,
-        CompressionSelection::Preserve(source_compression) => {
-            source_compression.or_else(|| first_chunk_compression.and_then(compression_from_str))
-        }
+        CompressionSelection::Preserve => first_chunk_compression.and_then(compression_from_str),
     }
 }
 
@@ -524,22 +457,23 @@ fn recover_records<R: Read, W: Write + Seek>(
     Ok((stats, writer))
 }
 
-/// For streaming `preserve` (no pre-detected source compression), the output codec is only knowable
-/// once we see a chunk. We defer creating the writer by buffering the small, structural records that
-/// the spec allows ahead of the first chunk (`[Header][Schema/Channel/Metadata...][Chunk]`).
+/// Under `preserve`, the output codec is only knowable once we reach the first chunk, so we defer
+/// creating the writer by buffering the small, structural records that the spec allows ahead of the
+/// first chunk (`[Header][Schema/Channel/Metadata...][Chunk]`).
 ///
 /// Attachments are deliberately *not* buffered: per the spec they never appear inside a chunk
 /// (op=0x09 "Attachment records must not appear within a chunk"), so a loose attachment carries no
 /// signal about the following chunks' compression, yet it can be arbitrarily large. Buffering it
-/// would risk holding the whole attachment in memory to learn nothing. If an attachment precedes
-/// the first chunk we instead commit to uncompressed output; the attachment is byte-identical
-/// regardless of file compression, so preservation only differs for the (rare) chunks after it.
+/// would risk holding the whole attachment in memory to learn nothing. A message/attachment/other
+/// record reached before any chunk instead commits the output to uncompressed; an attachment is
+/// byte-identical regardless of file compression, so preservation only differs for the (rare)
+/// chunks after it.
 fn should_buffer_until_compression_known<W: Write + Seek>(
     compression: CompressionSelection,
     writer: &Option<mcap::Writer<W>>,
     record: &Record<'_>,
 ) -> bool {
-    matches!(compression, CompressionSelection::Preserve(None))
+    matches!(compression, CompressionSelection::Preserve)
         && writer.is_none()
         && matches!(
             record,
@@ -883,10 +817,7 @@ mod tests {
     }
 
     fn recover_to_vec(input: &[u8], compression: &str) -> (Vec<u8>, RecoverStats) {
-        let source_compression =
-            super::detect_source_compression_from_reader(Cursor::new(input)).expect("compression");
-        let target =
-            super::resolve_compression(compression, source_compression).expect("compression");
+        let target = super::resolve_compression(compression).expect("compression");
         recover_to_vec_with_selection(input, target)
     }
 
@@ -1015,23 +946,12 @@ mod tests {
     }
 
     #[test]
-    fn streaming_preserve_buffers_loose_metadata_until_first_chunk() {
-        let input = write_metadata_then_zstd_chunk_input();
-        let (output, _) =
-            recover_to_vec_with_selection(&input, super::CompressionSelection::Preserve(None));
-        let compressions = chunk_compressions(&output);
-        assert!(!compressions.is_empty());
-        assert!(compressions.iter().all(|name| name == "zstd"));
-    }
-
-    #[test]
-    fn streaming_preserve_does_not_buffer_attachment_before_first_chunk() {
+    fn preserve_does_not_buffer_attachment_before_first_chunk() {
         // An attachment is never inside a chunk (spec op=0x09), so it carries no codec signal and
-        // must not be buffered in memory. Under streaming `preserve` it commits the output to
-        // uncompressed, yet the attachment itself is still recovered intact.
+        // must not be buffered in memory. Under `preserve` it commits the output to uncompressed,
+        // yet the attachment itself is still recovered intact.
         let input = write_attachment_then_zstd_chunk_input(4 * 1024 * 1024);
-        let (output, stats) =
-            recover_to_vec_with_selection(&input, super::CompressionSelection::Preserve(None));
+        let (output, stats) = recover_to_vec(&input, "preserve");
         let (_, attachments, _) = count_output_records(&output);
         assert_eq!(attachments, 1);
         assert_eq!(stats.attachments.recovered, 1);
@@ -1052,8 +972,8 @@ mod tests {
 
     #[test]
     fn rejects_unknown_compression_with_preserve_in_message() {
-        let err = super::resolve_compression("snappy", None)
-            .expect_err("unknown codec should be rejected");
+        let err =
+            super::resolve_compression("snappy").expect_err("unknown codec should be rejected");
         let message = err.to_string();
         assert!(message.contains("preserve"), "message was: {message}");
         assert!(message.contains("zstd"), "message was: {message}");

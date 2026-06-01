@@ -205,21 +205,21 @@ port is still pre-production:
    - Go `recover` copies chunk bytes through verbatim by default and can emit
      corrupt or bad-CRC chunks, producing files that strict readers reject.
 2. Compression is opt-in (`--compression preserve` by default):
-   - Rust CLI `recover` defaults to `--compression preserve`, keeping the input
-     file's compression (uncompressed if the input is unchunked). Pass
-     `--compression zstd|lz4|none` to choose explicitly.
+   - Rust CLI `recover` defaults to `--compression preserve`. The input is read
+     as a single stream (local files, stdin, and remote inputs are treated
+     identically), and the output codec is chosen from the first record that
+     determines it: a chunk reuses the chunk's compression; a message,
+     attachment, or other non-structural record before any chunk means the output
+     stays uncompressed. Schema/channel/metadata records before that point are
+     small and buffered so they land in the output with the chosen codec.
+     Attachments are never buffered (per the spec they never appear inside a
+     chunk, so they carry no codec signal and may be large); an attachment before
+     the first chunk is preserved byte-for-byte but leaves the output
+     uncompressed. Pass `--compression zstd|lz4|none` to force a codec.
    - Go `recover` defaults to `zstd` and compresses uncompressed/loose input by
      default.
    - The Rust CLI also has no `--always-decode-chunk` flag (Go does): chunks are
      always decoded, and `--compression` alone determines the output codec.
-   - With `preserve` on a non-seekable streaming input (stdin or a remote without
-     range support), the codec is only known once the first chunk is reached.
-     Schema/channel/metadata records seen before that chunk are buffered so the
-     output can match it. Attachments are not buffered (per the spec they never
-     appear inside a chunk, so they carry no codec signal and may be large): an
-     attachment before the first chunk commits the output to uncompressed. The
-     attachment itself is preserved byte-for-byte regardless. Seekable local
-     files are pre-scanned, so they preserve the original codec exactly.
 3. Exit codes signal data loss:
    - Rust CLI `recover` exits `0` when all records were recovered (rebuilding
      indexes/CRCs does not count as loss), `3` when recovery was lossy (one or

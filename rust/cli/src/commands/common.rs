@@ -337,7 +337,7 @@ pub fn remote_or_local_extension(path: &Path) -> Option<String> {
 }
 
 impl HttpRangeReader {
-    pub(crate) fn open(path: &Path) -> Result<Option<Self>> {
+    fn open(path: &Path) -> Result<Option<Self>> {
         let url = path.to_str().ok_or_else(|| {
             anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display())
         })?;
