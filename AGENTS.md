@@ -4,7 +4,7 @@
 
 This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) log file format, with implementations in TypeScript, Python, Go, Rust, C++, and Swift. There are no running services — this is purely a library/SDK project. The core functionality is writing and reading MCAP files.
 
-**MCAP** is a modular container file format for recording timestamped [pub/sub](https://en.wikipedia.org/wiki/Publish–subscribe_pattern) messages with arbitrary serialization formats. It is designed to work well under various workloads, resource constraints, and durability requirements. The format specification lives in [`website/docs/spec/index.md`](./website/docs/spec/index.md), with the well-known registry in [`website/docs/spec/registry.md`](./website/docs/spec/registry.md), feature notes in [`website/docs/spec/notes.md`](./website/docs/spec/notes.md), and a [Kaitai Struct](http://kaitai.io) description in [`website/docs/spec/mcap.ksy`](./website/docs/spec/mcap.ksy).
+**MCAP** is a modular container file format for recording timestamped pub/sub messages with arbitrary serialization formats. It is designed to work well under various workloads, resource constraints, and durability requirements. The format specification lives in [`website/docs/spec/index.md`](./website/docs/spec/index.md), with the well-known registry in [`website/docs/spec/registry.md`](./website/docs/spec/registry.md), and feature notes in [`website/docs/spec/notes.md`](./website/docs/spec/notes.md).
 
 ## General prerequisites
 
