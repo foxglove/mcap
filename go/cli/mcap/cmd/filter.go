@@ -690,7 +690,7 @@ usage:
 
 		filterCmd.MarkFlagsMutuallyExclusive("start-secs", "start-nsecs")
 		filterCmd.MarkFlagsMutuallyExclusive("end-secs", "end-nsecs")
-		chunkSize := filterCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
+		chunkSize := filterCmd.PersistentFlags().Int64P("chunk-size", "", defaultCLIChunkSize, "chunk size of output file")
 		includeMetadata := filterCmd.PersistentFlags().Bool(
 			"include-metadata",
 			false,
@@ -741,7 +741,7 @@ usage:
   mcap compress in.mcap -o out.mcap`,
 		}
 		output := compressCmd.PersistentFlags().StringP("output", "o", "", "output filename")
-		chunkSize := compressCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
+		chunkSize := compressCmd.PersistentFlags().Int64P("chunk-size", "", defaultCLIChunkSize, "chunk size of output file")
 		compression := compressCmd.PersistentFlags().String(
 			"compression",
 			"zstd",
@@ -775,7 +775,9 @@ usage:
   mcap decompress in.mcap -o out.mcap`,
 		}
 		output := decompressCmd.PersistentFlags().StringP("output", "o", "", "output filename")
-		chunkSize := decompressCmd.PersistentFlags().Int64P("chunk-size", "", 4*1024*1024, "chunk size of output file")
+		chunkSize := decompressCmd.PersistentFlags().Int64P(
+			"chunk-size", "", defaultCLIChunkSize, "chunk size of output file",
+		)
 		decompressCmd.Run = func(_ *cobra.Command, args []string) {
 			filterOptions, err := buildFilterOptions(&filterFlags{
 				output:             *output,
