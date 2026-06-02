@@ -511,49 +511,42 @@ jobs:
             image: ubuntu-latest
             arch: amd64
             target: x86_64-unknown-linux-musl
-            setup: ""
             exe: ""
             env: {}
           - os: linux
             image: ubuntu-latest
             arch: arm64
             target: aarch64-unknown-linux-musl
-            setup: ""
             exe: ""
             env: {}
           - os: linux
             image: ubuntu-latest
             arch: arm
             target: armv7-unknown-linux-musleabihf
-            setup: ""
             exe: ""
             env: {}
           - os: macos
             image: macos-latest
             arch: amd64
             target: x86_64-apple-darwin
-            setup: ""
             exe: ""
             env: {}
           - os: macos
             image: macos-latest
             arch: arm64
             target: aarch64-apple-darwin
-            setup: ""
             exe: ""
             env: {}
           - os: windows
             image: windows-latest
             arch: amd64
             target: x86_64-pc-windows-msvc
-            setup: ""
             exe: ".exe"
             env: {}
           - os: windows
             image: windows-latest
             arch: arm64
             target: aarch64-pc-windows-msvc
-            setup: ""
             exe: ".exe"
             env: {}
 
@@ -572,9 +565,6 @@ jobs:
           toolchain: stable
           default: true
       - run: rustup target add ${{ matrix.target }}
-      - name: Setup environment
-        if: matrix.setup != ''
-        run: ${{ matrix.setup }}
       - name: Setup Zig
         if: matrix.os == 'linux'
         uses: mlugg/setup-zig@v2
