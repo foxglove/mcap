@@ -511,36 +511,43 @@ jobs:
             image: ubuntu-latest
             arch: amd64
             target: x86_64-unknown-linux-musl
+            build: cargo zigbuild
             exe: ""
           - os: linux
             image: ubuntu-latest
             arch: arm64
             target: aarch64-unknown-linux-musl
+            build: cargo zigbuild
             exe: ""
           - os: linux
             image: ubuntu-latest
             arch: arm
             target: armv7-unknown-linux-musleabihf
+            build: cargo zigbuild
             exe: ""
           - os: macos
             image: macos-latest
             arch: amd64
             target: x86_64-apple-darwin
+            build: cargo build
             exe: ""
           - os: macos
             image: macos-latest
             arch: arm64
             target: aarch64-apple-darwin
+            build: cargo build
             exe: ""
           - os: windows
             image: windows-latest
             arch: amd64
             target: x86_64-pc-windows-msvc
+            build: cargo build
             exe: ".exe"
           - os: windows
             image: windows-latest
             arch: arm64
             target: aarch64-pc-windows-msvc
+            build: cargo build
             exe: ".exe"
 
     name: rust-cli (${{ matrix.os }}/${{ matrix.arch }})
@@ -568,11 +575,7 @@ jobs:
           fallback: none
       - name: Build binary
         run: |
-          if [[ "${{ matrix.os }}" == "linux" ]]; then
-            cargo zigbuild -p mcap-cli --release --target "${{ matrix.target }}"
-          else
-            cargo build -p mcap-cli --release --target "${{ matrix.target }}"
-          fi
+          ${{ matrix.build }} -p mcap-cli --release --target "${{ matrix.target }}"
           mkdir -p bin
           cp \
             "target/${{ matrix.target }}/release/mcap${{ matrix.exe }}" \
