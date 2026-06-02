@@ -106,14 +106,10 @@ struct ObjectStoreSource {
     display_url: String,
 }
 
-pub struct ObjectStoreRangeReader {
+pub struct RemoteRangeReader {
     source: ObjectStoreSource,
     size: u64,
     offset: u64,
-}
-
-pub enum RemoteRangeReader {
-    ObjectStore(ObjectStoreRangeReader),
 }
 
 pub(crate) enum StreamingInput {
@@ -382,7 +378,7 @@ impl ObjectStoreSource {
     }
 }
 
-impl ObjectStoreRangeReader {
+impl RemoteRangeReader {
     fn open(path: &Path) -> Result<Self> {
         let source = ObjectStoreSource::open(path)?;
         let size = source
@@ -470,30 +466,7 @@ fn object_store_options_from_env_vars(
         .collect()
 }
 
-impl RemoteRangeReader {
-    fn open(path: &Path) -> Result<Option<Self>> {
-        if is_remote_url(path) {
-            return ObjectStoreRangeReader::open(path)
-                .map(Self::ObjectStore)
-                .map(Some);
-        }
-        Ok(None)
-    }
-
-    fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
-        match self {
-            RemoteRangeReader::ObjectStore(reader) => reader.read_range(offset, length),
-        }
-    }
-
-    fn size(&self) -> u64 {
-        match self {
-            RemoteRangeReader::ObjectStore(reader) => reader.size(),
-        }
-    }
-}
-
-impl std::io::Read for ObjectStoreRangeReader {
+impl std::io::Read for RemoteRangeReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self.read_range(self.offset, buf.len()) {
             Ok(bytes) => {
@@ -503,14 +476,6 @@ impl std::io::Read for ObjectStoreRangeReader {
                 Ok(n)
             }
             Err(err) => Err(std::io::Error::other(err)),
-        }
-    }
-}
-
-impl std::io::Read for RemoteRangeReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            RemoteRangeReader::ObjectStore(reader) => reader.read(buf),
         }
     }
 }
@@ -525,7 +490,7 @@ impl std::io::Read for StreamingInput {
     }
 }
 
-impl std::io::Seek for ObjectStoreRangeReader {
+impl std::io::Seek for RemoteRangeReader {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         let target = match pos {
             SeekFrom::Start(offset) => offset as i128,
@@ -543,16 +508,11 @@ impl std::io::Seek for ObjectStoreRangeReader {
     }
 }
 
-impl std::io::Seek for RemoteRangeReader {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        match self {
-            RemoteRangeReader::ObjectStore(reader) => reader.seek(pos),
-        }
-    }
-}
-
 fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
-    RemoteRangeReader::open(path)
+    if is_remote_url(path) {
+        return RemoteRangeReader::open(path).map(Some);
+    }
+    Ok(None)
 }
 
 pub(crate) fn redacted_display(path: &Path) -> String {
@@ -1147,14 +1107,14 @@ mod tests {
         serve_http_with_headers(body, supports_ranges, &[])
     }
 
-    fn object_store_memory_reader(bytes: Vec<u8>) -> super::ObjectStoreRangeReader {
+    fn object_store_memory_reader(bytes: Vec<u8>) -> super::RemoteRangeReader {
         let store = Arc::new(object_store::memory::InMemory::new());
         let path = object_store::path::Path::from("demo.mcap");
         let runtime = super::object_store_runtime().expect("runtime");
         runtime
             .block_on(store.put(&path, bytes.clone().into()))
             .expect("put memory object");
-        super::ObjectStoreRangeReader::new_for_test(store, path, bytes.len() as u64)
+        super::RemoteRangeReader::new_for_test(store, path, bytes.len() as u64)
             .expect("memory range reader")
     }
 
@@ -1413,7 +1373,7 @@ mod tests {
     #[test]
     fn http_range_reader_uses_object_store_and_allows_seek_past_end() {
         let url = serve_http(b"hello remote", true);
-        let mut reader = super::ObjectStoreRangeReader::open(Path::new(&url))
+        let mut reader = super::RemoteRangeReader::open(Path::new(&url))
             .expect("HTTP range reader should open through object_store");
 
         assert_eq!(reader.read_range(0, 5).expect("range"), b"hello");
