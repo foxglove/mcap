@@ -421,7 +421,10 @@ pub fn remote_or_local_extension(path: &Path) -> Option<String> {
 
 impl ObjectStoreSource {
     fn open(path: &Path) -> Result<Self> {
-        let remote_url = RemoteUrl::parse(path)?;
+        Self::open_remote(RemoteUrl::parse(path)?)
+    }
+
+    fn open_remote(remote_url: RemoteUrl) -> Result<Self> {
         let (store, object_path) =
             object_store::parse_url_opts(&remote_url.url, remote_url.options()).with_context(
                 || {
@@ -438,21 +441,51 @@ impl ObjectStoreSource {
             display_url: remote_url.display_url,
         })
     }
+
+    fn head_size(&self) -> Result<u64> {
+        Ok(self
+            .runtime
+            .block_on(self.store.head(&self.path))
+            .with_context(|| format!("failed to stat {}", self.display_url))?
+            .size)
+    }
+
+    fn probe_http_range_size(&self) -> Result<Option<u64>> {
+        let response = match self.runtime.block_on(self.store.get_opts(
+            &self.path,
+            GetOptions {
+                range: Some(GetRange::Bounded(0..1)),
+                ..GetOptions::default()
+            },
+        )) {
+            Ok(response) => response,
+            Err(err) if remote_range_not_supported(&err) => return Ok(None),
+            Err(err) => {
+                return Err(err)
+                    .with_context(|| format!("failed to fetch range from {}", self.display_url));
+            }
+        };
+        validate_identity_content_encoding(&response.attributes, &self.display_url)?;
+        Ok(Some(response.meta.size))
+    }
 }
 
 impl RemoteRangeReader {
-    fn open(path: &Path) -> Result<Self> {
-        let source = ObjectStoreSource::open(path)?;
-        let size = source
-            .runtime
-            .block_on(source.store.head(&source.path))
-            .with_context(|| format!("failed to stat {}", source.display_url))?
-            .size;
-        Ok(Self {
+    fn open(path: &Path) -> Result<Option<Self>> {
+        let remote_url = RemoteUrl::parse(path)?;
+        let kind = remote_url.kind;
+        let source = ObjectStoreSource::open_remote(remote_url)?;
+        let Some(size) = (match kind {
+            RemoteUrlKind::Http => source.probe_http_range_size()?,
+            RemoteUrlKind::ObjectStore => Some(source.head_size()?),
+        }) else {
+            return Ok(None);
+        };
+        Ok(Some(Self {
             source,
             size,
             offset: 0,
-        })
+        }))
     }
 
     #[cfg(test)]
@@ -521,6 +554,10 @@ fn object_store_options_from_env_vars(
         .collect()
 }
 
+fn remote_range_not_supported(err: &object_store::Error) -> bool {
+    matches!(err, object_store::Error::NotSupported { .. })
+}
+
 impl std::io::Read for RemoteRangeReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self.read_range(self.offset, buf.len()) {
@@ -565,7 +602,7 @@ impl std::io::Seek for RemoteRangeReader {
 
 fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
     if is_remote_url(path) {
-        return RemoteRangeReader::open(path).map(Some);
+        return RemoteRangeReader::open(path);
     }
     Ok(None)
 }
@@ -1178,6 +1215,15 @@ mod tests {
         supports_ranges: bool,
         extra_headers: &'static [(&'static str, &'static str)],
     ) -> String {
+        serve_http_with_options(body, supports_ranges, extra_headers, false)
+    }
+
+    fn serve_http_with_options(
+        body: &'static [u8],
+        supports_ranges: bool,
+        extra_headers: &'static [(&'static str, &'static str)],
+        reject_head: bool,
+    ) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
         let addr = listener.local_addr().expect("test server addr");
         thread::spawn(move || {
@@ -1187,6 +1233,12 @@ mod tests {
                 let read = stream.read(&mut request).expect("read request");
                 let request = String::from_utf8_lossy(&request[..read]);
                 let is_head = request.starts_with("HEAD ");
+                if reject_head && is_head {
+                    stream
+                        .write_all(b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n")
+                        .expect("write HEAD rejection");
+                    continue;
+                }
                 let requested_range = request
                     .lines()
                     .find_map(|line| line.strip_prefix("Range: bytes="))
@@ -1357,8 +1409,7 @@ mod tests {
         assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
-    #[test]
-    fn remote_mcap_summary_uses_range_reader() {
+    fn summary_mcap_with_channel() -> (Vec<u8>, u16) {
         let mut buffer = Vec::new();
         let channel_id = {
             let mut writer = mcap::Writer::new(std::io::Cursor::new(&mut buffer)).expect("writer");
@@ -1371,6 +1422,12 @@ mod tests {
             writer.finish().expect("finish writer");
             channel_id
         };
+        (buffer, channel_id)
+    }
+
+    #[test]
+    fn remote_mcap_summary_uses_range_reader() {
+        let (buffer, channel_id) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let url = serve_http(body, true);
         let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
@@ -1378,6 +1435,41 @@ mod tests {
             .expect("summary should be present");
 
         assert!(remote.summary().channels.contains_key(&channel_id));
+    }
+
+    #[test]
+    fn remote_mcap_summary_uses_range_get_when_head_is_rejected() {
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http_with_options(body, true, &[], true);
+        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
+            .expect("remote summary should use range GET, not HEAD")
+            .expect("summary should be present");
+
+        assert!(remote.summary().channels.contains_key(&channel_id));
+    }
+
+    #[test]
+    fn remote_mcap_without_range_support_requires_scan_opt_in() {
+        let (buffer, _) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http(body, false);
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("non-range HTTP input should require scan opt-in");
+        let message = err.to_string();
+        assert!(message.contains("remote server does not support range requests"));
+        assert!(message.contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn remote_mcap_without_range_support_falls_back_with_scan_opt_in() {
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http(body, false);
+        let parsed = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::new(true))
+            .expect("non-range HTTP input should materialize with scan opt-in");
+
+        assert!(parsed.channels.contains_key(&channel_id));
     }
 
     #[test]
@@ -1429,7 +1521,8 @@ mod tests {
     fn http_range_reader_uses_object_store_and_allows_seek_past_end() {
         let url = serve_http(b"hello remote", true);
         let mut reader = super::RemoteRangeReader::open(Path::new(&url))
-            .expect("HTTP range reader should open through object_store");
+            .expect("HTTP range reader should open through object_store")
+            .expect("HTTP range reader should support ranges");
 
         assert_eq!(reader.read_range(0, 5).expect("range"), b"hello");
         assert_eq!(
