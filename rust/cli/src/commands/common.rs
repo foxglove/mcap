@@ -4,7 +4,6 @@ use std::fmt::Write as _;
 use std::io::{IsTerminal as _, Read as _, SeekFrom};
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use binrw::BinRead;
@@ -12,17 +11,15 @@ use futures_util::TryStreamExt;
 use mcap::records::{self, Record};
 use mcap::sans_io::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};
 use memmap2::Mmap;
-use object_store::{path::Path as ObjectStorePath, ObjectStore, ObjectStoreExt};
+use object_store::{
+    path::Path as ObjectStorePath, Attribute, GetOptions, GetRange, ObjectStore, ObjectStoreExt,
+};
 use tempfile::NamedTempFile;
-use ureq::Agent;
 use url::Url;
 
 pub const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
-const REMOTE_CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
-const REMOTE_BODY_TIMEOUT: Duration = Duration::from_secs(60);
 const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = 37;
 // Guards remote summary discovery against corrupt or hostile footers that point
 // `summary_start` near the beginning of a large file, which would otherwise turn
@@ -102,14 +99,6 @@ impl RemoteMcap {
     }
 }
 
-pub struct HttpRangeReader {
-    agent: Agent,
-    url: String,
-    display_url: String,
-    size: u64,
-    offset: u64,
-}
-
 struct ObjectStoreSource {
     runtime: Arc<tokio::runtime::Runtime>,
     store: Arc<dyn ObjectStore>,
@@ -124,26 +113,18 @@ pub struct ObjectStoreRangeReader {
 }
 
 pub enum RemoteRangeReader {
-    Http(HttpRangeReader),
     ObjectStore(ObjectStoreRangeReader),
 }
 
 pub(crate) enum StreamingInput {
     Local(std::fs::File),
     Stdin(std::io::Stdin),
-    Remote(HttpBodyReader),
     RemoteMaterialized {
         file: std::fs::File,
         #[allow(dead_code)]
         temp_file: NamedTempFile,
     },
 }
-
-pub(crate) struct HttpBodyReader {
-    response: ureq::http::Response<ureq::Body>,
-    display_url: String,
-}
-
 impl MaterializedInput {
     pub fn path(&self) -> &Path {
         if let Some(temp_file) = &self.temp_file {
@@ -262,21 +243,15 @@ pub(crate) fn open_streaming_input(
     options: SourceOptions,
 ) -> Result<StreamingInput> {
     if let Some(path) = file {
-        if is_http_url(path) {
-            return Ok(StreamingInput::Remote(open_remote_body_reader(
-                path, options,
-            )?));
-        }
-        if is_object_store_url(path) {
-            // Object store clients are async, while recover's reader pipeline is synchronous.
-            // Materializing keeps the recovery path simple and consistent with other full-scan
-            // object-store commands. Like every full remote scan, this is gated by
+        if is_remote_url(path) {
+            // Remote clients are async, while recover's reader pipeline is synchronous.
+            // Materializing keeps the recovery path simple and consistently gated by
             // `--allow-remote-scan` in `materialize_input`.
             let materialized = materialize_input(path, options)?;
             let file = open_seekable_mcap_source(materialized.path())?;
             let temp_file = materialized
                 .temp_file
-                .expect("object store streaming input should have a temp file");
+                .expect("remote streaming input should have a temp file");
             return Ok(StreamingInput::RemoteMaterialized { file, temp_file });
         }
         return Ok(StreamingInput::Local(open_seekable_mcap_source(path)?));
@@ -309,11 +284,7 @@ pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<Material
     let mut temp_file = builder
         .tempfile()
         .context("failed to create temporary remote input file")?;
-    if is_http_url(path) {
-        read_remote_input_to_writer(path, temp_file.as_file_mut())?;
-    } else {
-        read_object_store_input_to_writer(path, temp_file.as_file_mut())?;
-    }
+    read_remote_input_to_writer(path, temp_file.as_file_mut())?;
     std::io::Write::flush(temp_file.as_file_mut())
         .context("failed to flush temporary remote input file")?;
     Ok(MaterializedInput {
@@ -392,63 +363,6 @@ pub fn remote_or_local_extension(path: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
-impl HttpRangeReader {
-    fn open(path: &Path) -> Result<Option<Self>> {
-        let url = path.to_str().ok_or_else(|| {
-            anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display())
-        })?;
-        let display_url = redact_url(url);
-        let agent = remote_agent();
-        let Some(size) = probe_range_size(&agent, url, &display_url)? else {
-            return Ok(None);
-        };
-        Ok(Some(Self {
-            agent,
-            url: url.to_string(),
-            display_url,
-            size,
-            offset: 0,
-        }))
-    }
-
-    fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
-        if length == 0 || offset >= self.size {
-            return Ok(Vec::new());
-        }
-        let requested_end = offset
-            .checked_add(length as u64)
-            .and_then(|end| end.checked_sub(1))
-            .ok_or_else(|| anyhow::anyhow!("remote range overflow"))?;
-        let end = requested_end.min(self.size - 1);
-        let range = format!("bytes={offset}-{end}");
-        let mut response = self
-            .agent
-            .get(&self.url)
-            .header("Range", &range)
-            .call()
-            .with_context(|| format!("failed to fetch range from {}", self.display_url))?;
-        let status = response.status();
-        if status.as_u16() != 206 {
-            bail!(
-                "failed to fetch range from {}: HTTP {status}",
-                self.display_url
-            );
-        }
-        validate_identity_content_encoding(response.headers(), &self.display_url)?;
-        let mut bytes = Vec::with_capacity(length.min((end - offset + 1) as usize));
-        std::io::copy(
-            &mut response.body_mut().as_reader().take(end - offset + 1),
-            &mut bytes,
-        )
-        .with_context(|| format!("failed to read range from {}", self.display_url))?;
-        Ok(bytes)
-    }
-
-    fn size(&self) -> u64 {
-        self.size
-    }
-}
-
 impl ObjectStoreSource {
     fn open(path: &Path) -> Result<Self> {
         let url = path.to_str().ok_or_else(|| {
@@ -457,8 +371,8 @@ impl ObjectStoreSource {
         let display_url = redact_url(url);
         let url = Url::parse(url).with_context(|| format!("failed to parse {display_url}"))?;
         let (store, object_path) =
-            object_store::parse_url_opts(&url, object_store_env_options())
-                .with_context(|| format!("failed to configure object store for {display_url}"))?;
+            object_store::parse_url_opts(&url, remote_store_options(&url))
+                .with_context(|| format!("failed to configure remote store for {display_url}"))?;
         Ok(Self {
             runtime: object_store_runtime()?,
             store: Arc::from(store),
@@ -505,11 +419,23 @@ impl ObjectStoreRangeReader {
             .checked_add(length as u64)
             .map(|end| end.min(self.size))
             .ok_or_else(|| anyhow::anyhow!("remote range overflow"))?;
+        let response = self
+            .source
+            .runtime
+            .block_on(self.source.store.get_opts(
+                &self.source.path,
+                GetOptions {
+                    range: Some(GetRange::Bounded(offset..end)),
+                    ..GetOptions::default()
+                },
+            ))
+            .with_context(|| format!("failed to fetch range from {}", self.source.display_url))?;
+        validate_identity_content_encoding(&response.attributes, &self.source.display_url)?;
         let bytes = self
             .source
             .runtime
-            .block_on(self.source.store.get_range(&self.source.path, offset..end))
-            .with_context(|| format!("failed to fetch range from {}", self.source.display_url))?;
+            .block_on(response.bytes())
+            .with_context(|| format!("failed to read range from {}", self.source.display_url))?;
         Ok(bytes.to_vec())
     }
 
@@ -524,7 +450,10 @@ impl ObjectStoreRangeReader {
 // object_store builders themselves read in their `from_env` constructors.
 const OBJECT_STORE_ENV_PREFIXES: [&str; 3] = ["AWS_", "GOOGLE_", "AZURE_"];
 
-fn object_store_env_options() -> Vec<(String, String)> {
+fn remote_store_options(url: &Url) -> Vec<(String, String)> {
+    if url.scheme() == "http" {
+        return vec![("allow_http".to_string(), "true".to_string())];
+    }
     object_store_options_from_env_vars(std::env::vars_os())
 }
 
@@ -543,10 +472,7 @@ fn object_store_options_from_env_vars(
 
 impl RemoteRangeReader {
     fn open(path: &Path) -> Result<Option<Self>> {
-        if is_http_url(path) {
-            return HttpRangeReader::open(path).map(|reader| reader.map(Self::Http));
-        }
-        if is_object_store_url(path) {
+        if is_remote_url(path) {
             return ObjectStoreRangeReader::open(path)
                 .map(Self::ObjectStore)
                 .map(Some);
@@ -556,29 +482,13 @@ impl RemoteRangeReader {
 
     fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         match self {
-            RemoteRangeReader::Http(reader) => reader.read_range(offset, length),
             RemoteRangeReader::ObjectStore(reader) => reader.read_range(offset, length),
         }
     }
 
     fn size(&self) -> u64 {
         match self {
-            RemoteRangeReader::Http(reader) => reader.size(),
             RemoteRangeReader::ObjectStore(reader) => reader.size(),
-        }
-    }
-}
-
-impl std::io::Read for HttpRangeReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self.read_range(self.offset, buf.len()) {
-            Ok(bytes) => {
-                let n = bytes.len();
-                buf[..n].copy_from_slice(&bytes);
-                self.offset = self.offset.saturating_add(n as u64);
-                Ok(n)
-            }
-            Err(err) => Err(std::io::Error::other(err)),
         }
     }
 }
@@ -600,7 +510,6 @@ impl std::io::Read for ObjectStoreRangeReader {
 impl std::io::Read for RemoteRangeReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
-            RemoteRangeReader::Http(reader) => reader.read(buf),
             RemoteRangeReader::ObjectStore(reader) => reader.read(buf),
         }
     }
@@ -611,42 +520,8 @@ impl std::io::Read for StreamingInput {
         match self {
             StreamingInput::Local(file) => file.read(buf),
             StreamingInput::Stdin(stdin) => stdin.read(buf),
-            StreamingInput::Remote(reader) => reader.read(buf),
             StreamingInput::RemoteMaterialized { file, .. } => file.read(buf),
         }
-    }
-}
-
-impl std::io::Read for HttpBodyReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.response
-            .body_mut()
-            .as_reader()
-            .read(buf)
-            .map_err(|err| {
-                std::io::Error::new(
-                    err.kind(),
-                    format!("failed to read remote input {}: {err}", self.display_url),
-                )
-            })
-    }
-}
-
-impl std::io::Seek for HttpRangeReader {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        let target = match pos {
-            SeekFrom::Start(offset) => offset as i128,
-            SeekFrom::End(offset) => self.size as i128 + offset as i128,
-            SeekFrom::Current(offset) => self.offset as i128 + offset as i128,
-        };
-        if target < 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "remote seek out of bounds",
-            ));
-        }
-        self.offset = target as u64;
-        Ok(self.offset)
     }
 }
 
@@ -671,7 +546,6 @@ impl std::io::Seek for ObjectStoreRangeReader {
 impl std::io::Seek for RemoteRangeReader {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         match self {
-            RemoteRangeReader::Http(reader) => reader.seek(pos),
             RemoteRangeReader::ObjectStore(reader) => reader.seek(pos),
         }
     }
@@ -681,29 +555,6 @@ fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
     RemoteRangeReader::open(path)
 }
 
-fn probe_range_size(agent: &Agent, url: &str, display_url: &str) -> Result<Option<u64>> {
-    let response = agent
-        .get(url)
-        .header("Range", "bytes=0-0")
-        .call()
-        .with_context(|| format!("failed to fetch {display_url}"))?;
-    match response.status() {
-        status if status.as_u16() == 206 => {
-            validate_identity_content_encoding(response.headers(), display_url)?;
-            Ok(response
-                .headers()
-                .get("content-range")
-                .and_then(|value| value.to_str().ok())
-                .and_then(parse_content_range_len))
-        }
-        status if status.is_success() => {
-            validate_identity_content_encoding(response.headers(), display_url)?;
-            Ok(None)
-        }
-        status => bail!("failed to fetch {display_url}: HTTP {status}"),
-    }
-}
-
 pub(crate) fn redacted_display(path: &Path) -> String {
     path.to_str()
         .map(redact_url)
@@ -711,28 +562,6 @@ pub(crate) fn redacted_display(path: &Path) -> String {
 }
 
 fn read_remote_input_to_writer(path: &Path, writer: &mut impl std::io::Write) -> Result<()> {
-    let url = path
-        .to_str()
-        .ok_or_else(|| anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display()))?;
-    let display_url = redact_url(url);
-    let agent = remote_agent();
-    eprintln!("Warning: reading entire remote file {display_url}");
-
-    let mut response = agent
-        .get(url)
-        .call()
-        .with_context(|| format!("failed to read remote input {display_url}"))?;
-    let status = response.status();
-    if !status.is_success() {
-        bail!("failed to read remote input {display_url}: HTTP {status}");
-    }
-
-    validate_identity_content_encoding(response.headers(), &display_url)?;
-    copy_response(&mut response, writer, &display_url)?;
-    Ok(())
-}
-
-fn read_object_store_input_to_writer(path: &Path, writer: &mut impl std::io::Write) -> Result<()> {
     let source = ObjectStoreSource::open(path)?;
     eprintln!("Warning: reading entire remote file {}", source.display_url);
 
@@ -742,6 +571,7 @@ fn read_object_store_input_to_writer(path: &Path, writer: &mut impl std::io::Wri
             .get(&source.path)
             .await
             .with_context(|| format!("failed to read remote input {}", source.display_url))?;
+        validate_identity_content_encoding(&response.attributes, &source.display_url)?;
         let mut stream = response.into_stream();
         while let Some(bytes) = stream
             .try_next()
@@ -755,40 +585,6 @@ fn read_object_store_input_to_writer(path: &Path, writer: &mut impl std::io::Wri
     })?;
 
     Ok(())
-}
-
-fn open_remote_body_reader(path: &Path, options: SourceOptions) -> Result<HttpBodyReader> {
-    require_remote_scan_allowed(path, options)?;
-    let url = path
-        .to_str()
-        .ok_or_else(|| anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display()))?;
-    let display_url = redact_url(url);
-    let agent = remote_agent();
-    eprintln!("Warning: reading entire remote file {display_url}");
-
-    let response = agent
-        .get(url)
-        .call()
-        .with_context(|| format!("failed to read remote input {display_url}"))?;
-    let status = response.status();
-    if !status.is_success() {
-        bail!("failed to read remote input {display_url}: HTTP {status}");
-    }
-    validate_identity_content_encoding(response.headers(), &display_url)?;
-    Ok(HttpBodyReader {
-        response,
-        display_url,
-    })
-}
-
-fn remote_agent() -> Agent {
-    Agent::config_builder()
-        .http_status_as_error(false)
-        .timeout_connect(Some(REMOTE_CONNECT_TIMEOUT))
-        .timeout_recv_response(Some(REMOTE_RESPONSE_TIMEOUT))
-        .timeout_recv_body(Some(REMOTE_BODY_TIMEOUT))
-        .build()
-        .into()
 }
 
 fn object_store_runtime() -> Result<Arc<tokio::runtime::Runtime>> {
@@ -828,26 +624,14 @@ fn remote_url_without_fragment_or_query(url: &str) -> &str {
         .unwrap_or(url)
 }
 
-fn copy_response(
-    response: &mut ureq::http::Response<ureq::Body>,
-    writer: &mut impl std::io::Write,
-    display_url: &str,
-) -> Result<()> {
-    std::io::copy(&mut response.body_mut().as_reader(), writer)
-        .with_context(|| format!("failed to read remote input {display_url}"))?;
-    Ok(())
-}
-
 fn validate_identity_content_encoding(
-    headers: &ureq::http::HeaderMap,
+    attributes: &object_store::Attributes,
     display_url: &str,
 ) -> Result<()> {
-    let Some(value) = headers.get("content-encoding") else {
+    let Some(value) = attributes.get(&Attribute::ContentEncoding) else {
         return Ok(());
     };
-    let value = value
-        .to_str()
-        .context("remote Content-Encoding header is not valid UTF-8")?;
+    let value = value.as_ref();
     if value.eq_ignore_ascii_case("identity") {
         return Ok(());
     }
@@ -1143,14 +927,6 @@ fn parsed_mcap_from_summary_ref(
     }
 
     out
-}
-
-fn parse_content_range_len(value: &str) -> Option<u64> {
-    let (_, total) = value.rsplit_once('/')?;
-    if total == "*" {
-        return None;
-    }
-    total.parse().ok()
 }
 
 pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
@@ -1501,9 +1277,8 @@ mod tests {
         let url = serve_http_with_headers(b"hello remote", false, &[("Content-Encoding", "gzip")]);
         let err = load_path(Path::new(&url), super::SourceOptions::new(true))
             .expect_err("gzip-encoded remote read should fail");
-        assert!(err
-            .to_string()
-            .contains("MCAP remote reads require identity encoding"));
+        let message = format!("{err:#}");
+        assert!(message.contains("MCAP remote reads require identity encoding"));
     }
 
     #[test]
@@ -1520,9 +1295,8 @@ mod tests {
                 Ok(_) => panic!("gzip-encoded range probe should fail"),
                 Err(err) => err,
             };
-        assert!(err
-            .to_string()
-            .contains("MCAP remote reads require identity encoding"));
+        let message = format!("{err:#}");
+        assert!(message.contains("MCAP remote reads require identity encoding"));
     }
 
     #[test]
@@ -1637,18 +1411,15 @@ mod tests {
     }
 
     #[test]
-    fn http_range_reader_allows_seek_past_end() {
-        let mut reader = super::HttpRangeReader {
-            agent: super::remote_agent(),
-            url: "http://127.0.0.1:1/demo.mcap".to_string(),
-            display_url: "http://127.0.0.1:1/demo.mcap".to_string(),
-            size: 10,
-            offset: 0,
-        };
+    fn http_range_reader_uses_object_store_and_allows_seek_past_end() {
+        let url = serve_http(b"hello remote", true);
+        let mut reader = super::ObjectStoreRangeReader::open(Path::new(&url))
+            .expect("HTTP range reader should open through object_store");
 
+        assert_eq!(reader.read_range(0, 5).expect("range"), b"hello");
         assert_eq!(
             std::io::Seek::seek(&mut reader, SeekFrom::End(1)).unwrap(),
-            11
+            13
         );
         let mut byte = [0_u8; 1];
         assert_eq!(std::io::Read::read(&mut reader, &mut byte).unwrap(), 0);
