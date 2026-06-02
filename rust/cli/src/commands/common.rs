@@ -8,11 +8,14 @@ use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use binrw::BinRead;
+use futures_util::TryStreamExt;
 use mcap::records::{self, Record};
 use mcap::sans_io::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};
 use memmap2::Mmap;
+use object_store::{path::Path as ObjectStorePath, ObjectStore, ObjectStoreExt};
 use tempfile::NamedTempFile;
 use ureq::Agent;
+use url::Url;
 
 pub const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
@@ -85,7 +88,7 @@ pub struct MaterializedInput {
 }
 
 pub struct RemoteMcap {
-    reader: HttpRangeReader,
+    reader: RemoteRangeReader,
     summary: mcap::Summary,
 }
 
@@ -107,10 +110,33 @@ pub struct HttpRangeReader {
     offset: u64,
 }
 
+struct ObjectStoreSource {
+    runtime: Arc<tokio::runtime::Runtime>,
+    store: Arc<dyn ObjectStore>,
+    path: ObjectStorePath,
+    display_url: String,
+}
+
+pub struct ObjectStoreRangeReader {
+    source: ObjectStoreSource,
+    size: u64,
+    offset: u64,
+}
+
+pub enum RemoteRangeReader {
+    Http(HttpRangeReader),
+    ObjectStore(ObjectStoreRangeReader),
+}
+
 pub(crate) enum StreamingInput {
     Local(std::fs::File),
     Stdin(std::io::Stdin),
     Remote(HttpBodyReader),
+    RemoteMaterialized {
+        file: std::fs::File,
+        #[allow(dead_code)]
+        temp_file: NamedTempFile,
+    },
 }
 
 pub(crate) struct HttpBodyReader {
@@ -158,8 +184,8 @@ pub fn open_seekable_mcap_source(path: &Path) -> Result<std::fs::File> {
 }
 
 pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<ParsedMcap> {
-    if is_http_url(path) {
-        match HttpRangeReader::open(path)? {
+    if is_remote_url(path) {
+        match open_remote_range_reader(path)? {
             Some(mut reader) => {
                 if let Some(summary) =
                     read_summary_from_remote(&reader, options).with_context(|| {
@@ -182,7 +208,7 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
             }
             None if !options.allow_remote_scan => {
                 bail!(
-                    "{}: remote server does not support HTTP range requests; {}",
+                    "{}: remote server does not support range requests; {}",
                     redacted_display(path),
                     remote_scan_opt_in_suffix()
                 );
@@ -202,7 +228,7 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
 }
 
 pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
-    if is_http_url(path) {
+    if is_remote_url(path) {
         let materialized = materialize_input(path, options)?;
         let mmap = map_file(materialized.path())?;
         let temp_file = materialized
@@ -241,6 +267,18 @@ pub(crate) fn open_streaming_input(
                 path, options,
             )?));
         }
+        if is_object_store_url(path) {
+            // Object store clients are async, while recover's reader pipeline is synchronous.
+            // Materializing keeps the recovery path simple and consistent with other full-scan
+            // object-store commands. Like every full remote scan, this is gated by
+            // `--allow-remote-scan` in `materialize_input`.
+            let materialized = materialize_input(path, options)?;
+            let file = open_seekable_mcap_source(materialized.path())?;
+            let temp_file = materialized
+                .temp_file
+                .expect("object store streaming input should have a temp file");
+            return Ok(StreamingInput::RemoteMaterialized { file, temp_file });
+        }
         return Ok(StreamingInput::Local(open_seekable_mcap_source(path)?));
     }
 
@@ -252,7 +290,7 @@ pub(crate) fn open_streaming_input(
 }
 
 pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<MaterializedInput> {
-    if !is_http_url(path) {
+    if !is_remote_url(path) {
         return Ok(MaterializedInput {
             temp_file: None,
             local_path: Some(path.to_path_buf()),
@@ -271,7 +309,11 @@ pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<Material
     let mut temp_file = builder
         .tempfile()
         .context("failed to create temporary remote input file")?;
-    read_remote_input_to_writer(path, temp_file.as_file_mut())?;
+    if is_http_url(path) {
+        read_remote_input_to_writer(path, temp_file.as_file_mut())?;
+    } else {
+        read_object_store_input_to_writer(path, temp_file.as_file_mut())?;
+    }
     std::io::Write::flush(temp_file.as_file_mut())
         .context("failed to flush temporary remote input file")?;
     Ok(MaterializedInput {
@@ -281,13 +323,13 @@ pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<Material
 }
 
 pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Option<RemoteMcap>> {
-    if !is_http_url(path) {
+    if !is_remote_url(path) {
         return Ok(None);
     }
-    let Some(reader) = HttpRangeReader::open(path)? else {
+    let Some(reader) = open_remote_range_reader(path)? else {
         if !options.allow_remote_scan {
             bail!(
-                "{}: remote server does not support HTTP range requests; {}",
+                "{}: remote server does not support range requests; {}",
                 redacted_display(path),
                 remote_scan_opt_in_suffix()
             );
@@ -314,17 +356,31 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
 }
 
 pub fn is_http_url(path: &Path) -> bool {
-    let Some(text) = path.to_str() else {
-        return false;
-    };
-    let Some((scheme, _)) = text.split_once("://") else {
-        return false;
-    };
-    scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")
+    scheme_of(path).is_some_and(|scheme| {
+        scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")
+    })
+}
+
+pub fn is_object_store_url(path: &Path) -> bool {
+    scheme_of(path).is_some_and(|scheme| {
+        matches!(
+            scheme.to_ascii_lowercase().as_str(),
+            "s3" | "s3a" | "gs" | "az" | "adl" | "azure" | "abfs" | "abfss"
+        )
+    })
+}
+
+pub fn is_remote_url(path: &Path) -> bool {
+    is_http_url(path) || is_object_store_url(path)
+}
+
+fn scheme_of(path: &Path) -> Option<&str> {
+    let text = path.to_str()?;
+    text.split_once("://").map(|(scheme, _)| scheme)
 }
 
 pub fn remote_or_local_extension(path: &Path) -> Option<String> {
-    if is_http_url(path) {
+    if is_remote_url(path) {
         let text = remote_url_without_fragment_or_query(path.to_str()?);
         return Path::new(text)
             .extension()
@@ -393,6 +449,126 @@ impl HttpRangeReader {
     }
 }
 
+impl ObjectStoreSource {
+    fn open(path: &Path) -> Result<Self> {
+        let url = path.to_str().ok_or_else(|| {
+            anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display())
+        })?;
+        let display_url = redact_url(url);
+        let url = Url::parse(url).with_context(|| format!("failed to parse {display_url}"))?;
+        let (store, object_path) =
+            object_store::parse_url_opts(&url, object_store_env_options())
+                .with_context(|| format!("failed to configure object store for {display_url}"))?;
+        Ok(Self {
+            runtime: object_store_runtime()?,
+            store: Arc::from(store),
+            path: object_path,
+            display_url,
+        })
+    }
+}
+
+impl ObjectStoreRangeReader {
+    fn open(path: &Path) -> Result<Self> {
+        let source = ObjectStoreSource::open(path)?;
+        let size = source
+            .runtime
+            .block_on(source.store.head(&source.path))
+            .with_context(|| format!("failed to stat {}", source.display_url))?
+            .size;
+        Ok(Self {
+            source,
+            size,
+            offset: 0,
+        })
+    }
+
+    #[cfg(test)]
+    fn new_for_test(store: Arc<dyn ObjectStore>, path: ObjectStorePath, size: u64) -> Result<Self> {
+        Ok(Self {
+            source: ObjectStoreSource {
+                runtime: object_store_runtime()?,
+                store,
+                path,
+                display_url: "memory:///test".to_string(),
+            },
+            size,
+            offset: 0,
+        })
+    }
+
+    fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
+        if length == 0 || offset >= self.size {
+            return Ok(Vec::new());
+        }
+        let end = offset
+            .checked_add(length as u64)
+            .map(|end| end.min(self.size))
+            .ok_or_else(|| anyhow::anyhow!("remote range overflow"))?;
+        let bytes = self
+            .source
+            .runtime
+            .block_on(self.source.store.get_range(&self.source.path, offset..end))
+            .with_context(|| format!("failed to fetch range from {}", self.source.display_url))?;
+        Ok(bytes.to_vec())
+    }
+
+    fn size(&self) -> u64 {
+        self.size
+    }
+}
+
+// object_store config keys accept unprefixed aliases (for example `endpoint`,
+// `region`, and `token`), so forwarding the whole environment would let unrelated
+// shell variables silently reconfigure the store. Restrict to the prefixes the
+// object_store builders themselves read in their `from_env` constructors.
+const OBJECT_STORE_ENV_PREFIXES: [&str; 3] = ["AWS_", "GOOGLE_", "AZURE_"];
+
+fn object_store_env_options() -> Vec<(String, String)> {
+    object_store_options_from_env_vars(std::env::vars_os())
+}
+
+fn object_store_options_from_env_vars(
+    vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+) -> Vec<(String, String)> {
+    vars.into_iter()
+        .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
+        .filter(|(key, _)| {
+            OBJECT_STORE_ENV_PREFIXES
+                .iter()
+                .any(|prefix| key.starts_with(prefix))
+        })
+        .collect()
+}
+
+impl RemoteRangeReader {
+    fn open(path: &Path) -> Result<Option<Self>> {
+        if is_http_url(path) {
+            return HttpRangeReader::open(path).map(|reader| reader.map(Self::Http));
+        }
+        if is_object_store_url(path) {
+            return ObjectStoreRangeReader::open(path)
+                .map(Self::ObjectStore)
+                .map(Some);
+        }
+        Ok(None)
+    }
+
+    fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
+        match self {
+            RemoteRangeReader::Http(reader) => reader.read_range(offset, length),
+            RemoteRangeReader::ObjectStore(reader) => reader.read_range(offset, length),
+        }
+    }
+
+    fn size(&self) -> u64 {
+        match self {
+            RemoteRangeReader::Http(reader) => reader.size(),
+            RemoteRangeReader::ObjectStore(reader) => reader.size(),
+        }
+    }
+}
+
 impl std::io::Read for HttpRangeReader {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self.read_range(self.offset, buf.len()) {
@@ -407,12 +583,36 @@ impl std::io::Read for HttpRangeReader {
     }
 }
 
+impl std::io::Read for ObjectStoreRangeReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self.read_range(self.offset, buf.len()) {
+            Ok(bytes) => {
+                let n = bytes.len();
+                buf[..n].copy_from_slice(&bytes);
+                self.offset = self.offset.saturating_add(n as u64);
+                Ok(n)
+            }
+            Err(err) => Err(std::io::Error::other(err)),
+        }
+    }
+}
+
+impl std::io::Read for RemoteRangeReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            RemoteRangeReader::Http(reader) => reader.read(buf),
+            RemoteRangeReader::ObjectStore(reader) => reader.read(buf),
+        }
+    }
+}
+
 impl std::io::Read for StreamingInput {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match self {
             StreamingInput::Local(file) => file.read(buf),
             StreamingInput::Stdin(stdin) => stdin.read(buf),
             StreamingInput::Remote(reader) => reader.read(buf),
+            StreamingInput::RemoteMaterialized { file, .. } => file.read(buf),
         }
     }
 }
@@ -448,6 +648,37 @@ impl std::io::Seek for HttpRangeReader {
         self.offset = target as u64;
         Ok(self.offset)
     }
+}
+
+impl std::io::Seek for ObjectStoreRangeReader {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let target = match pos {
+            SeekFrom::Start(offset) => offset as i128,
+            SeekFrom::End(offset) => self.size as i128 + offset as i128,
+            SeekFrom::Current(offset) => self.offset as i128 + offset as i128,
+        };
+        if target < 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "remote seek out of bounds",
+            ));
+        }
+        self.offset = target as u64;
+        Ok(self.offset)
+    }
+}
+
+impl std::io::Seek for RemoteRangeReader {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        match self {
+            RemoteRangeReader::Http(reader) => reader.seek(pos),
+            RemoteRangeReader::ObjectStore(reader) => reader.seek(pos),
+        }
+    }
+}
+
+fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
+    RemoteRangeReader::open(path)
 }
 
 fn probe_range_size(agent: &Agent, url: &str, display_url: &str) -> Result<Option<u64>> {
@@ -501,6 +732,31 @@ fn read_remote_input_to_writer(path: &Path, writer: &mut impl std::io::Write) ->
     Ok(())
 }
 
+fn read_object_store_input_to_writer(path: &Path, writer: &mut impl std::io::Write) -> Result<()> {
+    let source = ObjectStoreSource::open(path)?;
+    eprintln!("Warning: reading entire remote file {}", source.display_url);
+
+    source.runtime.block_on(async {
+        let response = source
+            .store
+            .get(&source.path)
+            .await
+            .with_context(|| format!("failed to read remote input {}", source.display_url))?;
+        let mut stream = response.into_stream();
+        while let Some(bytes) = stream
+            .try_next()
+            .await
+            .with_context(|| format!("failed to read remote input {}", source.display_url))?
+        {
+            std::io::Write::write_all(writer, bytes.as_ref())
+                .with_context(|| format!("failed to write remote input {}", source.display_url))?;
+        }
+        Ok::<(), anyhow::Error>(())
+    })?;
+
+    Ok(())
+}
+
 fn open_remote_body_reader(path: &Path, options: SourceOptions) -> Result<HttpBodyReader> {
     require_remote_scan_allowed(path, options)?;
     let url = path
@@ -533,6 +789,20 @@ fn remote_agent() -> Agent {
         .timeout_recv_body(Some(REMOTE_BODY_TIMEOUT))
         .build()
         .into()
+}
+
+fn object_store_runtime() -> Result<Arc<tokio::runtime::Runtime>> {
+    static RUNTIME: std::sync::OnceLock<Arc<tokio::runtime::Runtime>> = std::sync::OnceLock::new();
+    if let Some(runtime) = RUNTIME.get() {
+        return Ok(runtime.clone());
+    }
+    let runtime = Arc::new(
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .context("failed to create object store runtime")?,
+    );
+    Ok(RUNTIME.get_or_init(|| runtime).clone())
 }
 
 fn redact_url(url: &str) -> String {
@@ -618,7 +888,7 @@ fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()
 }
 
 fn read_summary_from_remote(
-    reader: &HttpRangeReader,
+    reader: &RemoteRangeReader,
     options: SourceOptions,
 ) -> Result<Option<mcap::Summary>> {
     let file_size = reader.size();
@@ -1084,9 +1354,10 @@ pub fn print_table(rows: &[Vec<String>]) {
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
-    use std::io::{Read, SeekFrom, Write};
+    use std::io::{Read, Seek, SeekFrom, Write};
     use std::net::TcpListener;
     use std::path::Path;
+    use std::sync::Arc;
     use std::thread;
 
     use super::{
@@ -1094,9 +1365,21 @@ mod tests {
         parse_mcap_from_summary, print_table, write_raw_time,
     };
     use mcap::records;
+    use object_store::ObjectStoreExt;
 
     fn serve_http(body: &'static [u8], supports_ranges: bool) -> String {
         serve_http_with_headers(body, supports_ranges, &[])
+    }
+
+    fn object_store_memory_reader(bytes: Vec<u8>) -> super::ObjectStoreRangeReader {
+        let store = Arc::new(object_store::memory::InMemory::new());
+        let path = object_store::path::Path::from("demo.mcap");
+        let runtime = super::object_store_runtime().expect("runtime");
+        runtime
+            .block_on(store.put(&path, bytes.clone().into()))
+            .expect("put memory object");
+        super::ObjectStoreRangeReader::new_for_test(store, path, bytes.len() as u64)
+            .expect("memory range reader")
     }
 
     fn serve_http_with_headers(
@@ -1167,12 +1450,6 @@ mod tests {
     }
 
     #[test]
-    fn table_printer_handles_empty_input() {
-        print_table(&[]);
-        assert!(format_table(&[]).is_empty());
-    }
-
-    #[test]
     fn remote_errors_redact_query_strings() {
         let url = "http://127.0.0.1:1/demo.mcap?X-Amz-Signature=secret-token";
         let err = load_path(Path::new(url), super::SourceOptions::default())
@@ -1197,6 +1474,18 @@ mod tests {
         let err = load_path(Path::new(&url), super::SourceOptions::default())
             .expect_err("remote full read should require opt-in");
         assert!(err.to_string().contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn remote_object_store_input_requires_remote_scan_opt_in_before_network() {
+        let err = load_path(
+            Path::new("s3://bucket/demo.mcap?X-Amz-Signature=secret-token"),
+            super::SourceOptions::default(),
+        )
+        .expect_err("cloud remote full read should require opt-in");
+        assert!(err.to_string().contains("--allow-remote-scan"));
+        assert!(!err.to_string().contains("secret-token"));
+        assert!(!err.to_string().contains("X-Amz-Signature"));
     }
 
     #[test]
@@ -1313,6 +1602,23 @@ mod tests {
     }
 
     #[test]
+    fn remote_url_recognizes_cloud_schemes() {
+        for url in [
+            "s3://bucket/demo.mcap",
+            "s3a://bucket/demo.mcap",
+            "gs://bucket/demo.mcap",
+            "az://container@account.blob.core.windows.net/demo.mcap",
+            "azure://container@account.blob.core.windows.net/demo.mcap",
+            "adl://container@account.dfs.core.windows.net/demo.mcap",
+            "abfs://container@account.dfs.core.windows.net/demo.mcap",
+            "abfss://container@account.dfs.core.windows.net/demo.mcap",
+        ] {
+            assert!(super::is_object_store_url(Path::new(url)), "{url}");
+            assert!(super::is_remote_url(Path::new(url)), "{url}");
+        }
+    }
+
+    #[test]
     fn remote_extension_ignores_query_and_fragment() {
         assert_eq!(
             super::remote_or_local_extension(Path::new(
@@ -1320,6 +1626,13 @@ mod tests {
             ))
             .as_deref(),
             Some("bag")
+        );
+        assert_eq!(
+            super::remote_or_local_extension(Path::new(
+                "s3://bucket/path/demo.db3?X-Amz-Signature=secret#fragment"
+            ))
+            .as_deref(),
+            Some("db3")
         );
     }
 
@@ -1339,6 +1652,102 @@ mod tests {
         );
         let mut byte = [0_u8; 1];
         assert_eq!(std::io::Read::read(&mut reader, &mut byte).unwrap(), 0);
+    }
+
+    #[test]
+    fn object_store_range_reader_reads_and_seeks() {
+        let mut reader = object_store_memory_reader(b"hello remote object".to_vec());
+
+        assert_eq!(reader.read_range(0, 5).expect("range"), b"hello");
+        assert_eq!(reader.read_range(13, 20).expect("clamped range"), b"object");
+
+        let mut buf = [0_u8; 6];
+        assert_eq!(reader.read(&mut buf).expect("read"), 6);
+        assert_eq!(&buf, b"hello ");
+
+        assert_eq!(reader.seek(SeekFrom::Current(1)).expect("seek"), 7);
+        let mut buf = [0_u8; 6];
+        assert_eq!(reader.read(&mut buf).expect("read"), 6);
+        assert_eq!(&buf, b"emote ");
+
+        assert_eq!(reader.seek(SeekFrom::End(-6)).expect("seek end"), 13);
+        let mut tail = Vec::new();
+        reader.read_to_end(&mut tail).expect("read tail");
+        assert_eq!(tail, b"object");
+
+        assert_eq!(reader.seek(SeekFrom::End(1)).expect("seek past end"), 20);
+        let mut byte = [0_u8; 1];
+        assert_eq!(reader.read(&mut byte).expect("eof"), 0);
+    }
+
+    #[test]
+    fn object_store_source_open_uses_url_parser() {
+        let source = super::ObjectStoreSource::open(Path::new("memory:///demo.mcap?token=secret"))
+            .expect("memory object store URL should parse");
+        assert_eq!(source.path.as_ref(), "demo.mcap");
+        assert_eq!(source.display_url, "memory:///demo.mcap");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn object_store_env_options_ignore_non_utf8_values() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let options = super::object_store_options_from_env_vars([
+            (OsString::from("AWS_REGION"), OsString::from("us-east-1")),
+            (
+                OsString::from_vec(vec![0xFF, b'B', b'A', b'D']),
+                OsString::from("ignored-key"),
+            ),
+            (
+                OsString::from("IGNORED_VALUE"),
+                OsString::from_vec(vec![0xFF, b'v']),
+            ),
+        ]);
+        assert_eq!(
+            options,
+            vec![("AWS_REGION".to_string(), "us-east-1".to_string())]
+        );
+    }
+
+    #[test]
+    fn object_store_env_options_only_forward_recognized_prefixes() {
+        use std::ffi::OsString;
+
+        let options = super::object_store_options_from_env_vars([
+            (OsString::from("AWS_ACCESS_KEY_ID"), OsString::from("akid")),
+            (OsString::from("GOOGLE_BUCKET"), OsString::from("bucket")),
+            (
+                OsString::from("AZURE_STORAGE_ACCOUNT_NAME"),
+                OsString::from("account"),
+            ),
+            // Unprefixed aliases like `endpoint`/`region`/`token` would otherwise
+            // be applied by object_store; they must not be forwarded.
+            (
+                OsString::from("ENDPOINT"),
+                OsString::from("http://attacker"),
+            ),
+            (OsString::from("REGION"), OsString::from("elsewhere")),
+            (OsString::from("TOKEN"), OsString::from("unrelated")),
+        ]);
+        assert_eq!(
+            options,
+            vec![
+                ("AWS_ACCESS_KEY_ID".to_string(), "akid".to_string()),
+                ("GOOGLE_BUCKET".to_string(), "bucket".to_string()),
+                (
+                    "AZURE_STORAGE_ACCOUNT_NAME".to_string(),
+                    "account".to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn table_printer_handles_empty_input() {
+        print_table(&[]);
+        assert!(format_table(&[]).is_empty());
     }
 
     #[test]

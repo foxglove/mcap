@@ -91,13 +91,7 @@ After the Rust CLI is in production, the following is a list of potential improv
      `.mcap` when no explicit output is provided.
    - This would also allow `mcap convert` to accept multiple input paths in one
      invocation, including wildcard-expanded paths from the user's shell.
-7. Future object-store remote input policy:
-   - Before Rust CLI 1.0, apply the remote scan opt-in policy consistently to
-     future object-store inputs such as S3, GCS, and Azure Blob Storage.
-   - Preserve the current HTTP(S) behavior for those backends: summary/index-only
-     operations should not require opt-in, while full-object scans/downloads and
-     message chunk payload reads should require `--allow-remote-scan`.
-8. Shared remote range-read APIs:
+7. Shared remote range-read APIs:
    - Before Rust CLI 1.0, consider moving the CLI-local coalesced summary range
      reads into reusable `mcap` crate reader APIs so HTTP(S), S3, GCS, and Azure
      Blob Storage backends can share tail/summary range reads instead of each
@@ -110,7 +104,7 @@ After the Rust CLI is in production, the following is a list of potential improv
      footer read before falling back to full-file materialization; a future
      implementation could share probe/footer state with materialization or skip
      indexed discovery for commands that already know they must scan.
-9. Range-backed metadata and attachment transforms:
+8. Range-backed metadata and attachment transforms:
    - The CLI can read exact indexed metadata and attachment records for direct
      `get` / `list` commands without whole-file fallback for HTTP(S) inputs.
      Single indexed attachment and metadata reads are allowed as bounded range
@@ -119,6 +113,17 @@ After the Rust CLI is in production, the following is a list of potential improv
    - Before Rust CLI 1.0, extend this pattern to metadata/attachment-preserving
      transforms so those commands do not need whole-file fallback for HTTP(S) and
      future object-store inputs.
+9. Use one HTTP client stack:
+   - The CLI currently uses `ureq` for HTTP(S) remote inputs and `reqwest`
+     through `object_store` for S3, GCS, and Azure Blob Storage inputs. Both use
+     rustls, but maintaining two HTTP client stacks increases binary size,
+     dependency surface area, and subtle behavior differences (for example root
+     certificate handling).
+   - Before Rust CLI 1.0, remove the direct `ureq` HTTP implementation and route
+     HTTP(S) remote inputs through the same `reqwest`/`object_store` stack used
+     for object stores, preserving the current remote scan opt-in behavior.
+     Prefer the platform's native certificate store for this unified stack
+     rather than shipping a separate bundled web PKI root set.
 10. `recover` chunk recompression optimization (deferred for valid chunks):
     - `recover` currently decodes every chunk, validates its records, and
       re-writes all records through the writer (which rebuilds chunks, indexes,
@@ -209,7 +214,9 @@ After the Rust CLI is in production, the following is a list of potential improv
 
 1. Remote read opt-in:
    - The Rust CLI requires `--allow-remote-scan` whenever a command would scan or
-     download a remote (HTTP/S3) file in full, rather than a bounded indexed read.
+     download a remote file in full, rather than a bounded indexed read. Remote
+     inputs include HTTP(S) URLs and object-store URLs (`s3://`, `gs://`, and
+     Azure `az://`/`abfs://` and friends).
      This covers whole-file commands such as `merge`, `filter`, and `convert`
      (including remote `convert` inputs and full-object downloads), as well as scan
      fallbacks for otherwise-indexed commands (for example, a remote file with no

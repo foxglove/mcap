@@ -15,7 +15,7 @@ const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
 pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     let input = ConvertInput::detect(&args.input)?;
-    let is_remote = crate::commands::common::is_http_url(&args.input);
+    let is_remote = crate::commands::common::is_remote_url(&args.input);
     if !is_remote {
         reject_lfs_pointer(&args.input)?;
     }
@@ -287,6 +287,20 @@ mod tests {
     }
 
     #[test]
+    fn detects_remote_cloud_extensions() {
+        assert!(matches!(
+            ConvertInput::detect(Path::new("s3://bucket/path/demo.bag?token=secret"))
+                .expect("detect s3 bag"),
+            ConvertInput::Ros1Bag
+        ));
+        assert!(matches!(
+            ConvertInput::detect(Path::new("gs://bucket/path/demo.db3#fragment"))
+                .expect("detect gcs db3"),
+            ConvertInput::Ros2Db3
+        ));
+    }
+
+    #[test]
     fn rejects_unknown_extension() {
         let path = temp_input("unknown", b"not an mcap input");
         let err = ConvertInput::detect(&path).expect_err("unknown input should fail");
@@ -363,6 +377,25 @@ size 123\n",
             },
         )
         .expect_err("remote convert should require opt-in");
+
+        assert!(err.to_string().contains("--allow-remote-scan"));
+        assert!(!err.to_string().contains("token=secret"));
+    }
+
+    #[test]
+    fn cloud_input_requires_allow_remote_scan_before_download() {
+        let err = super::run(
+            &CommandContext::default(),
+            ConvertCommand {
+                input: PathBuf::from("s3://bucket/demo.bag?token=secret"),
+                output: PathBuf::from("/tmp/mcap-cli-cloud-output.mcap"),
+                compression: CompressionFormat::None,
+                chunk_size: 8 * 1024 * 1024,
+                include_crc: false,
+                chunked: true,
+            },
+        )
+        .expect_err("cloud convert should require opt-in");
 
         assert!(err.to_string().contains("--allow-remote-scan"));
         assert!(!err.to_string().contains("token=secret"));
