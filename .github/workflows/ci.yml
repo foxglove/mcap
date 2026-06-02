@@ -510,30 +510,24 @@ jobs:
           - os: linux
             image: ubuntu-latest
             arch: amd64
-            target: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-musl
             setup: ""
             exe: ""
             env: {}
           - os: linux
             image: ubuntu-latest
             arch: arm64
-            target: aarch64-unknown-linux-gnu
-            setup: sudo apt-get update && sudo apt-get install -qq gcc-aarch64-linux-gnu
+            target: aarch64-unknown-linux-musl
+            setup: ""
             exe: ""
-            env:
-              CC: aarch64-linux-gnu-gcc
-              CXX: aarch64-linux-gnu-g++
-              CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+            env: {}
           - os: linux
             image: ubuntu-latest
             arch: arm
-            target: armv7-unknown-linux-gnueabihf
-            setup: sudo apt-get update && sudo apt-get install -qq gcc-arm-linux-gnueabihf
+            target: armv7-unknown-linux-musleabihf
+            setup: ""
             exe: ""
-            env:
-              CC: arm-linux-gnueabihf-gcc
-              CXX: arm-linux-gnueabihf-g++
-              CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+            env: {}
           - os: macos
             image: macos-latest
             arch: amd64
@@ -581,9 +575,19 @@ jobs:
       - name: Setup environment
         if: matrix.setup != ''
         run: ${{ matrix.setup }}
+      - name: Setup Zig
+        if: matrix.os == 'linux'
+        uses: mlugg/setup-zig@v2
+      - name: Install cargo-zigbuild
+        if: matrix.os == 'linux'
+        run: cargo install cargo-zigbuild --locked
       - name: Build binary
         run: |
-          cargo build -p mcap-cli --release --target "${{ matrix.target }}"
+          if [[ "${{ matrix.os }}" == "linux" ]]; then
+            cargo zigbuild -p mcap-cli --release --target "${{ matrix.target }}"
+          else
+            cargo build -p mcap-cli --release --target "${{ matrix.target }}"
+          fi
           mkdir -p bin
           cp \
             "target/${{ matrix.target }}/release/mcap${{ matrix.exe }}" \
