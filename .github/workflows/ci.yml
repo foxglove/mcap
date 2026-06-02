@@ -567,6 +567,8 @@ jobs:
       - name: Setup Zig
         if: matrix.os == 'linux'
         uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
       - name: Install cargo-zigbuild
         if: matrix.os == 'linux'
         uses: taiki-e/install-action@v2
