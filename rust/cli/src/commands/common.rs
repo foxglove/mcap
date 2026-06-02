@@ -468,6 +468,12 @@ impl ObjectStoreSource {
     }
 }
 
+// object_store config keys accept unprefixed aliases (for example `endpoint`,
+// `region`, and `token`), so forwarding the whole environment would let unrelated
+// shell variables silently reconfigure the store. Restrict to the prefixes the
+// object_store builders themselves read in their `from_env` constructors.
+const OBJECT_STORE_ENV_PREFIXES: [&str; 3] = ["AWS_", "GOOGLE_", "AZURE_"];
+
 fn object_store_env_options() -> Vec<(String, String)> {
     object_store_options_from_env_vars(std::env::vars_os())
 }
@@ -477,6 +483,11 @@ fn object_store_options_from_env_vars(
 ) -> Vec<(String, String)> {
     vars.into_iter()
         .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
+        .filter(|(key, _)| {
+            OBJECT_STORE_ENV_PREFIXES
+                .iter()
+                .any(|prefix| key.starts_with(prefix))
+        })
         .collect()
 }
 
@@ -1392,6 +1403,39 @@ mod tests {
         assert_eq!(
             options,
             vec![("AWS_REGION".to_string(), "us-east-1".to_string())]
+        );
+    }
+
+    #[test]
+    fn object_store_env_options_only_forward_recognized_prefixes() {
+        use std::ffi::OsString;
+
+        let options = super::object_store_options_from_env_vars([
+            (OsString::from("AWS_ACCESS_KEY_ID"), OsString::from("akid")),
+            (OsString::from("GOOGLE_BUCKET"), OsString::from("bucket")),
+            (
+                OsString::from("AZURE_STORAGE_ACCOUNT_NAME"),
+                OsString::from("account"),
+            ),
+            // Unprefixed aliases like `endpoint`/`region`/`token` would otherwise
+            // be applied by object_store; they must not be forwarded.
+            (
+                OsString::from("ENDPOINT"),
+                OsString::from("http://attacker"),
+            ),
+            (OsString::from("REGION"), OsString::from("elsewhere")),
+            (OsString::from("TOKEN"), OsString::from("unrelated")),
+        ]);
+        assert_eq!(
+            options,
+            vec![
+                ("AWS_ACCESS_KEY_ID".to_string(), "akid".to_string()),
+                ("GOOGLE_BUCKET".to_string(), "bucket".to_string()),
+                (
+                    "AZURE_STORAGE_ACCOUNT_NAME".to_string(),
+                    "account".to_string()
+                ),
+            ]
         );
     }
 
