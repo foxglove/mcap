@@ -580,7 +580,10 @@ jobs:
         uses: mlugg/setup-zig@v2
       - name: Install cargo-zigbuild
         if: matrix.os == 'linux'
-        run: cargo install cargo-zigbuild --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild@0.22.3
+          fallback: none
       - name: Build binary
         run: |
           if [[ "${{ matrix.os }}" == "linux" ]]; then
