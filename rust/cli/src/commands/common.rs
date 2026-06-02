@@ -398,14 +398,6 @@ fn remote_url_kind(path: &Path) -> Option<RemoteUrlKind> {
     RemoteUrlKind::from_scheme(scheme)
 }
 
-pub fn is_http_url(path: &Path) -> bool {
-    remote_url_kind(path) == Some(RemoteUrlKind::Http)
-}
-
-pub fn is_object_store_url(path: &Path) -> bool {
-    remote_url_kind(path) == Some(RemoteUrlKind::ObjectStore)
-}
-
 pub fn is_remote_url(path: &Path) -> bool {
     remote_url_kind(path).is_some()
 }
@@ -1473,11 +1465,11 @@ mod tests {
     }
 
     #[test]
-    fn http_url_scheme_is_case_insensitive() {
-        assert!(super::is_http_url(Path::new(
+    fn remote_url_scheme_is_case_insensitive() {
+        assert!(super::is_remote_url(Path::new(
             "HTTP://example.com/demo.mcap"
         )));
-        assert!(super::is_http_url(Path::new(
+        assert!(super::is_remote_url(Path::new(
             "Https://example.com/demo.mcap"
         )));
     }
@@ -1494,7 +1486,6 @@ mod tests {
             "abfs://container@account.dfs.core.windows.net/demo.mcap",
             "abfss://container@account.dfs.core.windows.net/demo.mcap",
         ] {
-            assert!(super::is_object_store_url(Path::new(url)), "{url}");
             assert!(super::is_remote_url(Path::new(url)), "{url}");
         }
     }
