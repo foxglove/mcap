@@ -214,7 +214,9 @@ After the Rust CLI is in production, the following is a list of potential improv
 
 1. Remote read opt-in:
    - The Rust CLI requires `--allow-remote-scan` whenever a command would scan or
-     download a remote (HTTP/S3) file in full, rather than a bounded indexed read.
+     download a remote file in full, rather than a bounded indexed read. Remote
+     inputs include HTTP(S) URLs and object-store URLs (`s3://`, `gs://`, and
+     Azure `az://`/`abfs://` and friends).
      This covers whole-file commands such as `merge`, `filter`, and `convert`
      (including remote `convert` inputs and full-object downloads), as well as scan
      fallbacks for otherwise-indexed commands (for example, a remote file with no
