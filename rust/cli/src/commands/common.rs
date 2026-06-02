@@ -322,37 +322,97 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
     Ok(Some(RemoteMcap { reader, summary }))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemoteUrlKind {
+    Http,
+    ObjectStore,
+}
+
+impl RemoteUrlKind {
+    fn from_scheme(scheme: &str) -> Option<Self> {
+        match scheme.to_ascii_lowercase().as_str() {
+            "http" | "https" => Some(Self::Http),
+            "s3" | "s3a" | "gs" | "az" | "adl" | "azure" | "abfs" | "abfss" => {
+                Some(Self::ObjectStore)
+            }
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct RemoteUrl {
+    url: Url,
+    display_url: String,
+    kind: RemoteUrlKind,
+}
+
+impl RemoteUrl {
+    fn parse(path: &Path) -> Result<Self> {
+        let raw_url = path.to_str().ok_or_else(|| {
+            anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display())
+        })?;
+        let display_url = redact_url(raw_url);
+        let url = Url::parse(raw_url).with_context(|| format!("failed to parse {display_url}"))?;
+        let kind = RemoteUrlKind::from_scheme(url.scheme()).ok_or_else(|| {
+            anyhow::anyhow!(
+                "unsupported remote URL scheme '{}' for {display_url}",
+                url.scheme()
+            )
+        })?;
+        Ok(Self {
+            url,
+            display_url,
+            kind,
+        })
+    }
+
+    fn options(&self) -> Vec<(String, String)> {
+        self.options_from_env_vars(std::env::vars_os())
+    }
+
+    fn options_from_env_vars(
+        &self,
+        vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+    ) -> Vec<(String, String)> {
+        match self.kind {
+            RemoteUrlKind::Http if self.url.scheme() == "http" => {
+                vec![("allow_http".to_string(), "true".to_string())]
+            }
+            RemoteUrlKind::Http => Vec::new(),
+            RemoteUrlKind::ObjectStore => object_store_options_from_env_vars(vars),
+        }
+    }
+
+    fn extension(&self) -> Option<String> {
+        Path::new(self.url.path())
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_string)
+    }
+}
+
+fn remote_url_kind(path: &Path) -> Option<RemoteUrlKind> {
+    let text = path.to_str()?;
+    let (scheme, _) = text.split_once("://")?;
+    RemoteUrlKind::from_scheme(scheme)
+}
+
 pub fn is_http_url(path: &Path) -> bool {
-    scheme_of(path).is_some_and(|scheme| {
-        scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https")
-    })
+    remote_url_kind(path) == Some(RemoteUrlKind::Http)
 }
 
 pub fn is_object_store_url(path: &Path) -> bool {
-    scheme_of(path).is_some_and(|scheme| {
-        matches!(
-            scheme.to_ascii_lowercase().as_str(),
-            "s3" | "s3a" | "gs" | "az" | "adl" | "azure" | "abfs" | "abfss"
-        )
-    })
+    remote_url_kind(path) == Some(RemoteUrlKind::ObjectStore)
 }
 
 pub fn is_remote_url(path: &Path) -> bool {
-    is_http_url(path) || is_object_store_url(path)
-}
-
-fn scheme_of(path: &Path) -> Option<&str> {
-    let text = path.to_str()?;
-    text.split_once("://").map(|(scheme, _)| scheme)
+    remote_url_kind(path).is_some()
 }
 
 pub fn remote_or_local_extension(path: &Path) -> Option<String> {
     if is_remote_url(path) {
-        let text = remote_url_without_fragment_or_query(path.to_str()?);
-        return Path::new(text)
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .map(str::to_string);
+        return RemoteUrl::parse(path).ok()?.extension();
     }
     path.extension()
         .and_then(|extension| extension.to_str())
@@ -361,19 +421,21 @@ pub fn remote_or_local_extension(path: &Path) -> Option<String> {
 
 impl ObjectStoreSource {
     fn open(path: &Path) -> Result<Self> {
-        let url = path.to_str().ok_or_else(|| {
-            anyhow::anyhow!("remote URL is not valid UTF-8: '{}'", path.display())
-        })?;
-        let display_url = redact_url(url);
-        let url = Url::parse(url).with_context(|| format!("failed to parse {display_url}"))?;
+        let remote_url = RemoteUrl::parse(path)?;
         let (store, object_path) =
-            object_store::parse_url_opts(&url, remote_store_options(&url))
-                .with_context(|| format!("failed to configure remote store for {display_url}"))?;
+            object_store::parse_url_opts(&remote_url.url, remote_url.options()).with_context(
+                || {
+                    format!(
+                        "failed to configure remote store for {}",
+                        remote_url.display_url
+                    )
+                },
+            )?;
         Ok(Self {
             runtime: object_store_runtime()?,
             store: Arc::from(store),
             path: object_path,
-            display_url,
+            display_url: remote_url.display_url,
         })
     }
 }
@@ -445,13 +507,6 @@ impl RemoteRangeReader {
 // shell variables silently reconfigure the store. Restrict to the prefixes the
 // object_store builders themselves read in their `from_env` constructors.
 const OBJECT_STORE_ENV_PREFIXES: [&str; 3] = ["AWS_", "GOOGLE_", "AZURE_"];
-
-fn remote_store_options(url: &Url) -> Vec<(String, String)> {
-    if url.scheme() == "http" {
-        return vec![("allow_http".to_string(), "true".to_string())];
-    }
-    object_store_options_from_env_vars(std::env::vars_os())
-}
 
 fn object_store_options_from_env_vars(
     vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
@@ -1413,10 +1468,48 @@ mod tests {
 
     #[test]
     fn object_store_source_open_uses_url_parser() {
-        let source = super::ObjectStoreSource::open(Path::new("memory:///demo.mcap?token=secret"))
-            .expect("memory object store URL should parse");
+        let source =
+            super::ObjectStoreSource::open(Path::new("https://example.com/demo.mcap?token=secret"))
+                .expect("HTTP object store URL should parse");
         assert_eq!(source.path.as_ref(), "demo.mcap");
-        assert_eq!(source.display_url, "memory:///demo.mcap");
+        assert_eq!(source.display_url, "https://example.com/demo.mcap");
+    }
+
+    #[test]
+    fn remote_url_options_keep_http_and_cloud_config_separate() {
+        use std::ffi::OsString;
+
+        let vars = [
+            (OsString::from("AWS_ACCESS_KEY_ID"), OsString::from("akid")),
+            (OsString::from("GOOGLE_BUCKET"), OsString::from("bucket")),
+            (
+                OsString::from("AZURE_STORAGE_ACCOUNT_NAME"),
+                OsString::from("account"),
+            ),
+        ];
+        let http =
+            super::RemoteUrl::parse(Path::new("http://example.com/demo.mcap")).expect("http URL");
+        assert_eq!(
+            http.options_from_env_vars(vars.clone()),
+            vec![("allow_http".to_string(), "true".to_string())]
+        );
+
+        let https =
+            super::RemoteUrl::parse(Path::new("https://example.com/demo.mcap")).expect("https URL");
+        assert!(https.options_from_env_vars(vars.clone()).is_empty());
+
+        let s3 = super::RemoteUrl::parse(Path::new("s3://bucket/demo.mcap")).expect("s3 URL");
+        assert_eq!(
+            s3.options_from_env_vars(vars),
+            vec![
+                ("AWS_ACCESS_KEY_ID".to_string(), "akid".to_string()),
+                ("GOOGLE_BUCKET".to_string(), "bucket".to_string()),
+                (
+                    "AZURE_STORAGE_ACCOUNT_NAME".to_string(),
+                    "account".to_string()
+                ),
+            ]
+        );
     }
 
     #[cfg(unix)]
