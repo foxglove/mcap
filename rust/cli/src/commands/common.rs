@@ -460,7 +460,7 @@ impl ObjectStoreSource {
             object_store::parse_url_opts(&url, object_store_env_options())
                 .with_context(|| format!("failed to configure object store for {display_url}"))?;
         Ok(Self {
-            runtime: Arc::new(object_store_runtime()?),
+            runtime: object_store_runtime()?,
             store: Arc::from(store),
             path: object_path,
             display_url,
@@ -510,7 +510,7 @@ impl ObjectStoreRangeReader {
     fn new_for_test(store: Arc<dyn ObjectStore>, path: ObjectStorePath, size: u64) -> Result<Self> {
         Ok(Self {
             source: ObjectStoreSource {
-                runtime: Arc::new(object_store_runtime()?),
+                runtime: object_store_runtime()?,
                 store,
                 path,
                 display_url: "memory:///test".to_string(),
@@ -791,11 +791,18 @@ fn remote_agent() -> Agent {
         .into()
 }
 
-fn object_store_runtime() -> Result<tokio::runtime::Runtime> {
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .context("failed to create object store runtime")
+fn object_store_runtime() -> Result<Arc<tokio::runtime::Runtime>> {
+    static RUNTIME: std::sync::OnceLock<Arc<tokio::runtime::Runtime>> = std::sync::OnceLock::new();
+    if let Some(runtime) = RUNTIME.get() {
+        return Ok(runtime.clone());
+    }
+    let runtime = Arc::new(
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .context("failed to create object store runtime")?,
+    );
+    Ok(RUNTIME.get_or_init(|| runtime).clone())
 }
 
 fn redact_url(url: &str) -> String {
