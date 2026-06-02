@@ -1382,70 +1382,6 @@ mod tests {
             .expect("memory range reader")
     }
 
-    #[test]
-    fn object_store_source_open_uses_url_parser() {
-        let source = super::ObjectStoreSource::open(Path::new("memory:///demo.mcap?token=secret"))
-            .expect("memory object store URL should parse");
-        assert_eq!(source.path.as_ref(), "demo.mcap");
-        assert_eq!(source.display_url, "memory:///demo.mcap");
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn object_store_env_options_ignore_non_utf8_values() {
-        use std::ffi::OsString;
-        use std::os::unix::ffi::OsStringExt;
-
-        let options = super::object_store_options_from_env_vars([
-            (OsString::from("AWS_REGION"), OsString::from("us-east-1")),
-            (
-                OsString::from_vec(vec![0xFF, b'B', b'A', b'D']),
-                OsString::from("ignored-key"),
-            ),
-            (
-                OsString::from("IGNORED_VALUE"),
-                OsString::from_vec(vec![0xFF, b'v']),
-            ),
-        ]);
-        assert_eq!(
-            options,
-            vec![("AWS_REGION".to_string(), "us-east-1".to_string())]
-        );
-    }
-
-    #[test]
-    fn object_store_env_options_only_forward_recognized_prefixes() {
-        use std::ffi::OsString;
-
-        let options = super::object_store_options_from_env_vars([
-            (OsString::from("AWS_ACCESS_KEY_ID"), OsString::from("akid")),
-            (OsString::from("GOOGLE_BUCKET"), OsString::from("bucket")),
-            (
-                OsString::from("AZURE_STORAGE_ACCOUNT_NAME"),
-                OsString::from("account"),
-            ),
-            // Unprefixed aliases like `endpoint`/`region`/`token` would otherwise
-            // be applied by object_store; they must not be forwarded.
-            (
-                OsString::from("ENDPOINT"),
-                OsString::from("http://attacker"),
-            ),
-            (OsString::from("REGION"), OsString::from("elsewhere")),
-            (OsString::from("TOKEN"), OsString::from("unrelated")),
-        ]);
-        assert_eq!(
-            options,
-            vec![
-                ("AWS_ACCESS_KEY_ID".to_string(), "akid".to_string()),
-                ("GOOGLE_BUCKET".to_string(), "bucket".to_string()),
-                (
-                    "AZURE_STORAGE_ACCOUNT_NAME".to_string(),
-                    "account".to_string()
-                ),
-            ]
-        );
-    }
-
     fn serve_http_with_headers(
         body: &'static [u8],
         supports_ranges: bool,
@@ -1511,12 +1447,6 @@ mod tests {
             }
         });
         format!("http://{addr}/demo.mcap")
-    }
-
-    #[test]
-    fn table_printer_handles_empty_input() {
-        print_table(&[]);
-        assert!(format_table(&[]).is_empty());
     }
 
     #[test]
@@ -1748,6 +1678,76 @@ mod tests {
         assert_eq!(reader.seek(SeekFrom::End(1)).expect("seek past end"), 20);
         let mut byte = [0_u8; 1];
         assert_eq!(reader.read(&mut byte).expect("eof"), 0);
+    }
+
+    #[test]
+    fn object_store_source_open_uses_url_parser() {
+        let source = super::ObjectStoreSource::open(Path::new("memory:///demo.mcap?token=secret"))
+            .expect("memory object store URL should parse");
+        assert_eq!(source.path.as_ref(), "demo.mcap");
+        assert_eq!(source.display_url, "memory:///demo.mcap");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn object_store_env_options_ignore_non_utf8_values() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let options = super::object_store_options_from_env_vars([
+            (OsString::from("AWS_REGION"), OsString::from("us-east-1")),
+            (
+                OsString::from_vec(vec![0xFF, b'B', b'A', b'D']),
+                OsString::from("ignored-key"),
+            ),
+            (
+                OsString::from("IGNORED_VALUE"),
+                OsString::from_vec(vec![0xFF, b'v']),
+            ),
+        ]);
+        assert_eq!(
+            options,
+            vec![("AWS_REGION".to_string(), "us-east-1".to_string())]
+        );
+    }
+
+    #[test]
+    fn object_store_env_options_only_forward_recognized_prefixes() {
+        use std::ffi::OsString;
+
+        let options = super::object_store_options_from_env_vars([
+            (OsString::from("AWS_ACCESS_KEY_ID"), OsString::from("akid")),
+            (OsString::from("GOOGLE_BUCKET"), OsString::from("bucket")),
+            (
+                OsString::from("AZURE_STORAGE_ACCOUNT_NAME"),
+                OsString::from("account"),
+            ),
+            // Unprefixed aliases like `endpoint`/`region`/`token` would otherwise
+            // be applied by object_store; they must not be forwarded.
+            (
+                OsString::from("ENDPOINT"),
+                OsString::from("http://attacker"),
+            ),
+            (OsString::from("REGION"), OsString::from("elsewhere")),
+            (OsString::from("TOKEN"), OsString::from("unrelated")),
+        ]);
+        assert_eq!(
+            options,
+            vec![
+                ("AWS_ACCESS_KEY_ID".to_string(), "akid".to_string()),
+                ("GOOGLE_BUCKET".to_string(), "bucket".to_string()),
+                (
+                    "AZURE_STORAGE_ACCOUNT_NAME".to_string(),
+                    "account".to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn table_printer_handles_empty_input() {
+        print_table(&[]);
+        assert!(format_table(&[]).is_empty());
     }
 
     #[test]
