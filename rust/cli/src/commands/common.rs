@@ -110,17 +110,17 @@ pub struct HttpRangeReader {
     offset: u64,
 }
 
-pub struct ObjectStoreRangeReader {
-    source: ObjectStoreSource,
-    size: u64,
-    offset: u64,
-}
-
 struct ObjectStoreSource {
     runtime: Arc<tokio::runtime::Runtime>,
     store: Arc<dyn ObjectStore>,
     path: ObjectStorePath,
     display_url: String,
+}
+
+pub struct ObjectStoreRangeReader {
+    source: ObjectStoreSource,
+    size: u64,
+    offset: u64,
 }
 
 pub enum RemoteRangeReader {
@@ -468,29 +468,6 @@ impl ObjectStoreSource {
     }
 }
 
-// object_store config keys accept unprefixed aliases (for example `endpoint`,
-// `region`, and `token`), so forwarding the whole environment would let unrelated
-// shell variables silently reconfigure the store. Restrict to the prefixes the
-// object_store builders themselves read in their `from_env` constructors.
-const OBJECT_STORE_ENV_PREFIXES: [&str; 3] = ["AWS_", "GOOGLE_", "AZURE_"];
-
-fn object_store_env_options() -> Vec<(String, String)> {
-    object_store_options_from_env_vars(std::env::vars_os())
-}
-
-fn object_store_options_from_env_vars(
-    vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
-) -> Vec<(String, String)> {
-    vars.into_iter()
-        .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
-        .filter(|(key, _)| {
-            OBJECT_STORE_ENV_PREFIXES
-                .iter()
-                .any(|prefix| key.starts_with(prefix))
-        })
-        .collect()
-}
-
 impl ObjectStoreRangeReader {
     fn open(path: &Path) -> Result<Self> {
         let source = ObjectStoreSource::open(path)?;
@@ -539,6 +516,29 @@ impl ObjectStoreRangeReader {
     fn size(&self) -> u64 {
         self.size
     }
+}
+
+// object_store config keys accept unprefixed aliases (for example `endpoint`,
+// `region`, and `token`), so forwarding the whole environment would let unrelated
+// shell variables silently reconfigure the store. Restrict to the prefixes the
+// object_store builders themselves read in their `from_env` constructors.
+const OBJECT_STORE_ENV_PREFIXES: [&str; 3] = ["AWS_", "GOOGLE_", "AZURE_"];
+
+fn object_store_env_options() -> Vec<(String, String)> {
+    object_store_options_from_env_vars(std::env::vars_os())
+}
+
+fn object_store_options_from_env_vars(
+    vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
+) -> Vec<(String, String)> {
+    vars.into_iter()
+        .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
+        .filter(|(key, _)| {
+            OBJECT_STORE_ENV_PREFIXES
+                .iter()
+                .any(|prefix| key.starts_with(prefix))
+        })
+        .collect()
 }
 
 impl RemoteRangeReader {
