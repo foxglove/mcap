@@ -483,10 +483,43 @@ impl ObjectStoreSource {
         Ok(bytes.to_vec())
     }
 
+    /// Probe bounded range support with a one-byte request, returning the object
+    /// size parsed from `Content-Range`. `Ok(None)` means the server does not honor
+    /// range requests at all. Used as a fallback for HTTP servers that accept bounded
+    /// ranges but reject suffix ranges, and to learn the size without a HEAD (which
+    /// some HTTP servers reject).
+    fn probe_bounded_range_size(&self) -> Result<Option<u64>> {
+        match self.runtime.block_on(self.store.get_opts(
+            &self.path,
+            GetOptions {
+                range: Some(GetRange::Bounded(0..1)),
+                ..GetOptions::default()
+            },
+        )) {
+            Ok(response) => {
+                validate_identity_content_encoding(&response.attributes, &self.display_url)?;
+                // A `*` total in `Content-Range` fails object_store's parse and
+                // surfaces as a fetch error rather than a bogus size.
+                Ok(Some(response.meta.size))
+            }
+            Err(err) if remote_range_not_supported(&err) => Ok(None),
+            Err(err) => {
+                Err(err).with_context(|| format!("failed to fetch range from {}", self.display_url))
+            }
+        }
+    }
+
+    /// Read the final `tail_bytes` of an object of known `size` as a bounded range.
+    fn bounded_tail(&self, size: u64, tail_bytes: u64) -> Result<RemoteTail> {
+        let bytes = self.get_range(size.saturating_sub(tail_bytes)..size)?;
+        let start = size.saturating_sub(bytes.len() as u64);
+        Ok(RemoteTail { start, bytes })
+    }
+
     /// Read the final `tail_bytes` of the object in a single request, returning the
     /// file size and the fetched tail. Returns `Ok(None)` only when the store does
-    /// not support range requests (an HTTP server that ignored `Range`), signalling
-    /// the caller to fall back to a scan/full download.
+    /// not support range requests at all (an HTTP server that ignores `Range`),
+    /// signalling the caller to fall back to a scan/full download.
     fn read_summary_tail(
         &self,
         kind: RemoteUrlKind,
@@ -518,12 +551,16 @@ impl ObjectStoreSource {
                     let start = size.saturating_sub(bytes.len() as u64);
                     return Ok(Some((size, RemoteTail { start, bytes })));
                 }
-                // For HTTP, object_store maps a non-partial (`200 OK`) response to
-                // `NotSupported`; that means the server ignores ranges, so fall back.
-                Err(err)
-                    if remote_range_not_supported(&err) && !kind.range_support_is_guaranteed() =>
-                {
-                    return Ok(None);
+                // HTTP servers may honor bounded ranges but not suffix ranges, either
+                // ignoring the suffix (`200` -> `NotSupported`) or rejecting it (e.g.
+                // `416`). Rather than force a scan, fall back to a bounded probe: it
+                // confirms range support and yields the size, and only if it too shows
+                // no range support do we give up.
+                Err(_) if !kind.range_support_is_guaranteed() => {
+                    return Ok(match self.probe_bounded_range_size()? {
+                        Some(size) => Some((size, self.bounded_tail(size, tail_bytes)?)),
+                        None => None,
+                    });
                 }
                 // A suffix-capable cloud store should never report the suffix as
                 // unsupported, but if it does we still have guaranteed range support,
@@ -537,13 +574,10 @@ impl ObjectStoreSource {
             }
         }
 
-        // Bounded path: the store guarantees range support but does not accept suffix
-        // ranges (Azure), so discover the size with a HEAD and read a bounded tail.
+        // Cloud stores with guaranteed range support but no suffix support (Azure):
+        // discover the size with a HEAD and read a bounded tail.
         let size = self.head_size()?;
-        let start = size.saturating_sub(tail_bytes);
-        let bytes = self.get_range(start..size)?;
-        let start = size.saturating_sub(bytes.len() as u64);
-        Ok(Some((size, RemoteTail { start, bytes })))
+        Ok(Some((size, self.bounded_tail(size, tail_bytes)?)))
     }
 }
 
