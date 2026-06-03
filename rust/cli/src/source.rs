@@ -1012,7 +1012,10 @@ mod tests {
     // Like `serve_http` but also returns a counter of HTTP requests received, so tests
     // can assert how many round trips an operation makes. Each request uses a fresh
     // connection (`Connection: close`), so connections accepted == requests.
-    fn serve_http_counting(body: &'static [u8], supports_ranges: bool) -> (String, Arc<AtomicUsize>) {
+    fn serve_http_counting(
+        body: &'static [u8],
+        supports_ranges: bool,
+    ) -> (String, Arc<AtomicUsize>) {
         serve_http_with_options(body, supports_ranges, &[], false, false)
     }
 
