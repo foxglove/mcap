@@ -84,6 +84,18 @@ pub struct MaterializedInput {
     local_path: Option<std::path::PathBuf>,
 }
 
+impl MaterializedInput {
+    pub fn path(&self) -> &Path {
+        if let Some(temp_file) = &self.temp_file {
+            temp_file.path()
+        } else {
+            self.local_path
+                .as_deref()
+                .expect("materialized input should have a path")
+        }
+    }
+}
+
 pub struct RemoteMcap {
     reader: RemoteRangeReader,
     summary: mcap::Summary,
@@ -99,19 +111,6 @@ impl RemoteMcap {
     }
 }
 
-struct ObjectStoreSource {
-    runtime: Arc<tokio::runtime::Runtime>,
-    store: Arc<dyn ObjectStore>,
-    path: ObjectStorePath,
-    display_url: String,
-}
-
-pub struct RemoteRangeReader {
-    source: ObjectStoreSource,
-    size: u64,
-    offset: u64,
-}
-
 pub(crate) enum StreamingInput {
     Local(std::fs::File),
     Stdin(std::io::Stdin),
@@ -121,14 +120,13 @@ pub(crate) enum StreamingInput {
         temp_file: NamedTempFile,
     },
 }
-impl MaterializedInput {
-    pub fn path(&self) -> &Path {
-        if let Some(temp_file) = &self.temp_file {
-            temp_file.path()
-        } else {
-            self.local_path
-                .as_deref()
-                .expect("materialized input should have a path")
+
+impl std::io::Read for StreamingInput {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self {
+            StreamingInput::Local(file) => file.read(buf),
+            StreamingInput::Stdin(stdin) => stdin.read(buf),
+            StreamingInput::RemoteMaterialized { file, .. } => file.read(buf),
         }
     }
 }
@@ -411,6 +409,13 @@ pub fn remote_or_local_extension(path: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
+struct ObjectStoreSource {
+    runtime: Arc<tokio::runtime::Runtime>,
+    store: Arc<dyn ObjectStore>,
+    path: ObjectStorePath,
+    display_url: String,
+}
+
 impl ObjectStoreSource {
     fn open(path: &Path) -> Result<Self> {
         Self::open_remote(RemoteUrl::parse(path)?)
@@ -462,6 +467,12 @@ impl ObjectStoreSource {
         // (for example `bytes 0-0/1234`); servers returning a `*` total are unsupported.
         Ok(Some(response.meta.size))
     }
+}
+
+pub struct RemoteRangeReader {
+    source: ObjectStoreSource,
+    size: u64,
+    offset: u64,
 }
 
 impl RemoteRangeReader {
@@ -529,6 +540,38 @@ impl RemoteRangeReader {
     }
 }
 
+impl std::io::Read for RemoteRangeReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match self.read_range(self.offset, buf.len()) {
+            Ok(bytes) => {
+                let n = bytes.len();
+                buf[..n].copy_from_slice(&bytes);
+                self.offset = self.offset.saturating_add(n as u64);
+                Ok(n)
+            }
+            Err(err) => Err(std::io::Error::other(err)),
+        }
+    }
+}
+
+impl std::io::Seek for RemoteRangeReader {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        let target = match pos {
+            SeekFrom::Start(offset) => offset as i128,
+            SeekFrom::End(offset) => self.size as i128 + offset as i128,
+            SeekFrom::Current(offset) => self.offset as i128 + offset as i128,
+        };
+        if target < 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "remote seek out of bounds",
+            ));
+        }
+        self.offset = target as u64;
+        Ok(self.offset)
+    }
+}
+
 // object_store config keys accept unprefixed aliases (for example `endpoint`,
 // `region`, and `token`), so forwarding the whole environment would let unrelated
 // shell variables silently reconfigure the store. Restrict to the prefixes the
@@ -553,48 +596,6 @@ fn object_store_options_from_env_vars(
 // object_store's mapping, so the no-range fallback tests guard against version drift.
 fn remote_range_not_supported(err: &object_store::Error) -> bool {
     matches!(err, object_store::Error::NotSupported { .. })
-}
-
-impl std::io::Read for RemoteRangeReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self.read_range(self.offset, buf.len()) {
-            Ok(bytes) => {
-                let n = bytes.len();
-                buf[..n].copy_from_slice(&bytes);
-                self.offset = self.offset.saturating_add(n as u64);
-                Ok(n)
-            }
-            Err(err) => Err(std::io::Error::other(err)),
-        }
-    }
-}
-
-impl std::io::Read for StreamingInput {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            StreamingInput::Local(file) => file.read(buf),
-            StreamingInput::Stdin(stdin) => stdin.read(buf),
-            StreamingInput::RemoteMaterialized { file, .. } => file.read(buf),
-        }
-    }
-}
-
-impl std::io::Seek for RemoteRangeReader {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        let target = match pos {
-            SeekFrom::Start(offset) => offset as i128,
-            SeekFrom::End(offset) => self.size as i128 + offset as i128,
-            SeekFrom::Current(offset) => self.offset as i128 + offset as i128,
-        };
-        if target < 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "remote seek out of bounds",
-            ));
-        }
-        self.offset = target as u64;
-        Ok(self.offset)
-    }
 }
 
 fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
