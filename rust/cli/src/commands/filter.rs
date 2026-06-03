@@ -8,9 +8,9 @@ use anyhow::{bail, Context, Result};
 use regex::Regex;
 
 use crate::cli::FilterCommand;
-use crate::commands::add_attachment::parse_timestamp_or_nanos;
-use crate::commands::common;
 use crate::context::CommandContext;
+use crate::render::parse_timestamp_or_nanos;
+use crate::{render, source};
 
 #[derive(Debug, Clone)]
 struct FilterOptions {
@@ -125,16 +125,16 @@ struct PreStartMessage {
 pub fn run(ctx: &CommandContext, args: FilterCommand) -> Result<()> {
     run_transcode(
         TranscodeCommandOptions::from(&args),
-        common::SourceOptions::new(ctx.allow_remote_scan()),
+        source::SourceOptions::new(ctx.allow_remote_scan()),
     )
 }
 
 pub(crate) fn run_transcode(
     args: TranscodeCommandOptions,
-    source_options: common::SourceOptions,
+    source_options: source::SourceOptions,
 ) -> Result<()> {
     let opts = build_filter_options_from_transcode_options(&args)?;
-    let input = common::load_input(args.file.as_deref(), source_options)?;
+    let input = source::load_input(args.file.as_deref(), source_options)?;
 
     if let Some(output) = &opts.output {
         let writer = std::fs::File::create(output)
@@ -142,7 +142,7 @@ pub(crate) fn run_transcode(
         filter_to_writer(input.as_slice(), writer, &opts, false)
     } else {
         if std::io::stdout().is_terminal() {
-            bail!("{}", common::PLEASE_REDIRECT);
+            bail!("{}", source::PLEASE_REDIRECT);
         }
         let stdout = std::io::stdout();
         let writer = mcap::write::NoSeek::new(stdout.lock());
@@ -185,7 +185,7 @@ fn build_filter_options_from_transcode_options(
         end,
         include_metadata: args.include_metadata,
         include_attachments: args.include_attachments,
-        compression: common::parse_output_compression(&args.output_compression)?,
+        compression: render::parse_output_compression(&args.output_compression)?,
         chunk_size: args.chunk_size,
         use_chunks: args.use_chunks,
     })
@@ -963,7 +963,7 @@ mod tests {
         options.use_chunks = false;
         options.output_compression = "none".to_string();
 
-        super::run_transcode(options, super::common::SourceOptions::default())
+        super::run_transcode(options, crate::source::SourceOptions::default())
             .expect("transcode should succeed");
         let output = std::fs::read(&output_path).expect("read output");
         let summary = mcap::Summary::read(&output)

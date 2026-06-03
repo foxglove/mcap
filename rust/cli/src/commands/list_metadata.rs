@@ -1,24 +1,24 @@
 use anyhow::{Context, Result};
 
 use crate::cli::ListMetadataCommand;
-use crate::commands::common;
 use crate::context::CommandContext;
+use crate::{parse, render, source};
 
 pub fn run(ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
-    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
-    let records = if let Some(remote) = common::try_open_remote_mcap(&args.file, source_options)? {
+    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let records = if let Some(remote) = source::try_open_remote_mcap(&args.file, source_options)? {
         collect_remote_metadata_records(&remote, source_options)?
     } else {
-        let mcap = common::load_path(&args.file, source_options)?;
+        let mcap = source::load_path(&args.file, source_options)?;
         collect_metadata_records(&mcap)?
     };
-    common::print_table(&render_metadata_rows(&records)?);
+    render::print_table(&render_metadata_rows(&records)?);
     Ok(())
 }
 
 fn collect_remote_metadata_records(
-    remote: &common::RemoteMcap,
-    source_options: common::SourceOptions,
+    remote: &source::RemoteMcap,
+    source_options: source::SourceOptions,
 ) -> Result<Vec<(mcap::records::MetadataIndex, mcap::records::Metadata)>> {
     let total_bytes = remote
         .summary()
@@ -26,7 +26,7 @@ fn collect_remote_metadata_records(
         .iter()
         .map(|index| index.length)
         .sum::<u64>();
-    common::require_remote_metadata_budget(total_bytes, source_options, "metadata records")?;
+    source::require_remote_metadata_budget(total_bytes, source_options, "metadata records")?;
 
     let mut records = Vec::new();
     for index in &remote.summary().metadata_indexes {
@@ -35,7 +35,7 @@ fn collect_remote_metadata_records(
             usize::try_from(index.length)
                 .context("indexed record is too large to read on this platform")?,
         )?;
-        let metadata = common::parse_metadata_record(&bytes)
+        let metadata = parse::parse_metadata_record(&bytes)
             .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
         records.push((index.clone(), metadata));
     }
@@ -46,7 +46,7 @@ fn collect_metadata_records(
     mcap: &[u8],
 ) -> Result<Vec<(mcap::records::MetadataIndex, mcap::records::Metadata)>> {
     let mut records = Vec::new();
-    let parsed = common::parse_mcap(mcap)?;
+    let parsed = parse::parse_mcap(mcap)?;
     for index in parsed.metadata_indexes {
         let metadata = mcap::read::metadata(mcap, &index)
             .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;

@@ -4,15 +4,15 @@ use std::io::Write as _;
 use anyhow::{Context, Result};
 
 use crate::cli::GetAttachmentCommand;
-use crate::commands::common;
 use crate::context::CommandContext;
+use crate::{parse, source};
 
 const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 
 pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
-    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
-    if let Some(remote) = common::try_open_remote_mcap(&args.file, source_options)? {
+    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    if let Some(remote) = source::try_open_remote_mcap(&args.file, source_options)? {
         let index = select_attachment_index(
             &remote.summary().attachment_indexes,
             &args.name,
@@ -23,7 +23,7 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
             usize::try_from(index.length)
                 .context("indexed record is too large to read on this platform")?,
         )?;
-        let attachment = common::parse_attachment_record(&bytes).with_context(|| {
+        let attachment = parse::parse_attachment_record(&bytes).with_context(|| {
             format!(
                 "failed to read attachment {} at offset {}",
                 args.name, index.offset
@@ -31,8 +31,8 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
         })?;
         write_attachment_data(attachment.data.as_ref(), args.output.as_deref())?;
     } else {
-        let mcap = common::load_path(&args.file, source_options)?;
-        let parsed = common::parse_mcap(&mcap)?;
+        let mcap = source::load_path(&args.file, source_options)?;
+        let parsed = parse::parse_mcap(&mcap)?;
         let index = select_attachment_index(&parsed.attachment_indexes, &args.name, args.offset)?;
         let attachment = mcap::read::attachment(&mcap, index).with_context(|| {
             format!(

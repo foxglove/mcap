@@ -1,17 +1,17 @@
 use anyhow::Result;
 
 use crate::cli::ListAttachmentsCommand;
-use crate::commands::common;
 use crate::context::CommandContext;
+use crate::{render, source};
 
 pub fn run(ctx: &CommandContext, args: ListAttachmentsCommand) -> Result<()> {
-    let parsed = common::parse_mcap_from_path(
+    let parsed = source::parse_mcap_from_path(
         &args.file,
-        common::SourceOptions::new(ctx.allow_remote_scan()),
+        source::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
     let mut indexes = parsed.attachment_indexes;
     indexes.sort_by_key(|index| index.offset);
-    common::print_table(&render_attachment_rows(&indexes));
+    render::print_table(&render_attachment_rows(&indexes));
     Ok(())
 }
 
@@ -29,8 +29,8 @@ fn render_attachment_rows(indexes: &[mcap::records::AttachmentIndex]) -> Vec<Vec
         rows.push(vec![
             index.name.clone(),
             index.media_type.clone(),
-            common::raw_time(index.log_time),
-            common::raw_time(index.create_time),
+            render::raw_time(index.log_time),
+            render::raw_time(index.create_time),
             index.data_size.to_string(),
             index.offset.to_string(),
         ]);

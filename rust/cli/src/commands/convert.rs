@@ -15,13 +15,13 @@ const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
 pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     let input = ConvertInput::detect(&args.input)?;
-    let is_remote = crate::commands::common::is_remote_url(&args.input);
+    let is_remote = crate::source::is_remote_url(&args.input);
     if !is_remote {
         reject_lfs_pointer(&args.input)?;
     }
-    let materialized_input = crate::commands::common::materialize_input(
+    let materialized_input = crate::source::materialize_input(
         &args.input,
-        crate::commands::common::SourceOptions::new(ctx.allow_remote_scan()),
+        crate::source::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
     if !is_remote {
         ensure_distinct_paths(materialized_input.path(), &args.output)?;
@@ -45,8 +45,7 @@ enum ConvertInput {
 
 impl ConvertInput {
     fn detect(path: &Path) -> Result<Self> {
-        let extension =
-            crate::commands::common::remote_or_local_extension(path).unwrap_or_default();
+        let extension = crate::source::remote_or_local_extension(path).unwrap_or_default();
 
         if extension.eq_ignore_ascii_case("bag") {
             return Ok(Self::Ros1Bag);

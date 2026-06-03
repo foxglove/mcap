@@ -2,6 +2,9 @@ mod cli;
 mod commands;
 mod context;
 mod logsetup;
+mod parse;
+mod render;
+mod source;
 
 use std::process::ExitCode;
 

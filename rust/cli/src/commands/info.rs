@@ -4,19 +4,19 @@ use std::fmt::Write as _;
 use anyhow::Result;
 
 use crate::cli::InfoCommand;
-use crate::commands::common;
 use crate::context::CommandContext;
+use crate::{parse, render, source};
 
 pub fn run(ctx: &CommandContext, args: InfoCommand) -> Result<()> {
-    let parsed = common::parse_mcap_from_path(
+    let parsed = source::parse_mcap_from_path(
         &args.file,
-        common::SourceOptions::new(ctx.allow_remote_scan()),
+        source::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
     print!("{}", render_info(&parsed));
     Ok(())
 }
 
-fn render_info(parsed: &common::ParsedMcap) -> String {
+fn render_info(parsed: &parse::ParsedMcap) -> String {
     let mut out = String::new();
 
     if let Some(header) = &parsed.header {
@@ -37,12 +37,12 @@ fn render_info(parsed: &common::ParsedMcap) -> String {
         let _ = writeln!(
             &mut out,
             "start: {}",
-            common::formatted_time(stats.message_start_time)
+            render::formatted_time(stats.message_start_time)
         );
         let _ = writeln!(
             &mut out,
             "end: {}",
-            common::formatted_time(stats.message_end_time)
+            render::formatted_time(stats.message_end_time)
         );
     }
 
@@ -79,15 +79,15 @@ fn render_info(parsed: &common::ParsedMcap) -> String {
                 "\t{compression}: [{}/{} chunks] [{}/{} ({ratio:.2}%)]",
                 stats.count,
                 chunk_count,
-                common::human_bytes(stats.uncompressed_size),
-                common::human_bytes(stats.compressed_size),
+                render::human_bytes(stats.uncompressed_size),
+                render::human_bytes(stats.compressed_size),
             );
             if duration_seconds > 0.0 {
                 let throughput = (stats.compressed_size as f64 / duration_seconds).max(0.0);
                 let _ = write!(
                     &mut out,
                     " [{}/sec]",
-                    common::human_bytes(throughput as u64)
+                    render::human_bytes(throughput as u64)
                 );
             }
             let _ = writeln!(&mut out);
@@ -97,18 +97,18 @@ fn render_info(parsed: &common::ParsedMcap) -> String {
         let _ = writeln!(
             &mut out,
             "\tmax uncompressed size: {}",
-            common::human_bytes(largest_uncompressed)
+            render::human_bytes(largest_uncompressed)
         );
         let _ = writeln!(
             &mut out,
             "\tmax compressed size: {}",
-            common::human_bytes(largest_compressed)
+            render::human_bytes(largest_compressed)
         );
         if has_overlaps {
             let _ = writeln!(
                 &mut out,
                 "\toverlaps: [max concurrent: {max_active_chunks}, decompressed: {}]",
-                common::human_bytes(max_total_uncompressed_size)
+                render::human_bytes(max_total_uncompressed_size)
             );
         } else {
             let _ = writeln!(&mut out, "\toverlaps: no");
@@ -117,7 +117,7 @@ fn render_info(parsed: &common::ParsedMcap) -> String {
 
     let _ = writeln!(&mut out, "channels:");
     let rows = render_channel_summary_rows(parsed, duration_seconds);
-    out.push_str(&common::format_table(&rows));
+    out.push_str(&render::format_table(&rows));
 
     if let Some(stats) = &parsed.statistics {
         let _ = writeln!(&mut out, "channels: {}", stats.channel_count);
@@ -133,7 +133,7 @@ fn render_info(parsed: &common::ParsedMcap) -> String {
 }
 
 fn render_channel_summary_rows(
-    parsed: &common::ParsedMcap,
+    parsed: &parse::ParsedMcap,
     duration_seconds: f64,
 ) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
@@ -351,27 +351,27 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{count_chunk_overlaps, format_duration, render_channel_summary_rows, render_info};
-    use crate::commands::common;
-    use crate::commands::common::{ParsedMcap, ParsedSchema};
+    use crate::parse::{ParsedMcap, ParsedSchema};
+    use crate::render;
     use mcap::records::{self, ChunkIndex, Header, Statistics};
 
     #[test]
     fn decimal_time_formats_nanos() {
-        assert_eq!(common::decimal_time(1_234_567_890), "1.234567890");
+        assert_eq!(render::decimal_time(1_234_567_890), "1.234567890");
     }
 
     #[test]
     fn formatted_time_includes_rfc3339_and_decimal() {
         assert_eq!(
-            common::formatted_time(1_000_000_000),
+            render::formatted_time(1_000_000_000),
             "1970-01-01T00:00:01Z (1.000000000)"
         );
     }
 
     #[test]
     fn human_bytes_scales_units() {
-        assert_eq!(common::human_bytes(2), "2.00 B");
-        assert_eq!(common::human_bytes(2 * 1024), "2.00 KiB");
+        assert_eq!(render::human_bytes(2), "2.00 B");
+        assert_eq!(render::human_bytes(2 * 1024), "2.00 KiB");
     }
 
     #[test]

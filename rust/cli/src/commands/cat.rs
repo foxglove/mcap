@@ -8,14 +8,14 @@ use mcap::sans_io::indexed_reader::ReadOrder;
 use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor};
 
 use crate::cli::CatCommand;
-use crate::commands::common;
 use crate::context::CommandContext;
+use crate::{render, source};
 
 const MESSAGE_PREVIEW_LEN: usize = 10;
 
 pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
     let opts = CatOptions::from_args(&args)?;
-    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
+    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let stdout = std::io::stdout();
     let mut writer = std::io::BufWriter::new(stdout.lock());
 
@@ -42,9 +42,9 @@ fn cat_file(
     writer: &mut impl std::io::Write,
     file: &std::path::Path,
     opts: &CatOptions,
-    source_options: common::SourceOptions,
+    source_options: source::SourceOptions,
 ) -> Result<bool> {
-    if let Some(remote) = common::try_open_remote_mcap(file, source_options)? {
+    if let Some(remote) = source::try_open_remote_mcap(file, source_options)? {
         let mut json_transcoders = JsonTranscoders::default();
         match cat_remote_indexed(
             writer,
@@ -59,7 +59,7 @@ fn cat_file(
             RemoteCatResult::NeedsFullScan => {}
         }
     }
-    let mcap = common::load_path(file, source_options)?;
+    let mcap = source::load_path(file, source_options)?;
     cat_mcap(writer, &mcap, opts)
 }
 
@@ -199,9 +199,9 @@ enum RemoteCatResult {
 fn cat_remote_indexed(
     writer: &mut impl std::io::Write,
     file: &std::path::Path,
-    remote: &common::RemoteMcap,
+    remote: &source::RemoteMcap,
     opts: &CatOptions,
-    source_options: common::SourceOptions,
+    source_options: source::SourceOptions,
     json_transcoders: &mut JsonTranscoders,
 ) -> Result<RemoteCatResult> {
     let summary = remote.summary();
@@ -209,8 +209,8 @@ fn cat_remote_indexed(
         if !source_options.allow_remote_scan {
             bail!(
                 "{}: remote file has no chunk index; reading messages requires opt-in; {}",
-                common::redacted_display(file),
-                common::remote_scan_opt_in_suffix()
+                source::redacted_display(file),
+                source::remote_scan_opt_in_suffix()
             );
         }
         return Ok(RemoteCatResult::NeedsFullScan);
@@ -233,10 +233,10 @@ fn cat_remote_indexed(
             .sum::<u64>();
         bail!(
             "{}: remote cat would read {} message chunks ({} compressed); {}",
-            common::redacted_display(file),
+            source::redacted_display(file),
             planned_chunks.len(),
-            common::human_bytes(compressed_bytes),
-            common::remote_scan_opt_in_suffix()
+            render::human_bytes(compressed_bytes),
+            source::remote_scan_opt_in_suffix()
         );
     }
 
@@ -526,7 +526,7 @@ fn write_message_fields(
     max_preview_bytes: usize,
 ) -> Result<bool> {
     let result: io::Result<()> = (|| {
-        common::write_raw_time(writer, log_time)?;
+        render::write_raw_time(writer, log_time)?;
         write!(writer, " {} [{}] ", topic, schema_name)?;
         write_payload_preview(writer, data, max_preview_bytes)?;
         writeln!(writer)
@@ -552,9 +552,9 @@ fn write_json_message(
             writer,
             "{{\"topic\":{topic},\"sequence\":{sequence},\"log_time\":"
         )?;
-        writer.write_all(common::decimal_time(log_time).as_bytes())?;
+        writer.write_all(render::decimal_time(log_time).as_bytes())?;
         write!(writer, ",\"publish_time\":")?;
-        writer.write_all(common::decimal_time(publish_time).as_bytes())?;
+        writer.write_all(render::decimal_time(publish_time).as_bytes())?;
         writer.write_all(b",\"data\":")?;
         writer.write_all(encoded_data.as_ref())?;
         writer.write_all(b"}\n")
@@ -1303,7 +1303,7 @@ mod tests {
             &mut out,
             Path::new(&url),
             &CatOptions::default(),
-            super::common::SourceOptions::new(true),
+            crate::source::SourceOptions::new(true),
         )
         .expect("remote cat should scan unchunked messages with opt-in");
         assert!(!broken_pipe);
@@ -1326,7 +1326,7 @@ mod tests {
             &mut out,
             Path::new(&url),
             &CatOptions::default(),
-            super::common::SourceOptions::default(),
+            crate::source::SourceOptions::default(),
         )
         .expect_err("remote cat without chunk indexes should require opt-in");
         let message = err.to_string();
@@ -1344,7 +1344,7 @@ mod tests {
             &mut out,
             Path::new(&url),
             &CatOptions::default(),
-            super::common::SourceOptions::default(),
+            crate::source::SourceOptions::default(),
         )
         .expect_err("remote cat should require opt-in before reading chunks");
         assert!(err.to_string().contains("remote cat would read"));

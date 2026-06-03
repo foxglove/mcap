@@ -64,7 +64,7 @@ pub(crate) fn amend_mcap_file(
 ) -> Result<()> {
     let backup_path = make_tail_backup_path(file)?;
     let (layout, mut existing_summary) = {
-        let mapped = crate::commands::common::map_file(file)
+        let mapped = crate::source::map_file(file)
             .with_context(|| format!("failed to read '{}'", file.display()))?;
         let layout = parse_existing_layout(&mapped)?;
         let tail_start = layout.old_data_end_offset as usize;

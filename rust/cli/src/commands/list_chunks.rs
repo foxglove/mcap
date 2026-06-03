@@ -1,15 +1,15 @@
 use anyhow::Result;
 
 use crate::cli::ListChunksCommand;
-use crate::commands::common;
 use crate::context::CommandContext;
+use crate::{render, source};
 
 pub fn run(ctx: &CommandContext, args: ListChunksCommand) -> Result<()> {
-    let parsed = common::parse_mcap_from_path(
+    let parsed = source::parse_mcap_from_path(
         &args.file,
-        common::SourceOptions::new(ctx.allow_remote_scan()),
+        source::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
-    common::print_table(&render_chunk_rows(&parsed.chunk_indexes));
+    render::print_table(&render_chunk_rows(&parsed.chunk_indexes));
     Ok(())
 }
 
@@ -35,8 +35,8 @@ fn render_chunk_rows(chunk_indexes: &[mcap::records::ChunkIndex]) -> Vec<Vec<Str
         rows.push(vec![
             chunk.chunk_start_offset.to_string(),
             chunk.chunk_length.to_string(),
-            common::raw_time(chunk.message_start_time),
-            common::raw_time(chunk.message_end_time),
+            render::raw_time(chunk.message_start_time),
+            render::raw_time(chunk.message_end_time),
             chunk.compression.clone(),
             chunk.compressed_size.to_string(),
             chunk.uncompressed_size.to_string(),

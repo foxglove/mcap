@@ -4,13 +4,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context, Result};
 
 use crate::cli::DoctorCommand;
-use crate::commands::common;
 use crate::context::CommandContext;
+use crate::source;
 
 pub fn run(ctx: &CommandContext, args: DoctorCommand) -> Result<()> {
-    let mcap = common::load_path(
+    let mcap = source::load_path(
         &args.file,
-        common::SourceOptions::new(ctx.allow_remote_scan()),
+        source::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
     if ctx.verbose() > 0 {
         println!("Examining {}", args.file.display());
