@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::{Context, Result};
 
 use crate::cli::AddAttachmentCommand;
-use crate::commands::add::amend::{self, AttachmentToAdd};
+use crate::commands::add::shared::{self, AttachmentToAdd};
 use crate::context::CommandContext;
 use crate::render::parse_timestamp_or_nanos;
 
@@ -50,7 +50,7 @@ pub fn run(_ctx: &CommandContext, args: AddAttachmentCommand) -> Result<()> {
         data: attachment_data,
     };
 
-    amend::amend_mcap_file(&args.file, &[attachment], &[])
+    shared::amend_mcap_file(&args.file, &[attachment], &[])
         .with_context(|| format!("failed to add attachment to '{}'", args.file.display()))?;
     Ok(())
 }

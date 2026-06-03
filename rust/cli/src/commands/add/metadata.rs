@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use anyhow::{Context, Result};
 
 use crate::cli::AddMetadataCommand;
-use crate::commands::add::amend;
+use crate::commands::add::shared;
 use crate::context::CommandContext;
 
 pub fn run(_ctx: &CommandContext, args: AddMetadataCommand) -> Result<()> {
@@ -12,7 +12,7 @@ pub fn run(_ctx: &CommandContext, args: AddMetadataCommand) -> Result<()> {
         name: args.name,
         metadata: metadata_map,
     };
-    amend::amend_mcap_file(&args.file, &[], &[metadata])
+    shared::amend_mcap_file(&args.file, &[], &[metadata])
         .with_context(|| format!("failed to add metadata to '{}'", args.file.display()))?;
     Ok(())
 }
