@@ -1193,7 +1193,21 @@ mod tests {
                     })
                     .and_then(|range| range.split_once('-'))
                     .and_then(|(start, end)| {
-                        Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?))
+                        // Supports `S-E` (bounded), `-N` (suffix), and `S-` (open ended)
+                        // forms, resolving each to an inclusive (start, end) over the body.
+                        let len = body.len();
+                        match (start.trim(), end.trim()) {
+                            ("", suffix) => {
+                                let n = suffix.parse::<usize>().ok()?;
+                                Some((len.saturating_sub(n), len.saturating_sub(1)))
+                            }
+                            (start, "") => {
+                                Some((start.parse::<usize>().ok()?, len.saturating_sub(1)))
+                            }
+                            (start, end) => {
+                                Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?))
+                            }
+                        }
                     });
                 if let Some((start, end)) = requested_range {
                     let end = end.min(body.len().saturating_sub(1));

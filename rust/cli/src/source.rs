@@ -21,6 +21,14 @@ pub const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
 const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = 37;
+// Size of the single range request issued from the end of a remote file to discover
+// the summary section. One read proves range support (for HTTP), discovers the file
+// size via `Content-Range`, and in the common case already contains the whole summary
+// section (footer + summary + summary offset records). When the summary is larger than
+// this, exactly one additional range request back-fills the missing prefix. 256 KiB
+// comfortably covers the summaries of typical multi-hundred-MB to low-GB files while
+// keeping the per-open transfer small on bandwidth-constrained links.
+const REMOTE_SUMMARY_TAIL_BYTES: u64 = 256 * 1024;
 // Guards remote summary discovery against corrupt or hostile footers that point
 // `summary_start` near the beginning of a large file, which would otherwise turn
 // an index-only operation into a near-full-file range read without opt-in.
@@ -146,7 +154,7 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
         match open_remote_range_reader(path)? {
             Some(mut reader) => {
                 if let Some(summary) =
-                    read_summary_from_remote(&reader, options).with_context(|| {
+                    read_summary_from_remote(&mut reader, options).with_context(|| {
                         format!(
                             "failed to read remote summary from {}",
                             redacted_display(path)
@@ -274,7 +282,7 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
     if !is_remote_url(path) {
         return Ok(None);
     }
-    let Some(reader) = open_remote_range_reader(path)? else {
+    let Some(mut reader) = open_remote_range_reader(path)? else {
         if !options.allow_remote_scan {
             bail!(
                 "{}: remote server does not support range requests; {}",
@@ -284,7 +292,7 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
         }
         return Ok(None);
     };
-    let Some(summary) = read_summary_from_remote(&reader, options).with_context(|| {
+    let Some(summary) = read_summary_from_remote(&mut reader, options).with_context(|| {
         format!(
             "failed to read remote summary from {}",
             redacted_display(path)
@@ -305,19 +313,41 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RemoteUrlKind {
+    /// Plain HTTP(S). Range support is not guaranteed: a server may ignore `Range`
+    /// and return the whole body, which we detect and treat as "no range support".
     Http,
-    ObjectStore,
+    /// Cloud object store that supports HTTP suffix range requests (`bytes=-N`), so
+    /// the file size and trailing summary can be fetched in a single request without
+    /// a prior HEAD. Covers AWS S3 (and S3-compatible) and Google Cloud Storage.
+    CloudSuffix,
+    /// Cloud object store that does not support suffix range requests (Azure Blob
+    /// Storage). Bounded ranges work, so we discover the size with a HEAD first and
+    /// then read a bounded tail. `object_store` rejects `GetRange::Suffix` for Azure
+    /// before issuing any request.
+    CloudNoSuffix,
 }
 
 impl RemoteUrlKind {
     fn from_scheme(scheme: &str) -> Option<Self> {
         match scheme.to_ascii_lowercase().as_str() {
             "http" | "https" => Some(Self::Http),
-            "s3" | "s3a" | "gs" | "az" | "adl" | "azure" | "abfs" | "abfss" => {
-                Some(Self::ObjectStore)
-            }
+            "s3" | "s3a" | "gs" => Some(Self::CloudSuffix),
+            "az" | "adl" | "azure" | "abfs" | "abfss" => Some(Self::CloudNoSuffix),
             _ => None,
         }
+    }
+
+    /// Whether range support is guaranteed by the store. When false (HTTP), an
+    /// open-time read that comes back without partial content means the server does
+    /// not honor ranges and the caller must fall back to a scan/full download.
+    fn range_support_is_guaranteed(self) -> bool {
+        !matches!(self, Self::Http)
+    }
+
+    /// Whether `bytes=-N` suffix range requests are supported, letting us fetch the
+    /// tail (and learn the size) in a single request without a prior HEAD.
+    fn supports_suffix_range(self) -> bool {
+        !matches!(self, Self::CloudNoSuffix)
     }
 }
 
@@ -371,7 +401,9 @@ impl RemoteUrl {
                 vec![("allow_http".to_string(), "true".to_string())]
             }
             RemoteUrlKind::Http => Vec::new(),
-            RemoteUrlKind::ObjectStore => object_store_options_from_env_vars(vars),
+            RemoteUrlKind::CloudSuffix | RemoteUrlKind::CloudNoSuffix => {
+                object_store_options_from_env_vars(vars)
+            }
         }
     }
 
@@ -430,33 +462,141 @@ impl ObjectStoreSource {
             .size)
     }
 
-    fn probe_http_range_size(&self) -> Result<Option<u64>> {
-        let response = match self.runtime.block_on(self.store.get_opts(
+    /// Read a bounded byte range and return its bytes, validating the content
+    /// encoding. The range is assumed to be valid (non-empty, within the object).
+    fn get_range(&self, range: std::ops::Range<u64>) -> Result<Vec<u8>> {
+        let response = self
+            .runtime
+            .block_on(self.store.get_opts(
+                &self.path,
+                GetOptions {
+                    range: Some(GetRange::Bounded(range)),
+                    ..GetOptions::default()
+                },
+            ))
+            .with_context(|| format!("failed to fetch range from {}", self.display_url))?;
+        validate_identity_content_encoding(&response.attributes, &self.display_url)?;
+        let bytes = self
+            .runtime
+            .block_on(response.bytes())
+            .with_context(|| format!("failed to read range from {}", self.display_url))?;
+        Ok(bytes.to_vec())
+    }
+
+    /// Probe bounded range support with a one-byte request, returning the object
+    /// size parsed from `Content-Range`. `Ok(None)` means the server does not honor
+    /// range requests at all. Used as a fallback for HTTP servers that accept bounded
+    /// ranges but reject suffix ranges, and to learn the size without a HEAD (which
+    /// some HTTP servers reject).
+    fn probe_bounded_range_size(&self) -> Result<Option<u64>> {
+        match self.runtime.block_on(self.store.get_opts(
             &self.path,
             GetOptions {
                 range: Some(GetRange::Bounded(0..1)),
                 ..GetOptions::default()
             },
         )) {
-            Ok(response) => response,
-            Err(err) if remote_range_not_supported(&err) => return Ok(None),
-            Err(err) => {
-                return Err(err)
-                    .with_context(|| format!("failed to fetch range from {}", self.display_url));
+            Ok(response) => {
+                validate_identity_content_encoding(&response.attributes, &self.display_url)?;
+                // A `*` total in `Content-Range` fails object_store's parse and
+                // surfaces as a fetch error rather than a bogus size.
+                Ok(Some(response.meta.size))
             }
-        };
-        validate_identity_content_encoding(&response.attributes, &self.display_url)?;
-        // Relies on object_store parsing a numeric total from `Content-Range`
-        // (for example `bytes 0-0/1234`). A `*` total fails object_store's parse and
-        // surfaces above as a fetch error rather than a bogus size.
-        Ok(Some(response.meta.size))
+            Err(err) if remote_range_not_supported(&err) => Ok(None),
+            Err(err) => {
+                Err(err).with_context(|| format!("failed to fetch range from {}", self.display_url))
+            }
+        }
     }
+
+    /// Read the final `tail_bytes` of an object of known `size` as a bounded range.
+    fn bounded_tail(&self, size: u64, tail_bytes: u64) -> Result<RemoteTail> {
+        let bytes = self.get_range(size.saturating_sub(tail_bytes)..size)?;
+        let start = size.saturating_sub(bytes.len() as u64);
+        Ok(RemoteTail { start, bytes })
+    }
+
+    /// Read the final `tail_bytes` of the object in a single request, returning the
+    /// file size and the fetched tail. Returns `Ok(None)` only when the store does
+    /// not support range requests at all (an HTTP server that ignores `Range`),
+    /// signalling the caller to fall back to a scan/full download.
+    fn read_summary_tail(
+        &self,
+        kind: RemoteUrlKind,
+        tail_bytes: u64,
+    ) -> Result<Option<(u64, RemoteTail)>> {
+        if kind.supports_suffix_range() {
+            // A suffix request proves range support, discovers the size via
+            // `Content-Range`, and returns the tail in one round trip. If the object
+            // is shorter than `tail_bytes`, servers return the entire object.
+            match self.runtime.block_on(self.store.get_opts(
+                &self.path,
+                GetOptions {
+                    range: Some(GetRange::Suffix(tail_bytes)),
+                    ..GetOptions::default()
+                },
+            )) {
+                Ok(response) => {
+                    validate_identity_content_encoding(&response.attributes, &self.display_url)?;
+                    // Relies on object_store parsing a numeric total from
+                    // `Content-Range` (for example `bytes 9-99/100`). A `*` total
+                    // fails object_store's parse and surfaces as a fetch error rather
+                    // than a bogus size.
+                    let size = response.meta.size;
+                    let bytes = self
+                        .runtime
+                        .block_on(response.bytes())
+                        .with_context(|| format!("failed to read range from {}", self.display_url))?
+                        .to_vec();
+                    let start = size.saturating_sub(bytes.len() as u64);
+                    return Ok(Some((size, RemoteTail { start, bytes })));
+                }
+                // HTTP servers may honor bounded ranges but not suffix ranges, either
+                // ignoring the suffix (`200` -> `NotSupported`) or rejecting it (e.g.
+                // `416`, `500`, etc.). object_store does not expose every
+                // unsupported-suffix case as a distinct error, so retry with a bounded
+                // probe and let that request decide whether ranges are usable or the
+                // caller should fall back to a plain GET/full scan.
+                Err(_) if !kind.range_support_is_guaranteed() => {
+                    return Ok(match self.probe_bounded_range_size()? {
+                        Some(size) => Some((size, self.bounded_tail(size, tail_bytes)?)),
+                        None => None,
+                    });
+                }
+                // A suffix-capable cloud store should never report the suffix as
+                // unsupported, but if it does we still have guaranteed range support,
+                // so fall through to the bounded path using a HEAD-discovered size.
+                Err(err) if remote_range_not_supported(&err) => {}
+                Err(err) => {
+                    return Err(err).with_context(|| {
+                        format!("failed to fetch range from {}", self.display_url)
+                    });
+                }
+            }
+        }
+
+        // Cloud stores with guaranteed range support but no suffix support (Azure):
+        // discover the size with a HEAD and read a bounded tail.
+        let size = self.head_size()?;
+        Ok(Some((size, self.bounded_tail(size, tail_bytes)?)))
+    }
+}
+
+/// The trailing bytes of a remote object fetched in a single request, used to
+/// discover the summary section. `start` is the absolute file offset of `bytes[0]`.
+#[derive(Debug)]
+struct RemoteTail {
+    start: u64,
+    bytes: Vec<u8>,
 }
 
 pub struct RemoteRangeReader {
     source: ObjectStoreSource,
     size: u64,
     offset: u64,
+    // Trailing bytes prefetched at open time, consumed once by summary discovery.
+    // Cleared afterwards so it does not linger while the reader services data reads.
+    tail: Option<RemoteTail>,
 }
 
 impl RemoteRangeReader {
@@ -464,16 +604,14 @@ impl RemoteRangeReader {
         let remote_url = RemoteUrl::parse(path)?;
         let kind = remote_url.kind;
         let source = ObjectStoreSource::open_remote(remote_url)?;
-        let Some(size) = (match kind {
-            RemoteUrlKind::Http => source.probe_http_range_size()?,
-            RemoteUrlKind::ObjectStore => Some(source.head_size()?),
-        }) else {
+        let Some((size, tail)) = source.read_summary_tail(kind, REMOTE_SUMMARY_TAIL_BYTES)? else {
             return Ok(None);
         };
         Ok(Some(Self {
             source,
             size,
             offset: 0,
+            tail: Some(tail),
         }))
     }
 
@@ -488,6 +626,34 @@ impl RemoteRangeReader {
             },
             size,
             offset: 0,
+            tail: None,
+        })
+    }
+
+    // Construct a reader whose prefetched tail covers only `[tail_start, size)`,
+    // forcing summary discovery to back-fill the missing prefix via a range read.
+    #[cfg(test)]
+    fn new_for_test_with_tail(
+        store: Arc<dyn ObjectStore>,
+        path: ObjectStorePath,
+        bytes: Vec<u8>,
+        tail_start: u64,
+    ) -> Result<Self> {
+        let size = bytes.len() as u64;
+        let tail = RemoteTail {
+            start: tail_start,
+            bytes: bytes[tail_start as usize..].to_vec(),
+        };
+        Ok(Self {
+            source: ObjectStoreSource {
+                runtime: object_store_runtime()?,
+                store,
+                path,
+                display_url: "memory:///test".to_string(),
+            },
+            size,
+            offset: 0,
+            tail: Some(tail),
         })
     }
 
@@ -499,24 +665,7 @@ impl RemoteRangeReader {
             .checked_add(length as u64)
             .map(|end| end.min(self.size))
             .ok_or_else(|| anyhow::anyhow!("remote range overflow"))?;
-        let response = self
-            .source
-            .runtime
-            .block_on(self.source.store.get_opts(
-                &self.source.path,
-                GetOptions {
-                    range: Some(GetRange::Bounded(offset..end)),
-                    ..GetOptions::default()
-                },
-            ))
-            .with_context(|| format!("failed to fetch range from {}", self.source.display_url))?;
-        validate_identity_content_encoding(&response.attributes, &self.source.display_url)?;
-        let bytes = self
-            .source
-            .runtime
-            .block_on(response.bytes())
-            .with_context(|| format!("failed to read range from {}", self.source.display_url))?;
-        Ok(bytes.to_vec())
+        self.source.get_range(offset..end)
     }
 
     fn size(&self) -> u64 {
@@ -706,7 +855,7 @@ fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()
 }
 
 fn read_summary_from_remote(
-    reader: &RemoteRangeReader,
+    reader: &mut RemoteRangeReader,
     options: SourceOptions,
 ) -> Result<Option<mcap::Summary>> {
     let file_size = reader.size();
@@ -715,24 +864,39 @@ fn read_summary_from_remote(
         return Err(mcap::McapError::UnexpectedEof.into());
     }
 
-    let footer_start = file_size - tail_len;
-    let tail = reader.read_range(footer_start, FOOTER_RECORD_AND_END_MAGIC_LEN)?;
-    if tail.len() != FOOTER_RECORD_AND_END_MAGIC_LEN {
+    // The tail was prefetched at open time. Consume it here; subsequent data reads
+    // do not need it. It always covers at least the footer + trailing magic.
+    let tail = reader
+        .tail
+        .take()
+        .ok_or_else(|| anyhow::anyhow!("remote reader is missing its prefetched tail"))?;
+    if (tail.bytes.len() as u64) < tail_len || tail.start > file_size - tail_len {
         return Err(mcap::McapError::UnexpectedEof.into());
     }
-    if tail[0] != records::op::FOOTER {
+    // The `footer_bytes` / `summary_end_in_tail` slicing below assumes the tail ends
+    // exactly at EOF; both `read_summary_tail` paths uphold this by construction.
+    debug_assert_eq!(
+        tail.start + tail.bytes.len() as u64,
+        file_size,
+        "prefetched remote tail must end at end of file"
+    );
+
+    let footer_start = file_size - tail_len;
+    let footer_bytes = &tail.bytes[tail.bytes.len() - FOOTER_RECORD_AND_END_MAGIC_LEN..];
+    if footer_bytes[0] != records::op::FOOTER {
         return Err(mcap::McapError::BadFooter.into());
     }
-    let record_len = u64::from_le_bytes(tail[1..9].try_into().expect("footer length slice"));
+    let record_len =
+        u64::from_le_bytes(footer_bytes[1..9].try_into().expect("footer length slice"));
     if record_len != 20 {
         return Err(mcap::McapError::BadFooter.into());
     }
-    if &tail[FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()..] != mcap::MAGIC {
+    if &footer_bytes[FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()..] != mcap::MAGIC {
         return Err(mcap::McapError::BadMagic.into());
     }
 
     let mut cursor =
-        std::io::Cursor::new(&tail[9..FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()]);
+        std::io::Cursor::new(&footer_bytes[9..FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()]);
     let footer = records::Footer::read_le(&mut cursor)?;
     if footer.summary_start == 0 {
         return Ok(None);
@@ -750,7 +914,23 @@ fn read_summary_from_remote(
             remote_scan_opt_in_suffix()
         );
     }
-    let summary_bytes = reader.read_range(footer.summary_start, summary_len)?;
+
+    // `[summary_start, footer_start)` is the summary + summary offset region. The
+    // portion at or after `tail.start` is already in the prefetched tail; only the
+    // prefix before the tail (the uncommon large-summary case) needs another request.
+    let summary_end_in_tail = (footer_start - tail.start) as usize;
+    let summary_bytes = if footer.summary_start >= tail.start {
+        let summary_start_in_tail = (footer.summary_start - tail.start) as usize;
+        tail.bytes[summary_start_in_tail..summary_end_in_tail].to_vec()
+    } else {
+        let prefix_len = (tail.start - footer.summary_start) as usize;
+        let mut summary_bytes = reader.read_range(footer.summary_start, prefix_len)?;
+        if summary_bytes.len() != prefix_len {
+            return Err(mcap::McapError::UnexpectedEof.into());
+        }
+        summary_bytes.extend_from_slice(&tail.bytes[..summary_end_in_tail]);
+        summary_bytes
+    };
     if summary_bytes.len() != summary_len {
         return Err(mcap::McapError::UnexpectedEof.into());
     }
@@ -809,6 +989,7 @@ mod tests {
     use std::io::{Read, Seek, SeekFrom, Write};
     use std::net::TcpListener;
     use std::path::Path;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread;
 
@@ -829,6 +1010,20 @@ mod tests {
             .block_on(store.put(&path, bytes.clone().into()))
             .expect("put memory object");
         super::RemoteRangeReader::new_for_test(store, path, bytes.len() as u64)
+            .expect("memory range reader")
+    }
+
+    fn object_store_memory_reader_with_tail(
+        bytes: Vec<u8>,
+        tail_start: u64,
+    ) -> super::RemoteRangeReader {
+        let store = Arc::new(object_store::memory::InMemory::new());
+        let path = object_store::path::Path::from("demo.mcap");
+        let runtime = super::object_store_runtime().expect("runtime");
+        runtime
+            .block_on(store.put(&path, bytes.clone().into()))
+            .expect("put memory object");
+        super::RemoteRangeReader::new_for_test_with_tail(store, path, bytes, tail_start)
             .expect("memory range reader")
     }
 
@@ -853,7 +1048,23 @@ mod tests {
         supports_ranges: bool,
         extra_headers: &'static [(&'static str, &'static str)],
     ) -> String {
-        serve_http_with_options(body, supports_ranges, extra_headers, false, false)
+        serve_http_with_options(body, supports_ranges, extra_headers, false, false, false).0
+    }
+
+    // Like `serve_http` but also returns a counter of HTTP requests received, so tests
+    // can assert how many round trips an operation makes. Each request uses a fresh
+    // connection (`Connection: close`), so connections accepted == requests.
+    fn serve_http_counting(
+        body: &'static [u8],
+        supports_ranges: bool,
+    ) -> (String, Arc<AtomicUsize>) {
+        serve_http_with_options(body, supports_ranges, &[], false, false, false)
+    }
+
+    // A server that honors bounded ranges (`bytes=S-E`) but rejects suffix ranges
+    // (`bytes=-N`) with `416`, like HTTP servers/proxies that omit the suffix form.
+    fn serve_http_bounded_only(body: &'static [u8]) -> (String, Arc<AtomicUsize>) {
+        serve_http_with_options(body, true, &[], false, false, true)
     }
 
     fn serve_http_with_options(
@@ -863,12 +1074,18 @@ mod tests {
         reject_head: bool,
         // Emit `Content-Range: bytes <start>-<end>/*` (unknown total) instead of a numeric total.
         unknown_range_total: bool,
-    ) -> String {
+        // Reject suffix ranges (`bytes=-N`) with `416` while still honoring bounded
+        // ranges, like HTTP servers that do not implement the suffix form.
+        reject_suffix: bool,
+    ) -> (String, Arc<AtomicUsize>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
         let addr = listener.local_addr().expect("test server addr");
+        let request_count = Arc::new(AtomicUsize::new(0));
+        let server_request_count = request_count.clone();
         thread::spawn(move || {
             for stream in listener.incoming().take(64) {
                 let mut stream = stream.expect("accept test connection");
+                server_request_count.fetch_add(1, Ordering::SeqCst);
                 let mut request = [0u8; 4096];
                 let read = stream.read(&mut request).expect("read request");
                 let request = String::from_utf8_lossy(&request[..read]);
@@ -879,18 +1096,48 @@ mod tests {
                         .expect("write HEAD rejection");
                     continue;
                 }
-                let requested_range = request
+                let range_spec = request
                     .lines()
                     .find_map(|line| line.strip_prefix("Range: bytes="))
                     .or_else(|| {
                         request
                             .lines()
                             .find_map(|line| line.strip_prefix("range: bytes="))
-                    })
-                    .and_then(|range| range.split_once('-'))
-                    .and_then(|(start, end)| {
-                        Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?))
                     });
+                if reject_suffix
+                    && range_spec.is_some_and(|spec| spec.trim_start().starts_with('-'))
+                {
+                    stream
+                        .write_all(
+                            format!(
+                                "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{}\r\nConnection: close\r\n\r\n",
+                                body.len()
+                            )
+                            .as_bytes(),
+                        )
+                        .expect("write 416");
+                    continue;
+                }
+                let requested_range =
+                    range_spec
+                        .and_then(|range| range.split_once('-'))
+                        .and_then(|(start, end)| {
+                            // Supports `S-E` (bounded), `-N` (suffix), and `S-` (open ended)
+                            // forms, resolving each to an inclusive (start, end) over the body.
+                            let len = body.len();
+                            match (start.trim(), end.trim()) {
+                                ("", suffix) => {
+                                    let n = suffix.parse::<usize>().ok()?;
+                                    Some((len.saturating_sub(n), len.saturating_sub(1)))
+                                }
+                                (start, "") => {
+                                    Some((start.parse::<usize>().ok()?, len.saturating_sub(1)))
+                                }
+                                (start, end) => {
+                                    Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?))
+                                }
+                            }
+                        });
                 if let (true, Some((start, end))) = (supports_ranges, requested_range) {
                     let end = end.min(body.len().saturating_sub(1));
                     let start = start.min(end);
@@ -933,7 +1180,7 @@ mod tests {
                 }
             }
         });
-        format!("http://{addr}/demo.mcap")
+        (format!("http://{addr}/demo.mcap"), request_count)
     }
 
     #[test]
@@ -1014,10 +1261,10 @@ mod tests {
     fn remote_range_probe_errors_on_unknown_content_range_total() {
         // object_store cannot parse a `*` total in `Content-Range`, so the probe must
         // surface a fetch error instead of trusting a bogus size. This guards the
-        // assumption documented in `probe_http_range_size`.
+        // assumption documented in `read_summary_tail`.
         let (buffer, _) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let url = serve_http_with_options(body, true, &[], false, true);
+        let (url, _requests) = serve_http_with_options(body, true, &[], false, true, false);
         let err =
             match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
                 Ok(_) => panic!("unknown range total should surface as an error, not a bogus size"),
@@ -1093,6 +1340,29 @@ mod tests {
             "abfss://container@account.dfs.core.windows.net/demo.mcap",
         ] {
             assert!(super::is_remote_url(Path::new(url)), "{url}");
+        }
+    }
+
+    #[test]
+    fn remote_url_kind_classifies_suffix_capability() {
+        use super::RemoteUrlKind;
+        for scheme in ["http", "https"] {
+            let kind = RemoteUrlKind::from_scheme(scheme).expect(scheme);
+            assert_eq!(kind, RemoteUrlKind::Http, "{scheme}");
+            assert!(kind.supports_suffix_range(), "{scheme}");
+            assert!(!kind.range_support_is_guaranteed(), "{scheme}");
+        }
+        for scheme in ["s3", "s3a", "gs"] {
+            let kind = RemoteUrlKind::from_scheme(scheme).expect(scheme);
+            assert_eq!(kind, RemoteUrlKind::CloudSuffix, "{scheme}");
+            assert!(kind.supports_suffix_range(), "{scheme}");
+            assert!(kind.range_support_is_guaranteed(), "{scheme}");
+        }
+        for scheme in ["az", "azure", "adl", "abfs", "abfss"] {
+            let kind = RemoteUrlKind::from_scheme(scheme).expect(scheme);
+            assert_eq!(kind, RemoteUrlKind::CloudNoSuffix, "{scheme}");
+            assert!(!kind.supports_suffix_range(), "{scheme}");
+            assert!(kind.range_support_is_guaranteed(), "{scheme}");
         }
     }
 
@@ -1271,15 +1541,88 @@ mod tests {
     }
 
     #[test]
+    fn remote_summary_uses_single_http_request_when_tail_contains_summary() {
+        // The whole point of the tail prefetch: when the summary fits in the tail,
+        // summary discovery must take exactly one HTTP request (no probe/HEAD/footer).
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let (url, requests) = serve_http_counting(body, true);
+        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
+            .expect("remote summary read")
+            .expect("summary should be present");
+        assert!(remote.summary().channels.contains_key(&channel_id));
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            1,
+            "summary discovery should make exactly one range request"
+        );
+    }
+
+    #[test]
+    fn remote_summary_reads_from_prefetched_tail_without_extra_request() {
+        // A tail covering the whole file (tail_start == 0) must yield the summary
+        // entirely from the prefetched bytes, with no back-fill range read.
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let mut reader = object_store_memory_reader_with_tail(buffer, 0);
+        let summary = super::read_summary_from_remote(&mut reader, super::SourceOptions::default())
+            .expect("summary read")
+            .expect("summary should be present");
+        assert!(summary.channels.contains_key(&channel_id));
+    }
+
+    #[test]
+    fn remote_summary_backfills_prefix_when_tail_is_short() {
+        // Simulate a summary larger than the prefetched tail: the tail starts after
+        // `summary_start`, so discovery must issue one back-fill read for the prefix.
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let footer_start = buffer.len() - super::FOOTER_RECORD_AND_END_MAGIC_LEN;
+        let summary_start = u64::from_le_bytes(
+            buffer[footer_start + 9..footer_start + 17]
+                .try_into()
+                .expect("summary_start slice"),
+        );
+        assert!(summary_start > 0, "test MCAP must have a summary section");
+        // Place the tail boundary strictly inside the summary region so the prefix
+        // `[summary_start, tail_start)` is missing from the tail but the footer is not.
+        let tail_start = summary_start + 1;
+        assert!(tail_start <= footer_start as u64);
+
+        let mut reader = object_store_memory_reader_with_tail(buffer, tail_start);
+        let summary = super::read_summary_from_remote(&mut reader, super::SourceOptions::default())
+            .expect("summary read with back-fill")
+            .expect("summary should be present");
+        assert!(summary.channels.contains_key(&channel_id));
+    }
+
+    #[test]
     fn remote_mcap_summary_uses_range_get_when_head_is_rejected() {
         let (buffer, channel_id) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let url = serve_http_with_options(body, true, &[], true, false);
+        let (url, _requests) = serve_http_with_options(body, true, &[], true, false, false);
         let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
             .expect("remote summary should use range GET, not HEAD")
             .expect("summary should be present");
 
         assert!(remote.summary().channels.contains_key(&channel_id));
+    }
+
+    #[test]
+    fn remote_summary_recovers_when_server_rejects_suffix_ranges() {
+        // A server that honors bounded ranges but rejects suffix ranges must still
+        // open without a scan: the suffix request fails, we fall back to a bounded
+        // probe for the size, then read a bounded tail (suffix + probe + tail = 3).
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let (url, requests) = serve_http_bounded_only(body);
+        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
+            .expect("bounded-only server should open without a scan")
+            .expect("summary should be present");
+        assert!(remote.summary().channels.contains_key(&channel_id));
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            3,
+            "expected suffix attempt + bounded probe + bounded tail"
+        );
     }
 
     #[test]
