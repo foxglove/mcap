@@ -113,51 +113,40 @@ After the Rust CLI is in production, the following is a list of potential improv
    - Before Rust CLI 1.0, extend this pattern to metadata/attachment-preserving
      transforms so those commands do not need whole-file fallback for HTTP(S) and
      future object-store inputs.
-9. Use one HTTP client stack:
-   - The CLI currently uses `ureq` for HTTP(S) remote inputs and `reqwest`
-     through `object_store` for S3, GCS, and Azure Blob Storage inputs. Both use
-     rustls, but maintaining two HTTP client stacks increases binary size,
-     dependency surface area, and subtle behavior differences (for example root
-     certificate handling).
-   - Before Rust CLI 1.0, remove the direct `ureq` HTTP implementation and route
-     HTTP(S) remote inputs through the same `reqwest`/`object_store` stack used
-     for object stores, preserving the current remote scan opt-in behavior.
-     Prefer the platform's native certificate store for this unified stack
-     rather than shipping a separate bundled web PKI root set.
-10. `recover` chunk recompression optimization (deferred for valid chunks):
-    - `recover` currently decodes every chunk, validates its records, and
-      re-writes all records through the writer (which rebuilds chunks, indexes,
-      the summary section, and CRCs). This guarantees a valid, readable output
-      and is implemented entirely in the CLI with no new `mcap` crate public API.
-    - The cost is that valid chunks are recompressed even when their compression
-      already matches the requested output compression. Go's `recover` avoids
-      this by copying compressed chunk bytes through verbatim (the fast
-      passthrough path from Go PR #1372,
-      https://github.com/foxglove/mcap/pull/1372).
-    - We deliberately do NOT do blind passthrough: it was a performance
-      optimization that never validated chunk contents, so a chunk with a
-      corrupt compressed payload (or a bad `uncompressed_crc`) is copied through
-      and can produce an unreadable file. Always-valid output is a hard
-      invariant.
-    - A safe "avoid recompression" optimization still has to decode and strictly
-      scan every chunk (you cannot prove a chunk decodes without decoding it; the
-      CRC is over the uncompressed data), and may reuse the original compressed
-      bytes only when the chunk's records frame and parse cleanly and its
-      compression already matches the target. It would also recompute and fix the
-      stored CRC rather than propagate a bad one.
-    - Before Rust CLI 1.0, decide whether to add this optimization. It requires
-      new public `mcap` crate API (a compatibility commitment): a
-      `Writer::write_chunk(header, data, &[MessageIndex])` to append an
-      already-compressed chunk plus its message indexes (updating the chunk index
-      and statistics), summary-only schema/channel registration so
-      schemas/channels inside a copied chunk still appear in the summary without
-      duplicate loose records, and optionally a public standalone-chunk decoder.
-      The same work could make `--compression preserve` preserve compression per
-      chunk instead of normalizing output to the first recovered chunk's
-      compression.
-      Adding this later is purely additive, so we ship the always-re-encode
-      version now and revisit if recompression cost matters in practice.
-11. `recover` out-of-order schema/channel handling:
+9. `recover` chunk recompression optimization (deferred for valid chunks):
+   - `recover` currently decodes every chunk, validates its records, and
+     re-writes all records through the writer (which rebuilds chunks, indexes,
+     the summary section, and CRCs). This guarantees a valid, readable output
+     and is implemented entirely in the CLI with no new `mcap` crate public API.
+   - The cost is that valid chunks are recompressed even when their compression
+     already matches the requested output compression. Go's `recover` avoids
+     this by copying compressed chunk bytes through verbatim (the fast
+     passthrough path from Go PR #1372,
+     https://github.com/foxglove/mcap/pull/1372).
+   - We deliberately do NOT do blind passthrough: it was a performance
+     optimization that never validated chunk contents, so a chunk with a
+     corrupt compressed payload (or a bad `uncompressed_crc`) is copied through
+     and can produce an unreadable file. Always-valid output is a hard
+     invariant.
+   - A safe "avoid recompression" optimization still has to decode and strictly
+     scan every chunk (you cannot prove a chunk decodes without decoding it; the
+     CRC is over the uncompressed data), and may reuse the original compressed
+     bytes only when the chunk's records frame and parse cleanly and its
+     compression already matches the target. It would also recompute and fix the
+     stored CRC rather than propagate a bad one.
+   - Before Rust CLI 1.0, decide whether to add this optimization. It requires
+     new public `mcap` crate API (a compatibility commitment): a
+     `Writer::write_chunk(header, data, &[MessageIndex])` to append an
+     already-compressed chunk plus its message indexes (updating the chunk index
+     and statistics), summary-only schema/channel registration so
+     schemas/channels inside a copied chunk still appear in the summary without
+     duplicate loose records, and optionally a public standalone-chunk decoder.
+     The same work could make `--compression preserve` preserve compression per
+     chunk instead of normalizing output to the first recovered chunk's
+     compression.
+     Adding this later is purely additive, so we ship the always-re-encode
+     version now and revisit if recompression cost matters in practice.
+10. `recover` out-of-order schema/channel handling:
     - `recover` registers each channel with the writer as soon as it is read, so a
       channel that appears before the schema it references is dropped (along with
       every message on that channel) and the recovery is reported as lossy.
@@ -168,7 +157,7 @@ After the Rust CLI is in production, the following is a list of potential improv
     - Before Rust CLI 1.0, decide whether `recover` should buffer channels with a
       not-yet-seen schema id and flush them once the schema is recovered, rather
       than discarding them on first sight.
-12. Shared lenient-scan infrastructure for `recover` and `doctor`:
+11. Shared lenient-scan infrastructure for `recover` and `doctor`:
     - `recover` and `doctor` independently implement the same lenient, single-pass
       scan of the data section: same permissive `LinearReader` options
       (`emit_chunks`, record-length limit), the same chunk decode via
@@ -188,7 +177,7 @@ After the Rust CLI is in production, the following is a list of potential improv
       `mcap::sans_io`), keeping summary validation and the write path
       command-specific. This would remove the most error-prone duplication and
       force the `doctor`/`recover` policy differences to be stated explicitly.
-13. `recover` attachment-CRC tolerance:
+12. `recover` attachment-CRC tolerance:
     - `recover` tolerates a bad chunk CRC (`with_validate_chunk_crcs(false)`, plus
       explicit `BadChunkCrc` handling) and recomputes a correct CRC on re-encode,
       but it has no equivalent path for a loose attachment: `mcap::parse_record`
