@@ -158,7 +158,6 @@ After the Rust CLI is in production, the following is a list of potential improv
       not-yet-seen schema id and flush them once the schema is recovered, rather
       than discarding them on first sight.
 11. Shared lenient-scan infrastructure for `recover` and `doctor`:
-
     - `recover` and `doctor` independently implement the same lenient, single-pass
       scan of the data section: same permissive `LinearReader` options
       (`emit_chunks`, record-length limit), the same chunk decode via
@@ -176,7 +175,6 @@ After the Rust CLI is in production, the following is a list of potential improv
       scan into one place, keeping summary validation and the write path
       command-specific. This would remove the most error-prone duplication and
       force the `doctor`/`recover` policy differences to be stated explicitly.
-
 12. `recover` attachment-CRC tolerance:
     - `recover` tolerates a bad chunk CRC (`with_validate_chunk_crcs(false)`, plus
       explicit `BadChunkCrc` handling) and recomputes a correct CRC on re-encode,
