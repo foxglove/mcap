@@ -23,52 +23,6 @@ pub fn formatted_time(t: u64) -> String {
     }
 }
 
-pub fn human_bytes(num_bytes: u64) -> String {
-    let prefixes = ["B", "KiB", "MiB", "GiB"];
-    for (index, prefix) in prefixes.iter().enumerate() {
-        let displayed = num_bytes as f64 / 1024f64.powi(index as i32);
-        if displayed <= 1024.0 {
-            return format!("{displayed:.2} {prefix}");
-        }
-    }
-
-    let last = prefixes.len() - 1;
-    let displayed = num_bytes as f64 / 1024f64.powi(last as i32);
-    format!("{displayed:.2} {}", prefixes[last])
-}
-
-pub fn parse_output_compression(value: &str) -> Result<Option<mcap::Compression>> {
-    match value {
-        "zstd" => Ok(Some(mcap::Compression::Zstd)),
-        "lz4" => Ok(Some(mcap::Compression::Lz4)),
-        "none" | "" => Ok(None),
-        _ => bail!(
-            "unrecognized compression format '{value}': valid options are 'lz4', 'zstd', or 'none'"
-        ),
-    }
-}
-
-/// Parse a CLI-supplied timestamp as either integer nanoseconds or an RFC3339 string.
-///
-/// Shared by commands that accept timestamps on the command line (for example
-/// `add attachment` and `filter`).
-pub(crate) fn parse_timestamp_or_nanos(value: &str) -> Result<u64> {
-    if let Ok(nanos) = value.parse::<u64>() {
-        return Ok(nanos);
-    }
-
-    let parsed = chrono::DateTime::parse_from_rfc3339(value)
-        .with_context(|| format!("failed to parse timestamp '{value}'"))?;
-    let seconds = parsed.timestamp();
-    anyhow::ensure!(seconds >= 0, "timestamp is before unix epoch: '{value}'");
-    let seconds = seconds as u64;
-    let nanos = parsed.timestamp_subsec_nanos() as u64;
-    seconds
-        .checked_mul(1_000_000_000)
-        .and_then(|v| v.checked_add(nanos))
-        .with_context(|| format!("timestamp is out of range: '{value}'"))
-}
-
 fn format_rfc3339_trimmed(dt: chrono::DateTime<chrono::Utc>) -> String {
     let rendered = dt.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
     let Some(without_z) = rendered.strip_suffix('Z') else {
@@ -85,6 +39,20 @@ fn format_rfc3339_trimmed(dt: chrono::DateTime<chrono::Utc>) -> String {
     } else {
         format!("{prefix}.{trimmed}Z")
     }
+}
+
+pub fn human_bytes(num_bytes: u64) -> String {
+    let prefixes = ["B", "KiB", "MiB", "GiB"];
+    for (index, prefix) in prefixes.iter().enumerate() {
+        let displayed = num_bytes as f64 / 1024f64.powi(index as i32);
+        if displayed <= 1024.0 {
+            return format!("{displayed:.2} {prefix}");
+        }
+    }
+
+    let last = prefixes.len() - 1;
+    let displayed = num_bytes as f64 / 1024f64.powi(last as i32);
+    format!("{displayed:.2} {}", prefixes[last])
 }
 
 pub fn format_table(rows: &[Vec<String>]) -> String {
@@ -125,6 +93,38 @@ pub fn print_table(rows: &[Vec<String>]) {
         return;
     }
     print!("{rendered}");
+}
+
+pub fn parse_output_compression(value: &str) -> Result<Option<mcap::Compression>> {
+    match value {
+        "zstd" => Ok(Some(mcap::Compression::Zstd)),
+        "lz4" => Ok(Some(mcap::Compression::Lz4)),
+        "none" | "" => Ok(None),
+        _ => bail!(
+            "unrecognized compression format '{value}': valid options are 'lz4', 'zstd', or 'none'"
+        ),
+    }
+}
+
+/// Parse a CLI-supplied timestamp as either integer nanoseconds or an RFC3339 string.
+///
+/// Shared by commands that accept timestamps on the command line (for example
+/// `add attachment` and `filter`).
+pub(crate) fn parse_timestamp_or_nanos(value: &str) -> Result<u64> {
+    if let Ok(nanos) = value.parse::<u64>() {
+        return Ok(nanos);
+    }
+
+    let parsed = chrono::DateTime::parse_from_rfc3339(value)
+        .with_context(|| format!("failed to parse timestamp '{value}'"))?;
+    let seconds = parsed.timestamp();
+    anyhow::ensure!(seconds >= 0, "timestamp is before unix epoch: '{value}'");
+    let seconds = seconds as u64;
+    let nanos = parsed.timestamp_subsec_nanos() as u64;
+    seconds
+        .checked_mul(1_000_000_000)
+        .and_then(|v| v.checked_add(nanos))
+        .with_context(|| format!("timestamp is out of range: '{value}'"))
 }
 
 #[cfg(test)]

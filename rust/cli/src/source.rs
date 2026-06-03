@@ -42,17 +42,6 @@ pub enum InputData {
     Buffered(Vec<u8>),
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub struct SourceOptions {
-    pub allow_remote_scan: bool,
-}
-
-impl SourceOptions {
-    pub fn new(allow_remote_scan: bool) -> Self {
-        Self { allow_remote_scan }
-    }
-}
-
 impl std::fmt::Debug for InputData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("InputData")
@@ -76,6 +65,17 @@ impl InputData {
             InputData::TempMapped { mmap, .. } => mmap.as_ref(),
             InputData::Buffered(buf) => buf.as_slice(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SourceOptions {
+    pub allow_remote_scan: bool,
+}
+
+impl SourceOptions {
+    pub fn new(allow_remote_scan: bool) -> Self {
+        Self { allow_remote_scan }
     }
 }
 

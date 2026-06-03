@@ -22,6 +22,146 @@ pub struct ParsedMcap {
     pub metadata_indexes: Vec<records::MetadataIndex>,
 }
 
+pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
+    let header = read_header(mcap)?;
+    if let Some(parsed_from_summary) = parse_mcap_from_summary(mcap, header.clone())? {
+        return Ok(parsed_from_summary);
+    }
+
+    eprintln!(
+        "Warning: summary section not available; full scan may be slow. Run `mcap doctor` for details."
+    );
+    parse_mcap_linear(mcap, header)
+}
+
+pub(crate) fn read_header(mcap: &[u8]) -> Result<Option<records::Header>> {
+    let mut reader = mcap::read::LinearReader::new(mcap)?;
+    match reader.next() {
+        Some(Ok(Record::Header(header))) => Ok(Some(header)),
+        Some(Ok(_)) | None => Ok(None),
+        Some(Err(err)) => Err(err.into()),
+    }
+}
+
+fn parse_mcap_from_summary(
+    mcap: &[u8],
+    header: Option<records::Header>,
+) -> Result<Option<ParsedMcap>> {
+    let Some(summary) = mcap::Summary::read(mcap)? else {
+        return Ok(None);
+    };
+    Ok(Some(parsed_mcap_from_summary_ref(header, &summary)))
+}
+
+pub(crate) fn parsed_mcap_from_summary_ref(
+    header: Option<records::Header>,
+    summary: &mcap::Summary,
+) -> ParsedMcap {
+    let mut out = ParsedMcap {
+        header,
+        statistics: summary.stats.clone(),
+        channels: std::collections::BTreeMap::new(),
+        schemas: std::collections::BTreeMap::new(),
+        chunk_indexes: summary.chunk_indexes.clone(),
+        attachment_indexes: summary.attachment_indexes.clone(),
+        metadata_indexes: summary.metadata_indexes.clone(),
+    };
+
+    for schema in summary.schemas.values() {
+        let schema = schema.as_ref();
+        out.schemas.insert(
+            schema.id,
+            ParsedSchema {
+                header: records::SchemaHeader {
+                    id: schema.id,
+                    name: schema.name.clone(),
+                    encoding: schema.encoding.clone(),
+                },
+                data: schema.data.clone().into_owned(),
+            },
+        );
+    }
+
+    for channel in summary.channels.values() {
+        let channel = channel.as_ref();
+        out.channels.insert(
+            channel.id,
+            records::Channel {
+                id: channel.id,
+                schema_id: channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0),
+                topic: channel.topic.clone(),
+                message_encoding: channel.message_encoding.clone(),
+                metadata: channel.metadata.clone(),
+            },
+        );
+    }
+
+    out
+}
+
+fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
+    let mut out = ParsedMcap {
+        header,
+        ..ParsedMcap::default()
+    };
+    for record in mcap::read::LinearReader::new(mcap)? {
+        let record = record?;
+        if let Record::Chunk { header, data } = record {
+            for nested_record in mcap::read::ChunkReader::new(header, data.as_ref())? {
+                collect_record(&mut out, nested_record?)?;
+            }
+        } else {
+            collect_record(&mut out, record)?;
+        }
+    }
+
+    Ok(out)
+}
+
+fn collect_record(out: &mut ParsedMcap, record: Record<'_>) -> Result<()> {
+    match record {
+        Record::Header(header) => {
+            if let Some(existing) = &out.header {
+                if existing != &header {
+                    bail!("conflicting MCAP header records");
+                }
+            } else {
+                out.header = Some(header);
+            }
+        }
+        Record::Statistics(statistics) => {
+            out.statistics = Some(statistics);
+        }
+        Record::Channel(channel) => {
+            if let Some(existing) = out.channels.get(&channel.id) {
+                if existing != &channel {
+                    bail!("conflicting channel definition for id {}", channel.id);
+                }
+            } else {
+                out.channels.insert(channel.id, channel);
+            }
+        }
+        Record::Schema { header, data } => {
+            let schema = ParsedSchema {
+                header,
+                data: data.into_owned(),
+            };
+            if let Some(existing) = out.schemas.get(&schema.header.id) {
+                if existing != &schema {
+                    bail!("conflicting schema definition for id {}", schema.header.id);
+                }
+            } else {
+                out.schemas.insert(schema.header.id, schema);
+            }
+        }
+        Record::ChunkIndex(index) => out.chunk_indexes.push(index),
+        Record::AttachmentIndex(index) => out.attachment_indexes.push(index),
+        Record::MetadataIndex(index) => out.metadata_indexes.push(index),
+        _ => {}
+    }
+    Ok(())
+}
+
 // TODO: keep this in sync with mcap::sans_io::SummaryReader and mcap::read::ChannelAccumulator.
 // A future mcap crate range-summary API should replace this CLI-local parser.
 pub(crate) fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
@@ -134,146 +274,6 @@ pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'
         return Err(mcap::McapError::BadIndex.into());
     }
     Ok(attachment)
-}
-
-pub(crate) fn parsed_mcap_from_summary_ref(
-    header: Option<records::Header>,
-    summary: &mcap::Summary,
-) -> ParsedMcap {
-    let mut out = ParsedMcap {
-        header,
-        statistics: summary.stats.clone(),
-        channels: std::collections::BTreeMap::new(),
-        schemas: std::collections::BTreeMap::new(),
-        chunk_indexes: summary.chunk_indexes.clone(),
-        attachment_indexes: summary.attachment_indexes.clone(),
-        metadata_indexes: summary.metadata_indexes.clone(),
-    };
-
-    for schema in summary.schemas.values() {
-        let schema = schema.as_ref();
-        out.schemas.insert(
-            schema.id,
-            ParsedSchema {
-                header: records::SchemaHeader {
-                    id: schema.id,
-                    name: schema.name.clone(),
-                    encoding: schema.encoding.clone(),
-                },
-                data: schema.data.clone().into_owned(),
-            },
-        );
-    }
-
-    for channel in summary.channels.values() {
-        let channel = channel.as_ref();
-        out.channels.insert(
-            channel.id,
-            records::Channel {
-                id: channel.id,
-                schema_id: channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0),
-                topic: channel.topic.clone(),
-                message_encoding: channel.message_encoding.clone(),
-                metadata: channel.metadata.clone(),
-            },
-        );
-    }
-
-    out
-}
-
-pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
-    let header = read_header(mcap)?;
-    if let Some(parsed_from_summary) = parse_mcap_from_summary(mcap, header.clone())? {
-        return Ok(parsed_from_summary);
-    }
-
-    eprintln!(
-        "Warning: summary section not available; full scan may be slow. Run `mcap doctor` for details."
-    );
-    parse_mcap_linear(mcap, header)
-}
-
-pub(crate) fn read_header(mcap: &[u8]) -> Result<Option<records::Header>> {
-    let mut reader = mcap::read::LinearReader::new(mcap)?;
-    match reader.next() {
-        Some(Ok(Record::Header(header))) => Ok(Some(header)),
-        Some(Ok(_)) | None => Ok(None),
-        Some(Err(err)) => Err(err.into()),
-    }
-}
-
-fn parse_mcap_from_summary(
-    mcap: &[u8],
-    header: Option<records::Header>,
-) -> Result<Option<ParsedMcap>> {
-    let Some(summary) = mcap::Summary::read(mcap)? else {
-        return Ok(None);
-    };
-    Ok(Some(parsed_mcap_from_summary_ref(header, &summary)))
-}
-
-fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
-    let mut out = ParsedMcap {
-        header,
-        ..ParsedMcap::default()
-    };
-    for record in mcap::read::LinearReader::new(mcap)? {
-        let record = record?;
-        if let Record::Chunk { header, data } = record {
-            for nested_record in mcap::read::ChunkReader::new(header, data.as_ref())? {
-                collect_record(&mut out, nested_record?)?;
-            }
-        } else {
-            collect_record(&mut out, record)?;
-        }
-    }
-
-    Ok(out)
-}
-
-fn collect_record(out: &mut ParsedMcap, record: Record<'_>) -> Result<()> {
-    match record {
-        Record::Header(header) => {
-            if let Some(existing) = &out.header {
-                if existing != &header {
-                    bail!("conflicting MCAP header records");
-                }
-            } else {
-                out.header = Some(header);
-            }
-        }
-        Record::Statistics(statistics) => {
-            out.statistics = Some(statistics);
-        }
-        Record::Channel(channel) => {
-            if let Some(existing) = out.channels.get(&channel.id) {
-                if existing != &channel {
-                    bail!("conflicting channel definition for id {}", channel.id);
-                }
-            } else {
-                out.channels.insert(channel.id, channel);
-            }
-        }
-        Record::Schema { header, data } => {
-            let schema = ParsedSchema {
-                header,
-                data: data.into_owned(),
-            };
-            if let Some(existing) = out.schemas.get(&schema.header.id) {
-                if existing != &schema {
-                    bail!("conflicting schema definition for id {}", schema.header.id);
-                }
-            } else {
-                out.schemas.insert(schema.header.id, schema);
-            }
-        }
-        Record::ChunkIndex(index) => out.chunk_indexes.push(index),
-        Record::AttachmentIndex(index) => out.attachment_indexes.push(index),
-        Record::MetadataIndex(index) => out.metadata_indexes.push(index),
-        _ => {}
-    }
-    Ok(())
 }
 
 #[cfg(test)]
