@@ -112,14 +112,14 @@ struct IdMaps {
 
 pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     let opts = build_merge_options(args);
-    let source_options = crate::commands::common::SourceOptions::new(ctx.allow_remote_scan());
+    let source_options = crate::source::SourceOptions::new(ctx.allow_remote_scan());
 
     let mut mapped_inputs = Vec::with_capacity(opts.files.len());
     let mut input_names = Vec::with_capacity(opts.files.len());
     for path in &opts.files {
-        let mapped = crate::commands::common::load_path(path, source_options)?;
+        let mapped = crate::source::load_path(path, source_options)?;
         mapped_inputs.push(mapped);
-        input_names.push(crate::commands::common::redacted_display(path));
+        input_names.push(crate::source::redacted_display(path));
     }
 
     let input_refs: Vec<InputRef<'_>> = mapped_inputs
@@ -137,7 +137,7 @@ pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
         merge_inputs(&input_refs, output, &opts, false)
     } else {
         if std::io::stdout().is_terminal() {
-            bail!("{}", crate::commands::common::PLEASE_REDIRECT);
+            bail!("{}", crate::source::PLEASE_REDIRECT);
         }
         let stdout = std::io::stdout();
         let output = mcap::write::NoSeek::new(stdout.lock());

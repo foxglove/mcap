@@ -3,8 +3,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 
-use crate::cli::AddAttachmentCommand;
-use crate::commands::add_common::{self, AttachmentToAdd};
+use crate::cli::{parse_timestamp_or_nanos, AddAttachmentCommand};
+use crate::commands::add::shared::{self, AttachmentToAdd};
 use crate::context::CommandContext;
 
 pub fn run(_ctx: &CommandContext, args: AddAttachmentCommand) -> Result<()> {
@@ -49,26 +49,9 @@ pub fn run(_ctx: &CommandContext, args: AddAttachmentCommand) -> Result<()> {
         data: attachment_data,
     };
 
-    add_common::amend_mcap_file(&args.file, &[attachment], &[])
+    shared::amend_mcap_file(&args.file, &[attachment], &[])
         .with_context(|| format!("failed to add attachment to '{}'", args.file.display()))?;
     Ok(())
-}
-
-pub(crate) fn parse_timestamp_or_nanos(value: &str) -> Result<u64> {
-    if let Ok(nanos) = value.parse::<u64>() {
-        return Ok(nanos);
-    }
-
-    let parsed = chrono::DateTime::parse_from_rfc3339(value)
-        .with_context(|| format!("failed to parse timestamp '{value}'"))?;
-    let seconds = parsed.timestamp();
-    anyhow::ensure!(seconds >= 0, "timestamp is before unix epoch: '{value}'");
-    let seconds = seconds as u64;
-    let nanos = parsed.timestamp_subsec_nanos() as u64;
-    seconds
-        .checked_mul(1_000_000_000)
-        .and_then(|v| v.checked_add(nanos))
-        .with_context(|| format!("timestamp is out of range: '{value}'"))
 }
 
 fn system_time_to_nanos(time: SystemTime) -> Result<u64> {
@@ -80,22 +63,4 @@ fn system_time_to_nanos(time: SystemTime) -> Result<u64> {
         .checked_mul(1_000_000_000)
         .and_then(|v| v.checked_add(duration.subsec_nanos() as u64))
         .context("timestamp is out of range")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::parse_timestamp_or_nanos;
-
-    #[test]
-    fn parses_nanos_or_rfc3339() {
-        assert_eq!(parse_timestamp_or_nanos("123").expect("nanos"), 123);
-        let ts = parse_timestamp_or_nanos("2023-07-25T15:27:30.132545471Z").expect("rfc3339");
-        assert_eq!(ts, 1_690_298_850_132_545_471);
-    }
-
-    #[test]
-    fn rejects_invalid_timestamp() {
-        let err = parse_timestamp_or_nanos("not-a-time").expect_err("invalid time should fail");
-        assert!(err.to_string().contains("failed to parse timestamp"));
-    }
 }

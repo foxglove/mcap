@@ -1,19 +1,19 @@
 use crate::cli::ListSchemasCommand;
-use crate::commands::common;
 use crate::context::CommandContext;
+use crate::{render, source};
 use anyhow::Result;
 
 pub fn run(ctx: &CommandContext, args: ListSchemasCommand) -> Result<()> {
-    let parsed = common::parse_mcap_from_path(
+    let parsed = source::parse_mcap_from_path(
         &args.file,
-        common::SourceOptions::new(ctx.allow_remote_scan()),
+        source::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
-    common::print_table(&render_schema_rows(&parsed.schemas));
+    render::print_table(&render_schema_rows(&parsed.schemas));
     Ok(())
 }
 
 fn render_schema_rows(
-    schemas: &std::collections::BTreeMap<u16, crate::commands::common::ParsedSchema>,
+    schemas: &std::collections::BTreeMap<u16, crate::parse::ParsedSchema>,
 ) -> Vec<Vec<String>> {
     let mut rows = vec![vec![
         "id".to_string(),
@@ -42,7 +42,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::render_schema_rows;
-    use crate::commands::common::ParsedSchema;
+    use crate::parse::ParsedSchema;
     use mcap::records::SchemaHeader;
 
     #[test]

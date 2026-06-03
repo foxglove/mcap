@@ -172,9 +172,7 @@ After the Rust CLI is in production, the following is a list of potential improv
       these choices independently, so the differences are accidental rather than
       explicit.
     - Before Rust CLI 1.0, decide whether to factor the lenient chunk-decoding
-      scan into one place (a `commands::common` scanner that both commands drive
-      with their own per-record visitors, or a lower-level primitive in
-      `mcap::sans_io`), keeping summary validation and the write path
+      scan into one place, keeping summary validation and the write path
       command-specific. This would remove the most error-prone duplication and
       force the `doctor`/`recover` policy differences to be stated explicitly.
 12. `recover` attachment-CRC tolerance:

@@ -7,8 +7,8 @@ use mcap::records::{self, op, Record};
 use mcap::sans_io::{LinearReadEvent, LinearReader, LinearReaderOptions};
 
 use crate::cli::DuCommand;
-use crate::commands::common;
 use crate::context::CommandContext;
+use crate::{render, source};
 
 const MCAP_MAGIC_SIZE: u64 = mcap::MAGIC.len() as u64;
 const FOOTER_RECORD_SIZE: u64 = 29;
@@ -32,9 +32,9 @@ struct OffsetEntry {
 }
 
 pub fn run(ctx: &CommandContext, args: DuCommand) -> Result<()> {
-    let mcap = common::load_path(
+    let mcap = source::load_path(
         &args.file,
-        common::SourceOptions::new(ctx.allow_remote_scan()),
+        source::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
 
     let (usage, used_approximate) = if args.approximate {
@@ -523,7 +523,7 @@ fn print_record_table(
         ]);
     }
 
-    common::print_table(&rows);
+    render::print_table(&rows);
 }
 
 fn print_topic_table(topic_message_size: &BTreeMap<String, u64>, total_message_size: u64) {
@@ -558,12 +558,12 @@ fn print_topic_table(topic_message_size: &BTreeMap<String, u64>, total_message_s
         };
         rows.push(vec![
             topic.to_string(),
-            common::human_bytes(size),
+            render::human_bytes(size),
             format!("{pct:.6}"),
         ]);
     }
 
-    common::print_table(&rows);
+    render::print_table(&rows);
 }
 
 fn record_kind_name(opcode: u8) -> &'static str {

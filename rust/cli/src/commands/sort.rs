@@ -5,8 +5,8 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 
 use crate::cli::{CompressionFormat, SortCommand};
-use crate::commands::common;
 use crate::context::CommandContext;
+use crate::{parse, source};
 
 #[derive(Debug, Clone)]
 struct SortOptions {
@@ -18,11 +18,11 @@ struct SortOptions {
 
 pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
     let opts = build_sort_options(&args);
-    let input = common::load_path(
+    let input = source::load_path(
         &args.file,
-        common::SourceOptions::new(ctx.allow_remote_scan()),
+        source::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
-    if !common::is_remote_url(&args.file) {
+    if !source::is_remote_url(&args.file) {
         ensure_distinct_input_output(&args.file, &args.output_file)?;
     }
     let summary = validate_sort_input(input.as_slice())?;
@@ -72,7 +72,7 @@ fn sort_to_writer<W: Write + Seek>(
     summary: Option<mcap::Summary>,
     opts: &SortOptions,
 ) -> Result<()> {
-    let header = common::read_header(input)?;
+    let header = parse::read_header(input)?;
     let mut write_options = mcap::WriteOptions::new()
         .use_chunks(opts.chunked)
         .chunk_size(Some(opts.chunk_size))

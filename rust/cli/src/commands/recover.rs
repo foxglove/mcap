@@ -8,9 +8,9 @@ use mcap::sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderO
 use mcap::{Compression, WriteOptions};
 
 use crate::cli::RecoverCommand;
-use crate::commands::common;
 use crate::commands::CommandOutcome;
 use crate::context::CommandContext;
+use crate::source;
 
 // 1 GiB upper limit on top-level record lengths while scanning the stream. This only bounds
 // records read by the linear reader (including a compressed chunk record's own length); it does
@@ -119,8 +119,8 @@ impl RecoverStats {
 /// - 2: command-line parsing error (owned by clap)
 /// - 3: successful recovery with warning-level data loss (`CommandOutcome::Warnings`)
 pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome> {
-    let source_options = common::SourceOptions::new(ctx.allow_remote_scan());
-    let input = common::open_streaming_input(args.file.as_deref(), source_options)?;
+    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let input = source::open_streaming_input(args.file.as_deref(), source_options)?;
     let compression = resolve_compression(&args.compression)?;
 
     let stats = if let Some(output) = &args.output {
@@ -132,7 +132,7 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome>
         stats
     } else {
         if std::io::stdout().is_terminal() {
-            bail!("{}", common::PLEASE_REDIRECT);
+            bail!("{}", source::PLEASE_REDIRECT);
         }
         let stdout = std::io::stdout();
         let writer = mcap::write::NoSeek::new(stdout.lock());

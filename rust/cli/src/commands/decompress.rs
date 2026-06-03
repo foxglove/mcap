@@ -12,6 +12,6 @@ pub fn run(ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
         .use_chunks(true);
     filter::run_transcode(
         options,
-        crate::commands::common::SourceOptions::new(ctx.allow_remote_scan()),
+        crate::source::SourceOptions::new(ctx.allow_remote_scan()),
     )
 }
