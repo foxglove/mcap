@@ -338,6 +338,16 @@ impl RemoteUrlKind {
     }
 }
 
+fn remote_url_kind(path: &Path) -> Option<RemoteUrlKind> {
+    let text = path.to_str()?;
+    let (scheme, _) = text.split_once("://")?;
+    RemoteUrlKind::from_scheme(scheme)
+}
+
+pub fn is_remote_url(path: &Path) -> bool {
+    remote_url_kind(path).is_some()
+}
+
 #[derive(Debug, Clone)]
 struct RemoteUrl {
     url: Url,
@@ -388,16 +398,6 @@ impl RemoteUrl {
             .and_then(|extension| extension.to_str())
             .map(str::to_string)
     }
-}
-
-fn remote_url_kind(path: &Path) -> Option<RemoteUrlKind> {
-    let text = path.to_str()?;
-    let (scheme, _) = text.split_once("://")?;
-    RemoteUrlKind::from_scheme(scheme)
-}
-
-pub fn is_remote_url(path: &Path) -> bool {
-    remote_url_kind(path).is_some()
 }
 
 pub fn remote_or_local_extension(path: &Path) -> Option<String> {
