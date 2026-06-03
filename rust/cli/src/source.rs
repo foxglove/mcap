@@ -1047,7 +1047,7 @@ mod tests {
         supports_ranges: bool,
         extra_headers: &'static [(&'static str, &'static str)],
     ) -> String {
-        serve_http_with_options(body, supports_ranges, extra_headers, false, false).0
+        serve_http_with_options(body, supports_ranges, extra_headers, false, false, false).0
     }
 
     // Like `serve_http` but also returns a counter of HTTP requests received, so tests
@@ -1057,7 +1057,13 @@ mod tests {
         body: &'static [u8],
         supports_ranges: bool,
     ) -> (String, Arc<AtomicUsize>) {
-        serve_http_with_options(body, supports_ranges, &[], false, false)
+        serve_http_with_options(body, supports_ranges, &[], false, false, false)
+    }
+
+    // A server that honors bounded ranges (`bytes=S-E`) but rejects suffix ranges
+    // (`bytes=-N`) with `416`, like HTTP servers/proxies that omit the suffix form.
+    fn serve_http_bounded_only(body: &'static [u8]) -> (String, Arc<AtomicUsize>) {
+        serve_http_with_options(body, true, &[], false, false, true)
     }
 
     fn serve_http_with_options(
@@ -1067,6 +1073,9 @@ mod tests {
         reject_head: bool,
         // Emit `Content-Range: bytes <start>-<end>/*` (unknown total) instead of a numeric total.
         unknown_range_total: bool,
+        // Reject suffix ranges (`bytes=-N`) with `416` while still honoring bounded
+        // ranges, like HTTP servers that do not implement the suffix form.
+        reject_suffix: bool,
     ) -> (String, Arc<AtomicUsize>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
         let addr = listener.local_addr().expect("test server addr");
@@ -1086,32 +1095,48 @@ mod tests {
                         .expect("write HEAD rejection");
                     continue;
                 }
-                let requested_range = request
+                let range_spec = request
                     .lines()
                     .find_map(|line| line.strip_prefix("Range: bytes="))
                     .or_else(|| {
                         request
                             .lines()
                             .find_map(|line| line.strip_prefix("range: bytes="))
-                    })
-                    .and_then(|range| range.split_once('-'))
-                    .and_then(|(start, end)| {
-                        // Supports `S-E` (bounded), `-N` (suffix), and `S-` (open ended)
-                        // forms, resolving each to an inclusive (start, end) over the body.
-                        let len = body.len();
-                        match (start.trim(), end.trim()) {
-                            ("", suffix) => {
-                                let n = suffix.parse::<usize>().ok()?;
-                                Some((len.saturating_sub(n), len.saturating_sub(1)))
-                            }
-                            (start, "") => {
-                                Some((start.parse::<usize>().ok()?, len.saturating_sub(1)))
-                            }
-                            (start, end) => {
-                                Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?))
-                            }
-                        }
                     });
+                if reject_suffix
+                    && range_spec.is_some_and(|spec| spec.trim_start().starts_with('-'))
+                {
+                    stream
+                        .write_all(
+                            format!(
+                                "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{}\r\nConnection: close\r\n\r\n",
+                                body.len()
+                            )
+                            .as_bytes(),
+                        )
+                        .expect("write 416");
+                    continue;
+                }
+                let requested_range =
+                    range_spec
+                        .and_then(|range| range.split_once('-'))
+                        .and_then(|(start, end)| {
+                            // Supports `S-E` (bounded), `-N` (suffix), and `S-` (open ended)
+                            // forms, resolving each to an inclusive (start, end) over the body.
+                            let len = body.len();
+                            match (start.trim(), end.trim()) {
+                                ("", suffix) => {
+                                    let n = suffix.parse::<usize>().ok()?;
+                                    Some((len.saturating_sub(n), len.saturating_sub(1)))
+                                }
+                                (start, "") => {
+                                    Some((start.parse::<usize>().ok()?, len.saturating_sub(1)))
+                                }
+                                (start, end) => {
+                                    Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?))
+                                }
+                            }
+                        });
                 if let (true, Some((start, end))) = (supports_ranges, requested_range) {
                     let end = end.min(body.len().saturating_sub(1));
                     let start = start.min(end);
@@ -1238,7 +1263,7 @@ mod tests {
         // assumption documented in `read_summary_tail`.
         let (buffer, _) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let (url, _requests) = serve_http_with_options(body, true, &[], false, true);
+        let (url, _requests) = serve_http_with_options(body, true, &[], false, true, false);
         let err =
             match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
                 Ok(_) => panic!("unknown range total should surface as an error, not a bogus size"),
@@ -1572,12 +1597,31 @@ mod tests {
     fn remote_mcap_summary_uses_range_get_when_head_is_rejected() {
         let (buffer, channel_id) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let (url, _requests) = serve_http_with_options(body, true, &[], true, false);
+        let (url, _requests) = serve_http_with_options(body, true, &[], true, false, false);
         let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
             .expect("remote summary should use range GET, not HEAD")
             .expect("summary should be present");
 
         assert!(remote.summary().channels.contains_key(&channel_id));
+    }
+
+    #[test]
+    fn remote_summary_recovers_when_server_rejects_suffix_ranges() {
+        // A server that honors bounded ranges but rejects suffix ranges must still
+        // open without a scan: the suffix request fails, we fall back to a bounded
+        // probe for the size, then read a bounded tail (suffix + probe + tail = 3).
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let (url, requests) = serve_http_bounded_only(body);
+        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
+            .expect("bounded-only server should open without a scan")
+            .expect("summary should be present");
+        assert!(remote.summary().channels.contains_key(&channel_id));
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            3,
+            "expected suffix attempt + bounded probe + bounded tail"
+        );
     }
 
     #[test]
