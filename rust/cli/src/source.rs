@@ -872,6 +872,13 @@ fn read_summary_from_remote(
     if (tail.bytes.len() as u64) < tail_len || tail.start > file_size - tail_len {
         return Err(mcap::McapError::UnexpectedEof.into());
     }
+    // The `footer_bytes` / `summary_end_in_tail` slicing below assumes the tail ends
+    // exactly at EOF; both `read_summary_tail` paths uphold this by construction.
+    debug_assert_eq!(
+        tail.start + tail.bytes.len() as u64,
+        file_size,
+        "prefetched remote tail must end at end of file"
+    );
 
     let footer_start = file_size - tail_len;
     let footer_bytes = &tail.bytes[tail.bytes.len() - FOOTER_RECORD_AND_END_MAGIC_LEN..];
