@@ -464,7 +464,8 @@ impl ObjectStoreSource {
         };
         validate_identity_content_encoding(&response.attributes, &self.display_url)?;
         // Relies on object_store parsing a numeric total from `Content-Range`
-        // (for example `bytes 0-0/1234`); servers returning a `*` total are unsupported.
+        // (for example `bytes 0-0/1234`). A `*` total fails object_store's parse and
+        // surfaces above as a fetch error rather than a bogus size.
         Ok(Some(response.meta.size))
     }
 }
@@ -1229,7 +1230,7 @@ mod tests {
         supports_ranges: bool,
         extra_headers: &'static [(&'static str, &'static str)],
     ) -> String {
-        serve_http_with_options(body, supports_ranges, extra_headers, false)
+        serve_http_with_options(body, supports_ranges, extra_headers, false, false)
     }
 
     fn serve_http_with_options(
@@ -1237,6 +1238,8 @@ mod tests {
         supports_ranges: bool,
         extra_headers: &'static [(&'static str, &'static str)],
         reject_head: bool,
+        // Emit `Content-Range: bytes <start>-<end>/*` (unknown total) instead of a numeric total.
+        unknown_range_total: bool,
     ) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
         let addr = listener.local_addr().expect("test server addr");
@@ -1273,10 +1276,14 @@ mod tests {
                         .iter()
                         .map(|(name, value)| format!("{name}: {value}\r\n"))
                         .collect::<String>();
+                    let total = if unknown_range_total {
+                        "*".to_string()
+                    } else {
+                        body.len().to_string()
+                    };
                     let response = format!(
-                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\n{extra_headers}Connection: close\r\n\r\n",
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{total}\r\nAccept-Ranges: bytes\r\n{extra_headers}Connection: close\r\n\r\n",
                         content.len(),
-                        body.len(),
                     );
                     stream
                         .write_all(response.as_bytes())
@@ -1378,6 +1385,23 @@ mod tests {
             };
         let message = format!("{err:#}");
         assert!(message.contains("MCAP remote reads require identity encoding"));
+    }
+
+    #[test]
+    fn remote_range_probe_errors_on_unknown_content_range_total() {
+        // object_store cannot parse a `*` total in `Content-Range`, so the probe must
+        // surface a fetch error instead of trusting a bogus size. This guards the
+        // assumption documented in `probe_http_range_size`.
+        let (buffer, _) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http_with_options(body, true, &[], false, true);
+        let err =
+            match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
+                Ok(_) => panic!("unknown range total should surface as an error, not a bogus size"),
+                Err(err) => err,
+            };
+        let message = format!("{err:#}");
+        assert!(message.contains("failed to fetch range from"));
     }
 
     #[test]
@@ -1627,7 +1651,7 @@ mod tests {
     fn remote_mcap_summary_uses_range_get_when_head_is_rejected() {
         let (buffer, channel_id) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let url = serve_http_with_options(body, true, &[], true);
+        let url = serve_http_with_options(body, true, &[], true, false);
         let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
             .expect("remote summary should use range GET, not HEAD")
             .expect("summary should be present");
