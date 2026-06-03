@@ -458,6 +458,8 @@ impl ObjectStoreSource {
             }
         };
         validate_identity_content_encoding(&response.attributes, &self.display_url)?;
+        // Relies on object_store parsing a numeric total from `Content-Range`
+        // (for example `bytes 0-0/1234`); servers returning a `*` total are unsupported.
         Ok(Some(response.meta.size))
     }
 }
@@ -546,6 +548,9 @@ fn object_store_options_from_env_vars(
         .collect()
 }
 
+// object_store maps a `200 OK` response to a ranged request onto `NotSupported`,
+// which is how we detect a server that ignores `Range` headers. This couples us to
+// object_store's mapping, so the no-range fallback tests guard against version drift.
 fn remote_range_not_supported(err: &object_store::Error) -> bool {
     matches!(err, object_store::Error::NotSupported { .. })
 }
