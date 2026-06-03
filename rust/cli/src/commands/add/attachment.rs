@@ -3,10 +3,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 
-use crate::cli::AddAttachmentCommand;
+use crate::cli::{parse_timestamp_or_nanos, AddAttachmentCommand};
 use crate::commands::add::shared::{self, AttachmentToAdd};
 use crate::context::CommandContext;
-use crate::render::parse_timestamp_or_nanos;
 
 pub fn run(_ctx: &CommandContext, args: AddAttachmentCommand) -> Result<()> {
     let attachment_data = fs::read(&args.attachment_file).with_context(|| {

@@ -7,10 +7,9 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 
-use crate::cli::FilterCommand;
+use crate::cli::{parse_output_compression, parse_timestamp_or_nanos, FilterCommand};
 use crate::context::CommandContext;
-use crate::render::parse_timestamp_or_nanos;
-use crate::{render, source};
+use crate::source;
 
 #[derive(Debug, Clone)]
 struct FilterOptions {
@@ -185,7 +184,7 @@ fn build_filter_options_from_transcode_options(
         end,
         include_metadata: args.include_metadata,
         include_attachments: args.include_attachments,
-        compression: render::parse_output_compression(&args.output_compression)?,
+        compression: parse_output_compression(&args.output_compression)?,
         chunk_size: args.chunk_size,
         use_chunks: args.use_chunks,
     })

@@ -1,7 +1,5 @@
 use std::fmt::Write as _;
 
-use anyhow::{bail, Context, Result};
-
 pub fn decimal_time(t: u64) -> String {
     format!("{}.{:09}", t / 1_000_000_000, t % 1_000_000_000)
 }
@@ -95,43 +93,10 @@ pub fn print_table(rows: &[Vec<String>]) {
     print!("{rendered}");
 }
 
-pub fn parse_output_compression(value: &str) -> Result<Option<mcap::Compression>> {
-    match value {
-        "zstd" => Ok(Some(mcap::Compression::Zstd)),
-        "lz4" => Ok(Some(mcap::Compression::Lz4)),
-        "none" | "" => Ok(None),
-        _ => bail!(
-            "unrecognized compression format '{value}': valid options are 'lz4', 'zstd', or 'none'"
-        ),
-    }
-}
-
-/// Parse a CLI-supplied timestamp as either integer nanoseconds or an RFC3339 string.
-///
-/// Shared by commands that accept timestamps on the command line (for example
-/// `add attachment` and `filter`).
-pub(crate) fn parse_timestamp_or_nanos(value: &str) -> Result<u64> {
-    if let Ok(nanos) = value.parse::<u64>() {
-        return Ok(nanos);
-    }
-
-    let parsed = chrono::DateTime::parse_from_rfc3339(value)
-        .with_context(|| format!("failed to parse timestamp '{value}'"))?;
-    let seconds = parsed.timestamp();
-    anyhow::ensure!(seconds >= 0, "timestamp is before unix epoch: '{value}'");
-    let seconds = seconds as u64;
-    let nanos = parsed.timestamp_subsec_nanos() as u64;
-    seconds
-        .checked_mul(1_000_000_000)
-        .and_then(|v| v.checked_add(nanos))
-        .with_context(|| format!("timestamp is out of range: '{value}'"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
-        decimal_time, format_table, formatted_time, human_bytes, parse_timestamp_or_nanos,
-        print_table, write_raw_time,
+        decimal_time, format_table, formatted_time, human_bytes, print_table, write_raw_time,
     };
 
     #[test]
@@ -200,45 +165,5 @@ mod tests {
     fn human_bytes_scales_units() {
         assert_eq!(human_bytes(2), "2.00 B");
         assert_eq!(human_bytes(2 * 1024), "2.00 KiB");
-    }
-
-    #[test]
-    fn parse_output_compression_supports_known_values() {
-        assert!(matches!(
-            super::parse_output_compression("zstd").expect("zstd should parse"),
-            Some(mcap::Compression::Zstd)
-        ));
-        assert!(matches!(
-            super::parse_output_compression("lz4").expect("lz4 should parse"),
-            Some(mcap::Compression::Lz4)
-        ));
-        assert!(super::parse_output_compression("none")
-            .expect("none should parse")
-            .is_none());
-        assert!(super::parse_output_compression("")
-            .expect("empty should parse")
-            .is_none());
-    }
-
-    #[test]
-    fn parse_output_compression_rejects_unknown_values() {
-        let err =
-            super::parse_output_compression("snappy").expect_err("unknown compression should fail");
-        assert!(err
-            .to_string()
-            .contains("unrecognized compression format 'snappy'"));
-    }
-
-    #[test]
-    fn parses_nanos_or_rfc3339() {
-        assert_eq!(parse_timestamp_or_nanos("123").expect("nanos"), 123);
-        let ts = parse_timestamp_or_nanos("2023-07-25T15:27:30.132545471Z").expect("rfc3339");
-        assert_eq!(ts, 1_690_298_850_132_545_471);
-    }
-
-    #[test]
-    fn rejects_invalid_timestamp() {
-        let err = parse_timestamp_or_nanos("not-a-time").expect_err("invalid time should fail");
-        assert!(err.to_string().contains("failed to parse timestamp"));
     }
 }
