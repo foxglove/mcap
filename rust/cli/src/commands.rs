@@ -1,6 +1,4 @@
-mod add_attachment;
-mod add_common;
-mod add_metadata;
+mod add;
 mod cat;
 mod compress;
 mod convert;
@@ -8,14 +6,9 @@ mod decompress;
 mod doctor;
 mod du;
 mod filter;
-mod get_attachment;
-mod get_metadata;
+mod get;
 mod info;
-mod list_attachments;
-mod list_channels;
-mod list_chunks;
-mod list_metadata;
-mod list_schemas;
+mod list;
 mod merge;
 mod recover;
 mod sort;
@@ -51,21 +44,21 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<CommandOutcome
         Command::Info(args) => info::run(ctx, args).map(|()| CommandOutcome::Success),
 
         Command::Add(args) => match args.command {
-            AddSubcommand::Attachment(args) => add_attachment::run(ctx, args),
-            AddSubcommand::Metadata(args) => add_metadata::run(ctx, args),
+            AddSubcommand::Attachment(args) => add::attachment::run(ctx, args),
+            AddSubcommand::Metadata(args) => add::metadata::run(ctx, args),
         }
         .map(|()| CommandOutcome::Success),
         Command::Get(args) => match args.command {
-            GetSubcommand::Attachment(args) => get_attachment::run(ctx, args),
-            GetSubcommand::Metadata(args) => get_metadata::run(ctx, args),
+            GetSubcommand::Attachment(args) => get::attachment::run(ctx, args),
+            GetSubcommand::Metadata(args) => get::metadata::run(ctx, args),
         }
         .map(|()| CommandOutcome::Success),
         Command::List(args) => match args.command {
-            ListSubcommand::Attachments(args) => list_attachments::run(ctx, args),
-            ListSubcommand::Channels(args) => list_channels::run(ctx, args),
-            ListSubcommand::Chunks(args) => list_chunks::run(ctx, args),
-            ListSubcommand::Metadata(args) => list_metadata::run(ctx, args),
-            ListSubcommand::Schemas(args) => list_schemas::run(ctx, args),
+            ListSubcommand::Attachments(args) => list::attachments::run(ctx, args),
+            ListSubcommand::Channels(args) => list::channels::run(ctx, args),
+            ListSubcommand::Chunks(args) => list::chunks::run(ctx, args),
+            ListSubcommand::Metadata(args) => list::metadata::run(ctx, args),
+            ListSubcommand::Schemas(args) => list::schemas::run(ctx, args),
         }
         .map(|()| CommandOutcome::Success),
 
