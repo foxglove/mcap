@@ -1208,6 +1208,22 @@ mod tests {
             .expect("memory range reader")
     }
 
+    fn summary_mcap_with_channel() -> (Vec<u8>, u16) {
+        let mut buffer = Vec::new();
+        let channel_id = {
+            let mut writer = mcap::Writer::new(std::io::Cursor::new(&mut buffer)).expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            writer.finish().expect("finish writer");
+            channel_id
+        };
+        (buffer, channel_id)
+    }
+
     fn serve_http_with_headers(
         body: &'static [u8],
         supports_ranges: bool,
@@ -1407,69 +1423,6 @@ mod tests {
         assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
-    fn summary_mcap_with_channel() -> (Vec<u8>, u16) {
-        let mut buffer = Vec::new();
-        let channel_id = {
-            let mut writer = mcap::Writer::new(std::io::Cursor::new(&mut buffer)).expect("writer");
-            let schema_id = writer
-                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
-                .expect("schema");
-            let channel_id = writer
-                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
-                .expect("channel");
-            writer.finish().expect("finish writer");
-            channel_id
-        };
-        (buffer, channel_id)
-    }
-
-    #[test]
-    fn remote_mcap_summary_uses_range_reader() {
-        let (buffer, channel_id) = summary_mcap_with_channel();
-        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let url = serve_http(body, true);
-        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
-            .expect("remote summary read")
-            .expect("summary should be present");
-
-        assert!(remote.summary().channels.contains_key(&channel_id));
-    }
-
-    #[test]
-    fn remote_mcap_summary_uses_range_get_when_head_is_rejected() {
-        let (buffer, channel_id) = summary_mcap_with_channel();
-        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let url = serve_http_with_options(body, true, &[], true);
-        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
-            .expect("remote summary should use range GET, not HEAD")
-            .expect("summary should be present");
-
-        assert!(remote.summary().channels.contains_key(&channel_id));
-    }
-
-    #[test]
-    fn remote_mcap_without_range_support_requires_scan_opt_in() {
-        let (buffer, _) = summary_mcap_with_channel();
-        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let url = serve_http(body, false);
-        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
-            .expect_err("non-range HTTP input should require scan opt-in");
-        let message = err.to_string();
-        assert!(message.contains("remote server does not support range requests"));
-        assert!(message.contains("--allow-remote-scan"));
-    }
-
-    #[test]
-    fn remote_mcap_without_range_support_falls_back_with_scan_opt_in() {
-        let (buffer, channel_id) = summary_mcap_with_channel();
-        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let url = serve_http(body, false);
-        let parsed = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::new(true))
-            .expect("non-range HTTP input should materialize with scan opt-in");
-
-        assert!(parsed.channels.contains_key(&channel_id));
-    }
-
     #[test]
     fn remote_url_scheme_is_case_insensitive() {
         assert!(super::is_remote_url(Path::new(
@@ -1656,6 +1609,53 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn remote_mcap_summary_uses_range_reader() {
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http(body, true);
+        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
+            .expect("remote summary read")
+            .expect("summary should be present");
+
+        assert!(remote.summary().channels.contains_key(&channel_id));
+    }
+
+    #[test]
+    fn remote_mcap_summary_uses_range_get_when_head_is_rejected() {
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http_with_options(body, true, &[], true);
+        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
+            .expect("remote summary should use range GET, not HEAD")
+            .expect("summary should be present");
+
+        assert!(remote.summary().channels.contains_key(&channel_id));
+    }
+
+    #[test]
+    fn remote_mcap_without_range_support_requires_scan_opt_in() {
+        let (buffer, _) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http(body, false);
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("non-range HTTP input should require scan opt-in");
+        let message = err.to_string();
+        assert!(message.contains("remote server does not support range requests"));
+        assert!(message.contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn remote_mcap_without_range_support_falls_back_with_scan_opt_in() {
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http(body, false);
+        let parsed = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::new(true))
+            .expect("non-range HTTP input should materialize with scan opt-in");
+
+        assert!(parsed.channels.contains_key(&channel_id));
     }
 
     #[test]
