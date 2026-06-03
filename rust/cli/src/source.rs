@@ -553,9 +553,10 @@ impl ObjectStoreSource {
                 }
                 // HTTP servers may honor bounded ranges but not suffix ranges, either
                 // ignoring the suffix (`200` -> `NotSupported`) or rejecting it (e.g.
-                // `416`). Rather than force a scan, fall back to a bounded probe: it
-                // confirms range support and yields the size, and only if it too shows
-                // no range support do we give up.
+                // `416`, `500`, etc.). object_store does not expose every
+                // unsupported-suffix case as a distinct error, so retry with a bounded
+                // probe and let that request decide whether ranges are usable or the
+                // caller should fall back to a plain GET/full scan.
                 Err(_) if !kind.range_support_is_guaranteed() => {
                     return Ok(match self.probe_bounded_range_size()? {
                         Some(size) => Some((size, self.bounded_tail(size, tail_bytes)?)),
