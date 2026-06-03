@@ -947,6 +947,7 @@ mod tests {
     use std::io::{Read, Seek, SeekFrom, Write};
     use std::net::TcpListener;
     use std::path::Path;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::thread;
 
@@ -1005,7 +1006,14 @@ mod tests {
         supports_ranges: bool,
         extra_headers: &'static [(&'static str, &'static str)],
     ) -> String {
-        serve_http_with_options(body, supports_ranges, extra_headers, false, false)
+        serve_http_with_options(body, supports_ranges, extra_headers, false, false).0
+    }
+
+    // Like `serve_http` but also returns a counter of HTTP requests received, so tests
+    // can assert how many round trips an operation makes. Each request uses a fresh
+    // connection (`Connection: close`), so connections accepted == requests.
+    fn serve_http_counting(body: &'static [u8], supports_ranges: bool) -> (String, Arc<AtomicUsize>) {
+        serve_http_with_options(body, supports_ranges, &[], false, false)
     }
 
     fn serve_http_with_options(
@@ -1015,12 +1023,15 @@ mod tests {
         reject_head: bool,
         // Emit `Content-Range: bytes <start>-<end>/*` (unknown total) instead of a numeric total.
         unknown_range_total: bool,
-    ) -> String {
+    ) -> (String, Arc<AtomicUsize>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
         let addr = listener.local_addr().expect("test server addr");
+        let request_count = Arc::new(AtomicUsize::new(0));
+        let server_request_count = request_count.clone();
         thread::spawn(move || {
             for stream in listener.incoming().take(64) {
                 let mut stream = stream.expect("accept test connection");
+                server_request_count.fetch_add(1, Ordering::SeqCst);
                 let mut request = [0u8; 4096];
                 let read = stream.read(&mut request).expect("read request");
                 let request = String::from_utf8_lossy(&request[..read]);
@@ -1099,7 +1110,7 @@ mod tests {
                 }
             }
         });
-        format!("http://{addr}/demo.mcap")
+        (format!("http://{addr}/demo.mcap"), request_count)
     }
 
     #[test]
@@ -1183,7 +1194,7 @@ mod tests {
         // assumption documented in `read_summary_tail`.
         let (buffer, _) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let url = serve_http_with_options(body, true, &[], false, true);
+        let (url, _requests) = serve_http_with_options(body, true, &[], false, true);
         let err =
             match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
                 Ok(_) => panic!("unknown range total should surface as an error, not a bogus size"),
@@ -1437,6 +1448,24 @@ mod tests {
     }
 
     #[test]
+    fn remote_summary_uses_single_http_request_when_tail_contains_summary() {
+        // The whole point of the tail prefetch: when the summary fits in the tail,
+        // summary discovery must take exactly one HTTP request (no probe/HEAD/footer).
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let (url, requests) = serve_http_counting(body, true);
+        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
+            .expect("remote summary read")
+            .expect("summary should be present");
+        assert!(remote.summary().channels.contains_key(&channel_id));
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            1,
+            "summary discovery should make exactly one range request"
+        );
+    }
+
+    #[test]
     fn remote_summary_reads_from_prefetched_tail_without_extra_request() {
         // A tail covering the whole file (tail_start == 0) must yield the summary
         // entirely from the prefetched bytes, with no back-fill range read.
@@ -1499,7 +1528,7 @@ mod tests {
     fn remote_mcap_summary_uses_range_get_when_head_is_rejected() {
         let (buffer, channel_id) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let url = serve_http_with_options(body, true, &[], true, false);
+        let (url, _requests) = serve_http_with_options(body, true, &[], true, false);
         let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
             .expect("remote summary should use range GET, not HEAD")
             .expect("summary should be present");
