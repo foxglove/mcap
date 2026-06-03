@@ -513,9 +513,7 @@ impl ObjectStoreSource {
                     let bytes = self
                         .runtime
                         .block_on(response.bytes())
-                        .with_context(|| {
-                            format!("failed to read range from {}", self.display_url)
-                        })?
+                        .with_context(|| format!("failed to read range from {}", self.display_url))?
                         .to_vec();
                     let start = size.saturating_sub(bytes.len() as u64);
                     return Ok(Some((size, RemoteTail { start, bytes })));
@@ -523,8 +521,7 @@ impl ObjectStoreSource {
                 // For HTTP, object_store maps a non-partial (`200 OK`) response to
                 // `NotSupported`; that means the server ignores ranges, so fall back.
                 Err(err)
-                    if remote_range_not_supported(&err)
-                        && !kind.range_support_is_guaranteed() =>
+                    if remote_range_not_supported(&err) && !kind.range_support_is_guaranteed() =>
                 {
                     return Ok(None);
                 }
