@@ -1277,6 +1277,29 @@ mod tests {
     }
 
     #[test]
+    fn remote_url_kind_classifies_suffix_capability() {
+        use super::RemoteUrlKind;
+        for scheme in ["http", "https"] {
+            let kind = RemoteUrlKind::from_scheme(scheme).expect(scheme);
+            assert_eq!(kind, RemoteUrlKind::Http, "{scheme}");
+            assert!(kind.supports_suffix_range(), "{scheme}");
+            assert!(!kind.range_support_is_guaranteed(), "{scheme}");
+        }
+        for scheme in ["s3", "s3a", "gs"] {
+            let kind = RemoteUrlKind::from_scheme(scheme).expect(scheme);
+            assert_eq!(kind, RemoteUrlKind::CloudSuffix, "{scheme}");
+            assert!(kind.supports_suffix_range(), "{scheme}");
+            assert!(kind.range_support_is_guaranteed(), "{scheme}");
+        }
+        for scheme in ["az", "azure", "adl", "abfs", "abfss"] {
+            let kind = RemoteUrlKind::from_scheme(scheme).expect(scheme);
+            assert_eq!(kind, RemoteUrlKind::CloudNoSuffix, "{scheme}");
+            assert!(!kind.supports_suffix_range(), "{scheme}");
+            assert!(kind.range_support_is_guaranteed(), "{scheme}");
+        }
+    }
+
+    #[test]
     fn remote_extension_ignores_query_and_fragment() {
         assert_eq!(
             super::remote_or_local_extension(Path::new(
@@ -1502,29 +1525,6 @@ mod tests {
             .expect("summary read with back-fill")
             .expect("summary should be present");
         assert!(summary.channels.contains_key(&channel_id));
-    }
-
-    #[test]
-    fn remote_url_kind_classifies_suffix_capability() {
-        use super::RemoteUrlKind;
-        for scheme in ["http", "https"] {
-            let kind = RemoteUrlKind::from_scheme(scheme).expect(scheme);
-            assert_eq!(kind, RemoteUrlKind::Http, "{scheme}");
-            assert!(kind.supports_suffix_range(), "{scheme}");
-            assert!(!kind.range_support_is_guaranteed(), "{scheme}");
-        }
-        for scheme in ["s3", "s3a", "gs"] {
-            let kind = RemoteUrlKind::from_scheme(scheme).expect(scheme);
-            assert_eq!(kind, RemoteUrlKind::CloudSuffix, "{scheme}");
-            assert!(kind.supports_suffix_range(), "{scheme}");
-            assert!(kind.range_support_is_guaranteed(), "{scheme}");
-        }
-        for scheme in ["az", "azure", "adl", "abfs", "abfss"] {
-            let kind = RemoteUrlKind::from_scheme(scheme).expect(scheme);
-            assert_eq!(kind, RemoteUrlKind::CloudNoSuffix, "{scheme}");
-            assert!(!kind.supports_suffix_range(), "{scheme}");
-            assert!(kind.range_support_is_guaranteed(), "{scheme}");
-        }
     }
 
     #[test]
