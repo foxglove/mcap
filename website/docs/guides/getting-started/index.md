@@ -9,7 +9,7 @@ You may be interested in using MCAP for a variety of scenarios throughout your r
 
 ## Convert to MCAP
 
-If you already have existing ROS data that is not in the MCAP file format, you may want to **convert it into MCAP files**. The easiest way to do this is to [install the MCAP CLI tool](../cli.md#installation) and use it to [convert your existing bag files](../cli.md#converting-other-formats).
+If you already have existing ROS data that is not in the MCAP file format, you may want to **convert it into MCAP files**. The easiest way to do this is to [install the MCAP CLI tool](../cli.md#installation) and use it to [convert your existing bag files](../cli.md#ros-bag-to-mcap-conversion).
 
 ## Read and write MCAP
 
