@@ -89,6 +89,20 @@ pub enum Command {
     Sort(SortCommand),
 }
 
+/// Generate a shell completion script and print it to stdout.
+///
+/// To load completions in the current shell session:
+///   bash:       source <(mcap completion bash)
+///   zsh:        source <(mcap completion zsh)
+///   fish:       mcap completion fish | source
+///   powershell: mcap completion powershell | Out-String | Invoke-Expression
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct CompletionCommand {
+    /// Shell to generate a completion script for
+    #[arg(value_enum)]
+    pub shell: Shell,
+}
+
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct CompressCommand {
     /// Input MCAP file path. If omitted, reads from stdin.
@@ -109,20 +123,6 @@ pub struct CompressCommand {
     /// Do not chunk the output file
     #[arg(long = "unchunked", default_value_t = false)]
     pub unchunked: bool,
-}
-
-/// Generate a shell completion script and print it to stdout.
-///
-/// To load completions in the current shell session:
-///   bash:       source <(mcap completion bash)
-///   zsh:        source <(mcap completion zsh)
-///   fish:       mcap completion fish | source
-///   powershell: mcap completion powershell | Out-String | Invoke-Expression
-#[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct CompletionCommand {
-    /// Shell to generate a completion script for
-    #[arg(value_enum)]
-    pub shell: Shell,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

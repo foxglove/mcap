@@ -48,14 +48,16 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use clap::Parser;
+    use clap_complete::Shell;
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        CoalesceChannels, Command, CompressCommand, CompressionFormat, ConvertCommand,
-        DecompressCommand, DoctorCommand, DuCommand, FilterCommand, GetAttachmentCommand,
-        GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
-        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
-        ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand, SortCommand,
+        CoalesceChannels, Command, CompletionCommand, CompressCommand, CompressionFormat,
+        ConvertCommand, DecompressCommand, DoctorCommand, DuCommand, FilterCommand,
+        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
+        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand,
+        SortCommand,
     };
 
     #[test]
@@ -67,24 +69,6 @@ mod tests {
                 file: "demo.mcap".into(),
             })
         );
-    }
-
-    #[test]
-    fn parses_completion_subcommand() {
-        let args =
-            Args::try_parse_from(["mcap", "completion", "bash"]).expect("completion should parse");
-        assert_eq!(
-            args.command,
-            Command::Completion(crate::cli::CompletionCommand {
-                shell: clap_complete::Shell::Bash,
-            })
-        );
-    }
-
-    #[test]
-    fn completion_requires_known_shell() {
-        Args::try_parse_from(["mcap", "completion", "notashell"])
-            .expect_err("completion should reject unknown shells");
     }
 
     #[test]
@@ -176,6 +160,22 @@ mod tests {
         ])
         .expect_err("end seconds and nanoseconds should conflict");
         assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn parses_completion_subcommand() {
+        let args =
+            Args::try_parse_from(["mcap", "completion", "bash"]).expect("completion should parse");
+        assert_eq!(
+            args.command,
+            Command::Completion(CompletionCommand { shell: Shell::Bash })
+        );
+    }
+
+    #[test]
+    fn completion_requires_known_shell() {
+        Args::try_parse_from(["mcap", "completion", "notashell"])
+            .expect_err("completion should reject unknown shells");
     }
 
     #[test]
