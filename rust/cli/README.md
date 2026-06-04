@@ -1,33 +1,6 @@
 # MCAP CLI
 
-This directory contains the MCAP CLI, ported from Go to Rust.
-
-This is the implementation published for the `releases/mcap-cli/vX.Y.Z` CLI
-releases. The legacy Go CLI under `go/cli/mcap` is still built and tested in CI
-but is no longer released.
-
-## Implementation status
-
-Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
-
-| Command      | Status | Notes |
-| ------------ | ------ | ----- |
-| `add`        | 🟢     |       |
-| `cat`        | 🟢     |       |
-| `completion` | 🟢     |       |
-| `compress`   | 🟢     |       |
-| `convert`    | 🟢     |       |
-| `decompress` | 🟢     |       |
-| `doctor`     | 🟢     |       |
-| `du`         | 🟢     |       |
-| `filter`     | 🟢     |       |
-| `get`        | 🟢     |       |
-| `info`       | 🟢     |       |
-| `list`       | 🟢     |       |
-| `merge`      | 🟢     |       |
-| `recover`    | 🟢     |       |
-| `sort`       | 🟢     |       |
-| `version`    | 🟢     |       |
+This directory contains the MCAP CLI.
 
 ## Pre-1.0 improvements
 
