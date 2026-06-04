@@ -74,6 +74,17 @@ export const cases: CliTestCase[] = [
     comparison: HELP_EXISTS,
   })),
   {
+    id: "completion-command",
+    description: "Both CLIs generate a shell completion script for a requested shell.",
+    tags: ["surface", "completion"],
+    invocation: { args: ["completion", "bash"] },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "nonempty" },
+      stderr: { kind: "ignore" },
+    },
+  },
+  {
     id: "known-difference-version-flag",
     description: "Rust CLI exposes a --version flag; Go CLI exposes a version subcommand.",
     tags: ["known-difference", "surface", "version"],
@@ -678,17 +689,6 @@ export const cases: CliTestCase[] = [
         exitCode: "nonzero",
         stderr: { kind: "contains", value: "--always-decode-chunk" },
       },
-    },
-  },
-  {
-    id: "completion-command",
-    description: "Both CLIs generate a shell completion script for a requested shell.",
-    tags: ["surface", "completion"],
-    invocation: { args: ["completion", "bash"] },
-    comparison: {
-      exitCode: 0,
-      stdout: { kind: "nonempty" },
-      stderr: { kind: "ignore" },
     },
   },
   {
