@@ -13,7 +13,10 @@ CI will build the appropriate packages once tags are pushed, as described below.
 
 The CLI is built from the Rust implementation in `rust/cli`.
 
-Tag a release matching `releases/mcap-cli/vX.Y.Z`.
+1. Update the version in `rust/cli/Cargo.toml`
+2. Tag a release matching `releases/mcap-cli/vX.Y.Z`
+
+The tag version must match the `rust/cli/Cargo.toml` version; CI fails the release if they differ.
 
 ## C++
 
