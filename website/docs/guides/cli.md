@@ -43,6 +43,7 @@ Run `mcap --help` to list the available commands, and `mcap <command> --help` fo
     Commands:
       add         Add records to an existing MCAP file
       cat         Concatenate the messages in one or more MCAP files to stdout
+      completion  Generate shell completion scripts
       compress    Create a compressed copy of an MCAP file
       convert     Convert supported input files to MCAP
       decompress  Create an uncompressed copy of an MCAP file
@@ -174,3 +175,17 @@ When reading from S3, specify the bucket region with the `AWS_REGION` environmen
 ```bash
 AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
 ```
+
+## Shell completion
+
+`mcap completion <shell>` prints a completion script for `bash`, `zsh`, `fish`, `powershell`, or `elvish`. To load completions in the current shell session:
+
+<!-- cspell: disable -->
+
+    $ source <(mcap completion bash)   # bash
+    $ source <(mcap completion zsh)    # zsh
+    $ mcap completion fish | source    # fish
+
+<!-- cspell: enable -->
+
+To make completions permanent, write the script to the location your shell loads completions from.
