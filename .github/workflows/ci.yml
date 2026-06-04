@@ -470,9 +470,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-        with:
-          fetch-depth: "0"
-      - run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
       - uses: actions/setup-go@v6
         with:
           go-version-file: go/go.work
@@ -550,7 +547,6 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: "0"
-      - run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
       - name: Check version matches tag
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
         run: |
