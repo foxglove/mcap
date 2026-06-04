@@ -819,16 +819,17 @@ export const cases: CliTestCase[] = [
   {
     id: "known-difference-pprof-profile-global",
     description:
-      "Go CLI writes pprof profiles; Rust CLI parses --pprof-profile but reports it unimplemented.",
-    tags: ["known-difference", "global-options"],
+      "Go CLI writes pprof profiles; Rust CLI intentionally does not expose --pprof-profile.",
+    tags: ["known-difference", "intentional", "global-options"],
     invocation: { args: ["--pprof-profile", "info", ONE_MESSAGE] },
     knownDifference: {
       id: "global-pprof-profile",
       summary:
-        "Go CLI implements --pprof-profile while Rust CLI currently bails out as unimplemented.",
-      reason: "Global option support is incomplete in the Rust CLI.",
+        "Go CLI implements --pprof-profile; the Rust CLI intentionally omits the flag and rejects it as an unknown argument.",
+      reason:
+        "The Go flag is built on Go's runtime/pprof profiler and emits Go-pprof-format artifacts that have no equivalent in Rust. Profiling Rust builds is done with external tooling (for example perf, cargo flamegraph, or samply) rather than a baked-in flag, so the Rust CLI deliberately does not carry it.",
       desiredBehavior:
-        "Rust CLI should either implement Go-compatible profiling or remove the flag.",
+        "Rust CLI should not expose --pprof-profile; the flag remains Go-only by design.",
       goBehavior: {
         exitCode: 0,
         files: [
@@ -888,16 +889,18 @@ export const cases: CliTestCase[] = [
   },
   {
     id: "known-difference-config-global",
-    description: "Go CLI accepts a config file; Rust parses --config but reports it unimplemented.",
-    tags: ["known-difference", "global-options"],
+    description: "Go CLI accepts a config file; Rust CLI intentionally does not expose --config.",
+    tags: ["known-difference", "intentional", "global-options"],
     setup: [{ type: "writeText", to: "{caseWorkDir}/config.yaml", contents: "{}\n" }],
     invocation: { args: ["--config", "{caseWorkDir}/config.yaml", "info", ONE_MESSAGE] },
     knownDifference: {
       id: "global-config",
-      summary: "Go CLI accepts --config but Rust CLI currently bails out as unimplemented.",
-      reason: "Global option support is incomplete in the Rust CLI.",
+      summary:
+        "Go CLI accepts --config; the Rust CLI intentionally omits the flag and rejects it as an unknown argument.",
+      reason:
+        "Go's --config loads a YAML file through viper and prints a confirmation line, but no Go command ever reads a value from it (there are no viper.Get* call sites), so the flag is effectively a no-op. Rather than reproduce a no-op flag, the Rust CLI deliberately omits --config until a real configuration system is designed for both CLIs.",
       desiredBehavior:
-        "Rust CLI should either implement Go-compatible config handling or remove the flag.",
+        "Rust CLI should not expose --config unless a future, intentionally designed configuration system is added to both CLIs.",
       goBehavior: {
         exitCode: 0,
         stderr: { kind: "contains", value: "Using config file:" },
