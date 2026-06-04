@@ -1,6 +1,6 @@
 # MCAP CLI
 
-This directory contains the MCAP CLI.
+This directory contains the MCAP CLI. See https://mcap.dev/guides/cli for documentation.
 
 ## Pre-1.0 improvements
 
