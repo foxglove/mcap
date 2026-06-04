@@ -1,8 +1,10 @@
-# MCAP CLI (WIP)
+# MCAP CLI
 
-This directory contains a WIP port of the MCAP CLI from Go to Rust.
+This directory contains the MCAP CLI, ported from Go to Rust.
 
-It is not ready for production use yet.
+This is the implementation published for the `releases/mcap-cli/vX.Y.Z` CLI
+releases. The legacy Go CLI under `go/cli/mcap` is still built and tested in CI
+but is no longer released.
 
 ## Implementation status
 

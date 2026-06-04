@@ -6,13 +6,13 @@ description: Read, write, and visualize MCAP files containing ROS 1 data.
 
 ## Convert to MCAP
 
-To convert your existing ROS 1 bag files into MCAP files, [install the mcap CLI tool](https://github.com/foxglove/mcap/tree/main/go/cli/mcap#installing) and run the following command:
+To convert your existing ROS 1 bag files into MCAP files, [install the mcap CLI tool](https://github.com/foxglove/mcap/tree/main/rust/cli#installing) and run the following command:
 
 ```
 $ mcap convert ../../testdata/bags/demo.bag demo.mcap
 ```
 
-You can also use the `mcap` CLI tool to inspect MCAP files, validate them, and even echo their messages to `stdout`. For a full list of possible commands, check out the [mcap GitHub repo](https://github.com/foxglove/mcap/tree/main/go/cli/mcap).
+You can also use the `mcap` CLI tool to inspect MCAP files, validate them, and even echo their messages to `stdout`. For a full list of possible commands, check out the [mcap GitHub repo](https://github.com/foxglove/mcap/tree/main/rust/cli).
 
 ## Read and write MCAP
 
@@ -30,9 +30,9 @@ The [`mcap` GitHub repo](https://github.com/foxglove/mcap/tree/main) includes th
 
 ## Inspect MCAP
 
-Use the [`mcap` CLI tool](https://github.com/foxglove/mcap/tree/main/go/cli/mcap) to inspect MCAP files, validate their contents, and even echo their messages to `stdout`.
+Use the [`mcap` CLI tool](https://github.com/foxglove/mcap/tree/main/rust/cli) to inspect MCAP files, validate their contents, and even echo their messages to `stdout`.
 
-For an exhaustive list of ways to interact with your MCAP data, check out the [mcap GitHub repo](https://github.com/foxglove/mcap/tree/main/go/cli/mcap).
+For an exhaustive list of ways to interact with your MCAP data, check out the [mcap GitHub repo](https://github.com/foxglove/mcap/tree/main/rust/cli).
 
 ## Visualize MCAP
 

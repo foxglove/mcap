@@ -11,9 +11,9 @@ CI will build the appropriate packages once tags are pushed, as described below.
 
 ## CLI
 
-Tag a release matching `releases/mcap-cli/vX.Y.Z`.
+The CLI is built from the Rust implementation in `rust/cli`.
 
-The version number is set at build time based on the tag.
+Tag a release matching `releases/mcap-cli/vX.Y.Z`.
 
 ## C++
 

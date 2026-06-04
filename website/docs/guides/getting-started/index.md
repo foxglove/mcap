@@ -9,7 +9,7 @@ You may be interested in using MCAP for a variety of scenarios throughout your r
 
 ## Convert to MCAP
 
-If you already have existing ROS data that is not in the MCAP file format, you may want to **convert it into MCAP files**. The easiest way to do this is to [install the MCAP CLI tool](https://github.com/foxglove/mcap/tree/main/go/cli/mcap#installing) and use it to [convert your existing bag files](https://github.com/foxglove/mcap/tree/main/go/cli/mcap#bag-to-mcap-conversion).
+If you already have existing ROS data that is not in the MCAP file format, you may want to **convert it into MCAP files**. The easiest way to do this is to [install the MCAP CLI tool](https://github.com/foxglove/mcap/tree/main/rust/cli#installing) and use it to [convert your existing bag files](https://github.com/foxglove/mcap/tree/main/rust/cli#bag-to-mcap-conversion).
 
 ## Read and write MCAP
 
@@ -26,7 +26,7 @@ We provide MCAP readers and writers in the following languages:
 
 ## Inspect and visualize MCAP
 
-Once you have MCAP data to work with, you may want to [**use the mcap CLI to inspect and interact with your MCAP files**](https://github.com/foxglove/mcap/tree/main/go/cli/mcap#examples).
+Once you have MCAP data to work with, you may want to [**use the mcap CLI to inspect and interact with your MCAP files**](https://github.com/foxglove/mcap/tree/main/rust/cli#examples).
 
 You can also start visualizing your MCAP data with third-party tools like [Foxglove](https://app.foxglove.dev/). To start leveraging all the visualizations Foxglove has to offer, you must write messages that adhere to a pre-defined set of Foxglove schemas.
 

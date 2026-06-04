@@ -224,7 +224,7 @@ build the test binaries:
 $ colcon build --packages-select rosbag2_storage_plugin_comparison
 ```
 
-Find some sample data to use as message content for the tests. A simple enough option is to download some [public bag data](https://google-cartographer-ros.readthedocs.io/en/latest/data.html) and use that as your source of data. To ensure that any downloaded bags are uncompressed, you can use the [mcap CLI](https://github.com/foxglove/mcap/tree/main/go/cli/mcap):
+Find some sample data to use as message content for the tests. A simple enough option is to download some [public bag data](https://google-cartographer-ros.readthedocs.io/en/latest/data.html) and use that as your source of data. To ensure that any downloaded bags are uncompressed, you can use the [mcap CLI](https://github.com/foxglove/mcap/tree/main/rust/cli):
 
 ```
 mcap convert --compression none <input bag> sample.mcap
