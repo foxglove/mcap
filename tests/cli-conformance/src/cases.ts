@@ -1,4 +1,4 @@
-/* cspell:words lz4 multitopic ndjson noetic notbag pprof testdata */
+/* cspell:words flamegraph lz4 multitopic ndjson noetic notbag pprof samply testdata */
 
 import type { CliTestCase } from "./types.ts";
 
@@ -820,7 +820,7 @@ export const cases: CliTestCase[] = [
     id: "known-difference-pprof-profile-global",
     description:
       "Go CLI writes pprof profiles; Rust CLI intentionally does not expose --pprof-profile.",
-    tags: ["known-difference", "intentional", "global-options"],
+    tags: ["known-difference", "global-options"],
     invocation: { args: ["--pprof-profile", "info", ONE_MESSAGE] },
     knownDifference: {
       id: "global-pprof-profile",
@@ -839,8 +839,8 @@ export const cases: CliTestCase[] = [
         ],
       },
       rustBehavior: {
-        exitCode: "nonzero",
-        stderr: { kind: "contains", value: "--pprof-profile" },
+        exitCode: 2,
+        stderr: { kind: "contains", value: "unexpected argument '--pprof-profile'" },
       },
     },
   },
@@ -890,7 +890,7 @@ export const cases: CliTestCase[] = [
   {
     id: "known-difference-config-global",
     description: "Go CLI accepts a config file; Rust CLI intentionally does not expose --config.",
-    tags: ["known-difference", "intentional", "global-options"],
+    tags: ["known-difference", "global-options"],
     setup: [{ type: "writeText", to: "{caseWorkDir}/config.yaml", contents: "{}\n" }],
     invocation: { args: ["--config", "{caseWorkDir}/config.yaml", "info", ONE_MESSAGE] },
     knownDifference: {
@@ -906,8 +906,8 @@ export const cases: CliTestCase[] = [
         stderr: { kind: "contains", value: "Using config file:" },
       },
       rustBehavior: {
-        exitCode: "nonzero",
-        stderr: { kind: "contains", value: "--config" },
+        exitCode: 2,
+        stderr: { kind: "contains", value: "unexpected argument '--config'" },
       },
     },
   },
