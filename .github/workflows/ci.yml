@@ -490,8 +490,6 @@ jobs:
           retention-days: 7
 
   rust-cli:
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -545,6 +543,8 @@ jobs:
       run:
         working-directory: rust
         shell: bash
+    permissions:
+      contents: write
 
     steps:
       - uses: actions/checkout@v6
