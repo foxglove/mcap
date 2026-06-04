@@ -16,19 +16,7 @@ use context::CommandContext;
 fn run() -> Result<CommandOutcome> {
     let args = cli::Args::parse();
     logsetup::init_logger(args.verbose, args.color)?;
-    if args.config.is_some() {
-        anyhow::bail!("'--config' is not implemented yet");
-    }
-    if args.pprof_profile {
-        anyhow::bail!("'--pprof-profile' is not implemented yet");
-    }
-    let ctx = CommandContext::new(
-        args.verbose,
-        args.color,
-        args.config,
-        args.pprof_profile,
-        args.allow_remote_scan,
-    );
+    let ctx = CommandContext::new(args.verbose, args.color, args.allow_remote_scan);
 
     commands::dispatch(&ctx, args.command)
 }
@@ -48,14 +36,16 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use clap::Parser;
+    use clap_complete::Shell;
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        CoalesceChannels, Command, CompressCommand, CompressionFormat, ConvertCommand,
-        DecompressCommand, DoctorCommand, DuCommand, FilterCommand, GetAttachmentCommand,
-        GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
-        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
-        ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand, SortCommand,
+        CoalesceChannels, Command, CompletionCommand, CompressCommand, CompressionFormat,
+        ConvertCommand, DecompressCommand, DoctorCommand, DuCommand, FilterCommand,
+        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
+        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand,
+        SortCommand,
     };
 
     #[test]
@@ -158,6 +148,22 @@ mod tests {
         ])
         .expect_err("end seconds and nanoseconds should conflict");
         assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn parses_completion_subcommand() {
+        let args =
+            Args::try_parse_from(["mcap", "completion", "bash"]).expect("completion should parse");
+        assert_eq!(
+            args.command,
+            Command::Completion(CompletionCommand { shell: Shell::Bash })
+        );
+    }
+
+    #[test]
+    fn completion_requires_known_shell() {
+        Args::try_parse_from(["mcap", "completion", "notashell"])
+            .expect_err("completion should reject unknown shells");
     }
 
     #[test]

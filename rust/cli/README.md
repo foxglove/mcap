@@ -14,6 +14,7 @@ Status legend: 🟢 implemented, 🟡 partial, 🔴 not implemented.
 | ------------ | ------ | ----- |
 | `add`        | 🟢     |       |
 | `cat`        | 🟢     |       |
+| `completion` | 🟢     |       |
 | `compress`   | 🟢     |       |
 | `convert`    | 🟢     |       |
 | `decompress` | 🟢     |       |

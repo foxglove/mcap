@@ -3,6 +3,7 @@ use std::sync::LazyLock;
 
 use anyhow::{bail, Context, Result};
 use clap::{ArgAction, Parser, Subcommand};
+use clap_complete::Shell;
 
 use crate::logsetup;
 
@@ -31,14 +32,6 @@ pub struct Args {
     )]
     pub color: logsetup::Color,
 
-    /// Config file path
-    #[arg(long, global = true)]
-    pub config: Option<PathBuf>,
-
-    /// Record pprof-style profiling output
-    #[arg(long, default_value_t = false, global = true)]
-    pub pprof_profile: bool,
-
     /// Allow commands to download/scan remote inputs
     #[arg(long, default_value_t = false, global = true)]
     pub allow_remote_scan: bool,
@@ -57,6 +50,15 @@ pub enum Command {
     Add(AddCommand),
     /// Concatenate the messages in one or more MCAP files to stdout
     Cat(CatCommand),
+    /// Generate shell completion scripts
+    ///
+    /// To load completions in the current shell session:
+    ///   bash:       source <(mcap completion bash)
+    ///   zsh:        source <(mcap completion zsh)
+    ///   fish:       mcap completion fish | source
+    ///   powershell: mcap completion powershell | Out-String | Invoke-Expression
+    #[command(verbatim_doc_comment)]
+    Completion(CompletionCommand),
     /// Create a compressed copy of an MCAP file
     Compress(CompressCommand),
     /// Convert supported input files to MCAP
@@ -84,6 +86,13 @@ pub enum Command {
     Recover(RecoverCommand),
     /// Read an MCAP file and write messages sorted by log time
     Sort(SortCommand),
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct CompletionCommand {
+    /// Shell to generate a completion script for
+    #[arg(value_enum)]
+    pub shell: Shell,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

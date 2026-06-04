@@ -354,6 +354,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "clap_complete"
+version = "4.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0a7a9bfdb35811f9e59832f0f05975114d2251b415fb534108e6f34060fd772"
+dependencies = [
+ "clap 4.6.0",
+]
+
+[[package]]
 name = "clap_derive"
 version = "3.2.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1335,6 +1344,7 @@ dependencies = [
  "bzip2",
  "chrono",
  "clap 4.6.0",
+ "clap_complete",
  "crc32fast",
  "futures-util",
  "log",
