@@ -70,6 +70,24 @@ mod tests {
     }
 
     #[test]
+    fn parses_completion_subcommand() {
+        let args =
+            Args::try_parse_from(["mcap", "completion", "bash"]).expect("completion should parse");
+        assert_eq!(
+            args.command,
+            Command::Completion(crate::cli::CompletionCommand {
+                shell: clap_complete::Shell::Bash,
+            })
+        );
+    }
+
+    #[test]
+    fn completion_requires_known_shell() {
+        Args::try_parse_from(["mcap", "completion", "notashell"])
+            .expect_err("completion should reject unknown shells");
+    }
+
+    #[test]
     fn parses_cat_subcommand_with_files() {
         let args =
             Args::try_parse_from(["mcap", "cat", "a.mcap", "b.mcap"]).expect("cat should parse");
