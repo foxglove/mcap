@@ -26,7 +26,7 @@ MCAP libraries are provided in the following languages. For guidance on each lan
 
 ## CLI
 
-Inspect, merge, and split MCAP files from the command line using the MCAP CLI.
+Inspect, filter, and merge MCAP files from the command line using the MCAP CLI.
 
 Install with `brew install mcap` or download the latest version directly from the [releases page](https://github.com/foxglove/mcap/releases?q=mcap-cli).
 

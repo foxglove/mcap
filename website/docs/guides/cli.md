@@ -133,9 +133,11 @@ Run `mcap --help` to list the available commands, and `mcap <command> --help` fo
 
 <!-- cspell: enable -->
 
-In ROS 2 releases prior to Iron, db3 files did not contain message definitions (schemas). When converting such a file, first source the same ROS 2 workspace it was recorded with. If that is unavailable, point `--ament-prefix-path` at a directory containing the message definitions (for example `/opt/ros/humble`):
+Converting a `.db3` file relies on the message definitions embedded in the file, so the input must be self-contained. ROS 2 db3 files recorded with Iron or newer embed their schemas; conversion fails if any topic is missing an embedded definition. For older db3 files that don't embed definitions, use [`ros2 bag convert`](https://github.com/ros2/rosbag2#converting-bags) instead.
 
-    $ mcap convert demo.db3 demo.mcap --ament-prefix-path /path/to/humble
+Pass `--compression` to choose the output codec (`zstd`, `lz4`, or `none`):
+
+    $ mcap convert demo.bag demo.mcap --compression none
 
 ## Editing and transforming files
 

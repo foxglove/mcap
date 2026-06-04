@@ -159,19 +159,29 @@ Run the following commands to summarize your file's contents and to verify that 
 
 ```bash
 $ mcap info output.mcap
-  library: my-excellent-library
-  profile:
-  messages: 1
-  duration: 0s
-  start: 2011-11-04T01:36:05.987339008+11:00 (1320330965.987339008)
-  end: 2011-11-04T01:36:05.987339008+11:00 (1320330965.987339008)
-  compression:
-    zstd: [1/1 chunks] (48.09%)
-  channels:
-    (1) pointcloud  1 msgs (+Inf Hz)   : foxglove.PointCloud [jsonschema]
-  attachments: 0
+library: my-excellent-library
+profile:
+messages: 1
+duration: 0ns
+start: 2011-11-03T14:36:05.987339008Z (1320330965.987339008)
+end: 2011-11-03T14:36:05.987339008Z (1320330965.987339008)
+compression:
+	zstd: [1/1 chunks] [142.00 B/123.00 B (13.38%)]
+chunks:
+	max uncompressed size: 142.00 B
+	max compressed size: 123.00 B
+	overlaps: no
+channels:
+	(1) pointcloud	1 msgs	 : foxglove.PointCloud [jsonschema]
+channels: 1
+attachments: 0
+metadata: 0
+```
+
+`mcap doctor` prints nothing and exits with status `0` when the file is well-formed:
+
+```bash
 $ mcap doctor output.mcap
-  Examining output.mcap
 ```
 
 ### Visualize data
