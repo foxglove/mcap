@@ -57,12 +57,12 @@ export const cases: CliTestCase[] = [
   {
     id: "root-help-command-list",
     description:
-      "Root help advertises the same supported command list, ignoring Go-only completion.",
+      "Root help advertises the same supported command list, ignoring the Go-only version subcommand.",
     tags: ["surface", "help"],
     invocation: { args: ["--help"] },
     comparison: {
       exitCode: 0,
-      stdout: { kind: "command-list", ignoreCommands: ["completion", "version"] },
+      stdout: { kind: "command-list", ignoreCommands: ["version"] },
       stderr: { kind: "text" },
     },
   },
