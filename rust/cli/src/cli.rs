@@ -31,14 +31,6 @@ pub struct Args {
     )]
     pub color: logsetup::Color,
 
-    /// Config file path
-    #[arg(long, global = true)]
-    pub config: Option<PathBuf>,
-
-    /// Record pprof-style profiling output
-    #[arg(long, default_value_t = false, global = true)]
-    pub pprof_profile: bool,
-
     /// Allow commands to download/scan remote inputs
     #[arg(long, default_value_t = false, global = true)]
     pub allow_remote_scan: bool,

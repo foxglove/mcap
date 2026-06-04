@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use crate::logsetup::Color;
 
 /// Global CLI execution context shared across command handlers.
@@ -11,8 +9,6 @@ use crate::logsetup::Color;
 pub struct CommandContext {
     verbose: u8,
     color: Color,
-    config: Option<PathBuf>,
-    pprof_profile: bool,
     allow_remote_scan: bool,
 }
 
@@ -21,8 +17,6 @@ impl Default for CommandContext {
         Self {
             verbose: 0,
             color: Color::Auto,
-            config: None,
-            pprof_profile: false,
             allow_remote_scan: false,
         }
     }
@@ -30,18 +24,10 @@ impl Default for CommandContext {
 
 #[allow(dead_code)]
 impl CommandContext {
-    pub fn new(
-        verbose: u8,
-        color: Color,
-        config: Option<PathBuf>,
-        pprof_profile: bool,
-        allow_remote_scan: bool,
-    ) -> Self {
+    pub fn new(verbose: u8, color: Color, allow_remote_scan: bool) -> Self {
         Self {
             verbose,
             color,
-            config,
-            pprof_profile,
             allow_remote_scan,
         }
     }
@@ -52,14 +38,6 @@ impl CommandContext {
 
     pub fn color(&self) -> Color {
         self.color
-    }
-
-    pub fn config(&self) -> Option<&PathBuf> {
-        self.config.as_ref()
-    }
-
-    pub fn pprof_profile(&self) -> bool {
-        self.pprof_profile
     }
 
     pub fn allow_remote_scan(&self) -> bool {
