@@ -1,5 +1,6 @@
 mod add;
 mod cat;
+mod completion;
 mod compress;
 mod convert;
 mod decompress;
@@ -63,6 +64,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<CommandOutcome
         .map(|()| CommandOutcome::Success),
 
         Command::Cat(args) => cat::run(ctx, args).map(|()| CommandOutcome::Success),
+        Command::Completion(args) => completion::run(args).map(|()| CommandOutcome::Success),
         Command::Compress(args) => compress::run(ctx, args).map(|()| CommandOutcome::Success),
         Command::Convert(args) => convert::run(ctx, args).map(|()| CommandOutcome::Success),
         Command::Decompress(args) => decompress::run(ctx, args).map(|()| CommandOutcome::Success),

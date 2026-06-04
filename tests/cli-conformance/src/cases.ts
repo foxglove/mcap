@@ -57,12 +57,12 @@ export const cases: CliTestCase[] = [
   {
     id: "root-help-command-list",
     description:
-      "Root help advertises the same supported command list, ignoring Go-only completion.",
+      "Root help advertises the same supported command list, ignoring the Go-only version subcommand.",
     tags: ["surface", "help"],
     invocation: { args: ["--help"] },
     comparison: {
       exitCode: 0,
-      stdout: { kind: "command-list", ignoreCommands: ["completion", "version"] },
+      stdout: { kind: "command-list", ignoreCommands: ["version"] },
       stderr: { kind: "text" },
     },
   },
@@ -73,6 +73,17 @@ export const cases: CliTestCase[] = [
     invocation: { args: [...args, "--help"] },
     comparison: HELP_EXISTS,
   })),
+  {
+    id: "completion-command",
+    description: "Both CLIs generate a shell completion script for a requested shell.",
+    tags: ["surface", "completion"],
+    invocation: { args: ["completion", "bash"] },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "nonempty" },
+      stderr: { kind: "ignore" },
+    },
+  },
   {
     id: "known-difference-version-flag",
     description: "Rust CLI exposes a --version flag; Go CLI exposes a version subcommand.",
@@ -677,27 +688,6 @@ export const cases: CliTestCase[] = [
       rustBehavior: {
         exitCode: "nonzero",
         stderr: { kind: "contains", value: "--always-decode-chunk" },
-      },
-    },
-  },
-  {
-    id: "known-difference-completion-command",
-    description: "The Go CLI exposes Cobra-generated shell completion; Rust CLI does not yet.",
-    tags: ["known-difference", "surface"],
-    invocation: { args: ["completion", "bash"] },
-    knownDifference: {
-      id: "completion-command",
-      summary: "Go CLI exposes a completion command; Rust CLI currently has no completion command.",
-      reason: "Rust CLI is still being prepared for v1.0 parity.",
-      desiredBehavior:
-        "Rust CLI should either provide completion behavior compatible with Go CLI or document an intentional replacement.",
-      goBehavior: {
-        exitCode: 0,
-        stdout: { kind: "nonempty" },
-      },
-      rustBehavior: {
-        exitCode: "nonzero",
-        stderr: { kind: "contains", value: "unrecognized" },
       },
     },
   },
