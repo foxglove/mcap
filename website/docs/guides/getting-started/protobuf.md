@@ -22,9 +22,9 @@ The [`mcap` GitHub repo](https://github.com/foxglove/mcap/tree/main) includes th
 
 ## Inspect MCAP
 
-Use the [`mcap` CLI tool](https://github.com/foxglove/mcap/tree/main/rust/cli) to inspect MCAP files, validate their contents, and even echo their messages to `stdout`.
+Use the [`mcap` CLI tool](../cli.md) to inspect MCAP files, validate their contents, and even echo their messages to `stdout`.
 
-For an exhaustive list of ways to interact with your MCAP data, check out the [`mcap` GitHub repo](https://github.com/foxglove/mcap/tree/main/rust/cli).
+For an exhaustive list of ways to interact with your MCAP data, check out the [`mcap` CLI documentation](../cli.md).
 
 ## Visualize MCAP
 
