@@ -111,6 +111,10 @@ void IChunkWriter::clear() {
 
 // BufferWriter //////////////////////////////////////////////////////////////
 
+BufferWriter::BufferWriter(uint64_t chunkSize) {
+  buffer_.reserve(chunkSize);
+}
+
 void BufferWriter::handleWrite(const std::byte* data, uint64_t size) {
   buffer_.insert(buffer_.end(), data, data + size);
 }
@@ -313,7 +317,7 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
   switch (compression_) {
     case Compression::None:
     default:
-      uncompressedChunk_ = std::make_unique<BufferWriter>();
+      uncompressedChunk_ = std::make_unique<BufferWriter>(chunkSize_);
       break;
 #ifndef MCAP_COMPRESSION_NO_LZ4
     case Compression::Lz4:
