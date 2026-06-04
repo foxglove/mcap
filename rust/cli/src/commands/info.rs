@@ -20,28 +20,28 @@ fn render_info(parsed: &parse::ParsedMcap) -> String {
     let mut out = String::new();
 
     if let Some(header) = &parsed.header {
-        let _ = writeln!(&mut out, "library: {}", header.library);
-        let _ = writeln!(&mut out, "profile: {}", header.profile);
+        let _ = writeln!(&mut out, "library:    {}", header.library);
+        let _ = writeln!(&mut out, "profile:    {}", header.profile);
     } else {
-        let _ = writeln!(&mut out, "library: unknown");
-        let _ = writeln!(&mut out, "profile: unknown");
+        let _ = writeln!(&mut out, "library:    unknown");
+        let _ = writeln!(&mut out, "profile:    unknown");
     }
 
     let mut duration_seconds = 0.0f64;
     if let Some(stats) = &parsed.statistics {
-        let _ = writeln!(&mut out, "messages: {}", stats.message_count);
+        let _ = writeln!(&mut out, "messages:   {}", stats.message_count);
         let (duration_ns, signed_duration) =
             format_duration(stats.message_start_time, stats.message_end_time);
         duration_seconds = duration_ns / 1e9;
-        let _ = writeln!(&mut out, "duration: {signed_duration}");
+        let _ = writeln!(&mut out, "duration:   {signed_duration}");
         let _ = writeln!(
             &mut out,
-            "start: {}",
+            "start:      {}",
             render::formatted_time(stats.message_start_time)
         );
         let _ = writeln!(
             &mut out,
-            "end: {}",
+            "end:        {}",
             render::formatted_time(stats.message_end_time)
         );
     }
