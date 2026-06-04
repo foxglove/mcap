@@ -681,24 +681,14 @@ export const cases: CliTestCase[] = [
     },
   },
   {
-    id: "known-difference-completion-command",
-    description: "The Go CLI exposes Cobra-generated shell completion; Rust CLI does not yet.",
-    tags: ["known-difference", "surface"],
+    id: "completion-command",
+    description: "Both CLIs generate a shell completion script for a requested shell.",
+    tags: ["surface", "completion"],
     invocation: { args: ["completion", "bash"] },
-    knownDifference: {
-      id: "completion-command",
-      summary: "Go CLI exposes a completion command; Rust CLI currently has no completion command.",
-      reason: "Rust CLI is still being prepared for v1.0 parity.",
-      desiredBehavior:
-        "Rust CLI should either provide completion behavior compatible with Go CLI or document an intentional replacement.",
-      goBehavior: {
-        exitCode: 0,
-        stdout: { kind: "nonempty" },
-      },
-      rustBehavior: {
-        exitCode: "nonzero",
-        stderr: { kind: "contains", value: "unrecognized" },
-      },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "nonempty" },
+      stderr: { kind: "ignore" },
     },
   },
   {
