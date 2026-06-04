@@ -59,6 +59,13 @@ pub enum Command {
     /// Concatenate the messages in one or more MCAP files to stdout
     Cat(CatCommand),
     /// Generate shell completion scripts
+    ///
+    /// To load completions in the current shell session:
+    ///   bash:       source <(mcap completion bash)
+    ///   zsh:        source <(mcap completion zsh)
+    ///   fish:       mcap completion fish | source
+    ///   powershell: mcap completion powershell | Out-String | Invoke-Expression
+    #[command(verbatim_doc_comment)]
     Completion(CompletionCommand),
     /// Create a compressed copy of an MCAP file
     Compress(CompressCommand),
@@ -89,13 +96,6 @@ pub enum Command {
     Sort(SortCommand),
 }
 
-/// Generate a shell completion script and print it to stdout.
-///
-/// To load completions in the current shell session:
-///   bash:       source <(mcap completion bash)
-///   zsh:        source <(mcap completion zsh)
-///   fish:       mcap completion fish | source
-///   powershell: mcap completion powershell | Out-String | Invoke-Expression
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct CompletionCommand {
     /// Shell to generate a completion script for
