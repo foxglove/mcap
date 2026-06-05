@@ -77,6 +77,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go/go.work
+          cache-dependency-path: |
+            go/go.work
+            go/**/go.mod
+            go/**/go.sum
       - run: cd go && make build-conformance-binaries
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
@@ -181,6 +185,10 @@ jobs:
         with:
           go-version-file: go/go.work
           cache: true
+          cache-dependency-path: |
+            go/go.work
+            go/**/go.mod
+            go/**/go.sum
       - uses: dtolnay/rust-toolchain@stable
       - run: yarn install --immutable
       - run: make -C go/cli/mcap build
@@ -406,6 +414,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go/go.work
+          cache-dependency-path: |
+            go/go.work
+            go/**/go.mod
+            go/**/go.sum
       - name: install golangci-lint
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1
       - run: make lint
@@ -467,6 +479,10 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go/go.work
+          cache-dependency-path: |
+            go/go.work
+            go/**/go.mod
+            go/**/go.sum
       - name: Setup environment
         run: ${{ matrix.setup }}
       - name: Build binary
