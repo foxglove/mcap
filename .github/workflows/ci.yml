@@ -486,7 +486,7 @@ jobs:
           path: go/cli/mcap/bin/mcap-go-${{ matrix.os }}-${{ matrix.arch }}
           retention-days: 7
 
-  rust-cli:
+  cli:
     strategy:
       fail-fast: false
       matrix:
