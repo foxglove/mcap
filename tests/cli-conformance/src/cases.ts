@@ -1319,11 +1319,11 @@ export const cases: CliTestCase[] = [
     knownDifference: {
       id: "recover-library-header",
       summary:
-        "Go recover stamps the recovered file with its own writer identity (mcap go vX.Y.Z, prepended to any source library); Rust recover preserves the source Header.library verbatim.",
+        "Rust recover preserves the source Header.library verbatim; Go recover prepends its own writer identity (mcap go vX.Y.Z) on every pass.",
       reason:
-        "Go recover re-headers the output with the go/mcap writer library, so the original library is replaced (or, when non-empty, kept only as a trailing suffix). Rust recover round-trips the existing Header.library so the recovered file keeps reporting the software that originally produced it. The TEN_MESSAGES fixture has an empty library, so Go writes just `mcap go vX.Y.Z` while Rust writes the empty original.",
+        "Header.library identifies the software that produced the data, which for a single-input transform like recover is still the original recorder. Rust preserves it verbatim, so the value is stable and idempotent across repeated transforms. Go prepends `mcap go vX.Y.Z; ` each pass without de-duplication, so the field grows unboundedly (e.g. `mcap go v1.8.0; mcap go v1.8.0; ...`) and no longer cleanly identifies the producer. The TEN_MESSAGES fixture has an empty source library, so Rust writes the empty original while Go writes `mcap go vX.Y.Z`. (Rust's single-input transforms — filter/compress/decompress/recover/sort — all preserve; merge/convert intentionally stamp the mcap-rs identity since there is no single source library to carry forward.)",
       desiredBehavior:
-        "Decide and document the intended recover provenance policy, then make both CLIs agree on the recovered Header.library.",
+        "Rust recover should keep preserving the source Header.library verbatim rather than re-stamping it; rewrite provenance, if needed, belongs in a separate record rather than concatenated into the library field.",
       goBehavior: {
         exitCode: 0,
         files: [
