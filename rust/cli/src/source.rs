@@ -1057,7 +1057,45 @@ fn prefer_http_object_error(reader: &RemoteRangeReader, err: anyhow::Error) -> a
             return head_err;
         }
     }
+    if let Some(mcap_err) = err.downcast_ref::<mcap::McapError>() {
+        match mcap_err {
+            mcap::McapError::BadFooter
+            | mcap::McapError::BadMagic
+            | mcap::McapError::UnexpectedEof => {
+                if let Some(err) = remote_mcap_tail_error(reader, mcap_err) {
+                    return err;
+                }
+            }
+            _ => {}
+        }
+    }
     err
+}
+
+fn remote_mcap_tail_error(
+    reader: &RemoteRangeReader,
+    mcap_err: &mcap::McapError,
+) -> Option<anyhow::Error> {
+    let has_start_magic = remote_range_matches_magic(reader, 0)?;
+    if !has_start_magic {
+        return Some(anyhow::anyhow!("Input does not appear to be an MCAP file"));
+    }
+
+    let trailing_magic_offset = reader.size().checked_sub(mcap::MAGIC.len() as u64)?;
+    let has_trailing_magic = remote_range_matches_magic(reader, trailing_magic_offset)?;
+    if matches!(mcap_err, mcap::McapError::BadFooter) && has_trailing_magic {
+        return Some(anyhow::anyhow!(
+            "Footer record couldn't be found before trailing MCAP magic"
+        ));
+    }
+
+    Some(anyhow::anyhow!(
+        "MCAP file appears truncated or incomplete (try running `mcap recover`)"
+    ))
+}
+
+fn remote_range_matches_magic(reader: &RemoteRangeReader, offset: u64) -> Option<bool> {
+    Some(reader.read_range(offset, mcap::MAGIC.len()).ok()? == mcap::MAGIC)
 }
 
 fn read_summary_from_seekable(
@@ -1454,18 +1492,55 @@ mod tests {
 
     #[test]
     fn remote_http_truncated_mcap_suggests_recover() {
-        let url = serve_http(b"hello remote", true);
+        let url = serve_http(mcap::MAGIC, true);
         let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
             .expect_err("truncated remote MCAP should fail");
         let message = format!("{err:#}");
         assert!(
             message.starts_with(&format!(
-                "failed to read {url}\nMCAP file ended in the middle of a record"
+                "failed to read {url}\nMCAP file appears truncated or incomplete"
             )),
             "{message}"
         );
         assert!(
             message.contains("(try running `mcap recover`)"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn remote_http_non_mcap_input_reports_not_mcap() {
+        let url = serve_http(b"hello remote", true);
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("non-MCAP remote input should fail");
+        let message = format!("{err:#}");
+        assert!(
+            message.starts_with(&format!(
+                "failed to read {url}\nInput does not appear to be an MCAP file"
+            )),
+            "{message}"
+        );
+        assert!(
+            !message.contains("Footer record couldn't be found"),
+            "{message}"
+        );
+        assert!(!message.contains("mcap recover"), "{message}");
+    }
+
+    #[test]
+    fn remote_http_trailing_magic_without_footer_reports_missing_footer() {
+        let mut body = Vec::new();
+        body.extend_from_slice(mcap::MAGIC);
+        body.extend_from_slice(&[0; 40]);
+        body.extend_from_slice(mcap::MAGIC);
+        let url = serve_http(Box::leak(body.into_boxed_slice()), true);
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("missing footer before trailing magic should fail");
+        let message = format!("{err:#}");
+        assert!(
+            message.starts_with(&format!(
+                "failed to read {url}\nFooter record couldn't be found before trailing MCAP magic"
+            )),
             "{message}"
         );
     }
