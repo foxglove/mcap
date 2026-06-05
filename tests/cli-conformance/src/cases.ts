@@ -1310,6 +1310,43 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "known-difference-recover-library-header",
+    description:
+      "Recover sets the output Header.library differently: Rust preserves the source library, Go writes its own writer identity.",
+    tags: ["known-difference", "recover"],
+    setup: [{ type: "copy", from: TEN_MESSAGES, to: "{caseWorkDir}/input.mcap" }],
+    invocation: { args: ["recover", "input.mcap", "-o", "recovered.mcap"] },
+    knownDifference: {
+      id: "recover-library-header",
+      summary:
+        "Go recover stamps the recovered file with its own writer identity (mcap go vX.Y.Z, prepended to any source library); Rust recover preserves the source Header.library verbatim.",
+      reason:
+        "Go recover re-headers the output with the go/mcap writer library, so the original library is replaced (or, when non-empty, kept only as a trailing suffix). Rust recover round-trips the existing Header.library so the recovered file keeps reporting the software that originally produced it. The TEN_MESSAGES fixture has an empty library, so Go writes just `mcap go vX.Y.Z` while Rust writes the empty original.",
+      desiredBehavior:
+        "Decide and document the intended recover provenance policy, then make both CLIs agree on the recovered Header.library.",
+      goBehavior: {
+        exitCode: 0,
+        files: [
+          {
+            path: "recovered.mcap",
+            exists: true,
+            mcapSummary: { libraryContains: "mcap go" },
+          },
+        ],
+      },
+      rustBehavior: {
+        exitCode: 0,
+        files: [
+          {
+            path: "recovered.mcap",
+            exists: true,
+            mcapSummary: { library: "" },
+          },
+        ],
+      },
+    },
+  },
+  {
     id: "known-difference-doctor-reports-all-structural-errors",
     description:
       "Rust doctor reports every structural error on a truncated file; Go doctor stops at the first read failure.",
