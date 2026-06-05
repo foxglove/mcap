@@ -1,4 +1,4 @@
-/* cspell:words flamegraph lz4 multitopic ndjson noetic notashell notbag pprof samply testdata */
+/* cspell:words flamegraph lz4 multitopic ndjson noetic notashell notbag pprof samply testdata undercount undercounting undercounts */
 
 import type { CliTestCase } from "./types.ts";
 
@@ -518,7 +518,8 @@ export const cases: CliTestCase[] = [
   },
   {
     id: "filter-exclude-topic-output-messages",
-    description: "Filtering with an exclude topic regex removes matching messages from output.",
+    description:
+      "Rust filter honors -n/--exclude-topic-regex; Go filter ignores it and leaves matching messages in the output.",
     tags: ["known-difference", "filter", "mcap-output", "topics"],
     invocation: {
       args: [
@@ -535,11 +536,11 @@ export const cases: CliTestCase[] = [
     knownDifference: {
       id: "filter-exclude-topic-regex",
       summary:
-        "Rust filter excludes matching topics with -n/--exclude-topic-regex; Go currently leaves matching messages in place.",
+        "Rust filter correctly excludes matching topics with -n/--exclude-topic-regex; Go filter ignores the flag and keeps the matching messages.",
       reason:
-        "The Rust CLI applies exclude regexes when rewriting the MCAP, while the legacy Go CLI's current output for this fixture still contains the excluded topic.",
+        "The Rust CLI applies exclude regexes when rewriting the MCAP, dropping the matching topic (here all 10 messages on `example`, leaving 0). The legacy Go CLI does not apply -n for this fixture and emits all 10 messages, which silently produces an unfiltered file.",
       desiredBehavior:
-        "Both CLIs should remove messages whose topics match -n/--exclude-topic-regex before Rust CLI v1.0.",
+        "Rust filter's exclusion behavior is the intended, correct behavior; the Go CLI ignoring -n is a known Go bug that will not be fixed before the Go CLI is retired.",
       goBehavior: {
         exitCode: 0,
         files: [
@@ -1064,16 +1065,18 @@ export const cases: CliTestCase[] = [
   },
   {
     id: "known-difference-du-record-accounting",
-    description: "Go and Rust currently account for top-level record bytes differently in du.",
+    description:
+      "Rust du counts the full on-disk size of each record; Go du undercounts by omitting record framing.",
     tags: ["known-difference", "du"],
     invocation: { args: ["du", ONE_MESSAGE] },
     knownDifference: {
       id: "du-record-accounting",
-      summary: "Go and Rust du currently report different top-level record byte counts.",
+      summary:
+        "Rust du reports the correct on-disk record byte counts; Go du undercounts every record by its 9-byte framing (opcode + length).",
       reason:
-        "The Rust CLI includes record envelope bytes consistently; the Go CLI reports smaller top-level record byte counts.",
+        "Each MCAP record occupies a 1-byte opcode and an 8-byte length prefix on disk in addition to its content. Rust du counts that framing, so the per-record totals account for every byte in the file apart from the 16 bytes of leading/trailing magic (here for ONE_MESSAGE they sum to 617 of the 633-byte file). Go du omits the framing, undercounting every record by 9 bytes (chunk = 155 instead of 164) and also skips attachment records entirely.",
       desiredBehavior:
-        "Decide and document the intended accounting model, then make both CLIs report the same values.",
+        "Rust du's full-record accounting is the intended, more correct behavior; the Go undercount is a known Go bug that will not be fixed before the Go CLI is retired.",
       goBehavior: {
         exitCode: 0,
         stdout: { kind: "contains", value: "chunk         \t155" },
@@ -1086,15 +1089,18 @@ export const cases: CliTestCase[] = [
   },
   {
     id: "known-difference-doctor-warning-stream",
-    description: "Doctor warning output currently goes to different streams.",
+    description:
+      "Rust doctor writes diagnostics to stderr; Go doctor writes them to stdout, polluting the results stream.",
     tags: ["known-difference", "doctor"],
     invocation: { args: ["doctor", ONE_MESSAGE] },
     knownDifference: {
       id: "doctor-warning-stream",
       summary:
-        "Go doctor prints a header-library warning to stdout; Rust doctor prints it to stderr.",
-      reason: "Doctor output streams have not been aligned between the two CLIs.",
-      desiredBehavior: "Warnings should use the same stream in both CLIs before v1.0.",
+        "Rust doctor prints the header-library warning to stderr (the correct stream for diagnostics); Go doctor prints it to stdout.",
+      reason:
+        "Diagnostics belong on stderr so stdout stays reserved for machine-consumable results; Rust follows this convention. Go writes doctor warnings/errors to stdout, which pollutes the results stream and is inconsistent with how the other Rust commands split output. This also matches the doctor-reports-all-structural-errors case, which documents Rust's error reporting on stderr.",
+      desiredBehavior:
+        "Rust doctor's use of stderr for diagnostics is the intended behavior; the Go stdout output is a known Go bug that will not be fixed before the Go CLI is retired.",
       goBehavior: {
         exitCode: 0,
         stdout: { kind: "contains", value: "Header.library" },
