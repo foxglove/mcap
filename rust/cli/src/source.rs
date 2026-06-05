@@ -462,6 +462,18 @@ impl ObjectStoreSource {
             .size)
     }
 
+    fn require_http_object_exists(&self) -> Result<()> {
+        match self.runtime.block_on(self.store.head(&self.path)) {
+            Ok(_) => Ok(()),
+            Err(err @ object_store::Error::NotFound { .. }) => {
+                Err(err).with_context(|| format!("failed to stat {}", self.display_url))
+            }
+            // Some HTTP servers reject HEAD even when ranged GETs work. Only prefer
+            // a definitive missing-object result over an MCAP parse error.
+            Err(_) => Ok(()),
+        }
+    }
+
     /// Read a bounded byte range and return its bytes, validating the content
     /// encoding. The range is assumed to be valid (non-empty, within the object).
     fn get_range(&self, range: std::ops::Range<u64>) -> Result<Vec<u8>> {
@@ -557,6 +569,13 @@ impl ObjectStoreSource {
                 // unsupported-suffix case as a distinct error, so retry with a bounded
                 // probe and let that request decide whether ranges are usable or the
                 // caller should fall back to a plain GET/full scan.
+                Err(err @ object_store::Error::NotFound { .. })
+                    if !kind.range_support_is_guaranteed() =>
+                {
+                    return Err(err).with_context(|| {
+                        format!("failed to fetch range from {}", self.display_url)
+                    });
+                }
                 Err(_) if !kind.range_support_is_guaranteed() => {
                     return Ok(match self.probe_bounded_range_size()? {
                         Some(size) => Some((size, self.bounded_tail(size, tail_bytes)?)),
@@ -592,6 +611,7 @@ struct RemoteTail {
 
 pub struct RemoteRangeReader {
     source: ObjectStoreSource,
+    kind: RemoteUrlKind,
     size: u64,
     offset: u64,
     // Trailing bytes prefetched at open time, consumed once by summary discovery.
@@ -609,6 +629,7 @@ impl RemoteRangeReader {
         };
         Ok(Some(Self {
             source,
+            kind,
             size,
             offset: 0,
             tail: Some(tail),
@@ -624,6 +645,7 @@ impl RemoteRangeReader {
                 path,
                 display_url: "memory:///test".to_string(),
             },
+            kind: RemoteUrlKind::CloudSuffix,
             size,
             offset: 0,
             tail: None,
@@ -651,6 +673,7 @@ impl RemoteRangeReader {
                 path,
                 display_url: "memory:///test".to_string(),
             },
+            kind: RemoteUrlKind::CloudSuffix,
             size,
             offset: 0,
             tail: Some(tail),
@@ -861,7 +884,10 @@ fn read_summary_from_remote(
     let file_size = reader.size();
     let tail_len = FOOTER_RECORD_AND_END_MAGIC_LEN as u64;
     if file_size < tail_len + mcap::MAGIC.len() as u64 {
-        return Err(mcap::McapError::UnexpectedEof.into());
+        return Err(prefer_http_object_error(
+            reader,
+            mcap::McapError::UnexpectedEof.into(),
+        ));
     }
 
     // The tail was prefetched at open time. Consume it here; subsequent data reads
@@ -871,7 +897,10 @@ fn read_summary_from_remote(
         .take()
         .ok_or_else(|| anyhow::anyhow!("remote reader is missing its prefetched tail"))?;
     if (tail.bytes.len() as u64) < tail_len || tail.start > file_size - tail_len {
-        return Err(mcap::McapError::UnexpectedEof.into());
+        return Err(prefer_http_object_error(
+            reader,
+            mcap::McapError::UnexpectedEof.into(),
+        ));
     }
     // The `footer_bytes` / `summary_end_in_tail` slicing below assumes the tail ends
     // exactly at EOF; both `read_summary_tail` paths uphold this by construction.
@@ -884,25 +913,38 @@ fn read_summary_from_remote(
     let footer_start = file_size - tail_len;
     let footer_bytes = &tail.bytes[tail.bytes.len() - FOOTER_RECORD_AND_END_MAGIC_LEN..];
     if footer_bytes[0] != records::op::FOOTER {
-        return Err(mcap::McapError::BadFooter.into());
+        return Err(prefer_http_object_error(
+            reader,
+            mcap::McapError::BadFooter.into(),
+        ));
     }
     let record_len =
         u64::from_le_bytes(footer_bytes[1..9].try_into().expect("footer length slice"));
     if record_len != 20 {
-        return Err(mcap::McapError::BadFooter.into());
+        return Err(prefer_http_object_error(
+            reader,
+            mcap::McapError::BadFooter.into(),
+        ));
     }
     if &footer_bytes[FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()..] != mcap::MAGIC {
-        return Err(mcap::McapError::BadMagic.into());
+        return Err(prefer_http_object_error(
+            reader,
+            mcap::McapError::BadMagic.into(),
+        ));
     }
 
     let mut cursor =
         std::io::Cursor::new(&footer_bytes[9..FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()]);
-    let footer = records::Footer::read_le(&mut cursor)?;
+    let footer = records::Footer::read_le(&mut cursor)
+        .map_err(|err| prefer_http_object_error(reader, err.into()))?;
     if footer.summary_start == 0 {
         return Ok(None);
     }
     if footer.summary_start > footer_start {
-        return Err(mcap::McapError::UnexpectedEof.into());
+        return Err(prefer_http_object_error(
+            reader,
+            mcap::McapError::UnexpectedEof.into(),
+        ));
     }
     let summary_len = usize::try_from(footer_start - footer.summary_start)
         .context("remote summary section is too large to read on this platform")?;
@@ -926,15 +968,32 @@ fn read_summary_from_remote(
         let prefix_len = (tail.start - footer.summary_start) as usize;
         let mut summary_bytes = reader.read_range(footer.summary_start, prefix_len)?;
         if summary_bytes.len() != prefix_len {
-            return Err(mcap::McapError::UnexpectedEof.into());
+            return Err(prefer_http_object_error(
+                reader,
+                mcap::McapError::UnexpectedEof.into(),
+            ));
         }
         summary_bytes.extend_from_slice(&tail.bytes[..summary_end_in_tail]);
         summary_bytes
     };
     if summary_bytes.len() != summary_len {
-        return Err(mcap::McapError::UnexpectedEof.into());
+        return Err(prefer_http_object_error(
+            reader,
+            mcap::McapError::UnexpectedEof.into(),
+        ));
     }
-    Ok(Some(parse::parse_summary_section(&summary_bytes)?))
+    parse::parse_summary_section(&summary_bytes)
+        .map(Some)
+        .map_err(|err| prefer_http_object_error(reader, err))
+}
+
+fn prefer_http_object_error(reader: &RemoteRangeReader, err: anyhow::Error) -> anyhow::Error {
+    if reader.kind == RemoteUrlKind::Http {
+        if let Err(head_err) = reader.source.require_http_object_exists() {
+            return head_err;
+        }
+    }
+    err
 }
 
 fn read_summary_from_seekable(
@@ -1065,6 +1124,47 @@ mod tests {
     // (`bytes=-N`) with `416`, like HTTP servers/proxies that omit the suffix form.
     fn serve_http_bounded_only(body: &'static [u8]) -> (String, Arc<AtomicUsize>) {
         serve_http_with_options(body, true, &[], false, false, true)
+    }
+
+    fn serve_http_not_found_with_range_body(body: &'static [u8]) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("test server addr");
+        thread::spawn(move || {
+            for stream in listener.incoming().take(8) {
+                let mut stream = stream.expect("accept test connection");
+                let mut request = [0u8; 4096];
+                let read = stream.read(&mut request).expect("read request");
+                let request = String::from_utf8_lossy(&request[..read]);
+                let is_head = request.starts_with("HEAD ");
+                let has_range = request.lines().any(|line| {
+                    line.starts_with("Range: bytes=") || line.starts_with("range: bytes=")
+                });
+                if has_range {
+                    let end = body.len().saturating_sub(1);
+                    let response = format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes 0-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        body.len(),
+                        body.len()
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write range headers");
+                    if !is_head {
+                        stream.write_all(body).expect("write range body");
+                    }
+                } else {
+                    stream
+                        .write_all(
+                            b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\n",
+                        )
+                        .expect("write 404 headers");
+                    if !is_head {
+                        stream.write_all(b"Not found").expect("write 404 body");
+                    }
+                }
+            }
+        });
+        format!("http://{addr}/demo.mcap")
     }
 
     fn serve_http_with_options(
@@ -1255,6 +1355,19 @@ mod tests {
             };
         let message = format!("{err:#}");
         assert!(message.contains("MCAP remote reads require identity encoding"));
+    }
+
+    #[test]
+    fn remote_http_not_found_prefers_http_error_over_mcap_parse_error() {
+        let url = serve_http_not_found_with_range_body(b"Not found");
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("missing HTTP object should surface as an HTTP error");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("not found") || message.contains("404"),
+            "{message}"
+        );
+        assert!(!message.contains("MCAP file ended"), "{message}");
     }
 
     #[test]
