@@ -153,20 +153,15 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     if is_remote_url(path) {
         match open_remote_range_reader(path)? {
             Some(mut reader) => {
-                if let Some(summary) =
-                    read_summary_from_remote(&mut reader, options).with_context(|| {
-                        format!(
-                            "failed to read remote summary from {}",
-                            redacted_display(path)
-                        )
-                    })?
+                if let Some(summary) = read_summary_from_remote(&mut reader, options)
+                    .map_err(|err| remote_read_error(path, err))?
                 {
                     let header = read_header_from_seekable(&mut reader)?;
                     return Ok(parse::parsed_mcap_from_summary_ref(header, &summary));
                 }
                 if !options.allow_remote_scan {
                     bail!(
-                        "{}: remote file has no summary section; reading without one requires opt-in; {}",
+                        "failed to read {}\nRemote file has no summary section; reading without one requires opt-in; {}",
                         redacted_display(path),
                         remote_scan_opt_in_suffix()
                     );
@@ -174,7 +169,7 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
             }
             None if !options.allow_remote_scan => {
                 bail!(
-                    "{}: remote server does not support range requests; {}",
+                    "failed to read {}\nRemote server does not support range requests; {}",
                     redacted_display(path),
                     remote_scan_opt_in_suffix()
                 );
@@ -190,7 +185,12 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     }
 
     let mcap = load_path(path, options)?;
-    parse::parse_mcap(&mcap)
+    let parsed = parse::parse_mcap(&mcap);
+    if is_remote_url(path) {
+        parsed.map_err(|err| remote_read_error(path, err))
+    } else {
+        parsed
+    }
 }
 
 pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
@@ -292,16 +292,12 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
         }
         return Ok(None);
     };
-    let Some(summary) = read_summary_from_remote(&mut reader, options).with_context(|| {
-        format!(
-            "failed to read remote summary from {}",
-            redacted_display(path)
-        )
-    })?
+    let Some(summary) = read_summary_from_remote(&mut reader, options)
+        .map_err(|err| remote_read_error(path, err))?
     else {
         if !options.allow_remote_scan {
             bail!(
-                "{}: remote file has no summary section; reading without one requires opt-in; {}",
+                "failed to read {}\nRemote file has no summary section; reading without one requires opt-in; {}",
                 redacted_display(path),
                 remote_scan_opt_in_suffix()
             );
@@ -454,12 +450,14 @@ impl ObjectStoreSource {
         })
     }
 
-    fn head_size(&self) -> Result<u64> {
-        Ok(self
-            .runtime
+    fn stat(&self) -> Result<object_store::ObjectMeta> {
+        self.runtime
             .block_on(self.store.head(&self.path))
-            .with_context(|| format!("failed to stat {}", self.display_url))?
-            .size)
+            .map_err(|err| concise_remote_stat_error(&self.display_url, err))
+    }
+
+    fn head_size(&self) -> Result<u64> {
+        Ok(self.stat()?.size)
     }
 
     /// Read a bounded byte range and return its bytes, validating the content
@@ -474,7 +472,9 @@ impl ObjectStoreSource {
                     ..GetOptions::default()
                 },
             ))
-            .with_context(|| format!("failed to fetch range from {}", self.display_url))?;
+            .map_err(|err| {
+                concise_remote_operation_error("fetching range from", &self.display_url, err)
+            })?;
         validate_identity_content_encoding(&response.attributes, &self.display_url)?;
         let bytes = self
             .runtime
@@ -503,9 +503,11 @@ impl ObjectStoreSource {
                 Ok(Some(response.meta.size))
             }
             Err(err) if remote_range_not_supported(&err) => Ok(None),
-            Err(err) => {
-                Err(err).with_context(|| format!("failed to fetch range from {}", self.display_url))
-            }
+            Err(err) => Err(concise_remote_operation_error(
+                "fetching range from",
+                &self.display_url,
+                err,
+            )),
         }
     }
 
@@ -555,8 +557,8 @@ impl ObjectStoreSource {
                 // ignoring the suffix (`200` -> `NotSupported`) or rejecting it (e.g.
                 // `416`, `500`, etc.). object_store does not expose every
                 // unsupported-suffix case as a distinct error, so retry with a bounded
-                // probe and let that request decide whether ranges are usable or the
-                // caller should fall back to a plain GET/full scan.
+                // probe even for odd suffix errors like 404 and let that request decide
+                // whether ranges are usable or the caller should fall back to a scan.
                 Err(_) if !kind.range_support_is_guaranteed() => {
                     return Ok(match self.probe_bounded_range_size()? {
                         Some(size) => Some((size, self.bounded_tail(size, tail_bytes)?)),
@@ -568,9 +570,11 @@ impl ObjectStoreSource {
                 // so fall through to the bounded path using a HEAD-discovered size.
                 Err(err) if remote_range_not_supported(&err) => {}
                 Err(err) => {
-                    return Err(err).with_context(|| {
-                        format!("failed to fetch range from {}", self.display_url)
-                    });
+                    return Err(concise_remote_operation_error(
+                        "fetching range from",
+                        &self.display_url,
+                        err,
+                    ));
                 }
             }
         }
@@ -592,6 +596,7 @@ struct RemoteTail {
 
 pub struct RemoteRangeReader {
     source: ObjectStoreSource,
+    kind: RemoteUrlKind,
     size: u64,
     offset: u64,
     // Trailing bytes prefetched at open time, consumed once by summary discovery.
@@ -609,6 +614,7 @@ impl RemoteRangeReader {
         };
         Ok(Some(Self {
             source,
+            kind,
             size,
             offset: 0,
             tail: Some(tail),
@@ -624,6 +630,7 @@ impl RemoteRangeReader {
                 path,
                 display_url: "memory:///test".to_string(),
             },
+            kind: RemoteUrlKind::CloudSuffix,
             size,
             offset: 0,
             tail: None,
@@ -651,6 +658,7 @@ impl RemoteRangeReader {
                 path,
                 display_url: "memory:///test".to_string(),
             },
+            kind: RemoteUrlKind::CloudSuffix,
             size,
             offset: 0,
             tail: Some(tail),
@@ -731,6 +739,80 @@ fn remote_range_not_supported(err: &object_store::Error) -> bool {
     matches!(err, object_store::Error::NotSupported { .. })
 }
 
+fn concise_remote_stat_error(display_url: &str, err: object_store::Error) -> anyhow::Error {
+    if let Some(status) = object_store_error_status(&err) {
+        return remote_status_read_error(display_url, &status);
+    }
+    anyhow::anyhow!("failed to read {display_url}\nFailed to stat remote input: {err}")
+}
+
+fn concise_remote_operation_error(
+    operation: &str,
+    display_url: &str,
+    err: object_store::Error,
+) -> anyhow::Error {
+    if let Some(status) = object_store_error_status(&err) {
+        return remote_status_read_error(display_url, &status);
+    }
+    anyhow::anyhow!("failed to read {display_url}\nFailed while {operation}: {err}")
+}
+
+fn remote_status_read_error(display_url: &str, status: &str) -> anyhow::Error {
+    anyhow::anyhow!("failed to read {display_url}\nRemote server returned {status}")
+}
+
+fn remote_read_error(path: &Path, err: anyhow::Error) -> anyhow::Error {
+    let message = format!("{err:#}");
+    if message.starts_with("failed to read ") {
+        return anyhow::anyhow!("{message}");
+    }
+    anyhow::anyhow!(
+        "failed to read {}\n{}",
+        redacted_display(path),
+        remote_read_error_detail(&message)
+    )
+}
+
+fn remote_read_error_detail(message: &str) -> String {
+    if message.contains("MCAP file ended in the middle of a record") {
+        return recoverable_mcap_error().to_string();
+    }
+    capitalize_first(message)
+}
+
+fn capitalize_first(message: &str) -> String {
+    let mut chars = message.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    first.to_uppercase().chain(chars).collect()
+}
+
+fn object_store_error_status(err: &object_store::Error) -> Option<String> {
+    let status = match err {
+        object_store::Error::NotFound { .. } => "404 Not Found",
+        object_store::Error::PermissionDenied { .. } => "403 Forbidden",
+        object_store::Error::Unauthenticated { .. } => "401 Unauthorized",
+        object_store::Error::NotModified { .. } => "304 Not Modified",
+        object_store::Error::Precondition { .. } => "412 Precondition Failed",
+        object_store::Error::AlreadyExists { .. } => "409 Conflict",
+        _ => return status_from_object_store_message(&err.to_string()),
+    };
+    Some(status.to_string())
+}
+
+fn status_from_object_store_message(message: &str) -> Option<String> {
+    // object_store does not expose every HTTP status as a typed variant. Keep the
+    // concise formatting best-effort and let the status-message tests catch
+    // upstream Display wording changes.
+    let (_, status) = message.split_once("Server returned non-2xx status code: ")?;
+    let status = status.trim().trim_end_matches(':').trim();
+    let status = status
+        .split_once(':')
+        .map_or(status, |(status, _)| status.trim());
+    (!status.is_empty()).then(|| status.to_string())
+}
+
 fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
     if is_remote_url(path) {
         return RemoteRangeReader::open(path);
@@ -749,11 +831,9 @@ fn read_remote_input_to_writer(path: &Path, writer: &mut impl std::io::Write) ->
     eprintln!("Warning: reading entire remote file {}", source.display_url);
 
     source.runtime.block_on(async {
-        let response = source
-            .store
-            .get(&source.path)
-            .await
-            .with_context(|| format!("failed to read remote input {}", source.display_url))?;
+        let response = source.store.get(&source.path).await.map_err(|err| {
+            concise_remote_operation_error("reading remote input from", &source.display_url, err)
+        })?;
         validate_identity_content_encoding(&response.attributes, &source.display_url)?;
         let mut stream = response.into_stream();
         while let Some(bytes) = stream
@@ -861,7 +941,10 @@ fn read_summary_from_remote(
     let file_size = reader.size();
     let tail_len = FOOTER_RECORD_AND_END_MAGIC_LEN as u64;
     if file_size < tail_len + mcap::MAGIC.len() as u64 {
-        return Err(mcap::McapError::UnexpectedEof.into());
+        return Err(classify_remote_summary_error(
+            reader,
+            mcap::McapError::UnexpectedEof.into(),
+        ));
     }
 
     // The tail was prefetched at open time. Consume it here; subsequent data reads
@@ -871,7 +954,10 @@ fn read_summary_from_remote(
         .take()
         .ok_or_else(|| anyhow::anyhow!("remote reader is missing its prefetched tail"))?;
     if (tail.bytes.len() as u64) < tail_len || tail.start > file_size - tail_len {
-        return Err(mcap::McapError::UnexpectedEof.into());
+        return Err(classify_remote_summary_error(
+            reader,
+            mcap::McapError::UnexpectedEof.into(),
+        ));
     }
     // The `footer_bytes` / `summary_end_in_tail` slicing below assumes the tail ends
     // exactly at EOF; both `read_summary_tail` paths uphold this by construction.
@@ -884,25 +970,38 @@ fn read_summary_from_remote(
     let footer_start = file_size - tail_len;
     let footer_bytes = &tail.bytes[tail.bytes.len() - FOOTER_RECORD_AND_END_MAGIC_LEN..];
     if footer_bytes[0] != records::op::FOOTER {
-        return Err(mcap::McapError::BadFooter.into());
+        return Err(classify_remote_summary_error(
+            reader,
+            mcap::McapError::BadFooter.into(),
+        ));
     }
     let record_len =
         u64::from_le_bytes(footer_bytes[1..9].try_into().expect("footer length slice"));
     if record_len != 20 {
-        return Err(mcap::McapError::BadFooter.into());
+        return Err(classify_remote_summary_error(
+            reader,
+            mcap::McapError::BadFooter.into(),
+        ));
     }
     if &footer_bytes[FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()..] != mcap::MAGIC {
-        return Err(mcap::McapError::BadMagic.into());
+        return Err(classify_remote_summary_error(
+            reader,
+            mcap::McapError::BadMagic.into(),
+        ));
     }
 
     let mut cursor =
         std::io::Cursor::new(&footer_bytes[9..FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()]);
-    let footer = records::Footer::read_le(&mut cursor)?;
+    let footer = records::Footer::read_le(&mut cursor)
+        .map_err(|err| classify_remote_summary_error(reader, err.into()))?;
     if footer.summary_start == 0 {
         return Ok(None);
     }
     if footer.summary_start > footer_start {
-        return Err(mcap::McapError::UnexpectedEof.into());
+        return Err(classify_remote_summary_error(
+            reader,
+            mcap::McapError::UnexpectedEof.into(),
+        ));
     }
     let summary_len = usize::try_from(footer_start - footer.summary_start)
         .context("remote summary section is too large to read on this platform")?;
@@ -926,15 +1025,70 @@ fn read_summary_from_remote(
         let prefix_len = (tail.start - footer.summary_start) as usize;
         let mut summary_bytes = reader.read_range(footer.summary_start, prefix_len)?;
         if summary_bytes.len() != prefix_len {
-            return Err(mcap::McapError::UnexpectedEof.into());
+            return Err(classify_remote_summary_error(
+                reader,
+                mcap::McapError::UnexpectedEof.into(),
+            ));
         }
         summary_bytes.extend_from_slice(&tail.bytes[..summary_end_in_tail]);
         summary_bytes
     };
     if summary_bytes.len() != summary_len {
-        return Err(mcap::McapError::UnexpectedEof.into());
+        return Err(classify_remote_summary_error(
+            reader,
+            mcap::McapError::UnexpectedEof.into(),
+        ));
     }
-    Ok(Some(parse::parse_summary_section(&summary_bytes)?))
+    parse::parse_summary_section(&summary_bytes)
+        .map(Some)
+        .map_err(|err| classify_remote_summary_error(reader, err))
+}
+
+fn classify_remote_summary_error(reader: &RemoteRangeReader, err: anyhow::Error) -> anyhow::Error {
+    if reader.kind == RemoteUrlKind::Http {
+        if let Err(head_err) = reader.source.stat() {
+            return head_err;
+        }
+    }
+    if let Some(mcap_err) = err.downcast_ref::<mcap::McapError>() {
+        match mcap_err {
+            mcap::McapError::BadFooter
+            | mcap::McapError::BadMagic
+            | mcap::McapError::UnexpectedEof => {
+                if let Some(err) = remote_mcap_tail_error(reader, mcap_err) {
+                    return err;
+                }
+            }
+            _ => {}
+        }
+    }
+    err
+}
+
+fn remote_mcap_tail_error(
+    reader: &RemoteRangeReader,
+    mcap_err: &mcap::McapError,
+) -> Option<anyhow::Error> {
+    let has_start_magic = remote_range_matches_magic(reader, 0)?;
+    if !has_start_magic {
+        return Some(anyhow::anyhow!("Input does not appear to be an MCAP file"));
+    }
+
+    let trailing_magic_offset = reader.size().checked_sub(mcap::MAGIC.len() as u64)?;
+    let has_trailing_magic = remote_range_matches_magic(reader, trailing_magic_offset)?;
+    if matches!(mcap_err, mcap::McapError::BadFooter) && has_trailing_magic {
+        return Some(anyhow::anyhow!("MCAP file is missing its footer record"));
+    }
+
+    Some(anyhow::anyhow!(recoverable_mcap_error()))
+}
+
+fn remote_range_matches_magic(reader: &RemoteRangeReader, offset: u64) -> Option<bool> {
+    Some(reader.read_range(offset, mcap::MAGIC.len()).ok()? == mcap::MAGIC)
+}
+
+fn recoverable_mcap_error() -> &'static str {
+    "MCAP file appears truncated or incomplete (try running `mcap --allow-remote-scan recover`)"
 }
 
 fn read_summary_from_seekable(
@@ -1065,6 +1219,79 @@ mod tests {
     // (`bytes=-N`) with `416`, like HTTP servers/proxies that omit the suffix form.
     fn serve_http_bounded_only(body: &'static [u8]) -> (String, Arc<AtomicUsize>) {
         serve_http_with_options(body, true, &[], false, false, true)
+    }
+
+    fn serve_http_status_with_range_body(
+        range_body: &'static [u8],
+        status_code: u16,
+        reason: &'static str,
+        status_body: &'static [u8],
+    ) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("test server addr");
+        thread::spawn(move || {
+            for stream in listener.incoming().take(8) {
+                let mut stream = stream.expect("accept test connection");
+                let mut request = [0u8; 4096];
+                let read = stream.read(&mut request).expect("read request");
+                let request = String::from_utf8_lossy(&request[..read]);
+                let is_head = request.starts_with("HEAD ");
+                let has_range = request.lines().any(|line| {
+                    line.starts_with("Range: bytes=") || line.starts_with("range: bytes=")
+                });
+                if has_range {
+                    let end = range_body.len().saturating_sub(1);
+                    let response = format!(
+                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes 0-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        range_body.len(),
+                        range_body.len()
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write range headers");
+                    if !is_head {
+                        stream.write_all(range_body).expect("write range body");
+                    }
+                } else {
+                    let response = format!(
+                        "HTTP/1.1 {status_code} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        status_body.len()
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write status headers");
+                    if !is_head {
+                        stream.write_all(status_body).expect("write status body");
+                    }
+                }
+            }
+        });
+        format!("http://{addr}/demo.mcap")
+    }
+
+    fn serve_http_status(status_code: u16, reason: &'static str, body: &'static [u8]) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("test server addr");
+        thread::spawn(move || {
+            for stream in listener.incoming().take(8) {
+                let mut stream = stream.expect("accept test connection");
+                let mut request = [0u8; 4096];
+                let read = stream.read(&mut request).expect("read request");
+                let request = String::from_utf8_lossy(&request[..read]);
+                let is_head = request.starts_with("HEAD ");
+                let response = format!(
+                    "HTTP/1.1 {status_code} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write status headers");
+                if !is_head {
+                    stream.write_all(body).expect("write status body");
+                }
+            }
+        });
+        format!("http://{addr}/demo.mcap")
     }
 
     fn serve_http_with_options(
@@ -1240,6 +1467,78 @@ mod tests {
     }
 
     #[test]
+    fn remote_http_range_status_error_is_concise() {
+        let url = serve_http_status(404, "Not Found", b"Not found");
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("range HTTP status error should surface cleanly");
+        let message = format!("{err:#}");
+        assert!(
+            message.starts_with(&format!(
+                "failed to read {url}\nRemote server returned 404 Not Found"
+            )),
+            "{message}"
+        );
+        assert!(!message.contains("Object at location"), "{message}");
+        assert!(!message.contains("Error performing GET"), "{message}");
+        assert!(!message.contains("MCAP file ended"), "{message}");
+    }
+
+    #[test]
+    fn remote_http_truncated_mcap_suggests_recover() {
+        let url = serve_http(mcap::MAGIC, true);
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("truncated remote MCAP should fail");
+        let message = format!("{err:#}");
+        assert!(
+            message.starts_with(&format!(
+                "failed to read {url}\nMCAP file appears truncated or incomplete"
+            )),
+            "{message}"
+        );
+        assert!(
+            message.contains("(try running `mcap --allow-remote-scan recover`)"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn remote_http_non_mcap_input_reports_not_mcap() {
+        let url = serve_http(b"hello remote", true);
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("non-MCAP remote input should fail");
+        let message = format!("{err:#}");
+        assert!(
+            message.starts_with(&format!(
+                "failed to read {url}\nInput does not appear to be an MCAP file"
+            )),
+            "{message}"
+        );
+        assert!(
+            !message.contains("Footer record couldn't be found"),
+            "{message}"
+        );
+        assert!(!message.contains("mcap recover"), "{message}");
+    }
+
+    #[test]
+    fn remote_http_trailing_magic_without_footer_reports_missing_footer() {
+        let mut body = Vec::new();
+        body.extend_from_slice(mcap::MAGIC);
+        body.extend_from_slice(&[0; 40]);
+        body.extend_from_slice(mcap::MAGIC);
+        let url = serve_http(Box::leak(body.into_boxed_slice()), true);
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("missing footer before trailing magic should fail");
+        let message = format!("{err:#}");
+        assert!(
+            message.starts_with(&format!(
+                "failed to read {url}\nMCAP file is missing its footer record"
+            )),
+            "{message}"
+        );
+    }
+
+    #[test]
     fn remote_range_probe_rejects_gzip_content_encoding() {
         let mut buffer = Vec::new();
         {
@@ -1258,6 +1557,40 @@ mod tests {
     }
 
     #[test]
+    fn remote_http_not_found_prefers_http_error_over_mcap_parse_error() {
+        let url = serve_http_status_with_range_body(b"Not found", 404, "Not Found", b"Not found");
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("missing HTTP object should surface as an HTTP error");
+        let message = format!("{err:#}");
+        assert!(
+            message.starts_with(&format!(
+                "failed to read {url}\nRemote server returned 404 Not Found"
+            )),
+            "{message}"
+        );
+        assert!(!message.contains("Object at location"), "{message}");
+        assert!(!message.contains("Error performing HEAD"), "{message}");
+        assert!(!message.contains("MCAP file ended"), "{message}");
+    }
+
+    #[test]
+    fn remote_http_status_error_prefers_http_error_over_mcap_parse_error() {
+        let url =
+            serve_http_status_with_range_body(b"Access denied", 403, "Forbidden", b"Forbidden");
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("HTTP status error should surface instead of an MCAP parse error");
+        let message = format!("{err:#}");
+        assert!(
+            message.starts_with(&format!(
+                "failed to read {url}\nRemote server returned 403 Forbidden"
+            )),
+            "{message}"
+        );
+        assert!(!message.contains("Error performing HEAD"), "{message}");
+        assert!(!message.contains("MCAP file ended"), "{message}");
+    }
+
+    #[test]
     fn remote_range_probe_errors_on_unknown_content_range_total() {
         // object_store cannot parse a `*` total in `Content-Range`, so the probe must
         // surface a fetch error instead of trusting a bogus size. This guards the
@@ -1271,7 +1604,7 @@ mod tests {
                 Err(err) => err,
             };
         let message = format!("{err:#}");
-        assert!(message.contains("failed to fetch range from"));
+        assert!(message.contains("Failed while fetching range from"));
     }
 
     #[test]
@@ -1298,7 +1631,7 @@ mod tests {
                 Err(err) => err,
             };
         let message = format!("{err:#}");
-        assert!(message.contains("remote summary section"));
+        assert!(message.contains("Remote summary section"));
         assert!(message.contains("--allow-remote-scan"));
     }
 
@@ -1633,7 +1966,7 @@ mod tests {
         let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
             .expect_err("non-range HTTP input should require scan opt-in");
         let message = err.to_string();
-        assert!(message.contains("remote server does not support range requests"));
+        assert!(message.contains("Remote server does not support range requests"));
         assert!(message.contains("--allow-remote-scan"));
     }
 
