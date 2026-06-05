@@ -553,21 +553,11 @@ jobs:
           echo "rust/cli/Cargo.toml version ($cargo_version) matches release tag"
       - uses: dtolnay/rust-toolchain@stable
       - run: rustup target add ${{ matrix.target }}
-      - name: Install Zig
+      - name: Setup Zig
         if: matrix.os == 'linux'
-        run: |
-          zig_version=0.16.0
-          zig_sha256=70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00
-          zig_dir="${RUNNER_TEMP}/zig-${zig_version}"
-          zig_archive="${RUNNER_TEMP}/zig-${zig_version}.tar.xz"
-          mkdir -p "$zig_dir"
-          curl --fail --location --retry 3 \
-            --output "$zig_archive" \
-            "https://ziglang.org/download/${zig_version}/zig-x86_64-linux-${zig_version}.tar.xz"
-          echo "${zig_sha256}  ${zig_archive}" | sha256sum --check
-          tar -xJf "$zig_archive" --strip-components=1 -C "$zig_dir"
-          echo "$zig_dir" >> "$GITHUB_PATH"
-          "$zig_dir/zig" version
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
       - name: Install cargo-zigbuild
         if: matrix.os == 'linux'
         uses: taiki-e/install-action@v2
