@@ -557,17 +557,8 @@ impl ObjectStoreSource {
                 // ignoring the suffix (`200` -> `NotSupported`) or rejecting it (e.g.
                 // `416`, `500`, etc.). object_store does not expose every
                 // unsupported-suffix case as a distinct error, so retry with a bounded
-                // probe and let that request decide whether ranges are usable or the
-                // caller should fall back to a plain GET/full scan.
-                Err(err @ object_store::Error::NotFound { .. })
-                    if !kind.range_support_is_guaranteed() =>
-                {
-                    return Err(concise_remote_operation_error(
-                        "fetching range from",
-                        &self.display_url,
-                        err,
-                    ));
-                }
+                // probe even for odd suffix errors like 404 and let that request decide
+                // whether ranges are usable or the caller should fall back to a scan.
                 Err(_) if !kind.range_support_is_guaranteed() => {
                     return Ok(match self.probe_bounded_range_size()? {
                         Some(size) => Some((size, self.bounded_tail(size, tail_bytes)?)),
@@ -784,8 +775,7 @@ fn remote_read_error(path: &Path, err: anyhow::Error) -> anyhow::Error {
 
 fn remote_read_error_detail(message: &str) -> String {
     if message.contains("MCAP file ended in the middle of a record") {
-        return "MCAP file ended in the middle of a record (try running `mcap recover`)"
-            .to_string();
+        return recoverable_mcap_error().to_string();
     }
     capitalize_first(message)
 }
@@ -812,6 +802,9 @@ fn object_store_error_status(err: &object_store::Error) -> Option<String> {
 }
 
 fn status_from_object_store_message(message: &str) -> Option<String> {
+    // object_store does not expose every HTTP status as a typed variant. Keep the
+    // concise formatting best-effort and let the status-message tests catch
+    // upstream Display wording changes.
     let (_, status) = message.split_once("Server returned non-2xx status code: ")?;
     let status = status.trim().trim_end_matches(':').trim();
     let status = status
@@ -1084,18 +1077,18 @@ fn remote_mcap_tail_error(
     let trailing_magic_offset = reader.size().checked_sub(mcap::MAGIC.len() as u64)?;
     let has_trailing_magic = remote_range_matches_magic(reader, trailing_magic_offset)?;
     if matches!(mcap_err, mcap::McapError::BadFooter) && has_trailing_magic {
-        return Some(anyhow::anyhow!(
-            "Footer record couldn't be found before trailing MCAP magic"
-        ));
+        return Some(anyhow::anyhow!("MCAP file is missing its footer record"));
     }
 
-    Some(anyhow::anyhow!(
-        "MCAP file appears truncated or incomplete (try running `mcap recover`)"
-    ))
+    Some(anyhow::anyhow!(recoverable_mcap_error()))
 }
 
 fn remote_range_matches_magic(reader: &RemoteRangeReader, offset: u64) -> Option<bool> {
     Some(reader.read_range(offset, mcap::MAGIC.len()).ok()? == mcap::MAGIC)
+}
+
+fn recoverable_mcap_error() -> &'static str {
+    "MCAP file appears truncated or incomplete (try running `mcap --allow-remote-scan recover`)"
 }
 
 fn read_summary_from_seekable(
@@ -1503,7 +1496,7 @@ mod tests {
             "{message}"
         );
         assert!(
-            message.contains("(try running `mcap recover`)"),
+            message.contains("(try running `mcap --allow-remote-scan recover`)"),
             "{message}"
         );
     }
@@ -1539,7 +1532,7 @@ mod tests {
         let message = format!("{err:#}");
         assert!(
             message.starts_with(&format!(
-                "failed to read {url}\nFooter record couldn't be found before trailing MCAP magic"
+                "failed to read {url}\nMCAP file is missing its footer record"
             )),
             "{message}"
         );
