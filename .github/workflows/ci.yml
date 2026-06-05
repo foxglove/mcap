@@ -79,6 +79,7 @@ jobs:
           go-version-file: go/go.work
           cache-dependency-path: |
             go/go.work
+            go/go.work.sum
             go/**/go.mod
             go/**/go.sum
       - run: cd go && make build-conformance-binaries
@@ -187,6 +188,7 @@ jobs:
           cache: true
           cache-dependency-path: |
             go/go.work
+            go/go.work.sum
             go/**/go.mod
             go/**/go.sum
       - uses: dtolnay/rust-toolchain@stable
@@ -416,6 +418,7 @@ jobs:
           go-version-file: go/go.work
           cache-dependency-path: |
             go/go.work
+            go/go.work.sum
             go/**/go.mod
             go/**/go.sum
       - name: install golangci-lint
@@ -481,6 +484,7 @@ jobs:
           go-version-file: go/go.work
           cache-dependency-path: |
             go/go.work
+            go/go.work.sum
             go/**/go.mod
             go/**/go.sum
       - name: Setup environment
