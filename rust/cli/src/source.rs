@@ -948,7 +948,7 @@ fn read_summary_from_remote(
     let file_size = reader.size();
     let tail_len = FOOTER_RECORD_AND_END_MAGIC_LEN as u64;
     if file_size < tail_len + mcap::MAGIC.len() as u64 {
-        return Err(prefer_http_object_error(
+        return Err(classify_remote_summary_error(
             reader,
             mcap::McapError::UnexpectedEof.into(),
         ));
@@ -961,7 +961,7 @@ fn read_summary_from_remote(
         .take()
         .ok_or_else(|| anyhow::anyhow!("remote reader is missing its prefetched tail"))?;
     if (tail.bytes.len() as u64) < tail_len || tail.start > file_size - tail_len {
-        return Err(prefer_http_object_error(
+        return Err(classify_remote_summary_error(
             reader,
             mcap::McapError::UnexpectedEof.into(),
         ));
@@ -977,7 +977,7 @@ fn read_summary_from_remote(
     let footer_start = file_size - tail_len;
     let footer_bytes = &tail.bytes[tail.bytes.len() - FOOTER_RECORD_AND_END_MAGIC_LEN..];
     if footer_bytes[0] != records::op::FOOTER {
-        return Err(prefer_http_object_error(
+        return Err(classify_remote_summary_error(
             reader,
             mcap::McapError::BadFooter.into(),
         ));
@@ -985,13 +985,13 @@ fn read_summary_from_remote(
     let record_len =
         u64::from_le_bytes(footer_bytes[1..9].try_into().expect("footer length slice"));
     if record_len != 20 {
-        return Err(prefer_http_object_error(
+        return Err(classify_remote_summary_error(
             reader,
             mcap::McapError::BadFooter.into(),
         ));
     }
     if &footer_bytes[FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()..] != mcap::MAGIC {
-        return Err(prefer_http_object_error(
+        return Err(classify_remote_summary_error(
             reader,
             mcap::McapError::BadMagic.into(),
         ));
@@ -1000,12 +1000,12 @@ fn read_summary_from_remote(
     let mut cursor =
         std::io::Cursor::new(&footer_bytes[9..FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()]);
     let footer = records::Footer::read_le(&mut cursor)
-        .map_err(|err| prefer_http_object_error(reader, err.into()))?;
+        .map_err(|err| classify_remote_summary_error(reader, err.into()))?;
     if footer.summary_start == 0 {
         return Ok(None);
     }
     if footer.summary_start > footer_start {
-        return Err(prefer_http_object_error(
+        return Err(classify_remote_summary_error(
             reader,
             mcap::McapError::UnexpectedEof.into(),
         ));
@@ -1032,7 +1032,7 @@ fn read_summary_from_remote(
         let prefix_len = (tail.start - footer.summary_start) as usize;
         let mut summary_bytes = reader.read_range(footer.summary_start, prefix_len)?;
         if summary_bytes.len() != prefix_len {
-            return Err(prefer_http_object_error(
+            return Err(classify_remote_summary_error(
                 reader,
                 mcap::McapError::UnexpectedEof.into(),
             ));
@@ -1041,17 +1041,17 @@ fn read_summary_from_remote(
         summary_bytes
     };
     if summary_bytes.len() != summary_len {
-        return Err(prefer_http_object_error(
+        return Err(classify_remote_summary_error(
             reader,
             mcap::McapError::UnexpectedEof.into(),
         ));
     }
     parse::parse_summary_section(&summary_bytes)
         .map(Some)
-        .map_err(|err| prefer_http_object_error(reader, err))
+        .map_err(|err| classify_remote_summary_error(reader, err))
 }
 
-fn prefer_http_object_error(reader: &RemoteRangeReader, err: anyhow::Error) -> anyhow::Error {
+fn classify_remote_summary_error(reader: &RemoteRangeReader, err: anyhow::Error) -> anyhow::Error {
     if reader.kind == RemoteUrlKind::Http {
         if let Err(head_err) = reader.source.stat() {
             return head_err;
