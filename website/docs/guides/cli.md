@@ -26,47 +26,49 @@ To install using [Homebrew](https://brew.sh) on macOS or Linux, run:
 
 ### From Source
 
-:::caution
-Installing via `go install` is not supported. To build from source you must clone the repository.
-:::
-
 1. Clone the [mcap repository](https://github.com/foxglove/mcap).
-2. `$ cd go/cli/mcap`
-3. `$ make build`
-4. The binary will be built into a newly created `bin` folder.
+2. `$ cd rust`
+3. `$ cargo build -p mcap-cli --release`
+4. The binary will be built at `rust/target/release/mcap`.
 
 ## Usage
 
-Run `mcap --help` for detailed usage information.
+Run `mcap --help` for detailed usage information, or `mcap <command> --help` for the options of a specific command.
 
     $ mcap --help
 
-    Usage:
-    mcap [command]
+    Usage: mcap [OPTIONS] <COMMAND>
 
-    Available Commands:
-    add         Add records to an existing MCAP file
-    cat         Cat the messages in an MCAP file to stdout
-    completion  Generate the autocompletion script for the specified shell
-    compress    Create a compressed copy of an MCAP file
-    convert     Convert a bag file to an MCAP file
-    decompress  Create an uncompressed copy of an MCAP file
-    doctor      Check an MCAP file structure
-    filter      Copy some filtered MCAP data to a new file
-    get         Get a record from an MCAP file
-    help        Help about any command
-    info        Report statistics about an MCAP file
-    list        List records of an MCAP file
-    merge       Merge a selection of MCAP files by record timestamp
-    recover     Recover data from a potentially corrupt MCAP file
-    version     Output version information
+    Commands:
+      add         Add records to an existing MCAP file
+      cat         Concatenate the messages in one or more MCAP files to stdout
+      completion  Generate shell completion scripts
+      compress    Create a compressed copy of an MCAP file
+      convert     Convert supported input files to MCAP
+      decompress  Create an uncompressed copy of an MCAP file
+      doctor      Check an MCAP file structure
+      du          Compute byte usage statistics for MCAP records
+      filter      Copy filtered MCAP data to a new file
+      get         Get a record from an MCAP file
+      info        Report statistics about an MCAP file
+      list        List records of an MCAP file
+      merge       Merge a selection of MCAP files by record timestamp
+      recover     Recover data from a potentially corrupt MCAP file
+      sort        Read an MCAP file and write messages sorted by log time
+      help        Print this message or the help of the given subcommand(s)
 
-    Flags:
-        --config string   Config file (default is $HOME/.mcap.yaml)
-    -h, --help            help for mcap
-    -v, --verbose         Verbose output
+    Options:
+      -c, --color <COLOR>      [default: auto] [possible values: auto, always, never]
+          --allow-remote-scan  Allow commands to download/scan remote inputs
+      -v, --verbose...         Verbosity (-v, -vv, -vvv, etc.)
+      -h, --help               Print help
+      -V, --version            Print version
 
-    Use "mcap [command] --help" for more information about a command.
+### Shell completion
+
+Generate a shell completion script with `mcap completion <shell>` (supports `bash`, `zsh`, `fish`, `elvish`, and `powershell`). For example, to enable completions in the current `bash` session:
+
+    $ source <(mcap completion bash)
 
 ### ROS Bag to MCAP conversion
 
@@ -86,11 +88,9 @@ Convert a ROS 2 db3 file to mcap:
 
 <!-- cspell: enable -->
 
-In ROS 2 releases prior to Iron, db3 files did not contain message definitions (schemas). When converting to MCAP, you should first source the same ROS 2 workspace that the original file was recorded with. If this is not available, you will need to specify a search directory for message definitions (e.g `/opt/ros/humble` from the original system):
+The `mcap` CLI dispatches on the input file extension (`.bag` for ROS 1, `.db3` for ROS 2) and reads ROS 2 `.db3` files using the message definitions embedded in the file. ROS 2 Iron and later embed message definitions when recording, so these files convert without a sourced workspace.
 
-    $ mcap convert demo.db3 demo.mcap --ament-prefix-path /path/to/humble
-
-Alternatively, the [`ros2 bag convert`](https://github.com/ros2/rosbag2#converting-bags-merge-split-etc-) utility may be used to convert between db3 and mcap.
+Bags recorded before ROS 2 Iron do not contain embedded message definitions and cannot be converted directly. Use the [`ros2 bag convert`](https://github.com/ros2/rosbag2#converting-bags-merge-split-etc-) utility instead (with the original ROS 2 workspace sourced) to convert between `.db3` and MCAP.
 
 ### File summarization
 
@@ -137,7 +137,7 @@ Echo messages for a specific topic to stdout as JSON:
 
 ### Remote file support
 
-All commands except `convert` support reading from remote files stored in **GCS** or **S3**:
+The `mcap` CLI can read files over **HTTP(S)** and from object stores: **Amazon S3** (`s3://`, `s3a://`), **Google Cloud Storage** (`gs://`), and **Azure Blob Storage** (`az://`, `azure://`, `adl://`, `abfs://`, `abfss://`):
 
 <!-- cspell: disable -->
 
@@ -162,15 +162,23 @@ All commands except `convert` support reading from remote files stored in **GCS*
 
 <!-- cspell: enable -->
 
-#### AWS S3
+Indexed reads use the summary index at the end of the file to fetch only the bytes they need, minimizing latency and data transfer. Commands that only need indexed data — such as `info`, `list`, and single-record `get` — work against remote files without any extra flags.
 
-When reading from S3 you must specify the region of the bucket:
+#### Allowing full remote scans
+
+Some operations must read or download the entire remote file: commands that rewrite a file (`filter`, `merge`, `convert`, `recover`) and any command that falls back to a linear scan (for example a remote file with no summary section, a server that does not support range requests, or `cat` reading message payloads). These require the `--allow-remote-scan` flag to opt in to the larger transfer:
+
+```bash
+mcap filter --allow-remote-scan gs://your-remote-bucket/demo.mcap -o filtered.mcap -y /tf
+```
+
+#### Credentials
+
+Credentials are read from the standard environment variables for each backend (`AWS_*` for S3, `GOOGLE_*` for GCS, and `AZURE_*` for Azure Blob Storage). When reading from S3 you must also specify the region of the bucket:
 
 ```bash
 AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
 ```
-
-Remote reads will use the index at the end of the file to minimize latency and data transfer.
 
 ### File Diagnostics
 
