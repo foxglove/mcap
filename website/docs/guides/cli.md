@@ -26,14 +26,10 @@ To install using [Homebrew](https://brew.sh) on macOS or Linux, run:
 
 ### From Source
 
-:::caution
-Installing via `go install` is not supported. To build from source you must clone the repository.
-:::
-
 1. Clone the [mcap repository](https://github.com/foxglove/mcap).
-2. `$ cd go/cli/mcap`
-3. `$ make build`
-4. The binary will be built into a newly created `bin` folder.
+2. `$ cd rust`
+3. `$ cargo build -p mcap-cli --release`
+4. The binary will be built at `rust/target/release/mcap`.
 
 ## Usage
 

@@ -1,10 +1,10 @@
 ## MCAP CLI
 
-A command line tool to work with MCAP files. See https://mcap.dev/guides/cli for documentation.
+Deprecated Go CLI for MCAP. See [MCAP CLI](../../../rust/cli) for the latest version, and https://mcap.dev/guides/cli for documentation.
 
 ## Build from source
 
-You can build the CLI tool from source by running `make build` in the same directory as this README.
+You can build the Go CLI from source by running `make build` in the same directory as this README.
 
 ```
 $ make build

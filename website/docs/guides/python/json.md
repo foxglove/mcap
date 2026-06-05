@@ -153,7 +153,7 @@ That's it! We now have a valid MCAP file with a single point cloud message.
 
 ### Inspect your file
 
-To inspect your MCAP file, install the [MCAP CLI tool](https://github.com/foxglove/mcap/tree/main/go/cli/mcap#installing).
+To inspect your MCAP file, install the [MCAP CLI tool](../cli.md#installation).
 
 Run the following commands to summarize your file's contents and to verify that it has no issues:
 

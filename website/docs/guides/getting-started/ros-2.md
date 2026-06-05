@@ -52,7 +52,7 @@ If you want to use compression when converting, specify a storage config file. S
 
 ### Using the `mcap` CLI tool
 
-The [`mcap` CLI tool](https://github.com/foxglove/mcap/tree/main/go/cli/mcap#installing) also supports converting ROS 2 `.db3` files into MCAP files directly.
+The [`mcap` CLI tool](../cli.md#installation) also supports converting ROS 2 `.db3` files into MCAP files directly.
 
 ```
 $ mcap convert multiple_files_1.db3 demo.mcap
@@ -68,7 +68,7 @@ Alternatively, you can specify a colon-separated list of directories for the CLI
 $ mcap convert ros2_input.db3 ros1_output.mcap --ament-prefix-path=/your/first/directory;/your/second/directory
 ```
 
-You can also use the mcap CLI tool to inspect MCAP files, validate them, and even echo their messages to `stdout`. For a full list of possible commands, check out the [mcap GitHub repo](https://github.com/foxglove/mcap/tree/main/go/cli/mcap).
+You can also use the mcap CLI tool to inspect MCAP files, validate them, and even echo their messages to `stdout`. For a full list of possible commands, check out the [mcap CLI documentation](../cli.md).
 
 ## Read and write MCAP
 
@@ -84,9 +84,9 @@ If you're starting from scratch, you can write code that allows you to **write y
 
 ## Inspect MCAP
 
-Use the [`mcap` CLI tool](https://github.com/foxglove/mcap/tree/main/go/cli/mcap) to inspect MCAP files, validate their contents, and even echo their messages to `stdout`.
+Use the [`mcap` CLI tool](../cli.md) to inspect MCAP files, validate their contents, and even echo their messages to `stdout`.
 
-For an exhaustive list of ways to interact with your MCAP data, check out the [mcap GitHub repo](https://github.com/foxglove/mcap/tree/main/go/cli/mcap).
+For an exhaustive list of ways to interact with your MCAP data, check out the [mcap CLI documentation](../cli.md).
 
 ## Visualize MCAP
 
