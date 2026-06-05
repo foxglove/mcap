@@ -1240,14 +1240,13 @@ export const cases: CliTestCase[] = [
     knownDifference: {
       id: "add-metadata-duplicate-keys",
       summary:
-        "Rust add metadata fails on duplicate keys; Go add metadata accepts them and keeps the last value.",
+        "Rust add metadata fails on duplicate keys; Go add metadata accepts them and exits successfully.",
       reason:
-        "MCAP metadata is a string map, so a duplicate key is ambiguous. The Rust CLI rejects the input to avoid silently dropping a value, while the Go CLI overwrites earlier values with the last one and exits successfully.",
+        "MCAP metadata is a string map, so a duplicate key is ambiguous. The Rust CLI rejects the input to avoid silently dropping a value, while the Go CLI overwrites earlier values with the last one and exits successfully. (The harness has no metadata-content comparator, so this case asserts only the accept/reject exit-code split, not the retained value.)",
       desiredBehavior:
         "Rust add metadata should keep rejecting duplicate keys rather than silently discarding a value.",
       goBehavior: {
         exitCode: 0,
-        files: [{ path: "input.mcap", exists: true }],
       },
       rustBehavior: {
         exitCode: "nonzero",
