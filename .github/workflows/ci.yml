@@ -8,7 +8,251 @@ on:
     branches: ["**"]
 
 jobs:
-  spellcheck:
+  cpp:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [clang, gcc]
+    defaults:
+      run:
+        working-directory: cpp
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: false
+      - uses: actions/cache@v5
+        with:
+          path: ~/.conan/data
+          key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
+      - run: make ci-format-check
+      - run: make ci-${{ matrix.compiler }}
+      - run: make test-host
+      - run: make test-examples-host
+      - run: make run-examples-host
+
+  cpp-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: cpp
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: false
+      - uses: actions/cache@v5
+        with:
+          path: ~/.conan/data
+          key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+      - run: pip install conan~=1.0
+      - run: bash build.sh --build-tests-only
+      - run: ./test/build/Debug/bin/unit-tests
+
+  go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go/go.work
+          cache-dependency-path: |
+            go/go.work
+            go/go.work.sum
+            go/**/go.mod
+            go/**/go.sum
+      - name: install golangci-lint
+        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1
+      - run: make lint
+      - run: make test
+      - name: Check library version
+        if: |
+          !github.event.pull_request.head.repo.fork &&
+          startsWith(github.ref, 'refs/tags/go/mcap/v')
+        run: make -C cli/mcap build && ./check_tag.sh cli/mcap/bin/mcap
+
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - uses: astral-sh/setup-uv@v8.2.0
+      - run: make lint
+      - run: make test
+      - run: make examples
+      - run: make build
+      - name: Publish mcap to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
+        with:
+          packages-dir: python/mcap/dist
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
+
+      - name: Publish mcap-protobuf-support to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+          packages-dir: python/mcap-protobuf-support/dist
+          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
+
+      - name: Publish mcap-ros1-support to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+          packages-dir: python/mcap-ros1-support/dist
+          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
+
+      - name: Publish mcap-ros2-support to TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+          packages-dir: python/mcap-ros2-support/dist
+          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
+
+      - name: Publish mcap to PyPI
+        if: |
+          !github.event.pull_request.head.repo.fork &&
+          startsWith(github.ref, 'refs/tags/releases/python/mcap/v')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/mcap/dist
+
+      - name: Publish mcap-protobuf-support to PyPI
+        if: |
+          !github.event.pull_request.head.repo.fork &&
+          startsWith(github.ref, 'refs/tags/releases/python/mcap-protobuf-support/v')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/mcap-protobuf-support/dist
+
+      - name: Publish mcap-ros1-support to PyPI
+        if: |
+          !github.event.pull_request.head.repo.fork &&
+          startsWith(github.ref, 'refs/tags/releases/python/mcap-ros1-support/v')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/mcap-ros1-support/dist
+
+      - name: Publish mcap-ros2-support to PyPI
+        if: |
+          !github.event.pull_request.head.repo.fork &&
+          startsWith(github.ref, 'refs/tags/releases/python/mcap-ros2-support/v')
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/mcap-ros2-support/dist
+
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: rustup target add wasm32-unknown-unknown
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- --no-deps -D warnings
+      - run: cargo clippy -p mcap --no-default-features -- --no-deps -D warnings
+      - run: cargo clippy -p mcap --no-default-features --features lz4 -- --no-deps -D warnings
+      - run: cargo clippy -p mcap --no-default-features --features zstd -- --no-deps -D warnings
+      - run: cargo clippy -p mcap --no-default-features --features tokio -- --no-deps -D warnings
+      - run: cargo clippy -p mcap --no-default-features --features tokio,lz4 -- --no-deps -D warnings
+      - run: cargo clippy -p mcap --no-default-features --features tokio,zstd -- --no-deps -D warnings
+      - run: cargo build --workspace --all-features
+      - run: cargo test --workspace --all-features
+      - run: cargo build -p mcap --all-features --target wasm32-unknown-unknown
+      - run: cargo check -p mcap --all-features --target wasm32-unknown-unknown
+      - run: cargo publish -p mcap --dry-run
+      - name: "publish to crates.io"
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/rust/v')
+        run: cargo publish -p mcap --token ${{ secrets.RUST_CRATES_IO_TOKEN }}
+
+  swift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: false
+      - uses: ./.github/actions/setup-swift
+        with:
+          swift-version: "6.1"
+      - run: docker run -t --rm -v $(pwd):/work -w /work ghcr.io/realm/swiftlint:0.62.2
+      - run: docker run -t --rm -v $(pwd):/work ghcr.io/nicklockwood/swiftformat:0.58.6 --lint /work
+      - run: swift build
+      - run: swift test
+  typescript:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      # https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: false
+      - run: corepack enable
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: yarn
+          registry-url: https://registry.npmjs.org
+      - run: yarn install --immutable
+      - run: yarn dedupe --check
+      - run: yarn fmt:check
+      - run: yarn workspace @mcap/core lint:ci
+      - run: yarn workspace @mcap/core build
+      - run: yarn workspace @mcap/support lint:ci
+      - run: yarn workspace @mcap/support build
+      - run: yarn workspace @mcap/nodejs lint:ci
+      - run: yarn workspace @mcap/nodejs build
+      - run: yarn workspace @mcap/browser lint:ci
+      - run: yarn workspace @mcap/browser build
+      - run: yarn typescript:test
+
+      - name: Publish @mcap/core to NPM
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/core/v') }}
+        run: yarn workspace @mcap/core npm publish --provenance --access public
+
+      - name: Publish @mcap/support to NPM
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/support/v') }}
+        run: yarn workspace @mcap/support npm publish --provenance --access public
+
+      - name: Publish @mcap/nodejs to NPM
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/nodejs/v') }}
+        run: yarn workspace @mcap/nodejs npm publish --provenance --access public
+
+      - name: Publish @mcap/browser to NPM
+        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/browser/v') }}
+        run: yarn workspace @mcap/browser npm publish --provenance --access public
+
+  typescript-examples:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -20,12 +264,231 @@ jobs:
           node-version: 24.x
           cache: yarn
       - run: yarn install --immutable
-      - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
-      - run: yarn spellcheck --no-progress
-      - uses: taiki-e/install-action@v2
+      - run: yarn workspace @foxglove/mcap-benchmarks lint:ci
+      - run: yarn workspace @foxglove/mcap-benchmarks typecheck
+      - run: yarn workspace @foxglove/mcap-example-validate lint:ci
+      - run: yarn workspace @foxglove/mcap-example-validate typecheck
+      - run: yarn workspace @foxglove/mcap-example-bag2mcap lint:ci
+      - run: yarn workspace @foxglove/mcap-example-bag2mcap typecheck
+      - run: yarn workspace @foxglove/mcap-example-basicwriter lint:ci
+      - run: yarn workspace @foxglove/mcap-example-basicwriter typecheck
+      - run: yarn workspace @foxglove/mcap-example-flatbufferswriter lint:ci
+      - run: yarn workspace @foxglove/mcap-example-flatbufferswriter typecheck
+      - run: yarn workspace @foxglove/mcap-example-text-annotation-demo lint:ci
+      - run: yarn workspace @foxglove/mcap-example-text-annotation-demo typecheck
+      - run: yarn workspace @foxglove/mcap-example-ulog2mcap lint:ci
+      - run: yarn workspace @foxglove/mcap-example-ulog2mcap typecheck
+      - run: yarn workspace @foxglove/mcap-example-ulog2mcap typescript:test
+
+  cli:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            image: ubuntu-latest
+            arch: amd64
+            target: x86_64-unknown-linux-musl
+            build: cargo zigbuild
+            exe: ""
+          - os: linux
+            image: ubuntu-latest
+            arch: arm64
+            target: aarch64-unknown-linux-musl
+            build: cargo zigbuild
+            exe: ""
+          - os: linux
+            image: ubuntu-latest
+            arch: arm
+            target: armv7-unknown-linux-musleabihf
+            build: cargo zigbuild
+            exe: ""
+          - os: macos
+            image: macos-latest
+            arch: amd64
+            target: x86_64-apple-darwin
+            build: cargo build
+            exe: ""
+          - os: macos
+            image: macos-latest
+            arch: arm64
+            target: aarch64-apple-darwin
+            build: cargo build
+            exe: ""
+          - os: windows
+            image: windows-latest
+            arch: amd64
+            target: x86_64-pc-windows-msvc
+            build: cargo build
+            exe: ".exe"
+          - os: windows
+            image: windows-latest
+            arch: arm64
+            target: aarch64-pc-windows-msvc
+            build: cargo build
+            exe: ".exe"
+
+    name: cli (${{ matrix.os }}/${{ matrix.arch }})
+    runs-on: ${{ matrix.image }}
+    defaults:
+      run:
+        working-directory: rust
+        shell: bash
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
         with:
-          tool: typos
-      - run: typos
+          fetch-depth: "0"
+      - name: Check version matches tag
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
+        run: |
+          cargo_version="$(grep -m1 '^version = ' cli/Cargo.toml | sed -E 's/^version = "(.*)"/\1/')"
+          tag_version="${GITHUB_REF#refs/tags/releases/mcap-cli/v}"
+          if [ "$cargo_version" != "$tag_version" ]; then
+            echo "::error::rust/cli/Cargo.toml version ($cargo_version) does not match release tag ($tag_version)"
+            exit 1
+          fi
+          echo "rust/cli/Cargo.toml version ($cargo_version) matches release tag"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup target add ${{ matrix.target }}
+      - name: Setup Zig
+        if: matrix.os == 'linux'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+      - name: Install cargo-zigbuild
+        if: matrix.os == 'linux'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-zigbuild@0.22.3
+          fallback: none
+      - name: Build binary
+        run: |
+          ${{ matrix.build }} -p mcap-cli --release --target "${{ matrix.target }}"
+          mkdir -p bin
+          cp \
+            "target/${{ matrix.target }}/release/mcap${{ matrix.exe }}" \
+            "bin/mcap-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }}"
+      - if: matrix.arch == 'amd64'
+        run: bin/mcap-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }} --version
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mcap-cli-${{ matrix.os }}-${{ matrix.arch }}
+          path: rust/bin/mcap-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }}
+          retention-days: 7
+      - name: Make release notes
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
+        run: |
+          git log --oneline --no-merges --first-parent --grep CLI --decorate-refs=refs $(git describe --tags $(git rev-list --tags=releases/mcap-cli --max-count=1))..HEAD > ${{ github.workspace }}-CHANGELOG.txt
+      - name: Release
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: rust/bin/*
+          body_path: ${{ github.workspace }}-CHANGELOG.txt
+          draft: false
+
+  cli-conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          lfs: true
+      - run: corepack enable
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: yarn
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go/go.work
+          cache: true
+          cache-dependency-path: |
+            go/go.work
+            go/go.work.sum
+            go/**/go.mod
+            go/**/go.sum
+      - uses: dtolnay/rust-toolchain@stable
+      - run: yarn install --immutable
+      - run: make -C go/cli/mcap build
+      - run: cargo build -p mcap-cli
+        working-directory: rust
+      - run: yarn test:conformance:generate-inputs --verify
+      - run: >
+          yarn test:cli-conformance
+          --go-bin "${{ github.workspace }}/go/cli/mcap/bin/mcap"
+          --rust-bin "${{ github.workspace }}/rust/target/debug/mcap"
+
+  go-cli:
+    needs:
+      - go
+    defaults:
+      run:
+        working-directory: go/cli/mcap
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            image: ubuntu-latest
+            arch: amd64
+            env: {}
+          - os: linux
+            image: ubuntu-latest
+            arch: arm64
+            setup: sudo apt-get update && sudo apt-get install -qq gcc-aarch64-linux-gnu
+            env:
+              CC: aarch64-linux-gnu-gcc
+              CXX: aarch64-linux-gnu-g++
+          - os: linux
+            image: ubuntu-latest
+            arch: arm
+            setup: sudo apt-get update && sudo apt-get install -qq gcc-arm-linux-gnueabihf
+            env:
+              CC: arm-linux-gnueabihf-gcc
+              CXX: arm-linux-gnueabihf-g++
+              GOARM: 7
+          - os: macos
+            image: macos-latest
+            arch: amd64
+            env: {}
+          - os: macos
+            image: macos-latest
+            arch: arm64
+            env: {}
+          - os: windows
+            image: windows-latest
+            arch: amd64
+            env: {}
+
+    name: go-cli (${{ matrix.os }}/${{ matrix.arch }})
+    runs-on: ${{ matrix.image }}
+    env: ${{ matrix.env }}
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go/go.work
+          cache-dependency-path: |
+            go/go.work
+            go/go.work.sum
+            go/**/go.mod
+            go/**/go.sum
+      - name: Setup environment
+        run: ${{ matrix.setup }}
+      - name: Build binary
+        run: make build
+        env:
+          GOARCH: ${{ matrix.arch }}
+          OUTPUT: mcap-go-${{ matrix.os }}-${{ matrix.arch }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mcap-go-cli-${{ matrix.os }}-${{ matrix.arch }}
+          path: go/cli/mcap/bin/mcap-go-${{ matrix.os }}-${{ matrix.arch }}
+          retention-days: 7
 
   conformance-lint:
     runs-on: ubuntu-latest
@@ -171,128 +634,7 @@ jobs:
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner rust-
 
-  cli-conformance:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          lfs: true
-      - run: corepack enable
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
-          cache: yarn
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go/go.work
-          cache: true
-          cache-dependency-path: |
-            go/go.work
-            go/go.work.sum
-            go/**/go.mod
-            go/**/go.sum
-      - uses: dtolnay/rust-toolchain@stable
-      - run: yarn install --immutable
-      - run: make -C go/cli/mcap build
-      - run: cargo build -p mcap-cli
-        working-directory: rust
-      - run: yarn test:conformance:generate-inputs --verify
-      - run: >
-          yarn test:cli-conformance
-          --go-bin "${{ github.workspace }}/go/cli/mcap/bin/mcap"
-          --rust-bin "${{ github.workspace }}/rust/target/debug/mcap"
-
-  cpp:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        compiler: [clang, gcc]
-    defaults:
-      run:
-        working-directory: cpp
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          lfs: false
-      - uses: actions/cache@v5
-        with:
-          path: ~/.conan/data
-          key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
-      - run: make ci-format-check
-      - run: make ci-${{ matrix.compiler }}
-      - run: make test-host
-      - run: make test-examples-host
-      - run: make run-examples-host
-
-  cpp-windows:
-    runs-on: windows-latest
-    defaults:
-      run:
-        working-directory: cpp
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          lfs: false
-      - uses: actions/cache@v5
-        with:
-          path: ~/.conan/data
-          key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.10"
-      - run: pip install conan~=1.0
-      - run: bash build.sh --build-tests-only
-      - run: ./test/build/Debug/bin/unit-tests
-
-  typescript:
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      # https://docs.npmjs.com/generating-provenance-statements#publishing-packages-with-provenance-via-github-actions
-      id-token: write
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          lfs: false
-      - run: corepack enable
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
-          cache: yarn
-          registry-url: https://registry.npmjs.org
-      - run: yarn install --immutable
-      - run: yarn dedupe --check
-      - run: yarn fmt:check
-      - run: yarn workspace @mcap/core lint:ci
-      - run: yarn workspace @mcap/core build
-      - run: yarn workspace @mcap/support lint:ci
-      - run: yarn workspace @mcap/support build
-      - run: yarn workspace @mcap/nodejs lint:ci
-      - run: yarn workspace @mcap/nodejs build
-      - run: yarn workspace @mcap/browser lint:ci
-      - run: yarn workspace @mcap/browser build
-      - run: yarn typescript:test
-
-      - name: Publish @mcap/core to NPM
-        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/core/v') }}
-        run: yarn workspace @mcap/core npm publish --provenance --access public
-
-      - name: Publish @mcap/support to NPM
-        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/support/v') }}
-        run: yarn workspace @mcap/support npm publish --provenance --access public
-
-      - name: Publish @mcap/nodejs to NPM
-        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/nodejs/v') }}
-        run: yarn workspace @mcap/nodejs npm publish --provenance --access public
-
-      - name: Publish @mcap/browser to NPM
-        if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/browser/v') }}
-        run: yarn workspace @mcap/browser npm publish --provenance --access public
-
-  typescript-examples:
+  spellcheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -304,352 +646,9 @@ jobs:
           node-version: 24.x
           cache: yarn
       - run: yarn install --immutable
-      - run: yarn workspace @foxglove/mcap-benchmarks lint:ci
-      - run: yarn workspace @foxglove/mcap-benchmarks typecheck
-      - run: yarn workspace @foxglove/mcap-example-validate lint:ci
-      - run: yarn workspace @foxglove/mcap-example-validate typecheck
-      - run: yarn workspace @foxglove/mcap-example-bag2mcap lint:ci
-      - run: yarn workspace @foxglove/mcap-example-bag2mcap typecheck
-      - run: yarn workspace @foxglove/mcap-example-basicwriter lint:ci
-      - run: yarn workspace @foxglove/mcap-example-basicwriter typecheck
-      - run: yarn workspace @foxglove/mcap-example-flatbufferswriter lint:ci
-      - run: yarn workspace @foxglove/mcap-example-flatbufferswriter typecheck
-      - run: yarn workspace @foxglove/mcap-example-text-annotation-demo lint:ci
-      - run: yarn workspace @foxglove/mcap-example-text-annotation-demo typecheck
-      - run: yarn workspace @foxglove/mcap-example-ulog2mcap lint:ci
-      - run: yarn workspace @foxglove/mcap-example-ulog2mcap typecheck
-      - run: yarn workspace @foxglove/mcap-example-ulog2mcap typescript:test
-
-  python:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: python
-    permissions:
-      id-token: write
-    steps:
-      - uses: actions/checkout@v6
+      - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
+      - run: yarn spellcheck --no-progress
+      - uses: taiki-e/install-action@v2
         with:
-          lfs: true
-      - uses: astral-sh/setup-uv@v8.2.0
-      - run: make lint
-      - run: make test
-      - run: make examples
-      - run: make build
-      - name: Publish mcap to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
-        with:
-          packages-dir: python/mcap/dist
-          repository-url: https://test.pypi.org/legacy/
-          skip-existing: true
-          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
-
-      - name: Publish mcap-protobuf-support to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          skip-existing: true
-          packages-dir: python/mcap-protobuf-support/dist
-          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
-
-      - name: Publish mcap-ros1-support to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          skip-existing: true
-          packages-dir: python/mcap-ros1-support/dist
-          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
-
-      - name: Publish mcap-ros2-support to TestPyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
-        with:
-          repository-url: https://test.pypi.org/legacy/
-          skip-existing: true
-          packages-dir: python/mcap-ros2-support/dist
-          attestations: false # https://github.com/pypa/gh-action-pypi-publish/issues/283#issuecomment-2499296440
-
-      - name: Publish mcap to PyPI
-        if: |
-          !github.event.pull_request.head.repo.fork &&
-          startsWith(github.ref, 'refs/tags/releases/python/mcap/v')
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: python/mcap/dist
-
-      - name: Publish mcap-protobuf-support to PyPI
-        if: |
-          !github.event.pull_request.head.repo.fork &&
-          startsWith(github.ref, 'refs/tags/releases/python/mcap-protobuf-support/v')
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: python/mcap-protobuf-support/dist
-
-      - name: Publish mcap-ros1-support to PyPI
-        if: |
-          !github.event.pull_request.head.repo.fork &&
-          startsWith(github.ref, 'refs/tags/releases/python/mcap-ros1-support/v')
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: python/mcap-ros1-support/dist
-
-      - name: Publish mcap-ros2-support to PyPI
-        if: |
-          !github.event.pull_request.head.repo.fork &&
-          startsWith(github.ref, 'refs/tags/releases/python/mcap-ros2-support/v')
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: python/mcap-ros2-support/dist
-
-  go:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: go
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          lfs: true
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go/go.work
-          cache-dependency-path: |
-            go/go.work
-            go/go.work.sum
-            go/**/go.mod
-            go/**/go.sum
-      - name: install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1
-      - run: make lint
-      - run: make test
-      - name: Check library version
-        if: |
-          !github.event.pull_request.head.repo.fork &&
-          startsWith(github.ref, 'refs/tags/go/mcap/v')
-        run: make -C cli/mcap build && ./check_tag.sh cli/mcap/bin/mcap
-
-  go-cli:
-    needs:
-      - go
-    defaults:
-      run:
-        working-directory: go/cli/mcap
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: linux
-            image: ubuntu-latest
-            arch: amd64
-            env: {}
-          - os: linux
-            image: ubuntu-latest
-            arch: arm64
-            setup: sudo apt-get update && sudo apt-get install -qq gcc-aarch64-linux-gnu
-            env:
-              CC: aarch64-linux-gnu-gcc
-              CXX: aarch64-linux-gnu-g++
-          - os: linux
-            image: ubuntu-latest
-            arch: arm
-            setup: sudo apt-get update && sudo apt-get install -qq gcc-arm-linux-gnueabihf
-            env:
-              CC: arm-linux-gnueabihf-gcc
-              CXX: arm-linux-gnueabihf-g++
-              GOARM: 7
-          - os: macos
-            image: macos-latest
-            arch: amd64
-            env: {}
-          - os: macos
-            image: macos-latest
-            arch: arm64
-            env: {}
-          - os: windows
-            image: windows-latest
-            arch: amd64
-            env: {}
-
-    name: go-cli (${{ matrix.os }}/${{ matrix.arch }})
-    runs-on: ${{ matrix.image }}
-    env: ${{ matrix.env }}
-
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go/go.work
-          cache-dependency-path: |
-            go/go.work
-            go/go.work.sum
-            go/**/go.mod
-            go/**/go.sum
-      - name: Setup environment
-        run: ${{ matrix.setup }}
-      - name: Build binary
-        run: make build
-        env:
-          GOARCH: ${{ matrix.arch }}
-          OUTPUT: mcap-go-${{ matrix.os }}-${{ matrix.arch }}
-      - uses: actions/upload-artifact@v7
-        with:
-          name: mcap-go-cli-${{ matrix.os }}-${{ matrix.arch }}
-          path: go/cli/mcap/bin/mcap-go-${{ matrix.os }}-${{ matrix.arch }}
-          retention-days: 7
-
-  rust-cli:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: linux
-            image: ubuntu-latest
-            arch: amd64
-            target: x86_64-unknown-linux-musl
-            build: cargo zigbuild
-            exe: ""
-          - os: linux
-            image: ubuntu-latest
-            arch: arm64
-            target: aarch64-unknown-linux-musl
-            build: cargo zigbuild
-            exe: ""
-          - os: linux
-            image: ubuntu-latest
-            arch: arm
-            target: armv7-unknown-linux-musleabihf
-            build: cargo zigbuild
-            exe: ""
-          - os: macos
-            image: macos-latest
-            arch: amd64
-            target: x86_64-apple-darwin
-            build: cargo build
-            exe: ""
-          - os: macos
-            image: macos-latest
-            arch: arm64
-            target: aarch64-apple-darwin
-            build: cargo build
-            exe: ""
-          - os: windows
-            image: windows-latest
-            arch: amd64
-            target: x86_64-pc-windows-msvc
-            build: cargo build
-            exe: ".exe"
-          - os: windows
-            image: windows-latest
-            arch: arm64
-            target: aarch64-pc-windows-msvc
-            build: cargo build
-            exe: ".exe"
-
-    name: rust-cli (${{ matrix.os }}/${{ matrix.arch }})
-    runs-on: ${{ matrix.image }}
-    defaults:
-      run:
-        working-directory: rust
-        shell: bash
-    permissions:
-      contents: write
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: "0"
-      - name: Check version matches tag
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
-        run: |
-          cargo_version="$(grep -m1 '^version = ' cli/Cargo.toml | sed -E 's/^version = "(.*)"/\1/')"
-          tag_version="${GITHUB_REF#refs/tags/releases/mcap-cli/v}"
-          if [ "$cargo_version" != "$tag_version" ]; then
-            echo "::error::rust/cli/Cargo.toml version ($cargo_version) does not match release tag ($tag_version)"
-            exit 1
-          fi
-          echo "rust/cli/Cargo.toml version ($cargo_version) matches release tag"
-      - uses: dtolnay/rust-toolchain@stable
-      - run: rustup target add ${{ matrix.target }}
-      - name: Setup Zig
-        if: matrix.os == 'linux'
-        uses: mlugg/setup-zig@v2
-        with:
-          version: 0.16.0
-      - name: Install cargo-zigbuild
-        if: matrix.os == 'linux'
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-zigbuild@0.22.3
-          fallback: none
-      - name: Build binary
-        run: |
-          ${{ matrix.build }} -p mcap-cli --release --target "${{ matrix.target }}"
-          mkdir -p bin
-          cp \
-            "target/${{ matrix.target }}/release/mcap${{ matrix.exe }}" \
-            "bin/mcap-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }}"
-      - if: matrix.arch == 'amd64'
-        run: bin/mcap-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }} --version
-      - uses: actions/upload-artifact@v7
-        with:
-          name: mcap-cli-${{ matrix.os }}-${{ matrix.arch }}
-          path: rust/bin/mcap-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }}
-          retention-days: 7
-      - name: Make release notes
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
-        run: |
-          git log --oneline --no-merges --first-parent --grep CLI --decorate-refs=refs $(git describe --tags $(git rev-list --tags=releases/mcap-cli --max-count=1))..HEAD > ${{ github.workspace }}-CHANGELOG.txt
-      - name: Release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/mcap-cli/v')
-        uses: softprops/action-gh-release@v3
-        with:
-          files: rust/bin/*
-          body_path: ${{ github.workspace }}-CHANGELOG.txt
-          draft: false
-
-  swift:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          lfs: false
-      - uses: ./.github/actions/setup-swift
-        with:
-          swift-version: "6.1"
-      - run: docker run -t --rm -v $(pwd):/work -w /work ghcr.io/realm/swiftlint:0.62.2
-      - run: docker run -t --rm -v $(pwd):/work ghcr.io/nicklockwood/swiftformat:0.58.6 --lint /work
-      - run: swift build
-      - run: swift test
-
-  rust:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: rust
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          lfs: true
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - run: rustup target add wasm32-unknown-unknown
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets -- --no-deps -D warnings
-      - run: cargo clippy -p mcap --no-default-features -- --no-deps -D warnings
-      - run: cargo clippy -p mcap --no-default-features --features lz4 -- --no-deps -D warnings
-      - run: cargo clippy -p mcap --no-default-features --features zstd -- --no-deps -D warnings
-      - run: cargo clippy -p mcap --no-default-features --features tokio -- --no-deps -D warnings
-      - run: cargo clippy -p mcap --no-default-features --features tokio,lz4 -- --no-deps -D warnings
-      - run: cargo clippy -p mcap --no-default-features --features tokio,zstd -- --no-deps -D warnings
-      - run: cargo build --workspace --all-features
-      - run: cargo test --workspace --all-features
-      - run: cargo build -p mcap --all-features --target wasm32-unknown-unknown
-      - run: cargo check -p mcap --all-features --target wasm32-unknown-unknown
-      - run: cargo publish -p mcap --dry-run
-      - name: "publish to crates.io"
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/rust/v')
-        run: cargo publish -p mcap --token ${{ secrets.RUST_CRATES_IO_TOKEN }}
+          tool: typos
+      - run: typos
