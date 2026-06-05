@@ -107,6 +107,13 @@ export type ExpectedMcapSummary = {
   messageCount?: number;
   channelCount?: number;
   schemaCount?: number;
+  // Each entry asserts a metadata record with the given name resolves to exactly these key/values.
+  // Records sharing a name are merged in file order (later values win), matching `get metadata`.
+  metadata?: Array<{ name: string; values: Record<string, string> }>;
+  // Exact match of the Header.library string.
+  library?: string;
+  // Substring match of the Header.library string (robust to version bumps in writer identity).
+  libraryContains?: string;
 };
 
 export type KnownDifference = {
