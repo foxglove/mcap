@@ -29,8 +29,8 @@ pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     let opts = build_write_options(
         args.compression,
         args.chunk_size,
-        args.include_crc,
-        args.chunked,
+        !args.no_crc,
+        !args.no_chunks,
         input.profile(),
     );
 
@@ -353,8 +353,8 @@ size 123\n",
                 output: PathBuf::from("/tmp/mcap-cli-missing-output.mcap"),
                 compression: CompressionFormat::None,
                 chunk_size: 8 * 1024 * 1024,
-                include_crc: false,
-                chunked: true,
+                no_crc: true,
+                no_chunks: false,
             },
         )
         .expect_err("missing input should fail");
@@ -371,8 +371,8 @@ size 123\n",
                 output: PathBuf::from("/tmp/mcap-cli-remote-output.mcap"),
                 compression: CompressionFormat::None,
                 chunk_size: 8 * 1024 * 1024,
-                include_crc: false,
-                chunked: true,
+                no_crc: true,
+                no_chunks: false,
             },
         )
         .expect_err("remote convert should require opt-in");
@@ -390,8 +390,8 @@ size 123\n",
                 output: PathBuf::from("/tmp/mcap-cli-cloud-output.mcap"),
                 compression: CompressionFormat::None,
                 chunk_size: 8 * 1024 * 1024,
-                include_crc: false,
-                chunked: true,
+                no_crc: true,
+                no_chunks: false,
             },
         )
         .expect_err("cloud convert should require opt-in");
@@ -429,8 +429,8 @@ size 123\n",
                 output: output_path.clone(),
                 compression: CompressionFormat::None,
                 chunk_size: 8 * 1024 * 1024,
-                include_crc: false,
-                chunked: true,
+                no_crc: true,
+                no_chunks: false,
             },
         )
         .expect_err("invalid ROS 1 bag should fail");
@@ -464,8 +464,8 @@ size 123\n",
                     output: output.path.clone(),
                     compression: CompressionFormat::None,
                     chunk_size: 8 * 1024 * 1024,
-                    include_crc: false,
-                    chunked: true,
+                    no_crc: true,
+                    no_chunks: false,
                 },
             )?;
 
