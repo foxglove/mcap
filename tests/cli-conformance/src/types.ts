@@ -36,6 +36,18 @@ export type FixtureAction =
         zeroValue?: number;
         count: number;
       }>;
+      metadata?: Array<{
+        name: string;
+        metadata: Record<string, string>;
+      }>;
+      attachments?: Array<{
+        name: string;
+        mediaType: string;
+        logTime: bigint | number;
+        createTime: bigint | number;
+        data: number[];
+      }>;
+      chunkedMessages?: boolean;
     }
   | {
       type: "writeRos1JsonMcap";
