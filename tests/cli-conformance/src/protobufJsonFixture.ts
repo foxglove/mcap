@@ -19,8 +19,23 @@ type ProtobufJsonMessage = {
   count: number;
 };
 
+type ProtobufJsonMetadata = {
+  name: string;
+  metadata: Record<string, string>;
+};
+
+type ProtobufJsonAttachment = {
+  name: string;
+  mediaType: string;
+  logTime: bigint | number;
+  createTime: bigint | number;
+  data: number[];
+};
+
 export type ProtobufJsonFixtureOptions = {
   messages: ProtobufJsonMessage[];
+  metadata?: ProtobufJsonMetadata[];
+  attachments?: ProtobufJsonAttachment[];
 };
 
 export function makeProtobufJsonMcap(options: ProtobufJsonFixtureOptions): Buffer {
@@ -52,10 +67,35 @@ export function makeProtobufJsonMcap(options: ProtobufJsonFixtureOptions): Buffe
         ]),
       ),
     ),
+    ...(options.metadata ?? []).map((metadata) =>
+      record(0x0c, Buffer.concat([mcapString(metadata.name), mcapStringMap(metadata.metadata)])),
+    ),
+    ...(options.attachments ?? []).map((attachment) => {
+      const data = Buffer.from(attachment.data);
+      return record(
+        0x09,
+        Buffer.concat([
+          uint64(attachment.logTime),
+          uint64(attachment.createTime),
+          mcapString(attachment.name),
+          mcapString(attachment.mediaType),
+          uint64(data.length),
+          data,
+          uint32(0),
+        ]),
+      );
+    }),
     record(0x0f, uint32(0)),
     record(0x02, Buffer.concat([uint64(0), uint64(0), uint32(0)])),
   ];
   return Buffer.concat([MCAP_MAGIC, ...records, MCAP_MAGIC]);
+}
+
+function mcapStringMap(values: Record<string, string>): Buffer {
+  const entries = Object.entries(values).map(([key, value]) =>
+    Buffer.concat([mcapString(key), mcapString(value)]),
+  );
+  return prefixedBytes(Buffer.concat(entries));
 }
 
 function sampleDescriptorSet(): Buffer {

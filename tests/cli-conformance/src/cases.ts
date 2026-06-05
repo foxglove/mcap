@@ -367,12 +367,59 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "get-attachment-by-offset",
+    description: "Attachment extraction by record offset writes identical payload bytes.",
+    tags: ["get", "attachments", "bytes", "offset"],
+    invocation: {
+      args: ["get", "attachment", ONE_ATTACHMENT, "--offset", "25", "-o", "attachment.bin"],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text" },
+      files: [{ path: "attachment.bin", comparator: { kind: "bytes" } }],
+    },
+  },
+  {
     id: "doctor-valid-file-exits-successfully",
     description:
       "Doctor accepts a representative valid MCAP; warning stream differences are covered separately.",
     tags: ["doctor"],
     invocation: { args: ["doctor", ONE_MESSAGE] },
     comparison: EXIT_CODE_ONLY,
+  },
+  {
+    id: "doctor-strict-message-order-detects-out-of-order-log-time",
+    description: "Doctor strict message ordering rejects messages whose log times move backward.",
+    tags: ["doctor", "strict-message-order"],
+    setup: [
+      {
+        type: "writeProtobufJsonMcap",
+        to: "{caseWorkDir}/out-of-order.mcap",
+        messages: [
+          {
+            sequence: 1,
+            logTime: 3,
+            publishTime: 1,
+            snakeCase: "later",
+            count: 1,
+          },
+          {
+            sequence: 2,
+            logTime: 2,
+            publishTime: 2,
+            snakeCase: "earlier",
+            count: 2,
+          },
+        ],
+      },
+    ],
+    invocation: { args: ["doctor", "--strict-message-order", "out-of-order.mcap"] },
+    comparison: {
+      exitCode: 1,
+      stdout: { kind: "ignore" },
+      stderr: { kind: "ignore" },
+    },
   },
   ...[
     {
@@ -448,6 +495,117 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "filter-exclude-topic-output-messages",
+    description: "Filtering with an exclude topic regex removes matching messages from output.",
+    tags: ["filter", "mcap-output", "topics"],
+    invocation: {
+      args: [
+        "filter",
+        TEN_MESSAGES,
+        "-o",
+        "filtered.mcap",
+        "-n",
+        "example",
+        "--output-compression",
+        "none",
+      ],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [
+        {
+          path: "filtered.mcap",
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
+        },
+      ],
+    },
+  },
+  {
+    id: "filter-rfc3339-time-range-output-messages",
+    description: "Filtering with RFC3339 start/end bounds preserves the same message stream.",
+    tags: ["filter", "mcap-output", "time"],
+    invocation: {
+      args: [
+        "filter",
+        ONE_MESSAGE,
+        "-o",
+        "filtered.mcap",
+        "-S",
+        "1970-01-01T00:00:00.000000002Z",
+        "-E",
+        "1970-01-01T00:00:00.000000003Z",
+        "--output-compression",
+        "none",
+      ],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [
+        {
+          path: "filtered.mcap",
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
+        },
+      ],
+    },
+  },
+  {
+    id: "filter-includes-metadata-and-attachments",
+    description: "Filtering with metadata and attachment flags preserves non-message records.",
+    tags: ["filter", "mcap-output", "metadata", "attachments"],
+    setup: [
+      {
+        type: "writeProtobufJsonMcap",
+        to: "{caseWorkDir}/content.mcap",
+        messages: [
+          {
+            sequence: 1,
+            logTime: 2,
+            publishTime: 1,
+            snakeCase: "hello",
+            count: 7,
+          },
+        ],
+        metadata: [{ name: "cli-conformance", metadata: { key: "value" } }],
+        attachments: [
+          {
+            name: "payload.bin",
+            mediaType: "application/octet-stream",
+            logTime: 4,
+            createTime: 3,
+            data: [1, 1, 2, 3, 5, 8],
+          },
+        ],
+      },
+    ],
+    invocation: {
+      args: [
+        "filter",
+        "content.mcap",
+        "-o",
+        "filtered.mcap",
+        "--include-metadata",
+        "--include-attachments",
+        "--output-compression",
+        "none",
+      ],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [
+        {
+          path: "filtered.mcap",
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
+        },
+      ],
+    },
+  },
+  {
     id: "compress-none-output-messages",
     description: "Rewriting an MCAP with no output compression preserves the same message stream.",
     tags: ["compress", "mcap-output"],
@@ -505,6 +663,25 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "compress-unchunked-output-content",
+    description: "Rewriting an MCAP with unchunked output preserves content.",
+    tags: ["compress", "mcap-output", "unchunked"],
+    invocation: {
+      args: ["compress", TEN_MESSAGES, "-o", "compressed-unchunked.mcap", "--unchunked"],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [
+        {
+          path: "compressed-unchunked.mcap",
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
+        },
+      ],
+    },
+  },
+  {
     id: "decompress-output-messages",
     description: "Decompressing an MCAP preserves the same message stream.",
     tags: ["decompress", "mcap-output"],
@@ -556,6 +733,35 @@ export const cases: CliTestCase[] = [
       files: [
         {
           path: "merged.mcap",
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
+        },
+      ],
+    },
+  },
+  {
+    id: "merge-coalesce-channels-none-output-messages",
+    description: "Merging with channel coalescing disabled preserves the same combined message stream.",
+    tags: ["merge", "mcap-output", "coalesce-channels"],
+    invocation: {
+      args: [
+        "merge",
+        ONE_MESSAGE,
+        ONE_MESSAGE,
+        "-o",
+        "merged-no-coalesce.mcap",
+        "--compression",
+        "none",
+        "--coalesce-channels",
+        "none",
+      ],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [
+        {
+          path: "merged-no-coalesce.mcap",
           comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
         },
       ],
@@ -803,6 +1009,38 @@ export const cases: CliTestCase[] = [
       rustBehavior: {
         exitCode: "nonzero",
         stderr: { kind: "contains", value: "unsupported input file extension" },
+      },
+    },
+  },
+  {
+    id: "known-difference-convert-bool-space-values",
+    description:
+      "Convert rejects space-separated explicit bool values with implementation-specific parse errors.",
+    tags: ["known-difference", "convert", "surface"],
+    invocation: {
+      args: [
+        "convert",
+        NOETIC_MULTITOPIC_NONE,
+        "converted.mcap",
+        "--include-crc",
+        "false",
+      ],
+    },
+    knownDifference: {
+      id: "convert-bool-space-values",
+      summary:
+        "Go and Rust both reject 'convert --include-crc false', but report different parse failures.",
+      reason:
+        "The Rust CLI requires explicit bool values to use the '--flag=<value>' form, while the Go CLI's Cobra parser leaves the trailing value as an extra positional argument for this command.",
+      desiredBehavior:
+        "Keep requiring '--include-crc=false' for explicit Rust bool values unless the CLI parser policy changes before v1.0.",
+      goBehavior: {
+        exitCode: 1,
+        stderr: { kind: "contains", value: "accepts 2 arg(s), received 3" },
+      },
+      rustBehavior: {
+        exitCode: 2,
+        stderr: { kind: "contains", value: "unexpected argument 'false'" },
       },
     },
   },
