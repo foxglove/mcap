@@ -457,7 +457,7 @@ impl ObjectStoreSource {
     fn stat(&self) -> Result<object_store::ObjectMeta> {
         self.runtime
             .block_on(self.store.head(&self.path))
-            .with_context(|| format!("failed to stat {}", self.display_url))
+            .map_err(|err| concise_remote_stat_error(&self.display_url, err))
     }
 
     fn head_size(&self) -> Result<u64> {
@@ -476,7 +476,9 @@ impl ObjectStoreSource {
                     ..GetOptions::default()
                 },
             ))
-            .with_context(|| format!("failed to fetch range from {}", self.display_url))?;
+            .map_err(|err| {
+                concise_remote_operation_error("fetching range from", &self.display_url, err)
+            })?;
         validate_identity_content_encoding(&response.attributes, &self.display_url)?;
         let bytes = self
             .runtime
@@ -505,9 +507,11 @@ impl ObjectStoreSource {
                 Ok(Some(response.meta.size))
             }
             Err(err) if remote_range_not_supported(&err) => Ok(None),
-            Err(err) => {
-                Err(err).with_context(|| format!("failed to fetch range from {}", self.display_url))
-            }
+            Err(err) => Err(concise_remote_operation_error(
+                "fetching range from",
+                &self.display_url,
+                err,
+            )),
         }
     }
 
@@ -562,9 +566,11 @@ impl ObjectStoreSource {
                 Err(err @ object_store::Error::NotFound { .. })
                     if !kind.range_support_is_guaranteed() =>
                 {
-                    return Err(err).with_context(|| {
-                        format!("failed to fetch range from {}", self.display_url)
-                    });
+                    return Err(concise_remote_operation_error(
+                        "fetching range from",
+                        &self.display_url,
+                        err,
+                    ));
                 }
                 Err(_) if !kind.range_support_is_guaranteed() => {
                     return Ok(match self.probe_bounded_range_size()? {
@@ -577,9 +583,11 @@ impl ObjectStoreSource {
                 // so fall through to the bounded path using a HEAD-discovered size.
                 Err(err) if remote_range_not_supported(&err) => {}
                 Err(err) => {
-                    return Err(err).with_context(|| {
-                        format!("failed to fetch range from {}", self.display_url)
-                    });
+                    return Err(concise_remote_operation_error(
+                        "fetching range from",
+                        &self.display_url,
+                        err,
+                    ));
                 }
             }
         }
@@ -744,6 +752,46 @@ fn remote_range_not_supported(err: &object_store::Error) -> bool {
     matches!(err, object_store::Error::NotSupported { .. })
 }
 
+fn concise_remote_stat_error(display_url: &str, err: object_store::Error) -> anyhow::Error {
+    if let Some(status) = object_store_error_status(&err) {
+        return anyhow::anyhow!("remote server returned {status} for {display_url}");
+    }
+    anyhow::anyhow!("failed to stat {display_url}: {err}")
+}
+
+fn concise_remote_operation_error(
+    operation: &str,
+    display_url: &str,
+    err: object_store::Error,
+) -> anyhow::Error {
+    if let Some(status) = object_store_error_status(&err) {
+        return anyhow::anyhow!("remote server returned {status} while {operation} {display_url}");
+    }
+    anyhow::anyhow!("failed while {operation} {display_url}: {err}")
+}
+
+fn object_store_error_status(err: &object_store::Error) -> Option<String> {
+    let status = match err {
+        object_store::Error::NotFound { .. } => "404 Not Found",
+        object_store::Error::PermissionDenied { .. } => "403 Forbidden",
+        object_store::Error::Unauthenticated { .. } => "401 Unauthorized",
+        object_store::Error::NotModified { .. } => "304 Not Modified",
+        object_store::Error::Precondition { .. } => "412 Precondition Failed",
+        object_store::Error::AlreadyExists { .. } => "409 Conflict",
+        _ => return status_from_object_store_message(&err.to_string()),
+    };
+    Some(status.to_string())
+}
+
+fn status_from_object_store_message(message: &str) -> Option<String> {
+    let (_, status) = message.split_once("Server returned non-2xx status code: ")?;
+    let status = status.trim().trim_end_matches(':').trim();
+    let status = status
+        .split_once(':')
+        .map_or(status, |(status, _)| status.trim());
+    (!status.is_empty()).then(|| status.to_string())
+}
+
 fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
     if is_remote_url(path) {
         return RemoteRangeReader::open(path);
@@ -762,11 +810,9 @@ fn read_remote_input_to_writer(path: &Path, writer: &mut impl std::io::Write) ->
     eprintln!("Warning: reading entire remote file {}", source.display_url);
 
     source.runtime.block_on(async {
-        let response = source
-            .store
-            .get(&source.path)
-            .await
-            .with_context(|| format!("failed to read remote input {}", source.display_url))?;
+        let response = source.store.get(&source.path).await.map_err(|err| {
+            concise_remote_operation_error("reading remote input from", &source.display_url, err)
+        })?;
         validate_identity_content_encoding(&response.attributes, &source.display_url)?;
         let mut stream = response.into_stream();
         while let Some(bytes) = stream
@@ -1164,6 +1210,31 @@ mod tests {
         format!("http://{addr}/demo.mcap")
     }
 
+    fn serve_http_status(status_code: u16, reason: &'static str, body: &'static [u8]) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("test server addr");
+        thread::spawn(move || {
+            for stream in listener.incoming().take(8) {
+                let mut stream = stream.expect("accept test connection");
+                let mut request = [0u8; 4096];
+                let read = stream.read(&mut request).expect("read request");
+                let request = String::from_utf8_lossy(&request[..read]);
+                let is_head = request.starts_with("HEAD ");
+                let response = format!(
+                    "HTTP/1.1 {status_code} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write status headers");
+                if !is_head {
+                    stream.write_all(body).expect("write status body");
+                }
+            }
+        });
+        format!("http://{addr}/demo.mcap")
+    }
+
     fn serve_http_with_options(
         body: &'static [u8],
         supports_ranges: bool,
@@ -1337,6 +1408,21 @@ mod tests {
     }
 
     #[test]
+    fn remote_http_range_status_error_is_concise() {
+        let url = serve_http_status(404, "Not Found", b"Not found");
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("range HTTP status error should surface cleanly");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("remote server returned 404 Not Found while fetching range from"),
+            "{message}"
+        );
+        assert!(!message.contains("Object at location"), "{message}");
+        assert!(!message.contains("Error performing GET"), "{message}");
+        assert!(!message.contains("MCAP file ended"), "{message}");
+    }
+
+    #[test]
     fn remote_range_probe_rejects_gzip_content_encoding() {
         let mut buffer = Vec::new();
         {
@@ -1361,9 +1447,11 @@ mod tests {
             .expect_err("missing HTTP object should surface as an HTTP error");
         let message = format!("{err:#}");
         assert!(
-            message.contains("not found") || message.contains("404"),
+            message.contains("remote server returned 404 Not Found"),
             "{message}"
         );
+        assert!(!message.contains("Object at location"), "{message}");
+        assert!(!message.contains("Error performing HEAD"), "{message}");
         assert!(!message.contains("MCAP file ended"), "{message}");
     }
 
@@ -1374,11 +1462,11 @@ mod tests {
         let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
             .expect_err("HTTP status error should surface instead of an MCAP parse error");
         let message = format!("{err:#}");
-        assert!(message.contains("failed to stat"), "{message}");
         assert!(
-            message.contains("403") || message.contains("Forbidden"),
+            message.contains("remote server returned 403 Forbidden"),
             "{message}"
         );
+        assert!(!message.contains("Error performing HEAD"), "{message}");
         assert!(!message.contains("MCAP file ended"), "{message}");
     }
 
@@ -1396,7 +1484,7 @@ mod tests {
                 Err(err) => err,
             };
         let message = format!("{err:#}");
-        assert!(message.contains("failed to fetch range from"));
+        assert!(message.contains("failed while fetching range from"));
     }
 
     #[test]
