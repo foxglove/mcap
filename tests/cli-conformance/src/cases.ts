@@ -1,4 +1,4 @@
-/* cspell:words flamegraph lz4 multitopic ndjson noetic notashell notbag pprof samply testdata undercount undercounting undercounts */
+/* cspell:words dedup flamegraph lz4 multitopic ndjson noetic notashell notbag pprof samply testdata undercount undercounting undercounts */
 
 import type { CliTestCase } from "./types.ts";
 
@@ -519,7 +519,7 @@ export const cases: CliTestCase[] = [
   {
     id: "filter-exclude-topic-output-messages",
     description:
-      "Rust filter honors -n/--exclude-topic-regex; Go filter ignores it and leaves matching messages in the output.",
+      "Rust filter excludes -n/--exclude-topic-regex topics; Go filter leaks all messages when the exclude matches every topic.",
     tags: ["known-difference", "filter", "mcap-output", "topics"],
     invocation: {
       args: [
@@ -536,11 +536,11 @@ export const cases: CliTestCase[] = [
     knownDifference: {
       id: "filter-exclude-topic-regex",
       summary:
-        "Rust filter correctly excludes matching topics with -n/--exclude-topic-regex; Go filter ignores the flag and keeps the matching messages.",
+        "Rust filter correctly excludes matching topics with -n/--exclude-topic-regex; Go filter leaks every message when the exclude regex matches all topics.",
       reason:
-        "The Rust CLI applies exclude regexes when rewriting the MCAP, dropping the matching topic (here all 10 messages on `example`, leaving 0). The legacy Go CLI does not apply -n for this fixture and emits all 10 messages, which silently produces an unfiltered file.",
+        "Go honors -n in general, but when the exclude regex eliminates every channel's topic the resulting empty topic set is treated by the indexed reader as `no filter` (an empty topic list means all topics), so every message passes through. This fixture has a single topic `example`, so excluding it leaves Go emitting all 10 messages — a silently unfiltered file — while Rust drops the matching channels to 0. (In a multi-topic file where -n removes only some topics, the topic set is non-empty and Go filters correctly.)",
       desiredBehavior:
-        "Rust filter's exclusion behavior is the intended, correct behavior; the Go CLI ignoring -n is a known Go bug that will not be fixed before the Go CLI is retired.",
+        "Rust filter's exclusion behavior is the intended, correct behavior; Go treating an exclude-everything result as `no filter` is a known Go bug that will not be fixed before the Go CLI is retired.",
       goBehavior: {
         exitCode: 0,
         files: [
@@ -1325,9 +1325,9 @@ export const cases: CliTestCase[] = [
     knownDifference: {
       id: "recover-library-header",
       summary:
-        "Rust recover preserves the source Header.library verbatim; Go recover prepends its own writer identity (mcap go vX.Y.Z) on every pass.",
+        "Rust recover preserves the source Header.library verbatim; Go recover re-stamps it with the go/mcap writer identity (mcap go vX.Y.Z).",
       reason:
-        "Header.library identifies the software that produced the data, which for a single-input transform like recover is still the original recorder. Rust preserves it verbatim, so the value is stable and idempotent across repeated transforms. Go prepends `mcap go vX.Y.Z; ` each pass without de-duplication, so the field grows unboundedly (e.g. `mcap go v1.8.0; mcap go v1.8.0; ...`) and no longer cleanly identifies the producer. The TEN_MESSAGES fixture has an empty source library, so Rust writes the empty original while Go writes `mcap go vX.Y.Z`. (Rust's single-input transforms — filter/compress/decompress/recover/sort — all preserve; merge/convert intentionally stamp the mcap-rs identity since there is no single source library to carry forward.)",
+        "Header.library identifies the software that produced the data, which for a single-input transform like recover is still the original recorder. Rust preserves it verbatim, so the value is stable across repeated transforms. Go re-stamps `mcap go vX.Y.Z` and prepends any earlier, differing library (a dedup guard at writer.go skips an identical one), so across version bumps the field accretes distinct tokens (e.g. `mcap go v1.9.0; mcap go v1.8.0`) and stops cleanly identifying the original producer. The TEN_MESSAGES fixture has an empty source library, so Rust writes the empty original while Go writes `mcap go vX.Y.Z`. (Rust's single-input transforms — filter/compress/decompress/recover/sort — all preserve; merge/convert intentionally stamp the mcap-rs identity since there is no single source library to carry forward.)",
       desiredBehavior:
         "Rust recover should keep preserving the source Header.library verbatim rather than re-stamping it; rewrite provenance, if needed, belongs in a separate record rather than concatenated into the library field.",
       goBehavior: {
