@@ -20,28 +20,28 @@ fn render_info(parsed: &parse::ParsedMcap) -> String {
     let mut out = String::new();
 
     if let Some(header) = &parsed.header {
-        let _ = writeln!(&mut out, "library:    {}", header.library);
-        let _ = writeln!(&mut out, "profile:    {}", header.profile);
+        let _ = writeln!(&mut out, "library:     {}", header.library);
+        let _ = writeln!(&mut out, "profile:     {}", header.profile);
     } else {
-        let _ = writeln!(&mut out, "library:    unknown");
-        let _ = writeln!(&mut out, "profile:    unknown");
+        let _ = writeln!(&mut out, "library:     unknown");
+        let _ = writeln!(&mut out, "profile:     unknown");
     }
 
     let mut duration_seconds = 0.0f64;
     if let Some(stats) = &parsed.statistics {
-        let _ = writeln!(&mut out, "messages:   {}", stats.message_count);
+        let _ = writeln!(&mut out, "messages:    {}", stats.message_count);
         let (duration_ns, signed_duration) =
             format_duration(stats.message_start_time, stats.message_end_time);
         duration_seconds = duration_ns / 1e9;
-        let _ = writeln!(&mut out, "duration:   {signed_duration}");
+        let _ = writeln!(&mut out, "duration:    {signed_duration}");
         let _ = writeln!(
             &mut out,
-            "start:      {}",
+            "start:       {}",
             render::formatted_time(stats.message_start_time)
         );
         let _ = writeln!(
             &mut out,
-            "end:        {}",
+            "end:         {}",
             render::formatted_time(stats.message_end_time)
         );
     }
@@ -120,13 +120,13 @@ fn render_info(parsed: &parse::ParsedMcap) -> String {
     out.push_str(&render::format_table(&rows));
 
     if let Some(stats) = &parsed.statistics {
-        let _ = writeln!(&mut out, "channels: {}", stats.channel_count);
+        let _ = writeln!(&mut out, "channels:    {}", stats.channel_count);
         let _ = writeln!(&mut out, "attachments: {}", stats.attachment_count);
-        let _ = writeln!(&mut out, "metadata: {}", stats.metadata_count);
+        let _ = writeln!(&mut out, "metadata:    {}", stats.metadata_count);
     } else {
-        let _ = writeln!(&mut out, "channels: unknown");
+        let _ = writeln!(&mut out, "channels:    unknown");
         let _ = writeln!(&mut out, "attachments: unknown");
-        let _ = writeln!(&mut out, "metadata: unknown");
+        let _ = writeln!(&mut out, "metadata:    unknown");
     }
 
     out
@@ -448,9 +448,9 @@ mod tests {
         );
 
         let rendered = render_info(&parsed);
-        assert!(rendered.contains("library: mcap-rust"));
-        assert!(rendered.contains("profile: demo"));
-        assert!(rendered.contains("messages: 2"));
+        assert!(rendered.contains("library:     mcap-rust"));
+        assert!(rendered.contains("profile:     demo"));
+        assert!(rendered.contains("messages:    2"));
         assert!(rendered.contains("channels:"));
         assert!(rendered.contains("/demo"));
     }
