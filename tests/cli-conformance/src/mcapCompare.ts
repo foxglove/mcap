@@ -61,6 +61,7 @@ export type McapSummaryExpectation = {
   messageCount?: number;
   channelCount?: number;
   schemaCount?: number;
+  metadata?: Array<{ name: string; values: Record<string, string> }>;
 };
 
 let decompressHandlersPromise: ReturnType<typeof loadDecompressHandlers> | undefined;
@@ -145,6 +146,25 @@ export async function compareMcapSummary(
   if (expected.schemaCount != undefined && actual.schemaCount !== expected.schemaCount) {
     messages.push(`expected ${expected.schemaCount} schemas, got ${actual.schemaCount}`);
   }
+  for (const expectedEntry of expected.metadata ?? []) {
+    const matching = actual.metadata.filter((entry) => entry.name === expectedEntry.name);
+    if (matching.length === 0) {
+      messages.push(`expected a metadata record named ${expectedEntry.name}, found none`);
+      continue;
+    }
+    // Merge records sharing a name in file order (later values win), matching `get metadata`.
+    const mergedValues = Object.assign({}, ...matching.map((entry) => entry.values)) as Record<
+      string,
+      string
+    >;
+    const expectedValues = stableStringify(expectedEntry.values);
+    const actualValues = stableStringify(mergedValues);
+    if (expectedValues !== actualValues) {
+      messages.push(
+        `expected metadata ${expectedEntry.name} values ${expectedValues}, got ${actualValues}`,
+      );
+    }
+  }
   return messages;
 }
 
@@ -157,6 +177,7 @@ function summarizeRecords(records: TypedMcapRecord[]): Required<McapSummaryExpec
   let messageCount = 0;
   const channels = new Set<number>();
   const schemas = new Set<number>();
+  const metadata: Array<{ name: string; values: Record<string, string> }> = [];
 
   for (const record of records) {
     const normalizedRecord = record as unknown as Record<string, unknown>;
@@ -173,6 +194,12 @@ function summarizeRecords(records: TypedMcapRecord[]): Required<McapSummaryExpec
       case "Schema":
         schemas.add(Number(normalizedRecord.id));
         break;
+      case "Metadata":
+        metadata.push({
+          name: stringField(normalizedRecord, "name"),
+          values: stringMapField(normalizedRecord, "metadata"),
+        });
+        break;
       default:
         break;
     }
@@ -183,6 +210,7 @@ function summarizeRecords(records: TypedMcapRecord[]): Required<McapSummaryExpec
     messageCount,
     channelCount: channels.size,
     schemaCount: schemas.size,
+    metadata,
   };
 }
 
