@@ -153,20 +153,15 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     if is_remote_url(path) {
         match open_remote_range_reader(path)? {
             Some(mut reader) => {
-                if let Some(summary) =
-                    read_summary_from_remote(&mut reader, options).with_context(|| {
-                        format!(
-                            "failed to read remote summary from {}",
-                            redacted_display(path)
-                        )
-                    })?
+                if let Some(summary) = read_summary_from_remote(&mut reader, options)
+                    .map_err(|err| remote_read_error(path, err))?
                 {
                     let header = read_header_from_seekable(&mut reader)?;
                     return Ok(parse::parsed_mcap_from_summary_ref(header, &summary));
                 }
                 if !options.allow_remote_scan {
                     bail!(
-                        "{}: remote file has no summary section; reading without one requires opt-in; {}",
+                        "failed to read {}\nRemote file has no summary section; reading without one requires opt-in; {}",
                         redacted_display(path),
                         remote_scan_opt_in_suffix()
                     );
@@ -174,7 +169,7 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
             }
             None if !options.allow_remote_scan => {
                 bail!(
-                    "{}: remote server does not support range requests; {}",
+                    "failed to read {}\nRemote server does not support range requests; {}",
                     redacted_display(path),
                     remote_scan_opt_in_suffix()
                 );
@@ -190,7 +185,12 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     }
 
     let mcap = load_path(path, options)?;
-    parse::parse_mcap(&mcap)
+    let parsed = parse::parse_mcap(&mcap);
+    if is_remote_url(path) {
+        parsed.map_err(|err| remote_read_error(path, err))
+    } else {
+        parsed
+    }
 }
 
 pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
@@ -292,16 +292,12 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
         }
         return Ok(None);
     };
-    let Some(summary) = read_summary_from_remote(&mut reader, options).with_context(|| {
-        format!(
-            "failed to read remote summary from {}",
-            redacted_display(path)
-        )
-    })?
+    let Some(summary) = read_summary_from_remote(&mut reader, options)
+        .map_err(|err| remote_read_error(path, err))?
     else {
         if !options.allow_remote_scan {
             bail!(
-                "{}: remote file has no summary section; reading without one requires opt-in; {}",
+                "failed to read {}\nRemote file has no summary section; reading without one requires opt-in; {}",
                 redacted_display(path),
                 remote_scan_opt_in_suffix()
             );
@@ -754,9 +750,9 @@ fn remote_range_not_supported(err: &object_store::Error) -> bool {
 
 fn concise_remote_stat_error(display_url: &str, err: object_store::Error) -> anyhow::Error {
     if let Some(status) = object_store_error_status(&err) {
-        return anyhow::anyhow!("remote server returned {status} for {display_url}");
+        return remote_status_read_error(display_url, &status);
     }
-    anyhow::anyhow!("failed to stat {display_url}: {err}")
+    anyhow::anyhow!("failed to read {display_url}\nFailed to stat remote input: {err}")
 }
 
 fn concise_remote_operation_error(
@@ -765,9 +761,41 @@ fn concise_remote_operation_error(
     err: object_store::Error,
 ) -> anyhow::Error {
     if let Some(status) = object_store_error_status(&err) {
-        return anyhow::anyhow!("remote server returned {status} while {operation} {display_url}");
+        return remote_status_read_error(display_url, &status);
     }
-    anyhow::anyhow!("failed while {operation} {display_url}: {err}")
+    anyhow::anyhow!("failed to read {display_url}\nFailed while {operation}: {err}")
+}
+
+fn remote_status_read_error(display_url: &str, status: &str) -> anyhow::Error {
+    anyhow::anyhow!("failed to read {display_url}\nRemote server returned {status}")
+}
+
+fn remote_read_error(path: &Path, err: anyhow::Error) -> anyhow::Error {
+    let message = format!("{err:#}");
+    if message.starts_with("failed to read ") {
+        return anyhow::anyhow!("{message}");
+    }
+    anyhow::anyhow!(
+        "failed to read {}\n{}",
+        redacted_display(path),
+        remote_read_error_detail(&message)
+    )
+}
+
+fn remote_read_error_detail(message: &str) -> String {
+    if message.contains("MCAP file ended in the middle of a record") {
+        return "MCAP file ended in the middle of a record (try running `mcap recover`)"
+            .to_string();
+    }
+    capitalize_first(message)
+}
+
+fn capitalize_first(message: &str) -> String {
+    let mut chars = message.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    first.to_uppercase().chain(chars).collect()
 }
 
 fn object_store_error_status(err: &object_store::Error) -> Option<String> {
@@ -1414,12 +1442,32 @@ mod tests {
             .expect_err("range HTTP status error should surface cleanly");
         let message = format!("{err:#}");
         assert!(
-            message.contains("remote server returned 404 Not Found while fetching range from"),
+            message.starts_with(&format!(
+                "failed to read {url}\nRemote server returned 404 Not Found"
+            )),
             "{message}"
         );
         assert!(!message.contains("Object at location"), "{message}");
         assert!(!message.contains("Error performing GET"), "{message}");
         assert!(!message.contains("MCAP file ended"), "{message}");
+    }
+
+    #[test]
+    fn remote_http_truncated_mcap_suggests_recover() {
+        let url = serve_http(b"hello remote", true);
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("truncated remote MCAP should fail");
+        let message = format!("{err:#}");
+        assert!(
+            message.starts_with(&format!(
+                "failed to read {url}\nMCAP file ended in the middle of a record"
+            )),
+            "{message}"
+        );
+        assert!(
+            message.contains("(try running `mcap recover`)"),
+            "{message}"
+        );
     }
 
     #[test]
@@ -1447,7 +1495,9 @@ mod tests {
             .expect_err("missing HTTP object should surface as an HTTP error");
         let message = format!("{err:#}");
         assert!(
-            message.contains("remote server returned 404 Not Found"),
+            message.starts_with(&format!(
+                "failed to read {url}\nRemote server returned 404 Not Found"
+            )),
             "{message}"
         );
         assert!(!message.contains("Object at location"), "{message}");
@@ -1463,7 +1513,9 @@ mod tests {
             .expect_err("HTTP status error should surface instead of an MCAP parse error");
         let message = format!("{err:#}");
         assert!(
-            message.contains("remote server returned 403 Forbidden"),
+            message.starts_with(&format!(
+                "failed to read {url}\nRemote server returned 403 Forbidden"
+            )),
             "{message}"
         );
         assert!(!message.contains("Error performing HEAD"), "{message}");
@@ -1484,7 +1536,7 @@ mod tests {
                 Err(err) => err,
             };
         let message = format!("{err:#}");
-        assert!(message.contains("failed while fetching range from"));
+        assert!(message.contains("Failed while fetching range from"));
     }
 
     #[test]
@@ -1511,7 +1563,7 @@ mod tests {
                 Err(err) => err,
             };
         let message = format!("{err:#}");
-        assert!(message.contains("remote summary section"));
+        assert!(message.contains("Remote summary section"));
         assert!(message.contains("--allow-remote-scan"));
     }
 
@@ -1846,7 +1898,7 @@ mod tests {
         let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
             .expect_err("non-range HTTP input should require scan opt-in");
         let message = err.to_string();
-        assert!(message.contains("remote server does not support range requests"));
+        assert!(message.contains("Remote server does not support range requests"));
         assert!(message.contains("--allow-remote-scan"));
     }
 
