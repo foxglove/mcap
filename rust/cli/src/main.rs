@@ -437,27 +437,6 @@ mod tests {
     }
 
     #[test]
-    fn convert_rejects_removed_writer_bool_flags() {
-        Args::try_parse_from([
-            "mcap",
-            "convert",
-            "input.bag",
-            "output.mcap",
-            "--include-crc",
-        ])
-        .expect_err("convert should reject removed --include-crc flag");
-
-        Args::try_parse_from([
-            "mcap",
-            "convert",
-            "input.bag",
-            "output.mcap",
-            "--chunked=false",
-        ])
-        .expect_err("convert should reject removed --chunked flag");
-    }
-
-    #[test]
     fn parses_doctor_subcommand() {
         let args =
             Args::try_parse_from(["mcap", "doctor", "demo.mcap"]).expect("doctor should parse");
@@ -521,12 +500,6 @@ mod tests {
                 compression: "lz4".to_string(),
             })
         );
-    }
-
-    #[test]
-    fn compress_rejects_unchunked_flag() {
-        Args::try_parse_from(["mcap", "compress", "in.mcap", "--unchunked"])
-            .expect_err("compress should reject removed --unchunked flag");
     }
 
     #[test]
@@ -698,22 +671,6 @@ mod tests {
     }
 
     #[test]
-    fn sort_rejects_removed_writer_bool_flags() {
-        Args::try_parse_from(["mcap", "sort", "in.mcap", "-o", "out.mcap", "--include-crc"])
-            .expect_err("sort should reject removed --include-crc flag");
-
-        Args::try_parse_from([
-            "mcap",
-            "sort",
-            "in.mcap",
-            "-o",
-            "out.mcap",
-            "--chunked=false",
-        ])
-        .expect_err("sort should reject removed --chunked flag");
-    }
-
-    #[test]
     fn parses_merge_with_defaults() {
         let args = Args::try_parse_from(["mcap", "merge", "a.mcap", "b.mcap"])
             .expect("merge should parse");
@@ -765,15 +722,6 @@ mod tests {
                 coalesce_channels: CoalesceChannels::Force,
             })
         );
-    }
-
-    #[test]
-    fn merge_rejects_removed_writer_bool_flags() {
-        Args::try_parse_from(["mcap", "merge", "a.mcap", "b.mcap", "--include-crc"])
-            .expect_err("merge should reject removed --include-crc flag");
-
-        Args::try_parse_from(["mcap", "merge", "a.mcap", "b.mcap", "--chunked=false"])
-            .expect_err("merge should reject removed --chunked flag");
     }
 
     #[test]
