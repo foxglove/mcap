@@ -465,12 +465,7 @@ impl ObjectStoreSource {
     fn require_http_object_exists(&self) -> Result<()> {
         match self.runtime.block_on(self.store.head(&self.path)) {
             Ok(_) => Ok(()),
-            Err(err @ object_store::Error::NotFound { .. }) => {
-                Err(err).with_context(|| format!("failed to stat {}", self.display_url))
-            }
-            // Some HTTP servers reject HEAD even when ranged GETs work. Only prefer
-            // a definitive missing-object result over an MCAP parse error.
-            Err(_) => Ok(()),
+            Err(err) => Err(err).with_context(|| format!("failed to stat {}", self.display_url)),
         }
     }
 
@@ -1126,7 +1121,12 @@ mod tests {
         serve_http_with_options(body, true, &[], false, false, true)
     }
 
-    fn serve_http_not_found_with_range_body(body: &'static [u8]) -> String {
+    fn serve_http_status_with_range_body(
+        range_body: &'static [u8],
+        status_code: u16,
+        reason: &'static str,
+        status_body: &'static [u8],
+    ) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
         let addr = listener.local_addr().expect("test server addr");
         thread::spawn(move || {
@@ -1140,26 +1140,28 @@ mod tests {
                     line.starts_with("Range: bytes=") || line.starts_with("range: bytes=")
                 });
                 if has_range {
-                    let end = body.len().saturating_sub(1);
+                    let end = range_body.len().saturating_sub(1);
                     let response = format!(
                         "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes 0-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
-                        body.len(),
-                        body.len()
+                        range_body.len(),
+                        range_body.len()
                     );
                     stream
                         .write_all(response.as_bytes())
                         .expect("write range headers");
                     if !is_head {
-                        stream.write_all(body).expect("write range body");
+                        stream.write_all(range_body).expect("write range body");
                     }
                 } else {
+                    let response = format!(
+                        "HTTP/1.1 {status_code} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        status_body.len()
+                    );
                     stream
-                        .write_all(
-                            b"HTTP/1.1 404 Not Found\r\nContent-Length: 9\r\nConnection: close\r\n\r\n",
-                        )
-                        .expect("write 404 headers");
+                        .write_all(response.as_bytes())
+                        .expect("write status headers");
                     if !is_head {
-                        stream.write_all(b"Not found").expect("write 404 body");
+                        stream.write_all(status_body).expect("write status body");
                     }
                 }
             }
@@ -1359,12 +1361,27 @@ mod tests {
 
     #[test]
     fn remote_http_not_found_prefers_http_error_over_mcap_parse_error() {
-        let url = serve_http_not_found_with_range_body(b"Not found");
+        let url = serve_http_status_with_range_body(b"Not found", 404, "Not Found", b"Not found");
         let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
             .expect_err("missing HTTP object should surface as an HTTP error");
         let message = format!("{err:#}");
         assert!(
             message.contains("not found") || message.contains("404"),
+            "{message}"
+        );
+        assert!(!message.contains("MCAP file ended"), "{message}");
+    }
+
+    #[test]
+    fn remote_http_status_error_prefers_http_error_over_mcap_parse_error() {
+        let url =
+            serve_http_status_with_range_body(b"Access denied", 403, "Forbidden", b"Forbidden");
+        let err = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::default())
+            .expect_err("HTTP status error should surface instead of an MCAP parse error");
+        let message = format!("{err:#}");
+        assert!(message.contains("failed to stat"), "{message}");
+        assert!(
+            message.contains("403") || message.contains("Forbidden"),
             "{message}"
         );
         assert!(!message.contains("MCAP file ended"), "{message}");
