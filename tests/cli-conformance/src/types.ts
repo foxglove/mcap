@@ -47,6 +47,7 @@ export type FixtureAction =
         createTime: bigint | number;
         data: number[];
       }>;
+      chunkedMessages?: boolean;
     }
   | {
       type: "writeRos1JsonMcap";

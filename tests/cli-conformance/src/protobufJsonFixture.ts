@@ -36,10 +36,12 @@ export type ProtobufJsonFixtureOptions = {
   messages: ProtobufJsonMessage[];
   metadata?: ProtobufJsonMetadata[];
   attachments?: ProtobufJsonAttachment[];
+  chunkedMessages?: boolean;
 };
 
 export function makeProtobufJsonMcap(options: ProtobufJsonFixtureOptions): Buffer {
   const descriptor = sampleDescriptorSet();
+  const messageRecords = options.messages.map(messageRecord);
   const records = [
     record(0x01, Buffer.concat([mcapString(""), mcapString("")])),
     record(
@@ -55,18 +57,7 @@ export function makeProtobufJsonMcap(options: ProtobufJsonFixtureOptions): Buffe
       0x04,
       Buffer.concat([uint16(1), uint16(1), mcapString("proto"), mcapString("protobuf"), uint32(0)]),
     ),
-    ...options.messages.map((message) =>
-      record(
-        0x05,
-        Buffer.concat([
-          uint16(1),
-          uint32(message.sequence),
-          uint64(message.logTime),
-          uint64(message.publishTime),
-          sampleMessage(message),
-        ]),
-      ),
-    ),
+    ...(options.chunkedMessages ? [chunkRecord(messageRecords, options.messages)] : messageRecords),
     ...(options.metadata ?? []).map((metadata) =>
       record(0x0c, Buffer.concat([mcapString(metadata.name), mcapStringMap(metadata.metadata)])),
     ),
@@ -89,6 +80,45 @@ export function makeProtobufJsonMcap(options: ProtobufJsonFixtureOptions): Buffe
     record(0x02, Buffer.concat([uint64(0), uint64(0), uint32(0)])),
   ];
   return Buffer.concat([MCAP_MAGIC, ...records, MCAP_MAGIC]);
+}
+
+function messageRecord(message: ProtobufJsonMessage): Buffer {
+  return record(
+    0x05,
+    Buffer.concat([
+      uint16(1),
+      uint32(message.sequence),
+      uint64(message.logTime),
+      uint64(message.publishTime),
+      sampleMessage(message),
+    ]),
+  );
+}
+
+function chunkRecord(records: Buffer[], messages: ProtobufJsonMessage[]): Buffer {
+  const chunkRecords = Buffer.concat(records);
+  const logTimes = messages.map((message) => BigInt(message.logTime));
+  const messageStartTime = logTimes.reduce(
+    (min, value) => (value < min ? value : min),
+    logTimes[0] ?? 0n,
+  );
+  const messageEndTime = logTimes.reduce(
+    (max, value) => (value > max ? value : max),
+    logTimes[0] ?? 0n,
+  );
+
+  return record(
+    0x06,
+    Buffer.concat([
+      uint64(messageStartTime),
+      uint64(messageEndTime),
+      uint64(chunkRecords.length),
+      uint32(0),
+      mcapString(""),
+      uint64(chunkRecords.length),
+      chunkRecords,
+    ]),
+  );
 }
 
 function mcapStringMap(values: Record<string, string>): Buffer {

@@ -378,6 +378,7 @@ export const cases: CliTestCase[] = [
         "--name",
         "myFile",
         "--offset",
+        // 8-byte magic + 1-byte header opcode + 8-byte header length + two empty MCAP strings.
         "25",
         "-o",
         "attachment.bin",
@@ -406,6 +407,7 @@ export const cases: CliTestCase[] = [
       {
         type: "writeProtobufJsonMcap",
         to: "{caseWorkDir}/out-of-order.mcap",
+        chunkedMessages: true,
         messages: [
           {
             sequence: 1,
