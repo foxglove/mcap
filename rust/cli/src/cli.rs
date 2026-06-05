@@ -111,10 +111,6 @@ pub struct CompressCommand {
     /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long = "compression", default_value = "zstd")]
     pub compression: String,
-
-    /// Do not chunk the output file
-    #[arg(long = "unchunked", default_value_t = false)]
-    pub unchunked: bool,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -315,31 +311,13 @@ pub struct ConvertCommand {
     #[arg(long, default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Include chunk CRC checksums in output MCAP.
-    ///
-    /// Accepts bare `--include-crc` and explicit `--include-crc=<bool>`.
-    #[arg(
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "true",
-        default_value_t = true
-    )]
-    pub include_crc: bool,
+    /// Disable all output CRC fields
+    #[arg(long = "no-crc", default_value_t = false)]
+    pub no_crc: bool,
 
-    /// Enable chunked output MCAP writing.
-    ///
-    /// Accepts bare `--chunked` and explicit `--chunked=<bool>`.
-    #[arg(
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "true",
-        default_value_t = true
-    )]
-    pub chunked: bool,
+    /// Write records outside of chunks
+    #[arg(long = "no-chunks", default_value_t = false)]
+    pub no_chunks: bool,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
@@ -368,31 +346,13 @@ pub struct MergeCommand {
     #[arg(long, default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Include chunk CRC checksums in output MCAP.
-    ///
-    /// Accepts bare `--include-crc` and explicit `--include-crc=<bool>`.
-    #[arg(
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "true",
-        default_value_t = true
-    )]
-    pub include_crc: bool,
+    /// Disable all output CRC fields
+    #[arg(long = "no-crc", default_value_t = false)]
+    pub no_crc: bool,
 
-    /// Enable chunked output MCAP writing.
-    ///
-    /// Accepts bare `--chunked` and explicit `--chunked=<bool>`.
-    #[arg(
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "true",
-        default_value_t = true
-    )]
-    pub chunked: bool,
+    /// Write records outside of chunks
+    #[arg(long = "no-chunks", default_value_t = false)]
+    pub no_chunks: bool,
 
     /// Allow duplicate-named metadata records in output.
     ///
@@ -549,31 +509,13 @@ pub struct SortCommand {
     #[arg(long, default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Include chunk CRC checksums in output MCAP.
-    ///
-    /// Accepts bare `--include-crc` and explicit `--include-crc=<bool>`.
-    #[arg(
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "true",
-        default_value_t = true
-    )]
-    pub include_crc: bool,
+    /// Disable all output CRC fields
+    #[arg(long = "no-crc", default_value_t = false)]
+    pub no_crc: bool,
 
-    /// Enable chunked output MCAP writing.
-    ///
-    /// Accepts bare `--chunked` and explicit `--chunked=<bool>`.
-    #[arg(
-        long,
-        action = ArgAction::Set,
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = "true",
-        default_value_t = true
-    )]
-    pub chunked: bool,
+    /// Write records outside of chunks
+    #[arg(long = "no-chunks", default_value_t = false)]
+    pub no_chunks: bool,
 }
 
 pub type InfoCommand = FileCommand;

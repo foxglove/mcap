@@ -53,8 +53,8 @@ fn build_sort_options(args: &SortCommand) -> SortOptions {
     SortOptions {
         compression: convert_compression(args.compression),
         chunk_size: args.chunk_size,
-        include_crc: args.include_crc,
-        chunked: args.chunked,
+        include_crc: !args.no_crc,
+        chunked: !args.no_chunks,
     }
 }
 
@@ -430,8 +430,8 @@ mod tests {
                 output_file: output_path.clone(),
                 compression: CompressionFormat::Zstd,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                include_crc: true,
-                chunked: true,
+                no_crc: false,
+                no_chunks: false,
             },
         )
         .expect_err("unindexed input with messages should fail");
@@ -460,8 +460,8 @@ mod tests {
                 output_file: file_path.clone(),
                 compression: CompressionFormat::Zstd,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                include_crc: true,
-                chunked: true,
+                no_crc: false,
+                no_chunks: false,
             },
         )
         .expect_err("same input/output path should fail");
@@ -481,8 +481,8 @@ mod tests {
                 output_file: PathBuf::from("/tmp/mcap-cli-cloud-sort-output.mcap"),
                 compression: CompressionFormat::Zstd,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                include_crc: true,
-                chunked: true,
+                no_crc: false,
+                no_chunks: false,
             },
         )
         .expect_err("cloud input should require scan opt-in before download");

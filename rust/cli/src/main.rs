@@ -402,8 +402,8 @@ mod tests {
                 output: "output.mcap".into(),
                 compression: CompressionFormat::Zstd,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                include_crc: true,
-                chunked: true,
+                no_crc: false,
+                no_chunks: false,
             })
         );
     }
@@ -419,8 +419,8 @@ mod tests {
             "none",
             "--chunk-size",
             "1024",
-            "--include-crc=false",
-            "--chunked=false",
+            "--no-crc",
+            "--no-chunks",
         ])
         .expect("convert with flags should parse");
         assert_eq!(
@@ -430,49 +430,10 @@ mod tests {
                 output: "output.mcap".into(),
                 compression: CompressionFormat::None,
                 chunk_size: 1024,
-                include_crc: false,
-                chunked: false,
+                no_crc: true,
+                no_chunks: true,
             })
         );
-    }
-
-    #[test]
-    fn parses_convert_bool_flags_without_explicit_values() {
-        let args = Args::try_parse_from([
-            "mcap",
-            "convert",
-            "input.bag",
-            "output.mcap",
-            "--include-crc",
-            "--chunked",
-        ])
-        .expect("convert bool flags should parse without explicit values");
-        assert_eq!(
-            args.command,
-            Command::Convert(ConvertCommand {
-                input: "input.bag".into(),
-                output: "output.mcap".into(),
-                compression: CompressionFormat::Zstd,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                include_crc: true,
-                chunked: true,
-            })
-        );
-    }
-
-    #[test]
-    fn convert_rejects_space_separated_bool_values() {
-        Args::try_parse_from([
-            "mcap",
-            "convert",
-            "input.bag",
-            "output.mcap",
-            "--include-crc",
-            "false",
-            "--chunked",
-            "false",
-        ])
-        .expect_err("convert bool flags should require --flag=<value> when explicit");
     }
 
     #[test]
@@ -512,7 +473,6 @@ mod tests {
                 output: None,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 compression: "zstd".to_string(),
-                unchunked: false,
             })
         );
     }
@@ -529,7 +489,6 @@ mod tests {
             "1024",
             "--compression",
             "lz4",
-            "--unchunked",
         ])
         .expect("compress with flags should parse");
         assert_eq!(
@@ -539,7 +498,6 @@ mod tests {
                 output: Some("out.mcap".into()),
                 chunk_size: 1024,
                 compression: "lz4".to_string(),
-                unchunked: true,
             })
         );
     }
@@ -652,8 +610,8 @@ mod tests {
                 output_file: "out.mcap".into(),
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 compression: CompressionFormat::Zstd,
-                include_crc: true,
-                chunked: true,
+                no_crc: false,
+                no_chunks: false,
             })
         );
     }
@@ -695,8 +653,8 @@ mod tests {
             "none",
             "--chunk-size",
             "1024",
-            "--include-crc=false",
-            "--chunked=false",
+            "--no-crc",
+            "--no-chunks",
         ])
         .expect("sort with flags should parse");
         assert_eq!(
@@ -706,51 +664,10 @@ mod tests {
                 output_file: "out.mcap".into(),
                 chunk_size: 1024,
                 compression: CompressionFormat::None,
-                include_crc: false,
-                chunked: false,
+                no_crc: true,
+                no_chunks: true,
             })
         );
-    }
-
-    #[test]
-    fn parses_sort_bool_flags_without_explicit_values() {
-        let args = Args::try_parse_from([
-            "mcap",
-            "sort",
-            "in.mcap",
-            "-o",
-            "out.mcap",
-            "--include-crc",
-            "--chunked",
-        ])
-        .expect("sort bool flags should parse without explicit values");
-        assert_eq!(
-            args.command,
-            Command::Sort(SortCommand {
-                file: "in.mcap".into(),
-                output_file: "out.mcap".into(),
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                compression: CompressionFormat::Zstd,
-                include_crc: true,
-                chunked: true,
-            })
-        );
-    }
-
-    #[test]
-    fn sort_rejects_space_separated_bool_values() {
-        Args::try_parse_from([
-            "mcap",
-            "sort",
-            "in.mcap",
-            "-o",
-            "out.mcap",
-            "--include-crc",
-            "false",
-            "--chunked",
-            "false",
-        ])
-        .expect_err("sort bool flags should require --flag=<value> when explicit");
     }
 
     #[test]
@@ -764,8 +681,8 @@ mod tests {
                 output_file: None,
                 compression: CompressionFormat::Zstd,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                include_crc: true,
-                chunked: true,
+                no_crc: false,
+                no_chunks: false,
                 allow_duplicate_metadata: false,
                 coalesce_channels: CoalesceChannels::Auto,
             })
@@ -785,8 +702,8 @@ mod tests {
             "none",
             "--chunk-size",
             "2048",
-            "--include-crc=false",
-            "--chunked=false",
+            "--no-crc",
+            "--no-chunks",
             "--allow-duplicate-metadata",
             "--coalesce-channels",
             "force",
@@ -799,69 +716,10 @@ mod tests {
                 output_file: Some("out.mcap".into()),
                 compression: CompressionFormat::None,
                 chunk_size: 2048,
-                include_crc: false,
-                chunked: false,
+                no_crc: true,
+                no_chunks: true,
                 allow_duplicate_metadata: true,
                 coalesce_channels: CoalesceChannels::Force,
-            })
-        );
-    }
-
-    #[test]
-    fn parses_merge_bool_flags_without_explicit_values() {
-        let args = Args::try_parse_from([
-            "mcap",
-            "merge",
-            "a.mcap",
-            "b.mcap",
-            "--include-crc",
-            "--chunked",
-        ])
-        .expect("merge bool flags should parse without explicit values");
-        assert_eq!(
-            args.command,
-            Command::Merge(MergeCommand {
-                files: vec!["a.mcap".into(), "b.mcap".into()],
-                output_file: None,
-                compression: CompressionFormat::Zstd,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                include_crc: true,
-                chunked: true,
-                allow_duplicate_metadata: false,
-                coalesce_channels: CoalesceChannels::Auto,
-            })
-        );
-    }
-
-    #[test]
-    fn merge_treats_space_separated_bool_values_as_positional_files() {
-        let args = Args::try_parse_from([
-            "mcap",
-            "merge",
-            "a.mcap",
-            "b.mcap",
-            "--include-crc",
-            "false",
-            "--chunked",
-            "false",
-        ])
-        .expect("merge should parse and treat trailing bool-like tokens as files");
-        assert_eq!(
-            args.command,
-            Command::Merge(MergeCommand {
-                files: vec![
-                    "a.mcap".into(),
-                    "b.mcap".into(),
-                    "false".into(),
-                    "false".into()
-                ],
-                output_file: None,
-                compression: CompressionFormat::Zstd,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                include_crc: true,
-                chunked: true,
-                allow_duplicate_metadata: false,
-                coalesce_channels: CoalesceChannels::Auto,
             })
         );
     }

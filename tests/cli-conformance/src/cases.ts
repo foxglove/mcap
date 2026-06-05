@@ -9,6 +9,8 @@ const ONE_SCHEMALESS =
   "{dataDir}/OneSchemalessMessage/OneSchemalessMessage-ch-chx-mx-pad-rch-st.mcap";
 const TEN_MESSAGES = "{dataDir}/TenMessages/TenMessages-ch-chx-mx-pad-rch-rsh-st-sum.mcap";
 const ONE_ATTACHMENT = "{dataDir}/OneAttachment/OneAttachment-ax-st-sum.mcap";
+// 8-byte magic + 1-byte header opcode + 8-byte header length + two empty MCAP strings.
+const ONE_ATTACHMENT_RECORD_OFFSET = "25";
 const ONE_METADATA = "{dataDir}/OneMetadata/OneMetadata-mdx-st-sum.mcap";
 const ROS2_EMBEDDED_SCHEMA_DB3 = "{repoRoot}/testdata/db3/talker-iron.db3";
 const NOETIC_MULTITOPIC_NONE = "{repoRoot}/testdata/bags/generated/noetic-multitopic-none.bag";
@@ -367,12 +369,70 @@ export const cases: CliTestCase[] = [
     },
   },
   {
+    id: "get-attachment-by-offset",
+    description: "Attachment extraction by record offset writes identical payload bytes.",
+    tags: ["get", "attachments", "bytes", "offset"],
+    invocation: {
+      args: [
+        "get",
+        "attachment",
+        ONE_ATTACHMENT,
+        "--name",
+        "myFile",
+        "--offset",
+        ONE_ATTACHMENT_RECORD_OFFSET,
+        "-o",
+        "attachment.bin",
+      ],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text" },
+      files: [{ path: "attachment.bin", comparator: { kind: "bytes" } }],
+    },
+  },
+  {
     id: "doctor-valid-file-exits-successfully",
     description:
       "Doctor accepts a representative valid MCAP; warning stream differences are covered separately.",
     tags: ["doctor"],
     invocation: { args: ["doctor", ONE_MESSAGE] },
     comparison: EXIT_CODE_ONLY,
+  },
+  {
+    id: "doctor-strict-message-order-detects-out-of-order-log-time",
+    description: "Doctor strict message ordering rejects messages whose log times move backward.",
+    tags: ["doctor", "strict-message-order"],
+    setup: [
+      {
+        type: "writeProtobufJsonMcap",
+        to: "{caseWorkDir}/out-of-order.mcap",
+        chunkedMessages: true,
+        messages: [
+          {
+            sequence: 1,
+            logTime: 3,
+            publishTime: 1,
+            snakeCase: "later",
+            count: 1,
+          },
+          {
+            sequence: 2,
+            logTime: 2,
+            publishTime: 2,
+            snakeCase: "earlier",
+            count: 2,
+          },
+        ],
+      },
+    ],
+    invocation: { args: ["doctor", "--strict-message-order", "out-of-order.mcap"] },
+    comparison: {
+      exitCode: 1,
+      stdout: { kind: "ignore" },
+      stderr: { kind: "ignore" },
+    },
   },
   ...[
     {
@@ -398,6 +458,9 @@ export const cases: CliTestCase[] = [
     description: testCase.description,
     tags: testCase.tags,
     invocation: {
+      args: ["convert", testCase.fixture, "converted.mcap", "--compression", "none"],
+    },
+    goInvocation: {
       args: [
         "convert",
         testCase.fixture,
@@ -406,6 +469,9 @@ export const cases: CliTestCase[] = [
         "none",
         "--include-crc=false",
       ],
+    },
+    rustInvocation: {
+      args: ["convert", testCase.fixture, "converted.mcap", "--compression", "none", "--no-crc"],
     },
     comparison: {
       exitCode: 0,
@@ -431,6 +497,135 @@ export const cases: CliTestCase[] = [
         "filtered.mcap",
         "-y",
         "example",
+        "--output-compression",
+        "none",
+      ],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [
+        {
+          path: "filtered.mcap",
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
+        },
+      ],
+    },
+  },
+  {
+    id: "filter-exclude-topic-output-messages",
+    description: "Filtering with an exclude topic regex removes matching messages from output.",
+    tags: ["known-difference", "filter", "mcap-output", "topics"],
+    invocation: {
+      args: [
+        "filter",
+        TEN_MESSAGES,
+        "-o",
+        "filtered.mcap",
+        "-n",
+        "example",
+        "--output-compression",
+        "none",
+      ],
+    },
+    knownDifference: {
+      id: "filter-exclude-topic-regex",
+      summary:
+        "Rust filter excludes matching topics with -n/--exclude-topic-regex; Go currently leaves matching messages in place.",
+      reason:
+        "The Rust CLI applies exclude regexes when rewriting the MCAP, while the legacy Go CLI's current output for this fixture still contains the excluded topic.",
+      desiredBehavior:
+        "Both CLIs should remove messages whose topics match -n/--exclude-topic-regex before Rust CLI v1.0.",
+      goBehavior: {
+        exitCode: 0,
+        files: [
+          {
+            path: "filtered.mcap",
+            exists: true,
+            mcapSummary: { messageCount: 10, channelCount: 1, schemaCount: 1 },
+          },
+        ],
+      },
+      rustBehavior: {
+        exitCode: 0,
+        files: [
+          {
+            path: "filtered.mcap",
+            exists: true,
+            mcapSummary: { messageCount: 0, channelCount: 0, schemaCount: 0 },
+          },
+        ],
+      },
+    },
+  },
+  {
+    id: "filter-rfc3339-time-range-output-messages",
+    description: "Filtering with RFC3339 start/end bounds preserves the same message stream.",
+    tags: ["filter", "mcap-output", "time"],
+    invocation: {
+      args: [
+        "filter",
+        ONE_MESSAGE,
+        "-o",
+        "filtered.mcap",
+        "-S",
+        "1970-01-01T00:00:00.000000002Z",
+        "-E",
+        "1970-01-01T00:00:00.000000003Z",
+        "--output-compression",
+        "none",
+      ],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [
+        {
+          path: "filtered.mcap",
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
+        },
+      ],
+    },
+  },
+  {
+    id: "filter-includes-metadata-and-attachments",
+    description: "Filtering with metadata and attachment flags preserves non-message records.",
+    tags: ["filter", "mcap-output", "metadata", "attachments"],
+    setup: [
+      {
+        type: "writeProtobufJsonMcap",
+        to: "{caseWorkDir}/content.mcap",
+        messages: [
+          {
+            sequence: 1,
+            logTime: 2,
+            publishTime: 1,
+            snakeCase: "hello",
+            count: 7,
+          },
+        ],
+        metadata: [{ name: "cli-conformance", metadata: { key: "value" } }],
+        attachments: [
+          {
+            name: "payload.bin",
+            mediaType: "application/octet-stream",
+            logTime: 4,
+            createTime: 3,
+            data: [1, 1, 2, 3, 5, 8],
+          },
+        ],
+      },
+    ],
+    invocation: {
+      args: [
+        "filter",
+        "content.mcap",
+        "-o",
+        "filtered.mcap",
+        "--include-metadata",
+        "--include-attachments",
         "--output-compression",
         "none",
       ],
@@ -556,6 +751,36 @@ export const cases: CliTestCase[] = [
       files: [
         {
           path: "merged.mcap",
+          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
+        },
+      ],
+    },
+  },
+  {
+    id: "merge-coalesce-channels-none-output-messages",
+    description:
+      "Merging with channel coalescing disabled preserves the same combined message stream.",
+    tags: ["merge", "mcap-output", "coalesce-channels"],
+    invocation: {
+      args: [
+        "merge",
+        ONE_MESSAGE,
+        ONE_MESSAGE,
+        "-o",
+        "merged-no-coalesce.mcap",
+        "--compression",
+        "none",
+        "--coalesce-channels",
+        "none",
+      ],
+    },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "text" },
+      stderr: { kind: "text", collapseWhitespace: true },
+      files: [
+        {
+          path: "merged-no-coalesce.mcap",
           comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
         },
       ],
