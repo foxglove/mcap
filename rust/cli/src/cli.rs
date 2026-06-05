@@ -315,7 +315,7 @@ pub struct ConvertCommand {
     #[arg(long = "no-crc", default_value_t = false)]
     pub no_crc: bool,
 
-    /// Write loose records instead of chunk records
+    /// Write records outside of chunks
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 }
@@ -350,7 +350,7 @@ pub struct MergeCommand {
     #[arg(long = "no-crc", default_value_t = false)]
     pub no_crc: bool,
 
-    /// Write loose records instead of chunk records
+    /// Write records outside of chunks
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 
@@ -513,7 +513,7 @@ pub struct SortCommand {
     #[arg(long = "no-crc", default_value_t = false)]
     pub no_crc: bool,
 
-    /// Write loose records instead of chunk records
+    /// Write records outside of chunks
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 }
