@@ -534,7 +534,7 @@ jobs:
             build: cargo build
             exe: ".exe"
 
-    name: rust-cli (${{ matrix.os }}/${{ matrix.arch }})
+    name: cli (${{ matrix.os }}/${{ matrix.arch }})
     runs-on: ${{ matrix.image }}
     defaults:
       run:
