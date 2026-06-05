@@ -61,6 +61,20 @@ export type McapSummaryExpectation = {
   messageCount?: number;
   channelCount?: number;
   schemaCount?: number;
+  metadata?: Array<{ name: string; values: Record<string, string> }>;
+  // Exact match of the Header.library string.
+  library?: string;
+  // Substring match of the Header.library string (robust to version bumps in writer identity).
+  libraryContains?: string;
+};
+
+type ActualMcapSummary = {
+  profile: string;
+  library: string;
+  messageCount: number;
+  channelCount: number;
+  schemaCount: number;
+  metadata: Array<{ name: string; values: Record<string, string> }>;
 };
 
 let decompressHandlersPromise: ReturnType<typeof loadDecompressHandlers> | undefined;
@@ -145,6 +159,39 @@ export async function compareMcapSummary(
   if (expected.schemaCount != undefined && actual.schemaCount !== expected.schemaCount) {
     messages.push(`expected ${expected.schemaCount} schemas, got ${actual.schemaCount}`);
   }
+  if (expected.library != undefined && actual.library !== expected.library) {
+    messages.push(
+      `expected MCAP library ${JSON.stringify(expected.library)}, got ${JSON.stringify(
+        actual.library,
+      )}`,
+    );
+  }
+  if (expected.libraryContains != undefined && !actual.library.includes(expected.libraryContains)) {
+    messages.push(
+      `expected MCAP library to contain ${JSON.stringify(
+        expected.libraryContains,
+      )}, got ${JSON.stringify(actual.library)}`,
+    );
+  }
+  for (const expectedEntry of expected.metadata ?? []) {
+    const matching = actual.metadata.filter((entry) => entry.name === expectedEntry.name);
+    if (matching.length === 0) {
+      messages.push(`expected a metadata record named ${expectedEntry.name}, found none`);
+      continue;
+    }
+    // Merge records sharing a name in file order (later values win), matching `get metadata`.
+    const mergedValues = Object.assign({}, ...matching.map((entry) => entry.values)) as Record<
+      string,
+      string
+    >;
+    const expectedValues = stableStringify(expectedEntry.values);
+    const actualValues = stableStringify(mergedValues);
+    if (expectedValues !== actualValues) {
+      messages.push(
+        `expected metadata ${expectedEntry.name} values ${expectedValues}, got ${actualValues}`,
+      );
+    }
+  }
   return messages;
 }
 
@@ -152,17 +199,20 @@ function byteExactDiagnostic(byteLength: number, details: string): string {
   return `<${byteLength} bytes>\n${details}`;
 }
 
-function summarizeRecords(records: TypedMcapRecord[]): Required<McapSummaryExpectation> {
+function summarizeRecords(records: TypedMcapRecord[]): ActualMcapSummary {
   let profile = "";
+  let library = "";
   let messageCount = 0;
   const channels = new Set<number>();
   const schemas = new Set<number>();
+  const metadata: Array<{ name: string; values: Record<string, string> }> = [];
 
   for (const record of records) {
     const normalizedRecord = record as unknown as Record<string, unknown>;
     switch (record.type) {
       case "Header":
         profile = stringField(normalizedRecord, "profile");
+        library = stringField(normalizedRecord, "library");
         break;
       case "Message":
         messageCount++;
@@ -173,6 +223,12 @@ function summarizeRecords(records: TypedMcapRecord[]): Required<McapSummaryExpec
       case "Schema":
         schemas.add(Number(normalizedRecord.id));
         break;
+      case "Metadata":
+        metadata.push({
+          name: stringField(normalizedRecord, "name"),
+          values: stringMapField(normalizedRecord, "metadata"),
+        });
+        break;
       default:
         break;
     }
@@ -180,9 +236,11 @@ function summarizeRecords(records: TypedMcapRecord[]): Required<McapSummaryExpec
 
   return {
     profile,
+    library,
     messageCount,
     channelCount: channels.size,
     schemaCount: schemas.size,
+    metadata,
   };
 }
 
