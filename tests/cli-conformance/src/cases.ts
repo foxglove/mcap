@@ -9,6 +9,8 @@ const ONE_SCHEMALESS =
   "{dataDir}/OneSchemalessMessage/OneSchemalessMessage-ch-chx-mx-pad-rch-st.mcap";
 const TEN_MESSAGES = "{dataDir}/TenMessages/TenMessages-ch-chx-mx-pad-rch-rsh-st-sum.mcap";
 const ONE_ATTACHMENT = "{dataDir}/OneAttachment/OneAttachment-ax-st-sum.mcap";
+// 8-byte magic + 1-byte header opcode + 8-byte header length + two empty MCAP strings.
+const ONE_ATTACHMENT_RECORD_OFFSET = "25";
 const ONE_METADATA = "{dataDir}/OneMetadata/OneMetadata-mdx-st-sum.mcap";
 const ROS2_EMBEDDED_SCHEMA_DB3 = "{repoRoot}/testdata/db3/talker-iron.db3";
 const NOETIC_MULTITOPIC_NONE = "{repoRoot}/testdata/bags/generated/noetic-multitopic-none.bag";
@@ -378,8 +380,7 @@ export const cases: CliTestCase[] = [
         "--name",
         "myFile",
         "--offset",
-        // 8-byte magic + 1-byte header opcode + 8-byte header length + two empty MCAP strings.
-        "25",
+        ONE_ATTACHMENT_RECORD_OFFSET,
         "-o",
         "attachment.bin",
       ],
