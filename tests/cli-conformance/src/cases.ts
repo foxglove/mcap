@@ -458,6 +458,9 @@ export const cases: CliTestCase[] = [
     description: testCase.description,
     tags: testCase.tags,
     invocation: {
+      args: ["convert", testCase.fixture, "converted.mcap", "--compression", "none"],
+    },
+    goInvocation: {
       args: [
         "convert",
         testCase.fixture,
@@ -466,6 +469,9 @@ export const cases: CliTestCase[] = [
         "none",
         "--include-crc=false",
       ],
+    },
+    rustInvocation: {
+      args: ["convert", testCase.fixture, "converted.mcap", "--compression", "none", "--no-crc"],
     },
     comparison: {
       exitCode: 0,
@@ -688,25 +694,6 @@ export const cases: CliTestCase[] = [
       files: [
         {
           path: "compressed-zstd.mcap",
-          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
-        },
-      ],
-    },
-  },
-  {
-    id: "compress-unchunked-output-content",
-    description: "Rewriting an MCAP with unchunked output preserves content.",
-    tags: ["compress", "mcap-output", "unchunked"],
-    invocation: {
-      args: ["compress", TEN_MESSAGES, "-o", "compressed-unchunked.mcap", "--unchunked"],
-    },
-    comparison: {
-      exitCode: 0,
-      stdout: { kind: "text" },
-      stderr: { kind: "text", collapseWhitespace: true },
-      files: [
-        {
-          path: "compressed-unchunked.mcap",
           comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
         },
       ],
@@ -1041,32 +1028,6 @@ export const cases: CliTestCase[] = [
       rustBehavior: {
         exitCode: "nonzero",
         stderr: { kind: "contains", value: "unsupported input file extension" },
-      },
-    },
-  },
-  {
-    id: "known-difference-convert-bool-space-values",
-    description:
-      "Convert rejects space-separated explicit bool values with implementation-specific parse errors.",
-    tags: ["known-difference", "convert", "surface"],
-    invocation: {
-      args: ["convert", NOETIC_MULTITOPIC_NONE, "converted.mcap", "--include-crc", "false"],
-    },
-    knownDifference: {
-      id: "convert-bool-space-values",
-      summary:
-        "Go and Rust both reject 'convert --include-crc false', but report different parse failures.",
-      reason:
-        "The Rust CLI requires explicit bool values to use the '--flag=<value>' form, while the Go CLI's Cobra parser leaves the trailing value as an extra positional argument for this command.",
-      desiredBehavior:
-        "Keep requiring '--include-crc=false' for explicit Rust bool values unless the CLI parser policy changes before v1.0.",
-      goBehavior: {
-        exitCode: 1,
-        stderr: { kind: "contains", value: "accepts 2 arg(s), received 3" },
-      },
-      rustBehavior: {
-        exitCode: 2,
-        stderr: { kind: "contains", value: "unexpected argument 'false'" },
       },
     },
   },

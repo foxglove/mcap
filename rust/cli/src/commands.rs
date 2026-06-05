@@ -256,7 +256,6 @@ mod tests {
                 output: None,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 compression: "invalid".to_string(),
-                unchunked: false,
             }),
         )
         .expect_err("compress should reject invalid compression");
@@ -272,8 +271,8 @@ mod tests {
                 output_file: PathBuf::from("sorted.mcap"),
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 compression: crate::cli::CompressionFormat::Zstd,
-                include_crc: true,
-                chunked: true,
+                no_crc: false,
+                no_chunks: false,
             }),
         )
         .expect_err("sort should fail on missing input file");
