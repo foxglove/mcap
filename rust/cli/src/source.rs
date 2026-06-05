@@ -454,19 +454,14 @@ impl ObjectStoreSource {
         })
     }
 
-    fn head_size(&self) -> Result<u64> {
-        Ok(self
-            .runtime
+    fn stat(&self) -> Result<object_store::ObjectMeta> {
+        self.runtime
             .block_on(self.store.head(&self.path))
-            .with_context(|| format!("failed to stat {}", self.display_url))?
-            .size)
+            .with_context(|| format!("failed to stat {}", self.display_url))
     }
 
-    fn require_http_object_exists(&self) -> Result<()> {
-        match self.runtime.block_on(self.store.head(&self.path)) {
-            Ok(_) => Ok(()),
-            Err(err) => Err(err).with_context(|| format!("failed to stat {}", self.display_url)),
-        }
+    fn head_size(&self) -> Result<u64> {
+        Ok(self.stat()?.size)
     }
 
     /// Read a bounded byte range and return its bytes, validating the content
@@ -984,7 +979,7 @@ fn read_summary_from_remote(
 
 fn prefer_http_object_error(reader: &RemoteRangeReader, err: anyhow::Error) -> anyhow::Error {
     if reader.kind == RemoteUrlKind::Http {
-        if let Err(head_err) = reader.source.require_http_object_exists() {
+        if let Err(head_err) = reader.source.stat() {
             return head_err;
         }
     }
