@@ -37,6 +37,8 @@ ignorePaths:
   - cpp/examples/protobuf/proto
 
 words:
+  - abfs
+  - abfss
   - Aescape
   - Anduril
   - bagfile
