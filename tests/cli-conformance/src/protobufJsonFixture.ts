@@ -57,7 +57,9 @@ export function makeProtobufJsonMcap(options: ProtobufJsonFixtureOptions): Buffe
       0x04,
       Buffer.concat([uint16(1), uint16(1), mcapString("proto"), mcapString("protobuf"), uint32(0)]),
     ),
-    ...(options.chunkedMessages ? [chunkRecord(messageRecords, options.messages)] : messageRecords),
+    ...(options.chunkedMessages === true
+      ? [chunkRecord(messageRecords, options.messages)]
+      : messageRecords),
     ...(options.metadata ?? []).map((metadata) =>
       record(0x0c, Buffer.concat([mcapString(metadata.name), mcapStringMap(metadata.metadata)])),
     ),
