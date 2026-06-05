@@ -371,7 +371,17 @@ export const cases: CliTestCase[] = [
     description: "Attachment extraction by record offset writes identical payload bytes.",
     tags: ["get", "attachments", "bytes", "offset"],
     invocation: {
-      args: ["get", "attachment", ONE_ATTACHMENT, "--offset", "25", "-o", "attachment.bin"],
+      args: [
+        "get",
+        "attachment",
+        ONE_ATTACHMENT,
+        "--name",
+        "myFile",
+        "--offset",
+        "25",
+        "-o",
+        "attachment.bin",
+      ],
     },
     comparison: {
       exitCode: 0,
@@ -497,7 +507,7 @@ export const cases: CliTestCase[] = [
   {
     id: "filter-exclude-topic-output-messages",
     description: "Filtering with an exclude topic regex removes matching messages from output.",
-    tags: ["filter", "mcap-output", "topics"],
+    tags: ["known-difference", "filter", "mcap-output", "topics"],
     invocation: {
       args: [
         "filter",
@@ -510,16 +520,34 @@ export const cases: CliTestCase[] = [
         "none",
       ],
     },
-    comparison: {
-      exitCode: 0,
-      stdout: { kind: "text" },
-      stderr: { kind: "text", collapseWhitespace: true },
-      files: [
-        {
-          path: "filtered.mcap",
-          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
-        },
-      ],
+    knownDifference: {
+      id: "filter-exclude-topic-regex",
+      summary:
+        "Rust filter excludes matching topics with -n/--exclude-topic-regex; Go currently leaves matching messages in place.",
+      reason:
+        "The Rust CLI applies exclude regexes when rewriting the MCAP, while the legacy Go CLI's current output for this fixture still contains the excluded topic.",
+      desiredBehavior:
+        "Both CLIs should remove messages whose topics match -n/--exclude-topic-regex before Rust CLI v1.0.",
+      goBehavior: {
+        exitCode: 0,
+        files: [
+          {
+            path: "filtered.mcap",
+            exists: true,
+            mcapSummary: { messageCount: 10, channelCount: 1, schemaCount: 1 },
+          },
+        ],
+      },
+      rustBehavior: {
+        exitCode: 0,
+        files: [
+          {
+            path: "filtered.mcap",
+            exists: true,
+            mcapSummary: { messageCount: 0, channelCount: 0, schemaCount: 0 },
+          },
+        ],
+      },
     },
   },
   {
@@ -740,7 +768,8 @@ export const cases: CliTestCase[] = [
   },
   {
     id: "merge-coalesce-channels-none-output-messages",
-    description: "Merging with channel coalescing disabled preserves the same combined message stream.",
+    description:
+      "Merging with channel coalescing disabled preserves the same combined message stream.",
     tags: ["merge", "mcap-output", "coalesce-channels"],
     invocation: {
       args: [
@@ -1018,13 +1047,7 @@ export const cases: CliTestCase[] = [
       "Convert rejects space-separated explicit bool values with implementation-specific parse errors.",
     tags: ["known-difference", "convert", "surface"],
     invocation: {
-      args: [
-        "convert",
-        NOETIC_MULTITOPIC_NONE,
-        "converted.mcap",
-        "--include-crc",
-        "false",
-      ],
+      args: ["convert", NOETIC_MULTITOPIC_NONE, "converted.mcap", "--include-crc", "false"],
     },
     knownDifference: {
       id: "convert-bool-space-values",
