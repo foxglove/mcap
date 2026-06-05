@@ -1,6 +1,6 @@
 # MCAP CLI
 
-`mcap` is a command line tool for inspecting, editing, and converting [MCAP](https://mcap.dev) files. It is written in rust using the [mcap crate](../mcap).
+A command line tool for inspecting, editing, and converting [MCAP](https://mcap.dev) files.
 
 ## Getting started
 
@@ -20,7 +20,9 @@ For more installation options and full usage documentation, see https://mcap.dev
 
 ## Development
 
-To build the CLI from source:
+The CLI is written in Rust using the [mcap crate](../mcap).
+
+To build from source:
 
 ```sh
 cd rust
