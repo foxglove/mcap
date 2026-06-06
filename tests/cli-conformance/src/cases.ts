@@ -337,13 +337,15 @@ export const cases: CliTestCase[] = [
     description:
       "For a wall-clock (>= 2000) timestamp, Rust info shows a lone RFC3339 string while Go appends the epoch decimal in parens.",
     tags: ["known-difference", "info"],
-    invocation: { args: ["info", WALL_CLOCK_MCAP] },
+    // Pin TZ=UTC: Go renders info timestamps in the host's local time zone while Rust always renders
+    // UTC, so without this the Go assertion below would only hold on a UTC host.
+    invocation: { args: ["info", WALL_CLOCK_MCAP], env: { TZ: "UTC" } },
     knownDifference: {
       id: "info-timestamp-wall-clock-format",
       summary:
         "Above the 2000-01-01 cutoff, Rust info renders start/end as a single RFC3339 string; Go appends the epoch decimal in parentheses.",
       reason:
-        "At or after the cutoff, Rust shows one representation — the RFC3339 wall-clock string — because RFC3339 already carries full nanosecond precision, so a parenthetical epoch decimal would be redundant and harder to read/parse. Go appends the epoch seconds in parens. This fixture's statistics carry a 2017 start/end, so info renders an absolute date in both CLIs and the only difference is the trailing `(decimal)`.",
+        "At or after the cutoff, Rust shows one representation — the RFC3339 wall-clock string — because RFC3339 already carries full nanosecond precision, so a parenthetical epoch decimal would be redundant and harder to read/parse. Go appends the epoch seconds in parens. This fixture's statistics carry a 2017 start/end, so info renders an absolute date in both CLIs and the only difference is the trailing `(decimal)`. The invocation pins TZ=UTC because Go renders the local time zone while Rust always renders UTC (`Z`); with TZ=UTC both show the same instant, isolating the parenthetical-decimal difference.",
       desiredBehavior:
         "Rust info should keep rendering a lone RFC3339 string for wall-clock timestamps; the parenthetical epoch decimal remains Go-only.",
       // Go appends the epoch seconds in parens after the RFC3339 string.
