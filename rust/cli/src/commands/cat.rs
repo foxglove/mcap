@@ -1544,6 +1544,34 @@ mod tests {
     }
 
     #[test]
+    fn cat_json_passes_schemaless_json_messages() {
+        let message = sample_message(None, br#"{"value":1}"#.to_vec());
+        let mut out = Vec::new();
+        let mut transcoders = JsonTranscoders::default();
+        let opts = CatOptions {
+            json: true,
+            ..CatOptions::default()
+        };
+        let cat_message = super::CatMessage {
+            channel: &message.channel,
+            sequence: message.sequence,
+            log_time: message.log_time,
+            publish_time: message.publish_time,
+            data: message.data.as_ref(),
+        };
+        let broken_pipe = super::write_message(&mut out, cat_message, &opts, &mut transcoders)
+            .expect("schemaless json message should write");
+        assert!(!broken_pipe);
+
+        assert_eq!(
+            String::from_utf8(out).expect("valid utf8 output"),
+            r#"{"topic":"/demo","sequence":1,"log_time":0.000000042,"publish_time":0.000000043,"data":{"value":1}}"#
+                .to_string()
+                + "\n"
+        );
+    }
+
+    #[test]
     fn protobuf_json_uses_lower_camel_case_and_omits_zero_values() {
         let descriptor = vec![
             10, 122, 10, 12, 115, 97, 109, 112, 108, 101, 46, 112, 114, 111, 116, 111, 18, 4, 116,

@@ -6,7 +6,7 @@ use anyhow::{bail, Context, Result};
 use mcap::records::{self, Record};
 
 const FOOTER_RECORD_LEN: usize = 1 + 8 + 8 + 8 + 4;
-const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = FOOTER_RECORD_LEN + mcap::MAGIC.len();
+pub(crate) const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = FOOTER_RECORD_LEN + mcap::MAGIC.len();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedSchema {
@@ -265,7 +265,7 @@ pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{parse_mcap, parse_mcap_from_summary};
+    use super::{parse_mcap, parse_mcap_from_summary, parse_summary_section};
     use mcap::records;
 
     #[test]
@@ -373,6 +373,49 @@ mod tests {
             .expect("channel should be read from summary");
         assert_eq!(channel.schema_id, schema_id);
         assert!(!parsed.schemas.contains_key(&schema_id));
+    }
+
+    #[test]
+    fn parse_summary_section_accepts_channel_with_missing_schema() {
+        let mut buffer = Vec::new();
+        let (schema_id, channel_id) = {
+            let mut writer = mcap::WriteOptions::new()
+                .repeat_schemas(false)
+                .repeat_channels(true)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 10,
+                        publish_time: 11,
+                    },
+                    br#"{"k":"v"}"#,
+                )
+                .expect("write message");
+            writer.finish().expect("finish writer");
+            (schema_id, channel_id)
+        };
+
+        let footer = mcap::read::footer(&buffer).expect("footer");
+        let footer_start = buffer.len() - super::FOOTER_RECORD_AND_END_MAGIC_LEN;
+        let summary = parse_summary_section(&buffer[footer.summary_start as usize..footer_start])
+            .expect("summary should parse without repeated schema");
+        let channel = summary
+            .channels
+            .get(&channel_id)
+            .expect("channel should be preserved");
+        assert_eq!(channel.id, channel_id);
+        assert!(channel.schema.is_none());
+        assert!(!summary.schemas.contains_key(&schema_id));
     }
 
     #[test]

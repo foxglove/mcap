@@ -19,7 +19,6 @@ use crate::render::human_bytes;
 pub const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage details.";
-const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = 37;
 // Size of the single range request issued from the end of a remote file to discover
 // the summary section. One read proves range support (for HTTP), discovers the file
 // size via `Content-Range`, and in the common case already contains the whole summary
@@ -947,7 +946,7 @@ fn read_summary_bytes_from_remote(
     options: SourceOptions,
 ) -> Result<Option<Vec<u8>>> {
     let file_size = reader.size();
-    let tail_len = FOOTER_RECORD_AND_END_MAGIC_LEN as u64;
+    let tail_len = parse::FOOTER_RECORD_AND_END_MAGIC_LEN as u64;
     if file_size < tail_len + mcap::MAGIC.len() as u64 {
         return Err(classify_remote_summary_error(
             reader,
@@ -976,7 +975,7 @@ fn read_summary_bytes_from_remote(
     );
 
     let footer_start = file_size - tail_len;
-    let footer_bytes = &tail.bytes[tail.bytes.len() - FOOTER_RECORD_AND_END_MAGIC_LEN..];
+    let footer_bytes = &tail.bytes[tail.bytes.len() - parse::FOOTER_RECORD_AND_END_MAGIC_LEN..];
     if footer_bytes[0] != records::op::FOOTER {
         return Err(classify_remote_summary_error(
             reader,
@@ -991,15 +990,16 @@ fn read_summary_bytes_from_remote(
             mcap::McapError::BadFooter.into(),
         ));
     }
-    if &footer_bytes[FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()..] != mcap::MAGIC {
+    if &footer_bytes[parse::FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()..] != mcap::MAGIC {
         return Err(classify_remote_summary_error(
             reader,
             mcap::McapError::BadMagic.into(),
         ));
     }
 
-    let mut cursor =
-        std::io::Cursor::new(&footer_bytes[9..FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()]);
+    let mut cursor = std::io::Cursor::new(
+        &footer_bytes[9..parse::FOOTER_RECORD_AND_END_MAGIC_LEN - mcap::MAGIC.len()],
+    );
     let footer = records::Footer::read_le(&mut cursor)
         .map_err(|err| classify_remote_summary_error(reader, err.into()))?;
     if footer.summary_start == 0 {
@@ -1595,12 +1595,12 @@ mod tests {
     #[test]
     fn remote_summary_read_requires_scan_for_oversized_summary_section() {
         let len = super::MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN
-            + super::FOOTER_RECORD_AND_END_MAGIC_LEN
+            + crate::parse::FOOTER_RECORD_AND_END_MAGIC_LEN
             + mcap::MAGIC.len()
             + 1;
         let mut body = vec![0u8; len];
         body[..mcap::MAGIC.len()].copy_from_slice(mcap::MAGIC);
-        let footer_start = len - super::FOOTER_RECORD_AND_END_MAGIC_LEN;
+        let footer_start = len - crate::parse::FOOTER_RECORD_AND_END_MAGIC_LEN;
         body[footer_start] = records::op::FOOTER;
         body[footer_start + 1..footer_start + 9].copy_from_slice(&20u64.to_le_bytes());
         body[footer_start + 9..footer_start + 17]
@@ -1893,7 +1893,7 @@ mod tests {
         // Simulate a summary larger than the prefetched tail: the tail starts after
         // `summary_start`, so discovery must issue one back-fill read for the prefix.
         let (buffer, channel_id) = summary_mcap_with_channel();
-        let footer_start = buffer.len() - super::FOOTER_RECORD_AND_END_MAGIC_LEN;
+        let footer_start = buffer.len() - crate::parse::FOOTER_RECORD_AND_END_MAGIC_LEN;
         let summary_start = u64::from_le_bytes(
             buffer[footer_start + 9..footer_start + 17]
                 .try_into()
