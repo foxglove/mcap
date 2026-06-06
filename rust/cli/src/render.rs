@@ -16,7 +16,7 @@ pub fn formatted_time(t: u64) -> String {
     let seconds = (t / 1_000_000_000) as i64;
     let nanos = (t % 1_000_000_000) as u32;
     match chrono::DateTime::from_timestamp(seconds, nanos) {
-        Some(dt) => format!("{} ({})", format_rfc3339_trimmed(dt), decimal_time(t)),
+        Some(dt) => format!("{} ({})", decimal_time(t), format_rfc3339_trimmed(dt)),
         None => decimal_time(t),
     }
 }
@@ -124,12 +124,12 @@ mod tests {
     fn formatted_time_includes_rfc3339_and_decimal() {
         assert_eq!(
             formatted_time(1_000_000_000),
-            "1970-01-01T00:00:01Z (1.000000000)"
+            "1.000000000 (1970-01-01T00:00:01Z)"
         );
         assert_eq!(decimal_time(1_234_567_890), "1.234567890");
         assert_eq!(
             formatted_time(1_234_567_890),
-            "1970-01-01T00:00:01.23456789Z (1.234567890)"
+            "1.234567890 (1970-01-01T00:00:01.23456789Z)"
         );
     }
 
