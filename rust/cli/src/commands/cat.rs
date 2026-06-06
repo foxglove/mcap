@@ -130,6 +130,18 @@ fn cat_indexed(
     if summary.chunk_indexes.is_empty() {
         return Ok(None);
     }
+    if summary
+        .chunk_indexes
+        .iter()
+        .any(|chunk| chunk.message_index_offsets.is_empty())
+    {
+        return Ok(None);
+    }
+
+    let chunk_indexes_by_data_offset = chunk_indexes_by_data_offset(&summary)?;
+    let mut schemas = summary.schemas.clone();
+    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
+    let mut channels = summary.channels.clone();
 
     let included_topics: BTreeSet<String> = summary
         .channels
@@ -137,7 +149,7 @@ fn cat_indexed(
         .filter(|channel| opts.include_topic(&channel.topic))
         .map(|channel| channel.topic.clone())
         .collect();
-    if !opts.topics.is_empty() && included_topics.is_empty() {
+    if !opts.topics.is_empty() && included_topics.is_empty() && !summary.channels.is_empty() {
         return Ok(Some(false));
     }
 
@@ -149,7 +161,7 @@ fn cat_indexed(
     if let Some(end) = opts.end {
         indexed_opts = indexed_opts.log_time_before(end);
     }
-    if !opts.topics.is_empty() {
+    if !opts.topics.is_empty() && !included_topics.is_empty() {
         indexed_opts = indexed_opts.include_topics(included_topics.iter().cloned());
     }
 
@@ -158,6 +170,15 @@ fn cat_indexed(
     while let Some(event) = reader.next_event() {
         match event? {
             mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                let chunk_index = chunk_indexes_by_data_offset.get(&offset).ok_or_else(|| {
+                    anyhow::anyhow!("chunk index missing for data offset {offset}")
+                })?;
+                collect_chunk_definitions_from_mcap(
+                    mcap,
+                    chunk_index,
+                    &mut schemas,
+                    &mut channel_defs,
+                )?;
                 let start = offset as usize;
                 let end = start
                     .checked_add(length)
@@ -168,12 +189,13 @@ fn cat_indexed(
                 reader.insert_chunk_record_data(offset, &mcap[start..end])?;
             }
             mcap::sans_io::IndexedReadEvent::Message { header, data } => {
-                let channel = summary
-                    .channels
-                    .get(&header.channel_id)
-                    .ok_or_else(|| anyhow::anyhow!("unknown channel {}", header.channel_id))?;
+                let channel =
+                    resolve_channel(header.channel_id, &schemas, &channel_defs, &mut channels)?;
+                if !opts.include_topic(&channel.topic) {
+                    continue;
+                }
                 let message = CatMessage {
-                    channel,
+                    channel: &channel,
                     sequence: header.sequence,
                     log_time: header.log_time,
                     publish_time: header.publish_time,
@@ -215,6 +237,25 @@ fn cat_remote_indexed(
         }
         return Ok(RemoteCatResult::NeedsFullScan);
     }
+    if summary
+        .chunk_indexes
+        .iter()
+        .any(|chunk| chunk.message_index_offsets.is_empty())
+    {
+        if !source_options.allow_remote_scan {
+            bail!(
+                "{}: remote file has chunk indexes without message indexes; reading messages requires opt-in; {}",
+                source::redacted_display(file),
+                source::remote_scan_opt_in_suffix()
+            );
+        }
+        return Ok(RemoteCatResult::NeedsFullScan);
+    }
+
+    let chunk_indexes_by_data_offset = chunk_indexes_by_data_offset(summary)?;
+    let mut schemas = summary.schemas.clone();
+    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
+    let mut channels = summary.channels.clone();
 
     let included_topics: BTreeSet<String> = summary
         .channels
@@ -222,7 +263,7 @@ fn cat_remote_indexed(
         .filter(|channel| opts.include_topic(&channel.topic))
         .map(|channel| channel.topic.clone())
         .collect();
-    if !opts.topics.is_empty() && included_topics.is_empty() {
+    if !opts.topics.is_empty() && included_topics.is_empty() && !summary.channels.is_empty() {
         return Ok(RemoteCatResult::Done);
     }
     let planned_chunks = planned_chunk_reads(summary, opts, &included_topics);
@@ -248,7 +289,7 @@ fn cat_remote_indexed(
     if let Some(end) = opts.end {
         indexed_opts = indexed_opts.log_time_before(end);
     }
-    if !opts.topics.is_empty() {
+    if !opts.topics.is_empty() && !included_topics.is_empty() {
         indexed_opts = indexed_opts.include_topics(included_topics.iter().cloned());
     }
 
@@ -256,16 +297,44 @@ fn cat_remote_indexed(
     while let Some(event) = reader.next_event() {
         match event? {
             mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                let chunk = remote.read_range(offset, length)?;
-                reader.insert_chunk_record_data(offset, &chunk)?;
+                let chunk_index = chunk_indexes_by_data_offset.get(&offset).ok_or_else(|| {
+                    anyhow::anyhow!("chunk index missing for data offset {offset}")
+                })?;
+                let chunk_len = usize::try_from(chunk_index.chunk_length).with_context(|| {
+                    format!(
+                        "chunk length out of range for this platform: {}",
+                        chunk_index.chunk_length
+                    )
+                })?;
+                let chunk = remote.read_range(chunk_index.chunk_start_offset, chunk_len)?;
+                collect_chunk_definitions_from_record_bytes(
+                    &chunk,
+                    &mut schemas,
+                    &mut channel_defs,
+                )?;
+                let compressed_start = usize::try_from(offset - chunk_index.chunk_start_offset)
+                    .with_context(|| {
+                        format!("chunk data offset out of range for this platform: {offset}")
+                    })?;
+                let compressed_end = compressed_start
+                    .checked_add(length)
+                    .ok_or_else(|| anyhow::anyhow!("chunk read overflow at offset {offset}"))?;
+                let compressed_data =
+                    chunk.get(compressed_start..compressed_end).ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "chunk read out of bounds at offset {offset} length {length}"
+                        )
+                    })?;
+                reader.insert_chunk_record_data(offset, compressed_data)?;
             }
             mcap::sans_io::IndexedReadEvent::Message { header, data } => {
-                let channel = summary
-                    .channels
-                    .get(&header.channel_id)
-                    .ok_or_else(|| anyhow::anyhow!("unknown channel {}", header.channel_id))?;
+                let channel =
+                    resolve_channel(header.channel_id, &schemas, &channel_defs, &mut channels)?;
+                if !opts.include_topic(&channel.topic) {
+                    continue;
+                }
                 let message = CatMessage {
-                    channel,
+                    channel: &channel,
                     sequence: header.sequence,
                     log_time: header.log_time,
                     publish_time: header.publish_time,
@@ -279,6 +348,113 @@ fn cat_remote_indexed(
     }
 
     Ok(RemoteCatResult::Done)
+}
+
+fn chunk_indexes_by_data_offset(
+    summary: &mcap::Summary,
+) -> Result<HashMap<u64, &mcap::records::ChunkIndex>> {
+    summary
+        .chunk_indexes
+        .iter()
+        .map(|index| Ok((index.compressed_data_offset()?, index)))
+        .collect()
+}
+
+fn collect_chunk_definitions_from_mcap(
+    mcap: &[u8],
+    index: &mcap::records::ChunkIndex,
+    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
+    channel_defs: &mut HashMap<u16, mcap::records::Channel>,
+) -> Result<()> {
+    let start = usize::try_from(index.chunk_start_offset).with_context(|| {
+        format!(
+            "chunk offset out of range for this platform: {}",
+            index.chunk_start_offset
+        )
+    })?;
+    let length = usize::try_from(index.chunk_length).with_context(|| {
+        format!(
+            "chunk length out of range for this platform: {}",
+            index.chunk_length
+        )
+    })?;
+    let end = start.checked_add(length).ok_or_else(|| {
+        anyhow::anyhow!("chunk read overflow at offset {}", index.chunk_start_offset)
+    })?;
+    let chunk = mcap.get(start..end).ok_or_else(|| {
+        anyhow::anyhow!(
+            "chunk read out of bounds at offset {} length {}",
+            index.chunk_start_offset,
+            length
+        )
+    })?;
+    collect_chunk_definitions_from_record_bytes(chunk, schemas, channel_defs)
+}
+
+fn collect_chunk_definitions_from_record_bytes(
+    chunk: &[u8],
+    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
+    channel_defs: &mut HashMap<u16, mcap::records::Channel>,
+) -> Result<()> {
+    if chunk.len() < 9 || chunk[0] != mcap::records::op::CHUNK {
+        return Err(mcap::McapError::BadIndex.into());
+    }
+    let body_len = usize::try_from(u64::from_le_bytes(chunk[1..9].try_into()?))
+        .context("chunk body length out of range for this platform")?;
+    if chunk.len() != 9 + body_len {
+        return Err(mcap::McapError::BadIndex.into());
+    }
+
+    let (header, data) = match mcap::parse_record(mcap::records::op::CHUNK, &chunk[9..])? {
+        mcap::records::Record::Chunk { header, data } => (header, data),
+        _ => return Err(mcap::McapError::BadIndex.into()),
+    };
+
+    for record in mcap::read::ChunkReader::new(header, data.as_ref())? {
+        collect_definition_record(record?, schemas, channel_defs);
+    }
+    Ok(())
+}
+
+fn collect_definition_record(
+    record: mcap::records::Record<'_>,
+    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
+    channel_defs: &mut HashMap<u16, mcap::records::Channel>,
+) {
+    match record {
+        mcap::records::Record::Schema { header, data } => {
+            schemas.entry(header.id).or_insert_with(|| {
+                Arc::new(mcap::Schema {
+                    id: header.id,
+                    name: header.name,
+                    encoding: header.encoding,
+                    data: Cow::Owned(data.into_owned()),
+                })
+            });
+        }
+        mcap::records::Record::Channel(channel) => {
+            channel_defs.entry(channel.id).or_insert(channel);
+        }
+        _ => {}
+    }
+}
+
+fn resolve_channel(
+    channel_id: u16,
+    schemas: &HashMap<u16, Arc<mcap::Schema<'static>>>,
+    channel_defs: &HashMap<u16, mcap::records::Channel>,
+    channels: &mut HashMap<u16, Arc<mcap::Channel<'static>>>,
+) -> Result<Arc<mcap::Channel<'static>>> {
+    if let Some(channel) = channels.get(&channel_id) {
+        return Ok(channel.clone());
+    }
+
+    let channel_def = channel_defs
+        .get(&channel_id)
+        .ok_or_else(|| anyhow::anyhow!("unknown channel {channel_id}"))?;
+    let channel = build_channel(channel_def, schemas)?;
+    channels.insert(channel_id, channel.clone());
+    Ok(channel)
 }
 
 // Keep this planner conservative: it intentionally mirrors IndexedReader chunk filtering as an
@@ -1024,8 +1200,9 @@ mod tests {
     };
 
     use super::{
-        cat_mcap, cat_streaming, parse_ros1_field_type, planned_chunk_reads, write_payload_preview,
-        write_ros1_float, write_signed_decimal_time, CatOptions, JsonTranscoders, Ros1MessageDef,
+        cat_indexed, cat_mcap, cat_streaming, parse_ros1_field_type, planned_chunk_reads,
+        write_payload_preview, write_ros1_float, write_signed_decimal_time, CatOptions,
+        JsonTranscoders, Ros1MessageDef, MESSAGE_PREVIEW_LEN,
     };
 
     fn sample_message(schema_name: Option<&str>, data: Vec<u8>) -> mcap::Message<'static> {
@@ -1080,6 +1257,18 @@ mod tests {
             .expect("message line should be utf8")
             .trim_end_matches('\n')
             .to_string()
+    }
+
+    fn message_lines_from_stream(mcap: &[u8]) -> Vec<String> {
+        mcap::MessageStream::new(mcap)
+            .expect("message stream should open")
+            .map(|message| {
+                message_line_string(
+                    &message.expect("message stream should read"),
+                    MESSAGE_PREVIEW_LEN,
+                )
+            })
+            .collect()
     }
 
     fn build_out_of_order_chunked_mcap() -> Vec<u8> {
@@ -1472,6 +1661,67 @@ mod tests {
             lines,
             vec!["30 /demo [Example] [1]", "10 /demo [Example] [2]"]
         );
+    }
+
+    #[test]
+    fn cat_falls_back_for_chunk_index_without_message_indexes_and_in_chunk_channels() {
+        let mcap =
+            include_bytes!("../../../../tests/conformance/data/OneMessage/OneMessage-ch-chx.mcap");
+        let expected = message_lines_from_stream(mcap);
+        assert_eq!(expected.len(), 1);
+
+        let mut indexed_out = Vec::new();
+        let mut json_transcoders = JsonTranscoders::default();
+        let indexed_result = cat_indexed(
+            &mut indexed_out,
+            mcap,
+            &CatOptions::default(),
+            &mut json_transcoders,
+        )
+        .expect("indexed planner should fall back");
+        assert_eq!(indexed_result, None);
+        assert!(indexed_out.is_empty());
+
+        let mut out = Vec::new();
+        let broken_pipe = cat_mcap(&mut out, mcap, &CatOptions::default())
+            .expect("cat should succeed through linear fallback");
+        assert!(!broken_pipe);
+
+        let output = String::from_utf8(out).expect("valid utf8 output");
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines, expected);
+    }
+
+    #[test]
+    fn cat_indexed_reads_message_index_with_in_chunk_channels() {
+        let mcap = include_bytes!(
+            "../../../../tests/conformance/data/OneMessage/OneMessage-ch-chx-mx.mcap"
+        );
+        let expected = message_lines_from_stream(mcap);
+        assert_eq!(expected.len(), 1);
+        let summary = mcap::Summary::read(mcap)
+            .expect("summary read")
+            .expect("summary should exist");
+        assert!(summary.channels.is_empty());
+        assert!(summary
+            .chunk_indexes
+            .iter()
+            .all(|chunk| !chunk.message_index_offsets.is_empty()));
+
+        let mut out = Vec::new();
+        let mut json_transcoders = JsonTranscoders::default();
+        let indexed_result = cat_indexed(
+            &mut out,
+            mcap,
+            &CatOptions::default(),
+            &mut json_transcoders,
+        )
+        .expect("indexed cat should succeed");
+        assert_eq!(indexed_result, Some(false));
+
+        let output = String::from_utf8(out).expect("valid utf8 output");
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines, expected);
     }
 
     #[test]
