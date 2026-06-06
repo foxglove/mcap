@@ -9,7 +9,7 @@ use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor};
 
 use crate::cli::CatCommand;
 use crate::context::CommandContext;
-use crate::{render, source};
+use crate::{parse, render, source};
 
 const MESSAGE_PREVIEW_LEN: usize = 10;
 
@@ -175,7 +175,7 @@ fn cat_indexed(
                     anyhow::anyhow!("chunk index missing for data offset {offset}")
                 })?;
                 if needs_in_chunk_definitions {
-                    collect_chunk_definitions_from_mcap(
+                    parse::collect_chunk_definitions_from_mcap(
                         mcap,
                         chunk_index,
                         &mut schemas,
@@ -314,7 +314,7 @@ fn cat_remote_indexed(
                             )
                         })?;
                     let chunk = remote.read_range(chunk_index.chunk_start_offset, chunk_len)?;
-                    collect_chunk_definitions_from_record_bytes(
+                    parse::collect_chunk_definitions_from_record_bytes(
                         &chunk,
                         &mut schemas,
                         &mut channel_defs,
@@ -379,85 +379,6 @@ fn needs_in_chunk_definitions(summary: &mcap::Summary) -> bool {
             .keys()
             .any(|channel_id| !summary.channels.contains_key(channel_id))
     })
-}
-
-fn collect_chunk_definitions_from_mcap(
-    mcap: &[u8],
-    index: &mcap::records::ChunkIndex,
-    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &mut HashMap<u16, mcap::records::Channel>,
-) -> Result<()> {
-    let start = usize::try_from(index.chunk_start_offset).with_context(|| {
-        format!(
-            "chunk offset out of range for this platform: {}",
-            index.chunk_start_offset
-        )
-    })?;
-    let length = usize::try_from(index.chunk_length).with_context(|| {
-        format!(
-            "chunk length out of range for this platform: {}",
-            index.chunk_length
-        )
-    })?;
-    let end = start.checked_add(length).ok_or_else(|| {
-        anyhow::anyhow!("chunk read overflow at offset {}", index.chunk_start_offset)
-    })?;
-    let chunk = mcap.get(start..end).ok_or_else(|| {
-        anyhow::anyhow!(
-            "chunk read out of bounds at offset {} length {}",
-            index.chunk_start_offset,
-            length
-        )
-    })?;
-    collect_chunk_definitions_from_record_bytes(chunk, schemas, channel_defs)
-}
-
-fn collect_chunk_definitions_from_record_bytes(
-    chunk: &[u8],
-    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &mut HashMap<u16, mcap::records::Channel>,
-) -> Result<()> {
-    if chunk.len() < 9 || chunk[0] != mcap::records::op::CHUNK {
-        return Err(mcap::McapError::BadIndex.into());
-    }
-    let body_len = usize::try_from(u64::from_le_bytes(chunk[1..9].try_into()?))
-        .context("chunk body length out of range for this platform")?;
-    if chunk.len() != 9 + body_len {
-        return Err(mcap::McapError::BadIndex.into());
-    }
-
-    let (header, data) = match mcap::parse_record(mcap::records::op::CHUNK, &chunk[9..])? {
-        mcap::records::Record::Chunk { header, data } => (header, data),
-        _ => return Err(mcap::McapError::BadIndex.into()),
-    };
-
-    for record in mcap::read::ChunkReader::new(header, data.as_ref())? {
-        collect_definition_record(record?, schemas, channel_defs);
-    }
-    Ok(())
-}
-
-fn collect_definition_record(
-    record: mcap::records::Record<'_>,
-    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &mut HashMap<u16, mcap::records::Channel>,
-) {
-    match record {
-        mcap::records::Record::Schema { header, data } => {
-            schemas.entry(header.id).or_insert_with(|| {
-                Arc::new(mcap::Schema {
-                    id: header.id,
-                    name: header.name,
-                    encoding: header.encoding,
-                    data: Cow::Owned(data.into_owned()),
-                })
-            });
-        }
-        mcap::records::Record::Channel(channel) => {
-            channel_defs.entry(channel.id).or_insert(channel);
-        }
-        _ => {}
-    }
 }
 
 fn resolve_channel(

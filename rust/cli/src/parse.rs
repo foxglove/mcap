@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context as _, Result};
 use mcap::records::{self, Record};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -274,6 +274,85 @@ pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'
         return Err(mcap::McapError::BadIndex.into());
     }
     Ok(attachment)
+}
+
+pub(crate) fn collect_chunk_definitions_from_mcap(
+    mcap: &[u8],
+    index: &records::ChunkIndex,
+    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
+    channel_defs: &mut HashMap<u16, records::Channel>,
+) -> Result<()> {
+    let start = usize::try_from(index.chunk_start_offset).with_context(|| {
+        format!(
+            "chunk offset out of range for this platform: {}",
+            index.chunk_start_offset
+        )
+    })?;
+    let length = usize::try_from(index.chunk_length).with_context(|| {
+        format!(
+            "chunk length out of range for this platform: {}",
+            index.chunk_length
+        )
+    })?;
+    let end = start.checked_add(length).ok_or_else(|| {
+        anyhow::anyhow!("chunk read overflow at offset {}", index.chunk_start_offset)
+    })?;
+    let chunk = mcap.get(start..end).ok_or_else(|| {
+        anyhow::anyhow!(
+            "chunk read out of bounds at offset {} length {}",
+            index.chunk_start_offset,
+            length
+        )
+    })?;
+    collect_chunk_definitions_from_record_bytes(chunk, schemas, channel_defs)
+}
+
+pub(crate) fn collect_chunk_definitions_from_record_bytes(
+    chunk: &[u8],
+    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
+    channel_defs: &mut HashMap<u16, records::Channel>,
+) -> Result<()> {
+    if chunk.len() < 9 || chunk[0] != records::op::CHUNK {
+        return Err(mcap::McapError::BadIndex.into());
+    }
+    let body_len = usize::try_from(u64::from_le_bytes(chunk[1..9].try_into()?))
+        .context("chunk body length out of range for this platform")?;
+    if chunk.len() != 9 + body_len {
+        return Err(mcap::McapError::BadIndex.into());
+    }
+
+    let (header, data) = match mcap::parse_record(records::op::CHUNK, &chunk[9..])? {
+        Record::Chunk { header, data } => (header, data),
+        _ => return Err(mcap::McapError::BadIndex.into()),
+    };
+
+    for record in mcap::read::ChunkReader::new(header, data.as_ref())? {
+        collect_definition_record(record?, schemas, channel_defs);
+    }
+    Ok(())
+}
+
+fn collect_definition_record(
+    record: Record<'_>,
+    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
+    channel_defs: &mut HashMap<u16, records::Channel>,
+) {
+    match record {
+        Record::Schema { header, data } => {
+            schemas.entry(header.id).or_insert_with(|| {
+                Arc::new(mcap::Schema {
+                    id: header.id,
+                    name: header.name,
+                    encoding: header.encoding,
+                    data: Cow::Owned(data.into_owned()),
+                })
+            });
+        }
+        Record::Channel(channel) => {
+            channel_defs.entry(channel.id).or_insert(channel);
+        }
+        _ => {}
+    }
 }
 
 #[cfg(test)]
