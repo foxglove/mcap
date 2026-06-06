@@ -361,10 +361,13 @@ mod tests {
     }
 
     #[test]
-    fn formatted_time_includes_rfc3339_and_decimal() {
+    fn formatted_time_appends_rfc3339_only_past_cutoff() {
+        // Near-epoch (relative) timestamp: decimal only, no absolute date.
+        assert_eq!(render::formatted_time(1_000_000_000), "1.000000000");
+        // Real wall-clock timestamp (past the 2000-01-01 cutoff): decimal plus RFC3339 in parens.
         assert_eq!(
-            render::formatted_time(1_000_000_000),
-            "1.000000000 (1970-01-01T00:00:01Z)"
+            render::formatted_time(1_585_866_235_112_411_371),
+            "1585866235.112411371 (2020-04-02T22:23:55.112411371Z)"
         );
     }
 

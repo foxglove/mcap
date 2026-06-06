@@ -12,12 +12,24 @@ pub fn write_raw_time(writer: &mut impl std::io::Write, t: u64) -> std::io::Resu
     write!(writer, "{t}")
 }
 
+// Nanoseconds for 2000-01-01T00:00:00Z. Timestamps below this almost certainly are not real
+// wall-clock times (relative/monotonic recordings start at or near 0), so rendering them as an
+// absolute date would be misleading. A fixed cutoff keeps `info` output deterministic, unlike a
+// rolling "looks recent" window.
+const WALL_CLOCK_CUTOFF_NANOS: u64 = 946_684_800_000_000_000;
+
 pub fn formatted_time(t: u64) -> String {
+    let decimal = decimal_time(t);
+    if t < WALL_CLOCK_CUTOFF_NANOS {
+        return decimal;
+    }
     let seconds = (t / 1_000_000_000) as i64;
     let nanos = (t % 1_000_000_000) as u32;
     match chrono::DateTime::from_timestamp(seconds, nanos) {
-        Some(dt) => format!("{} ({})", decimal_time(t), format_rfc3339_trimmed(dt)),
-        None => decimal_time(t),
+        // Lead with the raw decimal-seconds value (the authoritative value in the file) and append
+        // the RFC3339 wall-clock interpretation in parentheses.
+        Some(dt) => format!("{} ({})", decimal, format_rfc3339_trimmed(dt)),
+        None => decimal,
     }
 }
 
@@ -121,15 +133,15 @@ mod tests {
     }
 
     #[test]
-    fn formatted_time_includes_rfc3339_and_decimal() {
-        assert_eq!(
-            formatted_time(1_000_000_000),
-            "1.000000000 (1970-01-01T00:00:01Z)"
-        );
+    fn formatted_time_appends_rfc3339_only_past_cutoff() {
+        // Below the 2000-01-01 cutoff: decimal seconds only (no misleading 1970 date).
+        assert_eq!(formatted_time(1_000_000_000), "1.000000000");
         assert_eq!(decimal_time(1_234_567_890), "1.234567890");
+        assert_eq!(formatted_time(1_234_567_890), "1.234567890");
+        // At/after the cutoff: decimal seconds followed by the RFC3339 interpretation in parens.
         assert_eq!(
-            formatted_time(1_234_567_890),
-            "1.234567890 (1970-01-01T00:00:01.23456789Z)"
+            formatted_time(1_585_866_235_112_411_371),
+            "1585866235.112411371 (2020-04-02T22:23:55.112411371Z)"
         );
     }
 
