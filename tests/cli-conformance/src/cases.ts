@@ -16,6 +16,9 @@ const ONE_ATTACHMENT = "{dataDir}/OneAttachment/OneAttachment-ax-st-sum.mcap";
 const ONE_ATTACHMENT_RECORD_OFFSET = "25";
 const ONE_METADATA = "{dataDir}/OneMetadata/OneMetadata-mdx-st-sum.mcap";
 const ROS2_EMBEDDED_SCHEMA_DB3 = "{repoRoot}/testdata/db3/talker-iron.db3";
+// A committed MCAP whose statistics carry a real wall-clock (2017, above the info date cutoff) so
+// `info` renders an absolute RFC3339 start/end. Reused read-only from the mcap crate's test data.
+const WALL_CLOCK_MCAP = "{repoRoot}/rust/mcap/tests/data/uncompressed.mcap";
 const NOETIC_MULTITOPIC_NONE = "{repoRoot}/testdata/bags/generated/noetic-multitopic-none.bag";
 const NOETIC_MULTITOPIC_BZ2 = "{repoRoot}/testdata/bags/generated/noetic-multitopic-bz2.bag";
 const NOETIC_MULTITOPIC_LZ4 = "{repoRoot}/testdata/bags/generated/noetic-multitopic-lz4.bag";
@@ -304,7 +307,7 @@ export const cases: CliTestCase[] = [
       summary:
         "Rust renders each start/end as a single value — decimal seconds below the 2000-01-01 cutoff, an RFC3339 wall-clock string at/after it; for this near-epoch fixture both CLIs show decimal-only, so the remaining asserted difference is the zero-duration unit (Go `0s`, Rust `0ns`).",
       reason:
-        "Rust renders one representation per timestamp: the raw decimal seconds below 2000-01-01 (946684800s), and a lone RFC3339 wall-clock string at/after it (no parenthetical second form). Near-epoch/relative timestamps therefore render as a plain decimal offset rather than a misleading 1970 date, while real recordings show the human date. For this fixture's 2ns start, Rust now matches Go's decimal-only rendering (it no longer emits `1970-...Z`). Above the cutoff the two differ — Rust shows the RFC3339 string alone, while Go shows `RFC3339 (decimal)` with the epoch value in parens — but the conformance corpus has no above-cutoff fixture, so that difference is documented here rather than asserted (deferred coverage). The remaining asserted difference is the zero-duration unit: Go `0s`, Rust `0ns`.",
+        "Rust renders one representation per timestamp: the raw decimal seconds below 2000-01-01 (946684800s), and a lone RFC3339 wall-clock string at/after it (no parenthetical second form). Near-epoch/relative timestamps therefore render as a plain decimal offset rather than a misleading 1970 date, while real recordings show the human date. For this fixture's 2ns start, Rust now matches Go's decimal-only rendering (it no longer emits `1970-...Z`). Above the cutoff the two differ — Rust shows the RFC3339 string alone, while Go shows `RFC3339 (decimal)` with the epoch value in parens — which is asserted by the info-timestamp-wall-clock-format case below. The remaining difference asserted here is the zero-duration unit: Go `0s`, Rust `0ns`.",
       desiredBehavior:
         "Rust's single-representation rendering — decimal seconds below the 2000-01-01 cutoff, a lone RFC3339 string at/after it — is the intended behavior; the zero-duration unit difference (`0s` vs `0ns`) is cosmetic and unresolved.",
       // Go renders near-epoch times as decimal seconds only (no RFC3339 / no `1970-...Z`) and a zero
@@ -325,6 +328,39 @@ export const cases: CliTestCase[] = [
           kind: "matches",
           pattern:
             "^(?![\\s\\S]*1970-01-01)(?=[\\s\\S]*duration:\\s+0ns)[\\s\\S]*start:\\s+0\\.000000002[\\s\\S]*$",
+        },
+      },
+    },
+  },
+  {
+    id: "known-difference-info-timestamp-wall-clock-format",
+    description:
+      "For a wall-clock (>= 2000) timestamp, Rust info shows a lone RFC3339 string while Go appends the epoch decimal in parens.",
+    tags: ["known-difference", "info"],
+    invocation: { args: ["info", WALL_CLOCK_MCAP] },
+    knownDifference: {
+      id: "info-timestamp-wall-clock-format",
+      summary:
+        "Above the 2000-01-01 cutoff, Rust info renders start/end as a single RFC3339 string; Go appends the epoch decimal in parentheses.",
+      reason:
+        "At or after the cutoff, Rust shows one representation — the RFC3339 wall-clock string — because RFC3339 already carries full nanosecond precision, so a parenthetical epoch decimal would be redundant and harder to read/parse. Go appends the epoch seconds in parens. This fixture's statistics carry a 2017 start/end, so info renders an absolute date in both CLIs and the only difference is the trailing `(decimal)`.",
+      desiredBehavior:
+        "Rust info should keep rendering a lone RFC3339 string for wall-clock timestamps; the parenthetical epoch decimal remains Go-only.",
+      // Go appends the epoch seconds in parens after the RFC3339 string.
+      goBehavior: {
+        exitCode: 0,
+        stdout: {
+          kind: "contains",
+          value: "2017-03-22T02:26:20.103843113Z (1490149580.103843113)",
+        },
+      },
+      // Rust shows the RFC3339 string alone — no parenthetical epoch decimal anywhere.
+      rustBehavior: {
+        exitCode: 0,
+        stdout: {
+          kind: "matches",
+          pattern:
+            "^(?![\\s\\S]*\\(1490149580)[\\s\\S]*start:\\s+2017-03-22T02:26:20\\.103843113Z[\\s\\S]*$",
         },
       },
     },
