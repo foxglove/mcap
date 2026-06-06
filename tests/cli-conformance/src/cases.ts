@@ -296,17 +296,17 @@ export const cases: CliTestCase[] = [
   {
     id: "known-difference-info-timestamp-format",
     description:
-      "Below the 2000-01-01 cutoff both CLIs render start/end as decimal seconds only; they differ on the zero-duration unit (Go `0s` vs Rust `0ns`). Rust appends the RFC3339 date only past the cutoff.",
+      "Below the 2000-01-01 cutoff both CLIs render start/end as decimal seconds only; they differ on the zero-duration unit (Go `0s` vs Rust `0ns`). Rust renders a lone RFC3339 string past the cutoff.",
     tags: ["known-difference", "info"],
     invocation: { args: ["info", ONE_MESSAGE] },
     knownDifference: {
       id: "info-timestamp-format",
       summary:
-        "Rust renders start/end as decimal seconds and appends the RFC3339 interpretation in parens only for timestamps at/after 2000-01-01; for this near-epoch fixture both CLIs show decimal-only, so the remaining asserted difference is the zero-duration unit (Go `0s`, Rust `0ns`).",
+        "Rust renders each start/end as a single value — decimal seconds below the 2000-01-01 cutoff, an RFC3339 wall-clock string at/after it; for this near-epoch fixture both CLIs show decimal-only, so the remaining asserted difference is the zero-duration unit (Go `0s`, Rust `0ns`).",
       reason:
-        "Rust leads with the raw decimal-seconds value and appends the RFC3339 wall-clock interpretation only when the timestamp is at/after 2000-01-01 (946684800s), so near-epoch/relative timestamps render as a plain offset rather than a misleading 1970 date while real recordings still show the human date. For this fixture's 2ns start, Rust now matches Go's decimal-only rendering (it no longer emits `1970-...Z`). Above the cutoff the two still differ in order — Rust `decimal (RFC3339)`, Go `RFC3339 (decimal)` — but the conformance corpus has no above-cutoff fixture, so that ordering is documented here rather than asserted (deferred coverage). The remaining asserted difference is the zero-duration unit: Go `0s`, Rust `0ns`.",
+        "Rust renders one representation per timestamp: the raw decimal seconds below 2000-01-01 (946684800s), and a lone RFC3339 wall-clock string at/after it (no parenthetical second form). Near-epoch/relative timestamps therefore render as a plain decimal offset rather than a misleading 1970 date, while real recordings show the human date. For this fixture's 2ns start, Rust now matches Go's decimal-only rendering (it no longer emits `1970-...Z`). Above the cutoff the two differ — Rust shows the RFC3339 string alone, while Go shows `RFC3339 (decimal)` with the epoch value in parens — but the conformance corpus has no above-cutoff fixture, so that difference is documented here rather than asserted (deferred coverage). The remaining asserted difference is the zero-duration unit: Go `0s`, Rust `0ns`.",
       desiredBehavior:
-        "Rust's decimal-first rendering, with the RFC3339 date appended only past the 2000-01-01 cutoff, is the intended behavior; the zero-duration unit difference (`0s` vs `0ns`) is cosmetic and unresolved.",
+        "Rust's single-representation rendering — decimal seconds below the 2000-01-01 cutoff, a lone RFC3339 string at/after it — is the intended behavior; the zero-duration unit difference (`0s` vs `0ns`) is cosmetic and unresolved.",
       // Go renders near-epoch times as decimal seconds only (no RFC3339 / no `1970-...Z`) and a zero
       // duration as `0s`.
       goBehavior: {
