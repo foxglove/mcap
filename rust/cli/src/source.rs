@@ -6,7 +6,6 @@ use anyhow::{bail, Context, Result};
 use binrw::BinRead;
 use futures_util::TryStreamExt;
 use mcap::records::{self, Record};
-use mcap::sans_io::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};
 use memmap2::Mmap;
 use object_store::{
     path::Path as ObjectStorePath, Attribute, GetOptions, GetRange, ObjectStore, ObjectStoreExt,
@@ -153,11 +152,14 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     if is_remote_url(path) {
         match open_remote_range_reader(path)? {
             Some(mut reader) => {
-                if let Some(summary) = read_summary_from_remote(&mut reader, options)
+                if let Some(summary_bytes) = read_summary_bytes_from_remote(&mut reader, options)
                     .map_err(|err| remote_read_error(path, err))?
                 {
                     let header = read_header_from_seekable(&mut reader)?;
-                    return Ok(parse::parsed_mcap_from_summary_ref(header, &summary));
+                    return parse::parsed_mcap_from_summary_section(header, &summary_bytes)
+                        .map_err(|err| {
+                            remote_read_error(path, classify_remote_summary_error(&reader, err))
+                        });
                 }
                 if !options.allow_remote_scan {
                     bail!(
@@ -175,12 +177,6 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
                 );
             }
             None => {}
-        }
-    } else {
-        let mut source = open_seekable_mcap_source(path)?;
-        let header = read_header_from_seekable(&mut source)?;
-        if let Some(summary) = read_summary_from_seekable(&mut source)? {
-            return Ok(parse::parsed_mcap_from_summary_ref(header, &summary));
         }
     }
 
@@ -938,6 +934,18 @@ fn read_summary_from_remote(
     reader: &mut RemoteRangeReader,
     options: SourceOptions,
 ) -> Result<Option<mcap::Summary>> {
+    let Some(summary_bytes) = read_summary_bytes_from_remote(reader, options)? else {
+        return Ok(None);
+    };
+    parse::parse_summary_section(&summary_bytes)
+        .map(Some)
+        .map_err(|err| classify_remote_summary_error(reader, err))
+}
+
+fn read_summary_bytes_from_remote(
+    reader: &mut RemoteRangeReader,
+    options: SourceOptions,
+) -> Result<Option<Vec<u8>>> {
     let file_size = reader.size();
     let tail_len = FOOTER_RECORD_AND_END_MAGIC_LEN as u64;
     if file_size < tail_len + mcap::MAGIC.len() as u64 {
@@ -1039,9 +1047,7 @@ fn read_summary_from_remote(
             mcap::McapError::UnexpectedEof.into(),
         ));
     }
-    parse::parse_summary_section(&summary_bytes)
-        .map(Some)
-        .map_err(|err| classify_remote_summary_error(reader, err))
+    Ok(Some(summary_bytes))
 }
 
 fn classify_remote_summary_error(reader: &RemoteRangeReader, err: anyhow::Error) -> anyhow::Error {
@@ -1089,27 +1095,6 @@ fn remote_range_matches_magic(reader: &RemoteRangeReader, offset: u64) -> Option
 
 fn recoverable_mcap_error() -> &'static str {
     "MCAP file appears truncated or incomplete (try running `mcap --allow-remote-scan recover`)"
-}
-
-fn read_summary_from_seekable(
-    reader: &mut (impl std::io::Read + std::io::Seek),
-) -> Result<Option<mcap::Summary>> {
-    let file_size = reader.seek(SeekFrom::End(0))?;
-    let mut summary_reader =
-        SummaryReader::new_with_options(SummaryReaderOptions::default().with_file_size(file_size));
-    while let Some(event) = summary_reader.next_event() {
-        match event? {
-            SummaryReadEvent::ReadRequest(n) => {
-                let read = reader.read(summary_reader.insert(n))?;
-                summary_reader.notify_read(read);
-            }
-            SummaryReadEvent::SeekRequest(to) => {
-                let pos = reader.seek(to)?;
-                summary_reader.notify_seeked(pos);
-            }
-        }
-    }
-    Ok(summary_reader.finish())
 }
 
 fn read_header_from_seekable(
