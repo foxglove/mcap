@@ -287,8 +287,39 @@ export const cases: CliTestCase[] = [
     invocation: { args: ["info", ONE_MESSAGE] },
     comparison: {
       exitCode: 0,
+      // The `info` comparator intentionally ignores the start/end/duration lines; their format
+      // differs between the CLIs and is pinned by the info-timestamp-format known difference below.
       stdout: { kind: "info" },
       stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "known-difference-info-timestamp-format",
+    description:
+      "Info renders start/end timestamps differently: Rust always shows RFC3339, Go shows decimal seconds for non-recent times.",
+    tags: ["known-difference", "info"],
+    invocation: { args: ["info", ONE_MESSAGE] },
+    knownDifference: {
+      id: "info-timestamp-format",
+      summary:
+        "Rust info always renders start/end as RFC3339 plus decimal seconds; Go info prints decimal seconds only unless the timestamp looks recent.",
+      reason:
+        "Rust prints an absolute RFC3339 timestamp (with the decimal-seconds value in parentheses) regardless of magnitude, so the format is consistent. Go only adds the RFC3339 form when the timestamp looks like a recent wall-clock time and otherwise prints decimal seconds alone, so the rendering silently changes with the data. For real-world (recent) timestamps the two agree; they diverge for near-epoch times like this fixture's 2ns start. (Go and Rust also differ on a zero duration — `0s` vs `0ns` — which the parity `info` comparator likewise ignores.)",
+      desiredBehavior:
+        "Rust info's consistent RFC3339-plus-decimal rendering is the intended behavior; Go's format that depends on timestamp magnitude is not carried forward.",
+      // Go renders near-epoch times as decimal seconds only (no RFC3339 / no `1970-...Z`).
+      goBehavior: {
+        exitCode: 0,
+        stdout: {
+          kind: "matches",
+          pattern: "^(?![\\s\\S]*1970-01-01)[\\s\\S]*start:\\s+0\\.000000002[\\s\\S]*$",
+        },
+      },
+      // Rust always renders the absolute RFC3339 timestamp alongside the decimal value.
+      rustBehavior: {
+        exitCode: 0,
+        stdout: { kind: "contains", value: "1970-01-01T00:00:00.000000002Z" },
+      },
     },
   },
   {

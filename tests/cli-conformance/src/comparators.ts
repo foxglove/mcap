@@ -329,18 +329,23 @@ function parseCanonicalNdjson(
 }
 
 function normalizeInfo(text: string): string {
-  return normalizeText(text)
-    .split("\n")
-    .map((line) => line.trim().replaceAll(/[ \t]+/g, " "))
-    .filter((line) => !/^(duration|start|end):/i.test(line))
-    .map((line) => {
-      const channel = /^\((\d+)\) ([^ ]+) (\d+) msgs? .*: (.+)$/.exec(line);
-      if (channel) {
-        return `channel ${channel[1]} ${channel[2]} ${channel[3]} : ${channel[4]}`;
-      }
-      return line;
-    })
-    .join("\n");
+  return (
+    normalizeText(text)
+      .split("\n")
+      .map((line) => line.trim().replaceAll(/[ \t]+/g, " "))
+      // Drop duration/start/end: their rendering intentionally differs between the CLIs (Rust always
+      // RFC3339+decimal, Go decimal-only for non-recent times; `0ns` vs `0s`). That difference is
+      // asserted by the info-timestamp-format known-difference case, so parity cases ignore it here.
+      .filter((line) => !/^(duration|start|end):/i.test(line))
+      .map((line) => {
+        const channel = /^\((\d+)\) ([^ ]+) (\d+) msgs? .*: (.+)$/.exec(line);
+        if (channel) {
+          return `channel ${channel[1]} ${channel[2]} ${channel[3]} : ${channel[4]}`;
+        }
+        return line;
+      })
+      .join("\n")
+  );
 }
 
 function normalizeCommandList(text: string, ignoreCommands: readonly string[] = []): string {
