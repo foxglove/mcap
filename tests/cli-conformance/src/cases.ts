@@ -296,17 +296,17 @@ export const cases: CliTestCase[] = [
   {
     id: "known-difference-info-timestamp-format",
     description:
-      "Info renders start/end as `decimal (RFC3339)`: Rust always appends the RFC3339 interpretation in parens, Go omits it for non-recent times.",
+      "Below the 2000-01-01 cutoff both CLIs render start/end as decimal seconds only; they differ on the zero-duration unit (Go `0s` vs Rust `0ns`). Rust appends the RFC3339 date only past the cutoff.",
     tags: ["known-difference", "info"],
     invocation: { args: ["info", ONE_MESSAGE] },
     knownDifference: {
       id: "info-timestamp-format",
       summary:
-        "Rust info prints every start/end as decimal seconds followed by the RFC3339 interpretation in parentheses; Go prints decimal seconds alone unless the timestamp looks recent.",
+        "Rust renders start/end as decimal seconds and appends the RFC3339 interpretation in parens only for timestamps at/after 2000-01-01; for this near-epoch fixture both CLIs show decimal-only, so the remaining asserted difference is the zero-duration unit (Go `0s`, Rust `0ns`).",
       reason:
-        "Rust leads with the raw decimal-seconds value (the authoritative value in the file) and appends the RFC3339 wall-clock interpretation in parentheses for every timestamp, so the rendering is consistent and a near-epoch/relative start reads as a small offset rather than a misleading absolute date. Go only adds the RFC3339 form when the timestamp looks like a recent wall-clock time (a ~20-year heuristic) and otherwise prints decimal seconds alone, so its rendering silently changes with the data. For real-world (recent) timestamps both include the RFC3339 form; they diverge for near-epoch times like this fixture's 2ns start, where Rust still appends `(1970-...Z)` and Go does not. Go and Rust also differ on a zero duration — `0s` vs `0ns` — pinned below alongside the start format.",
+        "Rust leads with the raw decimal-seconds value and appends the RFC3339 wall-clock interpretation only when the timestamp is at/after 2000-01-01 (946684800s), so near-epoch/relative timestamps render as a plain offset rather than a misleading 1970 date while real recordings still show the human date. For this fixture's 2ns start, Rust now matches Go's decimal-only rendering (it no longer emits `1970-...Z`). Above the cutoff the two still differ in order — Rust `decimal (RFC3339)`, Go `RFC3339 (decimal)` — but the conformance corpus has no above-cutoff fixture, so that ordering is documented here rather than asserted (deferred coverage). The remaining asserted difference is the zero-duration unit: Go `0s`, Rust `0ns`.",
       desiredBehavior:
-        "Rust info's `decimal (RFC3339)` rendering for every timestamp is the intended behavior; Go's heuristic of omitting the RFC3339 form for non-recent times is not carried forward.",
+        "Rust's decimal-first rendering, with the RFC3339 date appended only past the 2000-01-01 cutoff, is the intended behavior; the zero-duration unit difference (`0s` vs `0ns`) is cosmetic and unresolved.",
       // Go renders near-epoch times as decimal seconds only (no RFC3339 / no `1970-...Z`) and a zero
       // duration as `0s`.
       goBehavior: {
@@ -317,14 +317,14 @@ export const cases: CliTestCase[] = [
             "^(?![\\s\\S]*1970-01-01)(?=[\\s\\S]*duration:\\s+0s)[\\s\\S]*start:\\s+0\\.000000002[\\s\\S]*$",
         },
       },
-      // Rust leads with the decimal value and appends the RFC3339 interpretation in parens, and
-      // renders a zero duration as `0ns`.
+      // Below the cutoff Rust also renders decimal-only (no `1970-...Z`), matching Go; only the zero
+      // duration differs (`0ns`).
       rustBehavior: {
         exitCode: 0,
         stdout: {
           kind: "matches",
           pattern:
-            "^(?=[\\s\\S]*duration:\\s+0ns)[\\s\\S]*start:\\s+0\\.000000002 \\(1970-01-01T00:00:00\\.000000002Z\\)[\\s\\S]*$",
+            "^(?![\\s\\S]*1970-01-01)(?=[\\s\\S]*duration:\\s+0ns)[\\s\\S]*start:\\s+0\\.000000002[\\s\\S]*$",
         },
       },
     },

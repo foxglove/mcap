@@ -333,10 +333,10 @@ function normalizeInfo(text: string): string {
     normalizeText(text)
       .split("\n")
       .map((line) => line.trim().replaceAll(/[ \t]+/g, " "))
-      // Drop duration/start/end: their rendering intentionally differs between the CLIs (Rust always
-      // decimal + RFC3339 in parens, Go decimal-only for non-recent times; `0ns` vs `0s`). Both the start format
-      // and the zero-duration format are asserted by the info-timestamp-format known-difference case,
-      // so parity cases ignore them here.
+      // Drop duration/start/end: their rendering can differ between the CLIs — the zero-duration unit
+      // (Go `0s` vs Rust `0ns`), and for at/after-2000 timestamps the order (Go RFC-first vs Rust
+      // decimal-first). The info-timestamp-format known-difference case owns those, so parity cases
+      // ignore these lines here.
       .filter((line) => !/^(duration|start|end):/i.test(line))
       .map((line) => {
         const channel = /^\((\d+)\) ([^ ]+) (\d+) msgs? .*: (.+)$/.exec(line);
