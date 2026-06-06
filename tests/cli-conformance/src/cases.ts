@@ -296,17 +296,17 @@ export const cases: CliTestCase[] = [
   {
     id: "known-difference-info-timestamp-format",
     description:
-      "Info renders start/end timestamps differently: Rust always shows RFC3339, Go shows decimal seconds for non-recent times.",
+      "Info renders start/end as `decimal (RFC3339)`: Rust always appends the RFC3339 interpretation in parens, Go omits it for non-recent times.",
     tags: ["known-difference", "info"],
     invocation: { args: ["info", ONE_MESSAGE] },
     knownDifference: {
       id: "info-timestamp-format",
       summary:
-        "Rust info always renders start/end as RFC3339 plus decimal seconds; Go info prints decimal seconds only unless the timestamp looks recent.",
+        "Rust info prints every start/end as decimal seconds followed by the RFC3339 interpretation in parentheses; Go prints decimal seconds alone unless the timestamp looks recent.",
       reason:
-        "Rust prints an absolute RFC3339 timestamp (with the decimal-seconds value in parentheses) regardless of magnitude, so the format is consistent. Go only adds the RFC3339 form when the timestamp looks like a recent wall-clock time and otherwise prints decimal seconds alone, so the rendering silently changes with the data. For real-world (recent) timestamps the two agree; they diverge for near-epoch times like this fixture's 2ns start. Go and Rust also differ on a zero duration — `0s` vs `0ns` — which this case pins below alongside the start format. Tradeoff: always-RFC3339 renders recordings that use relative timestamps (a near-zero start) as a 1970 date rather than reading as a relative offset, which is exactly the case Go's heuristic avoids; consistency is chosen over that here.",
+        "Rust leads with the raw decimal-seconds value (the authoritative value in the file) and appends the RFC3339 wall-clock interpretation in parentheses for every timestamp, so the rendering is consistent and a near-epoch/relative start reads as a small offset rather than a misleading absolute date. Go only adds the RFC3339 form when the timestamp looks like a recent wall-clock time (a ~20-year heuristic) and otherwise prints decimal seconds alone, so its rendering silently changes with the data. For real-world (recent) timestamps both include the RFC3339 form; they diverge for near-epoch times like this fixture's 2ns start, where Rust still appends `(1970-...Z)` and Go does not. Go and Rust also differ on a zero duration — `0s` vs `0ns` — pinned below alongside the start format.",
       desiredBehavior:
-        "Rust info's consistent RFC3339-plus-decimal rendering is the intended behavior; Go's format that depends on timestamp magnitude is not carried forward.",
+        "Rust info's `decimal (RFC3339)` rendering for every timestamp is the intended behavior; Go's heuristic of omitting the RFC3339 form for non-recent times is not carried forward.",
       // Go renders near-epoch times as decimal seconds only (no RFC3339 / no `1970-...Z`) and a zero
       // duration as `0s`.
       goBehavior: {
@@ -317,14 +317,14 @@ export const cases: CliTestCase[] = [
             "^(?![\\s\\S]*1970-01-01)(?=[\\s\\S]*duration:\\s+0s)[\\s\\S]*start:\\s+0\\.000000002[\\s\\S]*$",
         },
       },
-      // Rust always renders the absolute RFC3339 timestamp alongside the decimal value, and a zero
-      // duration as `0ns`.
+      // Rust leads with the decimal value and appends the RFC3339 interpretation in parens, and
+      // renders a zero duration as `0ns`.
       rustBehavior: {
         exitCode: 0,
         stdout: {
           kind: "matches",
           pattern:
-            "^(?=[\\s\\S]*duration:\\s+0ns)[\\s\\S]*start:\\s+1970-01-01T00:00:00\\.000000002Z[\\s\\S]*$",
+            "^(?=[\\s\\S]*duration:\\s+0ns)[\\s\\S]*start:\\s+0\\.000000002 \\(1970-01-01T00:00:00\\.000000002Z\\)[\\s\\S]*$",
         },
       },
     },
