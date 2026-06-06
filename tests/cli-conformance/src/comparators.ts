@@ -334,8 +334,9 @@ function normalizeInfo(text: string): string {
       .split("\n")
       .map((line) => line.trim().replaceAll(/[ \t]+/g, " "))
       // Drop duration/start/end: their rendering intentionally differs between the CLIs (Rust always
-      // RFC3339+decimal, Go decimal-only for non-recent times; `0ns` vs `0s`). That difference is
-      // asserted by the info-timestamp-format known-difference case, so parity cases ignore it here.
+      // RFC3339+decimal, Go decimal-only for non-recent times; `0ns` vs `0s`). Both the start format
+      // and the zero-duration format are asserted by the info-timestamp-format known-difference case,
+      // so parity cases ignore them here.
       .filter((line) => !/^(duration|start|end):/i.test(line))
       .map((line) => {
         const channel = /^\((\d+)\) ([^ ]+) (\d+) msgs? .*: (.+)$/.exec(line);
