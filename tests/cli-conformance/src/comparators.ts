@@ -333,11 +333,13 @@ function normalizeInfo(text: string): string {
     normalizeText(text)
       .split("\n")
       .map((line) => line.trim().replaceAll(/[ \t]+/g, " "))
-      // Drop duration/start/end: their rendering can differ between the CLIs — the zero-duration unit
-      // (Go `0s` vs Rust `0ns`), and for at/after-2000 timestamps the form (Go shows `RFC3339 (decimal)`,
-      // Rust shows the RFC3339 string alone). The info-timestamp-format known-difference case owns
-      // those, so parity cases ignore these lines here.
-      .filter((line) => !/^(duration|start|end):/i.test(line))
+      // Drop the duration line: the only residual difference is the zero-duration unit (Go `0s` vs
+      // Rust `0ns`), owned by the info-timestamp-format known-difference case. start/end are NOT
+      // dropped — both CLIs now render the same `RFC3339 (decimal)` form at/after the 2000-01-01
+      // cutoff and the same decimal-only form below it, so parity cases verify them directly. (Go
+      // renders wall-clock times in the host local zone while Rust always renders UTC, so a parity
+      // case using wall-clock data must pin TZ=UTC for start/end to line up.)
+      .filter((line) => !/^duration:/i.test(line))
       .map((line) => {
         const channel = /^\((\d+)\) ([^ ]+) (\d+) msgs? .*: (.+)$/.exec(line);
         if (channel) {
