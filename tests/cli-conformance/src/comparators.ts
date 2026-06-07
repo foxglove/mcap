@@ -329,18 +329,26 @@ function parseCanonicalNdjson(
 }
 
 function normalizeInfo(text: string): string {
-  return normalizeText(text)
-    .split("\n")
-    .map((line) => line.trim().replaceAll(/[ \t]+/g, " "))
-    .filter((line) => !/^(duration|start|end):/i.test(line))
-    .map((line) => {
-      const channel = /^\((\d+)\) ([^ ]+) (\d+) msgs? .*: (.+)$/.exec(line);
-      if (channel) {
-        return `channel ${channel[1]} ${channel[2]} ${channel[3]} : ${channel[4]}`;
-      }
-      return line;
-    })
-    .join("\n");
+  return (
+    normalizeText(text)
+      .split("\n")
+      .map((line) => line.trim().replaceAll(/[ \t]+/g, " "))
+      // Drop the duration line: the only residual difference is the zero-duration unit (Go `0s` vs
+      // Rust `0ns`), owned by the info-timestamp-format known-difference case. start/end are NOT
+      // dropped — both CLIs now render the same `RFC3339 (decimal)` form at/after the 2000-01-01
+      // cutoff and the same decimal-only form below it, so parity cases verify them directly. (Go
+      // renders wall-clock times in the host local zone while Rust always renders UTC, so a parity
+      // case using wall-clock data must pin TZ=UTC for start/end to line up.)
+      .filter((line) => !/^duration:/i.test(line))
+      .map((line) => {
+        const channel = /^\((\d+)\) ([^ ]+) (\d+) msgs? .*: (.+)$/.exec(line);
+        if (channel) {
+          return `channel ${channel[1]} ${channel[2]} ${channel[3]} : ${channel[4]}`;
+        }
+        return line;
+      })
+      .join("\n")
+  );
 }
 
 function normalizeCommandList(text: string, ignoreCommands: readonly string[] = []): string {

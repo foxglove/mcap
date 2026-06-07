@@ -12,7 +12,17 @@ pub fn write_raw_time(writer: &mut impl std::io::Write, t: u64) -> std::io::Resu
     write!(writer, "{t}")
 }
 
+// Nanoseconds for 2000-01-01T00:00:00Z. Timestamps below this almost certainly are not real
+// wall-clock times (relative/monotonic recordings start at or near 0), so rendering them as an
+// absolute date would be misleading.
+const WALL_CLOCK_CUTOFF_NANOS: u64 = 946_684_800_000_000_000;
+
 pub fn formatted_time(t: u64) -> String {
+    // Below the cutoff, render the raw decimal seconds (relative/monotonic recordings).
+    // After, render an RFC3339 wall-clock string followed by the decimal seconds in parentheses.
+    if t < WALL_CLOCK_CUTOFF_NANOS {
+        return decimal_time(t);
+    }
     let seconds = (t / 1_000_000_000) as i64;
     let nanos = (t % 1_000_000_000) as u32;
     match chrono::DateTime::from_timestamp(seconds, nanos) {
@@ -121,15 +131,15 @@ mod tests {
     }
 
     #[test]
-    fn formatted_time_includes_rfc3339_and_decimal() {
-        assert_eq!(
-            formatted_time(1_000_000_000),
-            "1970-01-01T00:00:01Z (1.000000000)"
-        );
+    fn formatted_time_is_decimal_below_cutoff_and_rfc3339_above() {
+        // Below the 2000-01-01 cutoff: decimal seconds only (no misleading 1970 date).
+        assert_eq!(formatted_time(1_000_000_000), "1.000000000");
         assert_eq!(decimal_time(1_234_567_890), "1.234567890");
+        assert_eq!(formatted_time(1_234_567_890), "1.234567890");
+        // At/after the cutoff: an RFC3339 wall-clock string with the decimal seconds in parens.
         assert_eq!(
-            formatted_time(1_234_567_890),
-            "1970-01-01T00:00:01.23456789Z (1.234567890)"
+            formatted_time(1_585_866_235_112_411_371),
+            "2020-04-02T22:23:55.112411371Z (1585866235.112411371)"
         );
     }
 
