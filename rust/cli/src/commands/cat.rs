@@ -181,6 +181,9 @@ fn cat_indexed(
     if let Some(end) = opts.end {
         indexed_opts = indexed_opts.log_time_before(end);
     }
+    // Reader-level topic filtering keys on `summary.channels`, so skip it when chunk-local channels
+    // may exist (see `needs_in_chunk_definitions`) and let the per-message `include_topic` check
+    // below filter instead, to avoid silently dropping matching chunk-local messages.
     if !opts.topics.is_empty() && !included_topics.is_empty() && !needs_in_chunk_definitions {
         indexed_opts = indexed_opts.include_topics(included_topics.iter().cloned());
     }
@@ -350,6 +353,9 @@ fn cat_remote_indexed(
     if let Some(end) = opts.end {
         indexed_opts = indexed_opts.log_time_before(end);
     }
+    // Reader-level topic filtering keys on `summary.channels`, so skip it when chunk-local channels
+    // may exist (see `needs_in_chunk_definitions`) and let the per-message `include_topic` check
+    // below filter instead, to avoid silently dropping matching chunk-local messages.
     if !opts.topics.is_empty() && !included_topics.is_empty() && !needs_in_chunk_definitions {
         indexed_opts = indexed_opts.include_topics(included_topics.iter().cloned());
     }
@@ -393,6 +399,18 @@ fn cat_remote_indexed(
     Ok(RemoteCatResult::Done)
 }
 
+/// Returns whether any chunk references channels that aren't repeated in the summary, so their
+/// definitions (and topics) must be read from the chunks themselves.
+///
+/// When true, callers must (a) collect in-chunk definitions before resolving messages, and (b) skip
+/// reader-level topic filtering — which keys on `summary.channels` only — and filter per message
+/// instead, otherwise a chunk-local channel matching a `--topics` filter would be silently dropped.
+///
+/// Note: a file mixing summary channels with chunk-local ones can't be produced by the standard
+/// writer (its `repeat_channels`/`repeat_schemas` options are all-or-nothing: either every channel
+/// is in the summary, making this false, or none is, making `included_topics` empty). So the mixed +
+/// `--topics` path this guards is defensive against partial-repetition files from other tools and
+/// isn't covered by an `mcap::Writer`-based regression test.
 fn needs_in_chunk_definitions(summary: &mcap::Summary) -> bool {
     summary.chunk_indexes.iter().any(|chunk| {
         chunk
