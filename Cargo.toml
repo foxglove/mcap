@@ -1,5 +1,5 @@
 [workspace]
-members = ["mcap", "cli"]
+members = ["rust/mcap", "rust/cli"]
 resolver = "2"
 
 [profile.bench]

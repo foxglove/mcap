@@ -42,7 +42,7 @@ Build both CLIs first:
 
 ```bash
 make -C go/cli/mcap build
-cd rust && cargo build -p mcap-cli
+cargo build -p mcap-cli
 ```
 
 Ensure conformance fixtures exist:
@@ -56,7 +56,7 @@ Run the CLI conformance suite from the repository root:
 ```bash
 yarn test:cli-conformance \
   --go-bin "$(pwd)/go/cli/mcap/bin/mcap" \
-  --rust-bin "$(pwd)/rust/target/debug/mcap"
+  --rust-bin "$(pwd)/target/debug/mcap"
 ```
 
 Run a subset:
@@ -65,7 +65,7 @@ Run a subset:
 yarn workspace @foxglove/mcap-cli-conformance run-tests \
   --data-dir "$(pwd)/tests/conformance/data" \
   --go-bin "$(pwd)/go/cli/mcap/bin/mcap" \
-  --rust-bin "$(pwd)/rust/target/debug/mcap" \
+  --rust-bin "$(pwd)/target/debug/mcap" \
   --case-regex "cat|filter"
 ```
 
@@ -75,7 +75,7 @@ Keep temporary work directories for debugging:
 yarn workspace @foxglove/mcap-cli-conformance run-tests \
   --data-dir "$(pwd)/tests/conformance/data" \
   --go-bin "$(pwd)/go/cli/mcap/bin/mcap" \
-  --rust-bin "$(pwd)/rust/target/debug/mcap" \
+  --rust-bin "$(pwd)/target/debug/mcap" \
   --keep-work-dir
 ```
 
@@ -93,7 +93,7 @@ Build release binaries before using performance checks:
 
 ```bash
 make -C go/cli/mcap build
-cd rust && cargo build -p mcap-cli --release
+cargo build -p mcap-cli --release
 ```
 
 Run the performance checks:
@@ -102,7 +102,7 @@ Run the performance checks:
 yarn workspace @foxglove/mcap-cli-conformance perf \
   --data-dir "$(pwd)/tests/conformance/data" \
   --go-bin "$(pwd)/go/cli/mcap/bin/mcap" \
-  --rust-bin "$(pwd)/rust/target/release/mcap"
+  --rust-bin "$(pwd)/target/release/mcap"
 ```
 
 Pass `--fail-on-regression` only when you intentionally want the command to exit

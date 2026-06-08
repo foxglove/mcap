@@ -24,5 +24,5 @@ By default this package will build with zstd compression support enabled. To
 build without the zstd dependency pass the `--no-default-features` flag:
 
 ```
-cargo build --no-default-features
+cargo build -p mcap --no-default-features
 ```
