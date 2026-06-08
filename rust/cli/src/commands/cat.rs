@@ -560,16 +560,7 @@ fn handle_linear_record(
                 return Ok(false);
             }
 
-            let channel = if let Some(channel) = channels.get(&header.channel_id) {
-                channel.clone()
-            } else {
-                let Some(channel_def) = channel_defs.get(&header.channel_id) else {
-                    bail!("message references unknown channel {}", header.channel_id);
-                };
-                let resolved = build_channel(channel_def, schemas)?;
-                channels.insert(header.channel_id, resolved.clone());
-                resolved
-            };
+            let channel = resolve_channel(header.channel_id, schemas, channel_defs, channels)?;
 
             if !opts.include_topic(&channel.topic) {
                 return Ok(false);
