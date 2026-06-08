@@ -67,12 +67,12 @@ The Go workspace (`go/go.work`) includes the core library (`go/mcap`), ROS tools
 
 **Prerequisites:** Rust stable (`rustup default stable`; CI uses the `stable` toolchain). Older `rustc` versions may fail to compile some dependencies.
 
-| Action | Command                                                                  |
-| ------ | ------------------------------------------------------------------------ |
-| Build  | `cargo build -p mcap --all-features`                                     |
-| Test   | `cargo test -p mcap --all-features`                                      |
-| Lint   | `cargo clippy -p mcap --all-targets -- --no-deps -D warnings`            |
-| Format | `cargo fmt --all -- --check`                                             |
+| Action | Command                                                       |
+| ------ | ------------------------------------------------------------- |
+| Build  | `cargo build -p mcap --all-features`                          |
+| Test   | `cargo test -p mcap --all-features`                           |
+| Lint   | `cargo clippy -p mcap --all-targets -- --no-deps -D warnings` |
+| Format | `cargo fmt --all -- --check`                                  |
 
 The Rust workspace is defined at the repo root and includes the `mcap` library crate under `rust/mcap` and the `mcap-cli` CLI crate under `rust/cli`.
 
