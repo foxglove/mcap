@@ -931,15 +931,10 @@ mod tests {
     }
 
     fn output_library(output: &[u8]) -> String {
-        match mcap::read::LinearReader::new(output)
-            .expect("reader")
-            .next()
-            .expect("header record")
-            .expect("record")
-        {
-            mcap::records::Record::Header(header) => header.library,
-            _ => panic!("expected header record first"),
-        }
+        super::read_header(output)
+            .expect("read header")
+            .expect("header present")
+            .library
     }
 
     #[test]

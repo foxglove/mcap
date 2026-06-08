@@ -400,15 +400,10 @@ mod tests {
             .expect("sort should succeed");
         let output = output.into_inner();
 
-        let library = match mcap::read::LinearReader::new(&output)
-            .expect("reader")
-            .next()
-            .expect("header")
-            .expect("record")
-        {
-            mcap::records::Record::Header(header) => header.library,
-            _ => panic!("expected header record"),
-        };
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
         assert_eq!(
             library,
             crate::library::stamp_library(Some(&format!("mcap-rs-{}", mcap::VERSION)))

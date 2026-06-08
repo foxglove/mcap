@@ -923,15 +923,10 @@ mod tests {
         )
         .expect("merge");
 
-        let library = match mcap::read::LinearReader::new(&merged)
-            .expect("reader")
-            .next()
-            .expect("header")
-            .expect("record")
-        {
-            Record::Header(header) => header.library,
-            _ => panic!("expected header"),
-        };
+        let library = crate::parse::read_header(&merged)
+            .expect("read header")
+            .expect("header present")
+            .library;
         assert_eq!(library, crate::library::writer_library());
     }
 
