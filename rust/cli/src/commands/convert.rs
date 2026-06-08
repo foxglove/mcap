@@ -90,6 +90,7 @@ fn build_write_options(
 
     WriteOptions::new()
         .profile(profile)
+        .library(crate::library::writer_library())
         .use_chunks(chunked)
         .chunk_size(Some(chunk_size))
         .compression(compression)
@@ -473,7 +474,13 @@ size 123\n",
             let mut records = mcap::read::LinearReader::new(&bytes)?;
             match records.next() {
                 Some(Ok(mcap::records::Record::Header(header))) => {
-                    assert_eq!(header.profile, "ros1", "{fixture}")
+                    assert_eq!(header.profile, "ros1", "{fixture}");
+                    // convert authors a fresh MCAP, so it stamps the CLI writer with no origin.
+                    assert_eq!(
+                        header.library,
+                        crate::library::writer_library(),
+                        "{fixture}"
+                    );
                 }
                 other => panic!("{fixture}: expected MCAP header as first record, got {other:?}"),
             }

@@ -1,18 +1,26 @@
 //! Header `library` field policy shared by every command that authors an output MCAP.
 //!
 //! The MCAP spec defines `library` as a free-form string identifying the *writer* of the file. The
-//! CLI is the writer for any command that produces an output (compress, decompress, filter, sort,
-//! recover, merge), so the output always names the CLI. To keep the provenance of the original
-//! recording, the source writer is preserved as a trailing, `; `-separated origin segment, similar
-//! to an HTTP `User-Agent`:
+//! CLI is the writer for any command that authors an output file (compress, decompress, filter,
+//! sort, recover, merge, convert), so the output always names the CLI. To keep the provenance of
+//! the original recording, the source writer is preserved as a trailing, `; `-separated origin
+//! segment, similar to an HTTP `User-Agent`:
 //!
 //! ```text
 //! mcap-cli/<cli-version> mcap-rust/<lib-version>[; <original-source-library>]
 //! ```
 //!
+//! `mcap-rust/<lib-version>` names the underlying `mcap` crate (which self-identifies as
+//! `mcap-rs-<version>` when used directly); the CLI uses the `User-Agent`-style `name/version`
+//! token to match its own `--version` output.
+//!
 //! The origin is bounded to a single segment and is never the CLI itself, so repeatedly processing
 //! a file is idempotent: the leading writer token refreshes to the current version while the
-//! original source is retained unchanged.
+//! original source is retained unchanged. Commands that author a fresh file from a non-MCAP or
+//! multi-file source (`convert`, `merge`) stamp the writer with no origin.
+//!
+//! `add` (attachment/metadata) is intentionally exempt: it splices records into the existing file
+//! without rewriting it, so it preserves the original header — including its `library` — untouched.
 
 /// Prefix identifying a `library` string previously written by this CLI (any version).
 const CLI_PREFIX: &str = "mcap-cli/";
