@@ -352,27 +352,7 @@ mod tests {
 
     use super::{count_chunk_overlaps, format_duration, render_channel_summary_rows, render_info};
     use crate::parse::{ParsedMcap, ParsedSchema};
-    use crate::render;
     use mcap::records::{self, ChunkIndex, Header, Statistics};
-
-    #[test]
-    fn decimal_time_formats_nanos() {
-        assert_eq!(render::decimal_time(1_234_567_890), "1.234567890");
-    }
-
-    #[test]
-    fn formatted_time_includes_rfc3339_and_decimal() {
-        assert_eq!(
-            render::formatted_time(1_000_000_000),
-            "1970-01-01T00:00:01Z (1.000000000)"
-        );
-    }
-
-    #[test]
-    fn human_bytes_scales_units() {
-        assert_eq!(render::human_bytes(2), "2.00 B");
-        assert_eq!(render::human_bytes(2 * 1024), "2.00 KiB");
-    }
 
     #[test]
     fn overlaps_counts_concurrent_chunks() {

@@ -27,9 +27,8 @@ To install using [Homebrew](https://brew.sh) on macOS or Linux, run:
 ### From Source
 
 1. Clone the [mcap repository](https://github.com/foxglove/mcap).
-2. `$ cd rust`
-3. `$ cargo build -p mcap-cli --release`
-4. The binary will be built at `rust/target/release/mcap`.
+2. `$ cargo build -p mcap-cli --release`
+3. The binary will be built at `target/release/mcap`.
 
 ## Usage
 

@@ -11,7 +11,7 @@ export default class RustWriterTestRunner extends WriteTestRunner {
 
   async runWriteTest(filePath: string): Promise<Uint8Array> {
     const { stdout, stderr } = await promisify(exec)(`./conformance_writer ${filePath}`, {
-      cwd: join(import.meta.dirname, "../../../../../rust/target/debug/examples"),
+      cwd: join(import.meta.dirname, "../../../../../target/debug/examples"),
       encoding: undefined,
     });
 

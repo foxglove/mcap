@@ -218,7 +218,7 @@ function median(values: number[]): number {
 program
   .requiredOption("--data-dir <dataDir>", "directory containing generated MCAP conformance data")
   .option("--go-bin <path>", "path to legacy Go mcap binary", "go/cli/mcap/bin/mcap")
-  .option("--rust-bin <path>", "path to Rust mcap binary", "rust/target/release/mcap")
+  .option("--rust-bin <path>", "path to Rust mcap binary", "target/release/mcap")
   .option("--work-dir <path>", "directory for temporary per-case workspaces")
   .option("--case-regex <pattern>", "only run matching case ids", (value) => new RegExp(value, "u"))
   .option("--iterations <number>", "measured iterations per case", (value) => Number(value), 5)

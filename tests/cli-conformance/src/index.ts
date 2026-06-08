@@ -243,7 +243,7 @@ async function evaluateCase(
 program
   .requiredOption("--data-dir <dataDir>", "directory containing generated MCAP conformance data")
   .option("--go-bin <path>", "path to legacy Go mcap binary", "go/cli/mcap/bin/mcap")
-  .option("--rust-bin <path>", "path to Rust mcap binary", "rust/target/debug/mcap")
+  .option("--rust-bin <path>", "path to Rust mcap binary", "target/debug/mcap")
   .option("--work-dir <path>", "directory for temporary per-case workspaces")
   .option("--case-regex <pattern>", "only run matching case ids", (value) => new RegExp(value, "u"))
   .option("--no-include-known-differences", "skip known-difference cases")

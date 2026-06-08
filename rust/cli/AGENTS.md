@@ -4,7 +4,7 @@ This crate (`mcap-cli`) builds the `mcap` command line tool. It is an internal b
 
 ## Common commands
 
-- Run `cargo` commands from the `rust/` directory.
+- Run `cargo` commands from the repository root.
 - Lint with `cargo clippy -p mcap-cli --all-targets -- --no-deps -D warnings`.
 
 ## Architecture

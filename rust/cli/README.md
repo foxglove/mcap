@@ -25,10 +25,9 @@ The CLI is written in Rust using the [mcap crate](../mcap).
 To build from source:
 
 ```sh
-cd rust
 cargo build -p mcap-cli
 ```
 
-The binary is written to `rust/target/debug/mcap`.
+The binary is written to `target/debug/mcap`.
 
 For build, test, and architecture conventions, see [AGENTS.md](./AGENTS.md).
