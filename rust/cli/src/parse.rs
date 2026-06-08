@@ -2,8 +2,11 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use mcap::records::{self, Record};
+
+const FOOTER_RECORD_LEN: usize = 1 + 8 + 8 + 8 + 4;
+pub(crate) const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = FOOTER_RECORD_LEN + mcap::MAGIC.len();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedSchema {
@@ -47,56 +50,39 @@ fn parse_mcap_from_summary(
     mcap: &[u8],
     header: Option<records::Header>,
 ) -> Result<Option<ParsedMcap>> {
-    let Some(summary) = mcap::Summary::read(mcap)? else {
+    let footer = mcap::read::footer(mcap)?;
+    if footer.summary_start == 0 {
         return Ok(None);
-    };
-    Ok(Some(parsed_mcap_from_summary_ref(header, &summary)))
+    }
+
+    let footer_start = mcap
+        .len()
+        .checked_sub(FOOTER_RECORD_AND_END_MAGIC_LEN)
+        .context("input is too short to contain a footer")?;
+    let summary_start =
+        usize::try_from(footer.summary_start).context("summary offset is too large")?;
+    if summary_start > footer_start {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+
+    Ok(Some(parsed_mcap_from_summary_section(
+        header,
+        &mcap[summary_start..footer_start],
+    )?))
 }
 
-pub(crate) fn parsed_mcap_from_summary_ref(
+pub(crate) fn parsed_mcap_from_summary_section(
     header: Option<records::Header>,
-    summary: &mcap::Summary,
-) -> ParsedMcap {
+    summary: &[u8],
+) -> Result<ParsedMcap> {
     let mut out = ParsedMcap {
         header,
-        statistics: summary.stats.clone(),
-        channels: std::collections::BTreeMap::new(),
-        schemas: std::collections::BTreeMap::new(),
-        chunk_indexes: summary.chunk_indexes.clone(),
-        attachment_indexes: summary.attachment_indexes.clone(),
-        metadata_indexes: summary.metadata_indexes.clone(),
+        ..ParsedMcap::default()
     };
-
-    for schema in summary.schemas.values() {
-        let schema = schema.as_ref();
-        out.schemas.insert(
-            schema.id,
-            ParsedSchema {
-                header: records::SchemaHeader {
-                    id: schema.id,
-                    name: schema.name.clone(),
-                    encoding: schema.encoding.clone(),
-                },
-                data: schema.data.clone().into_owned(),
-            },
-        );
+    for record in mcap::read::LinearReader::sans_magic(summary) {
+        collect_record(&mut out, record?)?;
     }
-
-    for channel in summary.channels.values() {
-        let channel = channel.as_ref();
-        out.channels.insert(
-            channel.id,
-            records::Channel {
-                id: channel.id,
-                schema_id: channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0),
-                topic: channel.topic.clone(),
-                message_encoding: channel.message_encoding.clone(),
-                metadata: channel.metadata.clone(),
-            },
-        );
-    }
-
-    out
+    Ok(out)
 }
 
 fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
@@ -167,6 +153,7 @@ fn collect_record(out: &mut ParsedMcap, record: Record<'_>) -> Result<()> {
 pub(crate) fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
     let mut out = mcap::Summary::default();
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
+    let mut channel_defs = HashMap::<u16, records::Channel>::new();
 
     for record in mcap::read::LinearReader::sans_magic(summary) {
         match record? {
@@ -201,44 +188,42 @@ pub(crate) fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
                     }
                 }
             }
-            Record::Channel(channel) => {
-                let schema = if channel.schema_id == 0 {
-                    None
-                } else {
-                    Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
-                        mcap::McapError::UnknownSchema(channel.topic.clone(), channel.schema_id)
-                    })?)
-                };
-                let resolved = Arc::new(mcap::Channel {
+            Record::Channel(channel) => match channel_defs.entry(channel.id) {
+                std::collections::hash_map::Entry::Occupied(entry) => {
+                    let existing = entry.get();
+                    if existing != &channel {
+                        return Err(
+                            mcap::McapError::ConflictingChannels(channel.topic.clone()).into()
+                        );
+                    }
+                }
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(channel);
+                }
+            },
+            _ => {}
+        }
+    }
+    out.channels = channel_defs
+        .into_iter()
+        .map(|(id, channel)| {
+            let schema = if channel.schema_id == 0 {
+                None
+            } else {
+                schemas.get(&channel.schema_id).cloned()
+            };
+            (
+                id,
+                Arc::new(mcap::Channel {
                     id: channel.id,
                     topic: channel.topic,
                     schema,
                     message_encoding: channel.message_encoding,
                     metadata: channel.metadata,
-                });
-                match out.channels.entry(resolved.id) {
-                    std::collections::hash_map::Entry::Occupied(entry) => {
-                        let existing = entry.get();
-                        if existing.topic != resolved.topic
-                            || existing.schema.as_ref().map(|schema| schema.id)
-                                != resolved.schema.as_ref().map(|schema| schema.id)
-                            || existing.message_encoding != resolved.message_encoding
-                            || existing.metadata != resolved.metadata
-                        {
-                            return Err(mcap::McapError::ConflictingChannels(
-                                resolved.topic.clone(),
-                            )
-                            .into());
-                        }
-                    }
-                    std::collections::hash_map::Entry::Vacant(entry) => {
-                        entry.insert(resolved);
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
+                }),
+            )
+        })
+        .collect();
     out.schemas = schemas;
     Ok(out)
 }
@@ -280,7 +265,7 @@ pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'
 mod tests {
     use std::collections::BTreeMap;
 
-    use super::{parse_mcap, parse_mcap_from_summary};
+    use super::{parse_mcap, parse_mcap_from_summary, parse_summary_section};
     use mcap::records;
 
     #[test]
@@ -349,6 +334,88 @@ mod tests {
         assert!(parsed.header.is_some());
         assert!(parsed.channels.contains_key(&channel_id));
         assert!(parsed.schemas.contains_key(&schema_id));
+    }
+
+    #[test]
+    fn parse_mcap_preserves_missing_summary_schema_id() {
+        let mut buffer = Vec::new();
+        let (schema_id, channel_id) = {
+            let mut writer = mcap::WriteOptions::new()
+                .repeat_schemas(false)
+                .repeat_channels(true)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 10,
+                        publish_time: 11,
+                    },
+                    br#"{"k":"v"}"#,
+                )
+                .expect("write message");
+            writer.finish().expect("finish writer");
+            (schema_id, channel_id)
+        };
+
+        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        let channel = parsed
+            .channels
+            .get(&channel_id)
+            .expect("channel should be read from summary");
+        assert_eq!(channel.schema_id, schema_id);
+        assert!(!parsed.schemas.contains_key(&schema_id));
+    }
+
+    #[test]
+    fn parse_summary_section_accepts_channel_with_missing_schema() {
+        let mut buffer = Vec::new();
+        let (schema_id, channel_id) = {
+            let mut writer = mcap::WriteOptions::new()
+                .repeat_schemas(false)
+                .repeat_channels(true)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 10,
+                        publish_time: 11,
+                    },
+                    br#"{"k":"v"}"#,
+                )
+                .expect("write message");
+            writer.finish().expect("finish writer");
+            (schema_id, channel_id)
+        };
+
+        let footer = mcap::read::footer(&buffer).expect("footer");
+        let footer_start = buffer.len() - super::FOOTER_RECORD_AND_END_MAGIC_LEN;
+        let summary = parse_summary_section(&buffer[footer.summary_start as usize..footer_start])
+            .expect("summary should parse without repeated schema");
+        let channel = summary
+            .channels
+            .get(&channel_id)
+            .expect("channel should be preserved");
+        assert_eq!(channel.id, channel_id);
+        assert!(channel.schema.is_none());
+        assert!(!summary.schemas.contains_key(&schema_id));
     }
 
     #[test]
