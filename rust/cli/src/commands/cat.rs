@@ -124,8 +124,14 @@ fn cat_indexed(
     opts: &CatOptions,
     json_transcoders: &mut JsonTranscoders,
 ) -> Result<Option<bool>> {
-    let Some(summary) = mcap::Summary::read(mcap)? else {
-        return Ok(None);
+    let summary = match mcap::Summary::read(mcap) {
+        Ok(Some(summary)) => summary,
+        Ok(None) => return Ok(None),
+        // A spec-valid file may repeat a channel in the summary without repeating its schema,
+        // leaving the schema defined only inside a chunk. That can't be resolved from the summary
+        // alone, so fall back to a linear scan, which registers in-chunk definitions as it reads.
+        Err(mcap::McapError::UnknownSchema(..)) => return Ok(None),
+        Err(err) => return Err(err.into()),
     };
     if summary.chunk_indexes.is_empty() {
         return Ok(None);
@@ -138,11 +144,24 @@ fn cat_indexed(
         return Ok(None);
     }
 
-    let chunk_indexes_by_data_offset = chunk_indexes_by_data_offset(&summary)?;
     let needs_in_chunk_definitions = needs_in_chunk_definitions(&summary);
     let mut schemas = summary.schemas.clone();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
     let mut channels = summary.channels.clone();
+    // When channels/schemas are defined only inside chunks (not repeated in the summary), collect
+    // their definitions from every chunk up front. Collecting lazily per requested chunk would miss
+    // a definition that lives in a chunk skipped by a topic or time filter (e.g. a channel defined
+    // in an early chunk but referenced by messages in a later one).
+    if needs_in_chunk_definitions {
+        for chunk_index in &summary.chunk_indexes {
+            parse::collect_chunk_definitions_from_mcap(
+                mcap,
+                chunk_index,
+                &mut schemas,
+                &mut channel_defs,
+            )?;
+        }
+    }
 
     let included_topics: BTreeSet<String> = summary
         .channels
@@ -171,17 +190,6 @@ fn cat_indexed(
     while let Some(event) = reader.next_event() {
         match event? {
             mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                let chunk_index = chunk_indexes_by_data_offset.get(&offset).ok_or_else(|| {
-                    anyhow::anyhow!("chunk index missing for data offset {offset}")
-                })?;
-                if needs_in_chunk_definitions {
-                    parse::collect_chunk_definitions_from_mcap(
-                        mcap,
-                        chunk_index,
-                        &mut schemas,
-                        &mut channel_defs,
-                    )?;
-                }
                 let start = offset as usize;
                 let end = start
                     .checked_add(length)
@@ -255,7 +263,6 @@ fn cat_remote_indexed(
         return Ok(RemoteCatResult::NeedsFullScan);
     }
 
-    let chunk_indexes_by_data_offset = chunk_indexes_by_data_offset(summary)?;
     let needs_in_chunk_definitions = needs_in_chunk_definitions(summary);
     let mut schemas = summary.schemas.clone();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
@@ -286,6 +293,38 @@ fn cat_remote_indexed(
         );
     }
 
+    // When channels/schemas are defined only inside chunks, fetch every chunk once up front to
+    // collect their definitions, caching the compressed data so the indexed read below doesn't
+    // re-fetch. Lazy per-chunk collection would miss a definition in a chunk skipped by a topic or
+    // time filter. The remote-scan gate above already required opt-in to reach here.
+    let mut chunk_data_cache: HashMap<u64, Vec<u8>> = HashMap::new();
+    if needs_in_chunk_definitions && !planned_chunks.is_empty() {
+        for chunk_index in &summary.chunk_indexes {
+            let chunk_len = usize::try_from(chunk_index.chunk_length).with_context(|| {
+                format!(
+                    "chunk length out of range for this platform: {}",
+                    chunk_index.chunk_length
+                )
+            })?;
+            let chunk = remote.read_range(chunk_index.chunk_start_offset, chunk_len)?;
+            parse::collect_chunk_definitions_from_record_bytes(
+                &chunk,
+                &mut schemas,
+                &mut channel_defs,
+            )?;
+            let data_offset = chunk_index.compressed_data_offset()?;
+            let compressed_start = usize::try_from(data_offset - chunk_index.chunk_start_offset)
+                .with_context(|| {
+                    format!("chunk data offset out of range for this platform: {data_offset}")
+                })?;
+            let compressed = chunk
+                .get(compressed_start..)
+                .ok_or_else(|| anyhow::anyhow!("chunk data out of bounds at offset {data_offset}"))?
+                .to_vec();
+            chunk_data_cache.insert(data_offset, compressed);
+        }
+    }
+
     let mut indexed_opts =
         mcap::sans_io::IndexedReaderOptions::new().with_order(ReadOrder::LogTime);
     if opts.start != 0 {
@@ -302,42 +341,17 @@ fn cat_remote_indexed(
     while let Some(event) = reader.next_event() {
         match event? {
             mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                let chunk_index = chunk_indexes_by_data_offset.get(&offset).ok_or_else(|| {
-                    anyhow::anyhow!("chunk index missing for data offset {offset}")
-                })?;
-                let compressed_data = if needs_in_chunk_definitions {
-                    let chunk_len =
-                        usize::try_from(chunk_index.chunk_length).with_context(|| {
-                            format!(
-                                "chunk length out of range for this platform: {}",
-                                chunk_index.chunk_length
-                            )
-                        })?;
-                    let chunk = remote.read_range(chunk_index.chunk_start_offset, chunk_len)?;
-                    parse::collect_chunk_definitions_from_record_bytes(
-                        &chunk,
-                        &mut schemas,
-                        &mut channel_defs,
-                    )?;
-                    let compressed_start = usize::try_from(offset - chunk_index.chunk_start_offset)
-                        .with_context(|| {
-                            format!("chunk data offset out of range for this platform: {offset}")
-                        })?;
-                    let compressed_end = compressed_start
-                        .checked_add(length)
-                        .ok_or_else(|| anyhow::anyhow!("chunk read overflow at offset {offset}"))?;
-                    chunk
-                        .get(compressed_start..compressed_end)
-                        .ok_or_else(|| {
-                            anyhow::anyhow!(
-                                "chunk read out of bounds at offset {offset} length {length}"
-                            )
-                        })?
-                        .to_vec()
+                if let Some(cached) = chunk_data_cache.get(&offset) {
+                    let compressed = cached.get(..length).ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "chunk read out of bounds at offset {offset} length {length}"
+                        )
+                    })?;
+                    reader.insert_chunk_record_data(offset, compressed)?;
                 } else {
-                    remote.read_range(offset, length)?
-                };
-                reader.insert_chunk_record_data(offset, &compressed_data)?;
+                    let chunk = remote.read_range(offset, length)?;
+                    reader.insert_chunk_record_data(offset, &chunk)?;
+                }
             }
             mcap::sans_io::IndexedReadEvent::Message { header, data } => {
                 let channel =
@@ -360,16 +374,6 @@ fn cat_remote_indexed(
     }
 
     Ok(RemoteCatResult::Done)
-}
-
-fn chunk_indexes_by_data_offset(
-    summary: &mcap::Summary,
-) -> Result<HashMap<u64, &mcap::records::ChunkIndex>> {
-    summary
-        .chunk_indexes
-        .iter()
-        .map(|index| Ok((index.compressed_data_offset()?, index)))
-        .collect()
 }
 
 fn needs_in_chunk_definitions(summary: &mcap::Summary) -> bool {
@@ -1745,6 +1749,124 @@ mod tests {
         let output = String::from_utf8(out).expect("valid utf8 output");
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines, expected);
+    }
+
+    #[test]
+    fn cat_falls_back_for_summary_channel_with_in_chunk_schema() {
+        // Spec-valid file: the channel is repeated in the summary, but its schema is defined only
+        // inside the chunk. The indexed planner can't resolve the schema from the summary, so it
+        // defers to the linear scan, which registers the in-chunk schema and resolves the message.
+        let mcap = include_bytes!(
+            "../../../../tests/conformance/data/OneMessage/OneMessage-ch-chx-mx-rch-st-sum.mcap"
+        );
+        let expected = message_lines_from_stream(mcap);
+        assert_eq!(expected.len(), 1);
+
+        let mut indexed_out = Vec::new();
+        let mut json_transcoders = JsonTranscoders::default();
+        let indexed_result = cat_indexed(
+            &mut indexed_out,
+            mcap,
+            &CatOptions::default(),
+            &mut json_transcoders,
+        )
+        .expect("indexed planner should fall back");
+        assert_eq!(indexed_result, None);
+        assert!(indexed_out.is_empty());
+
+        let mut out = Vec::new();
+        let broken_pipe = cat_mcap(&mut out, mcap, &CatOptions::default())
+            .expect("cat should succeed through linear fallback");
+        assert!(!broken_pipe);
+
+        let output = String::from_utf8(out).expect("valid utf8 output");
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines, expected);
+    }
+
+    fn build_multi_chunk_chunk_local_mcap() -> Vec<u8> {
+        let mut buffer = Vec::new();
+        {
+            // A small schema/channel plus large messages and a mid-size chunk target keeps the
+            // schema+channel+first message together in chunk 0, then forces the second message into
+            // chunk 1. The chunk-flush check runs before each message, so the threshold must exceed
+            // the schema+channel size (to avoid a message-less chunk) but be smaller than chunk 0
+            // once the first message is added.
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(150))
+                .repeat_channels(false)
+                .repeat_schemas(false)
+                .create(Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer.add_schema("Example", "json", b"x").expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/topic", "json", &BTreeMap::new())
+                .expect("channel");
+            let payload = vec![0u8; 200];
+            for (sequence, log_time) in [(1u32, 10u64), (2, 20)] {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id,
+                            sequence,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        &payload,
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish writer");
+        }
+        buffer
+    }
+
+    #[test]
+    fn cat_indexed_resolves_chunk_local_channel_defined_in_filtered_out_chunk() {
+        // Multiple chunks, channels defined only inside chunks. The channel is defined in the first
+        // chunk, but a start-time filter excludes that chunk while keeping a later chunk's message.
+        // The channel must still resolve from the up-front in-chunk definition collection.
+        let mcap = build_multi_chunk_chunk_local_mcap();
+        let summary = mcap::Summary::read(&mcap)
+            .expect("summary read")
+            .expect("summary should exist");
+        assert!(summary.channels.is_empty());
+        assert!(
+            summary.chunk_indexes.len() >= 2,
+            "expected multiple chunks, got {}",
+            summary.chunk_indexes.len()
+        );
+        assert!(summary
+            .chunk_indexes
+            .iter()
+            .all(|chunk| !chunk.message_index_offsets.is_empty()));
+        assert!(needs_in_chunk_definitions(&summary));
+        // The first chunk (which defines the channel) is fully before the start filter.
+        assert!(summary.chunk_indexes[0].message_end_time < 15);
+
+        let opts = CatOptions {
+            start: 15,
+            ..CatOptions::default()
+        };
+        let mut out = Vec::new();
+        let mut json_transcoders = JsonTranscoders::default();
+        let indexed_result = cat_indexed(&mut out, &mcap, &opts, &mut json_transcoders)
+            .expect("indexed cat should resolve chunk-local channel");
+        assert_eq!(indexed_result, Some(false));
+
+        let output = String::from_utf8(out).expect("valid utf8 output");
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(
+            lines.len(),
+            1,
+            "only the second message is within the window"
+        );
+        assert!(lines[0].contains("/topic"), "unexpected line: {}", lines[0]);
+        assert!(
+            lines[0].contains("Example"),
+            "schema should resolve from the defining chunk: {}",
+            lines[0]
+        );
     }
 
     #[test]
