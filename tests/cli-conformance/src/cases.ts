@@ -16,6 +16,9 @@ const ONE_ATTACHMENT = "{dataDir}/OneAttachment/OneAttachment-ax-st-sum.mcap";
 const ONE_ATTACHMENT_RECORD_OFFSET = "25";
 const ONE_METADATA = "{dataDir}/OneMetadata/OneMetadata-mdx-st-sum.mcap";
 const ROS2_EMBEDDED_SCHEMA_DB3 = "{repoRoot}/testdata/db3/talker-iron.db3";
+// A committed MCAP whose statistics carry a real wall-clock (2017, above the info date cutoff) so
+// `info` renders an absolute RFC3339 start/end. Reused read-only from the mcap crate's test data.
+const WALL_CLOCK_MCAP = "{repoRoot}/rust/mcap/tests/data/uncompressed.mcap";
 const NOETIC_MULTITOPIC_NONE = "{repoRoot}/testdata/bags/generated/noetic-multitopic-none.bag";
 const NOETIC_MULTITOPIC_BZ2 = "{repoRoot}/testdata/bags/generated/noetic-multitopic-bz2.bag";
 const NOETIC_MULTITOPIC_LZ4 = "{repoRoot}/testdata/bags/generated/noetic-multitopic-lz4.bag";
@@ -285,6 +288,61 @@ export const cases: CliTestCase[] = [
     description: "Info output reports the same stable summary fields for a representative MCAP.",
     tags: ["info", "stdout"],
     invocation: { args: ["info", ONE_MESSAGE] },
+    comparison: {
+      exitCode: 0,
+      // The `info` comparator ignores only the duration line (Go `0s` vs Rust `0ns` for this
+      // zero-duration fixture, pinned by the info-timestamp-format known difference below); start/end
+      // are compared and match here as decimal seconds since this fixture is below the 2000 cutoff.
+      stdout: { kind: "info" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "known-difference-info-timestamp-format",
+    description:
+      "Below the 2000-01-01 cutoff both CLIs render start/end as decimal seconds only; they differ only on the zero-duration unit (Go `0s` vs Rust `0ns`).",
+    tags: ["known-difference", "info"],
+    invocation: { args: ["info", ONE_MESSAGE] },
+    knownDifference: {
+      id: "info-timestamp-format",
+      summary:
+        "For this near-epoch fixture both CLIs render start/end as decimal seconds, so the only asserted difference is the zero-duration unit (Go `0s`, Rust `0ns`).",
+      reason:
+        "Rust renders the raw decimal seconds below the 2000-01-01 cutoff (946684800s) and an RFC3339 wall-clock string with the epoch decimal in parens at/after it — the same shape Go uses. Near-epoch/relative timestamps therefore render as a plain decimal offset rather than a misleading 1970 date, while real recordings show the human date. For this fixture's 2ns start, Rust matches Go's decimal-only rendering (neither emits `1970-...Z`); wall-clock parity at/after the cutoff is covered by the info-timestamp-wall-clock-format case below. The remaining difference asserted here is the zero-duration unit: Go `0s`, Rust `0ns`.",
+      desiredBehavior:
+        "Rust's start/end rendering — decimal seconds below the 2000-01-01 cutoff, `RFC3339 (epoch decimal)` at/after it — matches Go; the zero-duration unit difference (`0s` vs `0ns`) is cosmetic and unresolved.",
+      // Go renders near-epoch times as decimal seconds only (no RFC3339 / no `1970-...Z`) and a zero
+      // duration as `0s`.
+      goBehavior: {
+        exitCode: 0,
+        stdout: {
+          kind: "matches",
+          pattern:
+            "^(?![\\s\\S]*1970-01-01)(?=[\\s\\S]*duration:\\s+0s)[\\s\\S]*start:\\s+0\\.000000002[\\s\\S]*$",
+        },
+      },
+      // Below the cutoff Rust also renders decimal-only (no `1970-...Z`), matching Go; only the zero
+      // duration differs (`0ns`).
+      rustBehavior: {
+        exitCode: 0,
+        stdout: {
+          kind: "matches",
+          pattern:
+            "^(?![\\s\\S]*1970-01-01)(?=[\\s\\S]*duration:\\s+0ns)[\\s\\S]*start:\\s+0\\.000000002[\\s\\S]*$",
+        },
+      },
+    },
+  },
+  {
+    id: "info-timestamp-wall-clock-format",
+    description:
+      "For a wall-clock (>= 2000) timestamp, both CLIs render start/end as `RFC3339 (epoch decimal)`.",
+    tags: ["info", "stdout"],
+    // Pin TZ=UTC: Go renders info timestamps in the host's local time zone while Rust always renders
+    // UTC (`Z`), so without this the start/end lines would only line up on a UTC host. With TZ=UTC
+    // both show the same instant, and the `info` comparator (which no longer drops start/end) checks
+    // that both emit the identical `2017-...Z (1490149580.103843113)` form.
+    invocation: { args: ["info", WALL_CLOCK_MCAP], env: { TZ: "UTC" } },
     comparison: {
       exitCode: 0,
       stdout: { kind: "info" },
