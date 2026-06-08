@@ -280,14 +280,31 @@ fn cat_remote_indexed(
     let planned_chunks =
         planned_chunk_reads(summary, opts, &included_topics, needs_in_chunk_definitions);
     if !planned_chunks.is_empty() && !source_options.allow_remote_scan {
-        let compressed_bytes = planned_chunks
-            .iter()
-            .map(|chunk| chunk.compressed_size)
-            .sum::<u64>();
+        // When chunk-local definitions must be collected, every chunk is read up front (a
+        // definition can live in a chunk the filter would otherwise skip), so size the warning from
+        // the full set rather than the filtered plan to avoid under-quoting the bytes fetched.
+        let (chunk_count, compressed_bytes) = if needs_in_chunk_definitions {
+            (
+                summary.chunk_indexes.len(),
+                summary
+                    .chunk_indexes
+                    .iter()
+                    .map(|chunk| chunk.compressed_size)
+                    .sum::<u64>(),
+            )
+        } else {
+            (
+                planned_chunks.len(),
+                planned_chunks
+                    .iter()
+                    .map(|chunk| chunk.compressed_size)
+                    .sum::<u64>(),
+            )
+        };
         bail!(
             "{}: remote cat would read {} message chunks ({} compressed); {}",
             source::redacted_display(file),
-            planned_chunks.len(),
+            chunk_count,
             render::human_bytes(compressed_bytes),
             source::remote_scan_opt_in_suffix()
         );
