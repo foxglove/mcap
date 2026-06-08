@@ -1887,6 +1887,55 @@ mod tests {
     }
 
     #[test]
+    fn cat_indexed_applies_topic_filter_to_chunk_local_channels() {
+        // The channel is defined only inside the chunk, so reader-level topic filtering is disabled
+        // and the per-message `include_topic` check is the sole filter. Exercise both a matching and
+        // a non-matching topic end-to-end through `cat_indexed` (not the linear fallback).
+        let mcap = include_bytes!(
+            "../../../../tests/conformance/data/OneMessage/OneMessage-ch-chx-mx.mcap"
+        );
+        let summary = mcap::Summary::read(mcap)
+            .expect("summary read")
+            .expect("summary should exist");
+        assert!(summary.channels.is_empty());
+        assert!(needs_in_chunk_definitions(&summary));
+
+        // Matching topic keeps the chunk-local channel's message.
+        let mut matched = Vec::new();
+        let mut json_transcoders = JsonTranscoders::default();
+        let result = cat_indexed(
+            &mut matched,
+            mcap,
+            &CatOptions {
+                topics: vec!["example".to_string()],
+                ..CatOptions::default()
+            },
+            &mut json_transcoders,
+        )
+        .expect("indexed cat should succeed");
+        assert_eq!(result, Some(false));
+        let matched = String::from_utf8(matched).expect("valid utf8 output");
+        assert_eq!(matched.lines().count(), 1);
+
+        // Non-matching topic drops the message via the per-message check (not silently via
+        // reader-level filtering), and the indexed path still completes without a linear fallback.
+        let mut filtered = Vec::new();
+        let mut json_transcoders = JsonTranscoders::default();
+        let result = cat_indexed(
+            &mut filtered,
+            mcap,
+            &CatOptions {
+                topics: vec!["nope".to_string()],
+                ..CatOptions::default()
+            },
+            &mut json_transcoders,
+        )
+        .expect("indexed cat should succeed");
+        assert_eq!(result, Some(false));
+        assert!(filtered.is_empty());
+    }
+
+    #[test]
     fn cat_applies_topic_and_time_filters() {
         let mcap = build_multi_topic_mcap();
         let opts = CatOptions {
