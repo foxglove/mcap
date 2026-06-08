@@ -27,8 +27,8 @@ enum CompressionSelection {
 
 // Recovery status model:
 // - info!: non-lossy recovery decisions or metadata fallback. These may explain output differences
-//   (for example, a corrupt leading header means the output gets a default profile/library) but do
-//   not imply message/attachment/metadata loss by themselves.
+//   (for example, a corrupt leading header means the output gets a default profile and no preserved
+//   source library) but do not imply message/attachment/metadata loss by themselves.
 // - warn!: corrupt or malformed input records that are skipped, messages dropped because their
 //   channel could not be recovered, or an early stop caused by truncation/corrupt chunk payloads.
 //   Every warning corresponds to data loss and therefore to exit code 3.
@@ -228,10 +228,11 @@ fn build_writer<W: Write + Seek>(
         .compression(compression)
         .disable_seeking(disable_seeking);
 
+    write_options = write_options.library(crate::library::stamp_library(
+        header.as_ref().map(|header| header.library.as_str()),
+    ));
     if let Some(header) = header {
-        write_options = write_options
-            .profile(header.profile)
-            .library(header.library);
+        write_options = write_options.profile(header.profile);
     }
 
     write_options
@@ -900,6 +901,35 @@ mod tests {
         assert_eq!(stats.attachments.recovered, 1);
         assert_eq!(stats.metadata.recovered, 1);
         assert!(!stats.is_lossy());
+    }
+
+    fn output_library(output: &[u8]) -> String {
+        match mcap::read::LinearReader::new(output)
+            .expect("reader")
+            .next()
+            .expect("header")
+            .expect("record")
+        {
+            Record::Header(header) => header.library,
+            _ => panic!("expected header record"),
+        }
+    }
+
+    #[test]
+    fn recover_stamps_writer_and_preserves_source_library() {
+        let input = write_test_input(Some(mcap::Compression::Zstd));
+        let (output, _) = recover_to_vec(&input, "preserve");
+        assert_eq!(
+            output_library(&output),
+            crate::library::stamp_library(Some(&format!("mcap-rs-{}", mcap::VERSION)))
+        );
+    }
+
+    #[test]
+    fn recover_with_corrupt_header_stamps_writer_without_origin() {
+        let input = corrupt_leading_header_body(&write_test_input(None));
+        let (output, _) = recover_to_vec(&input, "preserve");
+        assert_eq!(output_library(&output), crate::library::writer_library());
     }
 
     #[test]

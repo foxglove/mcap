@@ -255,7 +255,9 @@ fn filter_to_writer<W: Write + Seek>(
     if let Some(header) = read_header(input)? {
         write_options = write_options
             .profile(header.profile)
-            .library(header.library);
+            .library(crate::library::stamp_library(Some(&header.library)));
+    } else {
+        write_options = write_options.library(crate::library::stamp_library(None));
     }
 
     let mut writer = write_options
@@ -926,6 +928,46 @@ mod tests {
         assert_eq!(stats.topic_counts["camera_a"], 5);
         assert_eq!(stats.topic_counts["camera_b"], 5);
         assert!(!stats.topic_counts.contains_key("radar_a"));
+    }
+
+    fn output_library(output: &[u8]) -> String {
+        match mcap::read::LinearReader::new(output)
+            .expect("reader")
+            .next()
+            .expect("header record")
+            .expect("record")
+        {
+            mcap::records::Record::Header(header) => header.library,
+            _ => panic!("expected header record first"),
+        }
+    }
+
+    #[test]
+    fn filter_stamps_writer_and_preserves_source_library() {
+        let input = write_filter_test_input(true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Zstd),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        };
+        // The fixture is written with the library crate default, which is a foreign (non-CLI)
+        // writer string, so it is preserved as the origin segment.
+        let output = run_filter(&input, &opts);
+        let expected = crate::library::stamp_library(Some(&format!("mcap-rs-{}", mcap::VERSION)));
+        assert_eq!(output_library(&output), expected);
+        assert!(output_library(&output).starts_with("mcap-cli/"));
+
+        // Re-filtering the CLI output is idempotent: the writer refreshes, the origin is retained.
+        let twice = run_filter(&output, &opts);
+        assert_eq!(output_library(&twice), expected);
     }
 
     #[test]

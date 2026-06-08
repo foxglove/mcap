@@ -84,7 +84,9 @@ fn sort_to_writer<W: Write + Seek>(
     if let Some(header) = header {
         write_options = write_options
             .profile(header.profile)
-            .library(header.library);
+            .library(crate::library::stamp_library(Some(&header.library)));
+    } else {
+        write_options = write_options.library(crate::library::stamp_library(None));
     }
 
     let mut writer = write_options
@@ -385,6 +387,32 @@ mod tests {
             .map(|message| message.expect("message").log_time)
             .collect();
         assert_eq!(log_times, vec![10, 30]);
+    }
+
+    #[test]
+    fn sort_stamps_writer_and_preserves_source_library() {
+        let input = build_out_of_order_chunked_input(false);
+        let mut output = Cursor::new(Vec::new());
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary should exist");
+        sort_to_writer(&input, &mut output, Some(summary), &default_sort_options())
+            .expect("sort should succeed");
+        let output = output.into_inner();
+
+        let library = match mcap::read::LinearReader::new(&output)
+            .expect("reader")
+            .next()
+            .expect("header")
+            .expect("record")
+        {
+            mcap::records::Record::Header(header) => header.library,
+            _ => panic!("expected header record"),
+        };
+        assert_eq!(
+            library,
+            crate::library::stamp_library(Some(&format!("mcap-rs-{}", mcap::VERSION)))
+        );
     }
 
     #[test]
