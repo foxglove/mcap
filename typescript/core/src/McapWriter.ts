@@ -22,6 +22,7 @@ import type {
   Statistics,
   IReadable,
 } from "./types.ts";
+import { LIBRARY_IDENTIFIER } from "./version.ts";
 
 export type McapWriterOptions = {
   writable: IWritable;
@@ -38,8 +39,6 @@ export type McapWriterOptions = {
   chunkSize?: number;
   compressChunk?: (chunkData: Uint8Array) => { compression: string; compressedData: Uint8Array };
 };
-
-export const LIBRARY_IDENTIFIER = "mcap-typescript/2.2.1";
 
 /**
  * McapWriter provides an interface for writing messages to MCAP files.

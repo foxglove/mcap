@@ -2,13 +2,14 @@ import { crc32 } from "@foxglove/crc";
 
 import { McapIndexedReader } from "./McapIndexedReader.ts";
 import McapStreamReader from "./McapStreamReader.ts";
-import { LIBRARY_IDENTIFIER, McapWriter } from "./McapWriter.ts";
+import { McapWriter } from "./McapWriter.ts";
 import Reader from "./Reader.ts";
 import { TempBuffer } from "./TempBuffer.ts";
 import { MCAP_MAGIC, Opcode } from "./constants.ts";
 import { parseMagic, parseRecord } from "./parse.ts";
 import { collect, keyValues, record, string, uint16LE, uint32LE, uint64LE } from "./testUtils.ts";
 import type { TypedMcapRecord } from "./types.ts";
+import { LIBRARY_IDENTIFIER, VERSION } from "./version.ts";
 
 function readAsMcapStream(data: Uint8Array) {
   const reader = new McapStreamReader();
@@ -35,6 +36,8 @@ describe("McapWriter", () => {
       profile: "",
       library: LIBRARY_IDENTIFIER,
     });
+    expect(VERSION).toMatch(/^\d+\.\d+\.\d+/);
+    expect(LIBRARY_IDENTIFIER).toBe(`mcap-typescript/${VERSION}`);
     expect(LIBRARY_IDENTIFIER).toMatch(/^mcap-typescript\/.+/);
   });
 
