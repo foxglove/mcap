@@ -2,8 +2,8 @@ import time
 from io import BufferedWriter, BytesIO
 from typing import IO, Any, Dict, Optional, Union
 
-from mcap.writer import CompressionType
 from mcap.writer import LIBRARY_IDENTIFIER as MCAP_LIBRARY_IDENTIFIER
+from mcap.writer import CompressionType
 from mcap.writer import Writer as McapWriter
 
 from . import __version__

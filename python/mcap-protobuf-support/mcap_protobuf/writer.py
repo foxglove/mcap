@@ -3,8 +3,8 @@ from io import BufferedWriter
 from typing import IO, Any, Dict, Optional, Tuple, Union
 
 from mcap.well_known import MessageEncoding
-from mcap.writer import CompressionType
 from mcap.writer import LIBRARY_IDENTIFIER as MCAP_LIBRARY_IDENTIFIER
+from mcap.writer import CompressionType
 from mcap.writer import Writer as McapWriter
 
 from . import __version__
