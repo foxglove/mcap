@@ -2,11 +2,11 @@ import time
 from io import BufferedWriter
 from typing import IO, Any, Dict, Optional, Union
 
-import mcap
 from mcap.exceptions import McapError
 from mcap.records import Schema
 from mcap.well_known import SchemaEncoding
 from mcap.writer import CompressionType
+from mcap.writer import LIBRARY_IDENTIFIER as MCAP_LIBRARY_IDENTIFIER
 from mcap.writer import Writer as McapWriter
 
 from . import __version__
@@ -20,7 +20,7 @@ class McapROS2WriteError(McapError):
 
 
 def _library_identifier():
-    return f"mcap-python/{mcap.__version__} mcap-ros2-support/{__version__}"
+    return f"{MCAP_LIBRARY_IDENTIFIER} mcap-ros2-support/{__version__}"
 
 
 class Writer:

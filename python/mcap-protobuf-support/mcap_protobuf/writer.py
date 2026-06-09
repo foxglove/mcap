@@ -2,9 +2,9 @@ import time
 from io import BufferedWriter
 from typing import IO, Any, Dict, Optional, Tuple, Union
 
-import mcap
 from mcap.well_known import MessageEncoding
 from mcap.writer import CompressionType
+from mcap.writer import LIBRARY_IDENTIFIER as MCAP_LIBRARY_IDENTIFIER
 from mcap.writer import Writer as McapWriter
 
 from . import __version__
@@ -13,7 +13,7 @@ from .schema import register_schema
 
 def _library_identifier():
     """the default value written into MCAP headers by this library."""
-    return f"mcap-python/{mcap.__version__} mcap-protobuf-support/{__version__}"
+    return f"{MCAP_LIBRARY_IDENTIFIER} mcap-protobuf-support/{__version__}"
 
 
 class Writer:
