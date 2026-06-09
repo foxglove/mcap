@@ -14,7 +14,7 @@ from .schema import register_schema
 def _library_identifier():
     """the default value written into MCAP headers by this library."""
     mcap_version = getattr(mcap, "__version__", "0.0.10")
-    return f"mcap-protobuf-support/{__version__}; mcap-python/{mcap_version}"
+    return f"mcap-protobuf-support/{__version__} mcap-python/{mcap_version}"
 
 
 class Writer:
