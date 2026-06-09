@@ -873,8 +873,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::io::Read;
 
-    const DEFAULT_LIBRARY_LENGTH: u64 =
-        ("mcap-rust/".len() + env!("CARGO_PKG_VERSION").len()) as u64;
+    const DEFAULT_LIBRARY_LENGTH: u64 = crate::LIBRARY_IDENTIFIER.len() as u64;
 
     fn basic_chunked_file(compression: Option<Compression>) -> McapResult<Vec<u8>> {
         let mut buf = std::io::Cursor::new(Vec::new());

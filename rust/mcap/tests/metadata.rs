@@ -8,7 +8,7 @@ use anyhow::Result;
 use memmap2::Mmap;
 use tempfile::tempfile;
 
-const DEFAULT_LIBRARY_LENGTH: u64 = ("mcap-rust/".len() + env!("CARGO_PKG_VERSION").len()) as u64;
+const DEFAULT_LIBRARY_LENGTH: u64 = mcap::LIBRARY_IDENTIFIER.len() as u64;
 
 #[test]
 fn smoke() -> Result<()> {
