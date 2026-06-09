@@ -1898,6 +1898,9 @@ mod tests {
 
     use super::*;
 
+    const DEFAULT_LIBRARY_LENGTH: u64 =
+        ("mcap-rust/".len() + env!("CARGO_PKG_VERSION").len()) as u64;
+
     #[test]
     fn writes_all_channel_ids() {
         let file = std::io::Cursor::new(Vec::new());
@@ -2102,7 +2105,7 @@ mod tests {
             .into_inner()
             .stream_position()
             .expect("failed to get stream position");
-        assert_eq!(output_len, 487);
+        assert_eq!(output_len, 473 + DEFAULT_LIBRARY_LENGTH);
     }
 
     #[test]

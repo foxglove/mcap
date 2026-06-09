@@ -873,6 +873,9 @@ mod tests {
     use std::collections::BTreeMap;
     use std::io::Read;
 
+    const DEFAULT_LIBRARY_LENGTH: u64 =
+        ("mcap-rust/".len() + env!("CARGO_PKG_VERSION").len()) as u64;
+
     fn basic_chunked_file(compression: Option<Compression>) -> McapResult<Vec<u8>> {
         let mut buf = std::io::Cursor::new(Vec::new());
         {
@@ -1012,13 +1015,13 @@ mod tests {
                     parse_record(opcode, data).expect("parse should not fail");
                 }
                 Err(err) => {
-                    assert!(matches!(
-                        err,
-                        McapError::RecordTooLarge {
-                            opcode: op::HEADER,
-                            len: 22
+                    match err {
+                        McapError::RecordTooLarge { opcode, len } => {
+                            assert_eq!(opcode, op::HEADER);
+                            assert_eq!(len, 8 + DEFAULT_LIBRARY_LENGTH);
                         }
-                    ));
+                        _ => panic!("expected RecordTooLarge, got {err:?}"),
+                    }
                     return;
                 }
             }

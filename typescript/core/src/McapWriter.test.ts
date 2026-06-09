@@ -35,7 +35,7 @@ describe("McapWriter", () => {
       profile: "",
       library: LIBRARY_IDENTIFIER,
     });
-    expect(LIBRARY_IDENTIFIER).toBe("mcap-typescript/2.2.1");
+    expect(LIBRARY_IDENTIFIER).toMatch(/^mcap-typescript\/.+/);
   });
 
   it("supports messages with logTime 0", async () => {

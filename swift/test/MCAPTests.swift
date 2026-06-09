@@ -19,7 +19,7 @@ struct MCAPTests {
 
     #expect(header.profile == "")
     #expect(header.library == mcapLibraryIdentifier)
-    #expect(header.library == "mcap-swift/1.0.0")
+    #expect(header.library.hasPrefix("mcap-swift/"))
   }
 
   @Test

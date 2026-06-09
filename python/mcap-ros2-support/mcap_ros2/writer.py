@@ -21,7 +21,7 @@ class McapROS2WriteError(McapError):
 
 def _library_identifier():
     mcap_version = getattr(mcap, "__version__", "0.0.10")
-    return f"mcap-python-ros2-support/{__version__}; mcap-python/{mcap_version}"
+    return f"mcap-ros2-support/{__version__}; mcap-python/{mcap_version}"
 
 
 class Writer:
