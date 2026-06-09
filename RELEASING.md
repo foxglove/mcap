@@ -43,6 +43,7 @@ There are several TS packages; updating any follows a similar process.
 
 1. Check out the version of the code you want to release
 2. Update the version in `typescript/{pkg}/package.json`
+   - For `@mcap/core`, update `LIBRARY_IDENTIFIER` in `typescript/core/src/McapWriter.ts`
 3. Make a PR with your changes to package.json
 4. Wait for the PR to pass CI and merge
 5. Checkout main and tag the merged commit with `releases/typescript/{pkg}/v#.#.#`
@@ -50,7 +51,8 @@ There are several TS packages; updating any follows a similar process.
 
 ## Swift
 
-Tag a release matching the version number `releases/swift/vX.Y.Z`
+1. Update `mcapLibraryIdentifier` in `swift/mcap/Records.swift`
+2. Tag a release matching the version number `releases/swift/vX.Y.Z`
 
 ## Rust
 

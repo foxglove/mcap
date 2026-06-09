@@ -7,6 +7,7 @@ public typealias Timestamp = UInt64
 
 /// Magic bytes that appear at the beginning and end of every valid MCAP file: `"\u{89}MCAP0\r\n"`.
 public let mcapMagic = Data([137, 77, 67, 65, 80, 48, 13, 10])
+public let mcapLibraryIdentifier = "mcap-swift/1.0.0"
 
 public enum MCAPReadError: Error, Equatable {
   case invalidMagic(actual: [UInt8])

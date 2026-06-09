@@ -2,7 +2,7 @@ import { crc32 } from "@foxglove/crc";
 
 import { McapIndexedReader } from "./McapIndexedReader.ts";
 import McapStreamReader from "./McapStreamReader.ts";
-import { McapWriter } from "./McapWriter.ts";
+import { LIBRARY_IDENTIFIER, McapWriter } from "./McapWriter.ts";
 import Reader from "./Reader.ts";
 import { TempBuffer } from "./TempBuffer.ts";
 import { MCAP_MAGIC, Opcode } from "./constants.ts";
@@ -22,6 +22,22 @@ function readAsMcapStream(data: Uint8Array) {
 }
 
 describe("McapWriter", () => {
+  it("uses the TypeScript library identifier by default", async () => {
+    const tempBuffer = new TempBuffer();
+    const writer = new McapWriter({ writable: tempBuffer });
+
+    await writer.start();
+    await writer.end();
+
+    const records = readAsMcapStream(tempBuffer.get());
+    expect(records[0]).toEqual({
+      type: "Header",
+      profile: "",
+      library: LIBRARY_IDENTIFIER,
+    });
+    expect(LIBRARY_IDENTIFIER).toBe("mcap-typescript/2.2.1");
+  });
+
   it("supports messages with logTime 0", async () => {
     const tempBuffer = new TempBuffer();
     const writer = new McapWriter({ writable: tempBuffer });

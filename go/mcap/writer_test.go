@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -529,7 +530,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 }
 
 func TestLibraryString(t *testing.T) {
-	thisLibraryString := fmt.Sprintf("mcap go %s", Version)
+	thisLibraryString := fmt.Sprintf("mcap-go/%s", strings.TrimPrefix(Version, "v"))
 	cases := []struct {
 		input  string
 		output string

@@ -9,6 +9,8 @@ use anyhow::Result;
 use memmap2::Mmap;
 use tempfile::tempfile;
 
+const DEFAULT_LIBRARY_LENGTH: u64 = ("mcap-rust/".len() + env!("CARGO_PKG_VERSION").len()) as u64;
+
 #[test]
 fn smoke() -> Result<()> {
     let mapped = map_mcap("../../tests/conformance/data/OneAttachment/OneAttachment.mcap")?;
@@ -72,7 +74,7 @@ fn test_attach_in_multiple_parts() -> Result<()> {
         }),
         attachment_indexes: vec![mcap::records::AttachmentIndex {
             // offset depends on the length of the embedded library string, which includes the crate version
-            offset: 33 + (env!("CARGO_PKG_VERSION").len() as u64),
+            offset: 25 + DEFAULT_LIBRARY_LENGTH,
             length: 95,
             log_time: 100,
             create_time: 200,
@@ -134,7 +136,7 @@ fn round_trip() -> Result<()> {
         }),
         attachment_indexes: vec![mcap::records::AttachmentIndex {
             // offset depends on the length of the embedded library string, which includes the crate version
-            offset: 33 + (env!("CARGO_PKG_VERSION").len() as u64),
+            offset: 25 + DEFAULT_LIBRARY_LENGTH,
             length: 78,
             log_time: 2,
             create_time: 1,

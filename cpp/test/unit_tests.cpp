@@ -1042,22 +1042,41 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
 }
 
 TEST_CASE("parsing", "header") {
-  Buffer buffer;
-  mcap::McapWriter writer;
-  mcap::McapWriterOptions opts("my-profile");
-  opts.library = "my-library";
-  writer.open(buffer, opts);
-  writer.close();
+  SECTION("default library") {
+    Buffer buffer;
+    mcap::McapWriter writer;
+    writer.open(buffer, mcap::McapWriterOptions("my-profile"));
+    writer.close();
 
-  mcap::McapReader reader;
-  auto status = reader.open(buffer);
-  requireOk(status);
+    mcap::McapReader reader;
+    auto status = reader.open(buffer);
+    requireOk(status);
 
-  auto header = reader.header();
-  REQUIRE(header != std::nullopt);
+    auto header = reader.header();
+    REQUIRE(header != std::nullopt);
 
-  REQUIRE(header->library == "my-library");
-  REQUIRE(header->profile == "my-profile");
+    REQUIRE(header->library == "mcap-cpp/" MCAP_LIBRARY_VERSION);
+    REQUIRE(header->profile == "my-profile");
+  }
+
+  SECTION("custom library") {
+    Buffer buffer;
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("my-profile");
+    opts.library = "my-library";
+    writer.open(buffer, opts);
+    writer.close();
+
+    mcap::McapReader reader;
+    auto status = reader.open(buffer);
+    requireOk(status);
+
+    auto header = reader.header();
+    REQUIRE(header != std::nullopt);
+
+    REQUIRE(header->library == "my-library");
+    REQUIRE(header->profile == "my-profile");
+  }
 }
 
 TEST_CASE("Schema isolation between files with noRepeatedSchemas=false", "[writer][reader]") {

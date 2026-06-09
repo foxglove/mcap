@@ -39,6 +39,8 @@ export type McapWriterOptions = {
   compressChunk?: (chunkData: Uint8Array) => { compression: string; compressedData: Uint8Array };
 };
 
+export const LIBRARY_IDENTIFIER = "mcap-typescript/2.2.1";
+
 /**
  * McapWriter provides an interface for writing messages to MCAP files.
  *
@@ -182,7 +184,7 @@ export class McapWriter {
     return writer;
   }
 
-  async start(header: Header): Promise<void> {
+  async start(header: Header = { profile: "", library: LIBRARY_IDENTIFIER }): Promise<void> {
     if (this.#appendMode) {
       throw new Error(`Cannot call start() when writer is in append mode`);
     }

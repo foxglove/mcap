@@ -146,7 +146,7 @@ impl Default for WriteOptions {
             #[cfg(not(feature = "zstd"))]
             compression: None,
             profile: String::new(),
-            library: String::from("mcap-rs-") + env!("CARGO_PKG_VERSION"),
+            library: String::from("mcap-rust/") + env!("CARGO_PKG_VERSION"),
             chunk_size: Some(Self::DEFAULT_CHUNK_SIZE),
             use_chunks: true,
             disable_seeking: false,

@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -48,7 +49,7 @@ type Writer struct {
 func (w *Writer) WriteHeader(header *Header) error {
 	var library string
 	if !w.opts.OverrideLibrary {
-		library = fmt.Sprintf("mcap go %s", Version)
+		library = fmt.Sprintf("mcap-go/%s", strings.TrimPrefix(Version, "v"))
 		if header.Library != "" && header.Library != library {
 			library += "; " + header.Library
 		}
