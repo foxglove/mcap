@@ -11,6 +11,9 @@ class McapExamplesConan(ConanFile):
         "nlohmann_json/3.10.5",
         "catch2/2.13.8",
     ]
+    default_options = {
+        "catch2/*:with_main": True,
+    }
 
     def layout(self):
         self.folders.build = "."
