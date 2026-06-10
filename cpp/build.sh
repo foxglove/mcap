@@ -8,7 +8,9 @@ CONAN_SETTINGS=(-s compiler.cppstd=17)
 # should run `conan profile detect` once and remove --force if they need to keep it.
 conan profile detect --force
 
-conan editable remove "mcap/2.1.3" 2>/dev/null || true
+# `conan editable add` is idempotent, but remove any stale entry first so a moved
+# checkout does not leave the editable pointing at an old path.
+conan editable remove -r "mcap/2.1.3" 2>/dev/null || true
 conan editable add mcap
 
 conan_install() {
