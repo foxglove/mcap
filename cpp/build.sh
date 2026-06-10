@@ -2,19 +2,22 @@
 
 set -e
 
-conan config init
+conan profile detect --force
 
-conan editable add ./mcap mcap/2.1.3
-conan install test --install-folder test/build/Debug \
-  -s compiler.cppstd=17 -s build_type=Debug --build missing
+conan editable remove "mcap/2.1.3" 2>/dev/null || true
+conan editable add mcap
+
+conan_install() {
+  conan install "$1" -of "$2" -s compiler.cppstd=17 -s build_type="$3" --build=missing
+}
+
+conan_install test test/build/Debug Debug
 
 if [ "$1" != "--build-tests-only" ]; then
-  conan install bench --install-folder bench/build/Release \
-    -s compiler.cppstd=17 -s build_type=Release --build missing
-  conan install examples --install-folder examples/build/Release \
-    -s compiler.cppstd=17 -s build_type=Release --build missing
-  conan build examples --build-folder examples/build/Release
-  conan build bench --build-folder bench/build/Release
+  conan_install bench bench/build/Release Release
+  conan_install examples examples/build/Release Release
+  conan build examples -of examples/build/Release --build=editable
+  conan build bench -of bench/build/Release --build=editable
 fi
 
-conan build test --build-folder test/build/Debug
+conan build test -of test/build/Debug --build=editable

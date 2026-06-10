@@ -31,6 +31,6 @@ ENV CXX=clang++-13
 
 WORKDIR /src
 
-RUN pip --no-cache-dir install conan~=1.0
+RUN pip --no-cache-dir install "conan>=2.0,<3"
 
 CMD [ "./build.sh" ]

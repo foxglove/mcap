@@ -2,12 +2,12 @@
 
 set -e
 
-conan config init
+conan profile detect --force
 
-conan editable add ./mcap mcap/2.1.3
-conan install docs --install-folder docs/build/Release \
-  -s compiler.cppstd=17 -s build_type=Release --build missing
+conan editable remove "mcap/2.1.3" 2>/dev/null || true
+conan editable add mcap
+conan install docs -of docs/build/Release -s compiler.cppstd=17 -s build_type=Release --build=missing
 
-conan build docs --build-folder docs/build/Release
+conan build docs -of docs/build/Release --build=editable
 
 hdoc --verbose
