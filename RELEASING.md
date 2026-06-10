@@ -51,7 +51,7 @@ There are several TS packages; updating any follows a similar process.
 
 ## Swift
 
-1. Update `mcapLibraryIdentifier` in `swift/mcap/Records.swift`
+1. Update `mcapVersion` in `swift/mcap/Version.swift`
 2. Tag a release matching the version number `releases/swift/vX.Y.Z`
 
 ## Rust
