@@ -32,7 +32,7 @@ jobs:
       - run: make run-examples-host
 
   cpp-windows:
-    runs-on: windows-latest
+    runs-on: windows-2022
     defaults:
       run:
         working-directory: cpp
@@ -328,13 +328,13 @@ jobs:
             build: cargo build
             exe: ""
           - os: windows
-            image: windows-latest
+            image: windows-2022
             arch: amd64
             target: x86_64-pc-windows-msvc
             build: cargo build
             exe: ".exe"
           - os: windows
-            image: windows-latest
+            image: windows-2022
             arch: arm64
             target: aarch64-pc-windows-msvc
             build: cargo build
@@ -469,7 +469,7 @@ jobs:
             arch: arm64
             env: {}
           - os: windows
-            image: windows-latest
+            image: windows-2022
             arch: amd64
             env: {}
 

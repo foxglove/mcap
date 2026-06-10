@@ -213,7 +213,7 @@ export class Recorder extends EventEmitter<RecorderEvents> {
         timestamp: toProtobufTime(fromNanoSec(now)),
         frame_id: "camera",
         data: new Uint8Array(await blob.arrayBuffer()),
-        format: blob.type,
+        format: "jpeg",
       };
       await this.#writer.addMessage({
         sequence: this.#jpegChannelSeq++,
