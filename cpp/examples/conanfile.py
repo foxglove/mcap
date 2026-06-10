@@ -7,7 +7,6 @@ class McapExamplesConan(ConanFile):
     generators = "CMakeDeps", "CMakeToolchain"
     requires = [
         "mcap/2.1.3",
-        # 3.21.1 has no Conan Center 2 recipe; 3.21.12 is the closest available patch.
         "protobuf/3.21.12",
         "nlohmann_json/3.10.5",
         "catch2/2.13.8",
