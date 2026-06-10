@@ -499,4 +499,4 @@ class Writer:
             self.__finalize_chunk()
 
 
-__all__ = ["CompressionType", "IndexType", "Writer"]
+__all__ = ["CompressionType", "IndexType", "LIBRARY_IDENTIFIER", "Writer"]
