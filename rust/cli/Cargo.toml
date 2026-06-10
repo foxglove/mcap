@@ -12,9 +12,9 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
-bzip2 = "0.5"
+bzip2 = "0.6"
 lz4 = "1"
-binrw = "0.12"
+binrw = "0.15"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
@@ -26,7 +26,7 @@ regex = "1"
 serde_json = "1"
 simplelog = "0.12"
 prost-reflect = { version = "0.16.4", features = ["serde"] }
-rusqlite = { version = "0.39.0", features = ["bundled"] }
+rusqlite = { version = "0.40.1", features = ["bundled"] }
 tempfile = "3.27.0"
 object_store = { version = "0.13.2", features = ["aws", "gcp", "azure", "http"] }
 tokio = { version = "1.52.3", features = ["net", "rt", "time"] }

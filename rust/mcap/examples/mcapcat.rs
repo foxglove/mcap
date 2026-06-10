@@ -12,10 +12,10 @@ use memmap2::Mmap;
 #[derive(Parser, Debug)]
 struct Args {
     /// Verbosity (-v, -vv, -vvv, etc.)
-    #[clap(short, long, parse(from_occurrences))]
+    #[clap(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
 
-    #[clap(short, long, arg_enum, default_value = "auto")]
+    #[clap(short, long, value_enum, default_value = "auto")]
     color: logsetup::Color,
 
     mcap: Utf8PathBuf,

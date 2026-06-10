@@ -1,7 +1,7 @@
 use anyhow::*;
 use simplelog::*;
 
-#[derive(clap::ArgEnum, Debug, Copy, Clone)]
+#[derive(clap::ValueEnum, Debug, Copy, Clone)]
 pub enum Color {
     Auto,
     Always,
