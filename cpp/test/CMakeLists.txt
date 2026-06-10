@@ -26,7 +26,7 @@ find_package(Catch2 REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(mcap REQUIRED)
 
-set(MCAP_TEST_LIBS Catch2::Catch2WithMain nlohmann_json::nlohmann_json mcap::mcap)
+set(MCAP_TEST_LIBS Catch2::Catch2 nlohmann_json::nlohmann_json mcap::mcap)
 
 add_executable(streamed-reader-conformance streamed_reader_conformance.cpp)
 target_link_libraries(streamed-reader-conformance ${MCAP_TEST_LIBS})

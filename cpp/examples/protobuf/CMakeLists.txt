@@ -54,7 +54,7 @@ endif()
 
 add_executable(example_protobuf_unit_tests unit_tests.cpp BuildFileDescriptorSet.cpp)
 find_package(Catch2 REQUIRED)
-target_link_libraries(example_protobuf_unit_tests Catch2::Catch2WithMain ${MCAP_EXAMPLE_LIBS} foxglove_proto_lib)
+target_link_libraries(example_protobuf_unit_tests Catch2::Catch2 ${MCAP_EXAMPLE_LIBS} foxglove_proto_lib)
 if (MSVC)
     target_compile_options(example_protobuf_unit_tests PUBLIC /wd4100)
 else()

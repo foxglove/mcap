@@ -4,6 +4,7 @@ set -e
 
 CONAN_SETTINGS=(-s compiler.cppstd=17)
 
+# See build.sh for why --force is used here.
 conan profile detect --force
 
 conan editable remove "mcap/2.1.3" 2>/dev/null || true

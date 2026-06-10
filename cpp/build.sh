@@ -4,6 +4,8 @@ set -e
 
 CONAN_SETTINGS=(-s compiler.cppstd=17)
 
+# Overwrites the local default profile; fine on CI, but devs with a custom profile
+# should run `conan profile detect` once and remove --force if they need to keep it.
 conan profile detect --force
 
 conan editable remove "mcap/2.1.3" 2>/dev/null || true
