@@ -9,6 +9,7 @@ import { MCAP_MAGIC, Opcode } from "./constants.ts";
 import { parseMagic, parseRecord } from "./parse.ts";
 import { collect, keyValues, record, string, uint16LE, uint32LE, uint64LE } from "./testUtils.ts";
 import type { TypedMcapRecord } from "./types.ts";
+import { LIBRARY_IDENTIFIER, VERSION } from "./version.ts";
 
 function readAsMcapStream(data: Uint8Array) {
   const reader = new McapStreamReader();
@@ -22,6 +23,24 @@ function readAsMcapStream(data: Uint8Array) {
 }
 
 describe("McapWriter", () => {
+  it("uses the TypeScript library identifier by default", async () => {
+    const tempBuffer = new TempBuffer();
+    const writer = new McapWriter({ writable: tempBuffer });
+
+    await writer.start();
+    await writer.end();
+
+    const records = readAsMcapStream(tempBuffer.get());
+    expect(records[0]).toEqual({
+      type: "Header",
+      profile: "",
+      library: LIBRARY_IDENTIFIER,
+    });
+    expect(VERSION).toMatch(/^\d+\.\d+\.\d+/);
+    expect(LIBRARY_IDENTIFIER).toBe(`mcap-typescript/${VERSION}`);
+    expect(LIBRARY_IDENTIFIER).toMatch(/^mcap-typescript\/.+/);
+  });
+
   it("supports messages with logTime 0", async () => {
     const tempBuffer = new TempBuffer();
     const writer = new McapWriter({ writable: tempBuffer });

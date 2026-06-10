@@ -529,7 +529,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 }
 
 func TestLibraryString(t *testing.T) {
-	thisLibraryString := fmt.Sprintf("mcap go %s", Version)
+	thisLibraryString := libraryIdentifier()
 	cases := []struct {
 		input  string
 		output string

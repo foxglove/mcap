@@ -89,9 +89,9 @@ struct MCAP_PUBLIC McapWriterOptions {
   std::string profile;
   /**
    * @brief A freeform string written by recording libraries. For this library,
-   * the default is "libmcap {Major}.{Minor}.{Patch}".
+   * the default is "mcap-cpp/{Major}.{Minor}.{Patch}".
    */
-  std::string library = "libmcap " MCAP_LIBRARY_VERSION;
+  std::string library = "mcap-cpp/" MCAP_LIBRARY_VERSION;
 
   // The following options are less commonly used, providing more fine-grained
   // control of index records and the Summary section
