@@ -160,9 +160,14 @@ overrides:
 
   - filename: "cpp/**"
     words:
+      - bindirs
       - cppstd
       - hdoc
+      - includedirs
+      - libdirs
+      - libzstd
       - nlohmann
+      - zstdlib
       # Windows-specific functions and includes
       - ftelli
       - fseeki

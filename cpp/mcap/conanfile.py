@@ -40,4 +40,4 @@ class McapConan(ConanFile):
         self.cpp_info.includedirs = ["include"]
         self.cpp_info.set_property("cmake_file_name", "mcap")
         self.cpp_info.set_property("cmake_target_name", "mcap::mcap")
-        self.cpp_info.requires = ["lz4::lz4", "zstd::libzstd_static"]
+        self.cpp_info.requires = ["lz4::lz4", "zstd::zstdlib"]
