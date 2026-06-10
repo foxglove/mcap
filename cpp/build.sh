@@ -4,9 +4,11 @@ set -e
 
 CONAN_SETTINGS=(-s compiler.cppstd=17)
 
-# Overwrites the local default profile; fine on CI, but developers with a custom profile
-# should run `conan profile detect` once and remove --force if they need to keep it.
-conan profile detect --force
+# Create a default profile if one does not exist yet. We deliberately do not pass
+# --force so an existing developer profile is left untouched; CI containers start
+# without a profile, so detection still runs there. compiler.cppstd is forced via
+# -s below, so the detected profile's default standard does not matter.
+conan profile detect 2>/dev/null || true
 
 # `conan editable add` is idempotent, but remove any stale entry first so a moved
 # checkout does not leave the editable pointing at an old path.

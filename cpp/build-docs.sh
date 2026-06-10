@@ -4,8 +4,8 @@ set -e
 
 CONAN_SETTINGS=(-s compiler.cppstd=17)
 
-# See build.sh for why --force is used here.
-conan profile detect --force
+# See build.sh: create a default profile only if one does not already exist.
+conan profile detect 2>/dev/null || true
 
 # See build.sh: remove any stale editable entry before re-adding.
 conan editable remove -r "mcap/2.1.3" 2>/dev/null || true
