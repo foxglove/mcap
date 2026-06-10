@@ -225,6 +225,14 @@ jobs:
       - run: yarn fmt:check
       - run: yarn workspace @mcap/core lint:ci
       - run: yarn workspace @mcap/core build
+      - run: yarn workspace @mcap/support lint:ci
+      - run: yarn workspace @mcap/support build
+      - run: yarn workspace @mcap/nodejs lint:ci
+      - run: yarn workspace @mcap/nodejs build
+      - run: yarn workspace @mcap/browser lint:ci
+      - run: yarn workspace @mcap/browser build
+      - run: yarn typescript:test
+
       - name: Check @mcap/core version matches tag
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/typescript/core/v')
         run: |
@@ -240,14 +248,6 @@ jobs:
             exit 1
           fi
           echo "@mcap/core versions ($tag_version) match release tag"
-      - run: yarn workspace @mcap/support lint:ci
-      - run: yarn workspace @mcap/support build
-      - run: yarn workspace @mcap/nodejs lint:ci
-      - run: yarn workspace @mcap/nodejs build
-      - run: yarn workspace @mcap/browser lint:ci
-      - run: yarn workspace @mcap/browser build
-      - run: yarn typescript:test
-
       - name: Publish @mcap/core to NPM
         if: ${{ startsWith(github.ref, 'refs/tags/releases/typescript/core/v') }}
         run: yarn workspace @mcap/core npm publish --provenance --access public
