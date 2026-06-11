@@ -98,23 +98,29 @@ Report summary statistics on an MCAP file:
 <!-- cspell: disable -->
 
     $ mcap info demo.mcap
-    library: mcap-go/#(devel)
-    profile: ros1
-    messages: 1606
-    duration: 7.780758504s
-    start: 2017-03-21T19:26:20.103843113-07:00 (1490149580.103843113)
-    end: 2017-03-21T19:26:27.884601617-07:00 (1490149587.884601617)
+    library:     mcap-cli/0.1.0 mcap-rust/0.25.0
+    profile:     ros1
+    messages:    1606
+    duration:    7.780758504s
+    start:       2017-03-22T02:26:20.103843113Z (1490149580.103843113)
+    end:         2017-03-22T02:26:27.884601617Z (1490149587.884601617)
     compression:
-    	zstd: [14/14 chunks] (50.73%)
+    	zstd: [14/14 chunks] [119.10 MiB/58.61 MiB (50.79%)] [7.53 MiB/sec]
+    chunks:
+    	max uncompressed size: 9.20 MiB
+    	max compressed size: 4.54 MiB
+    	overlaps: no
     channels:
-      	(0) /diagnostics              52 msgs (6.68 Hz)    : diagnostic_msgs/DiagnosticArray [ros1msg]
-      	(1) /image_color/compressed  234 msgs (30.07 Hz)   : sensor_msgs/CompressedImage [ros1msg]
-      	(2) /tf                      774 msgs (99.48 Hz)   : tf2_msgs/TFMessage [ros1msg]
-      	(3) /radar/points            156 msgs (20.05 Hz)   : sensor_msgs/PointCloud2 [ros1msg]
-      	(4) /radar/range             156 msgs (20.05 Hz)   : sensor_msgs/Range [ros1msg]
-      	(5) /radar/tracks            156 msgs (20.05 Hz)   : radar_driver/RadarTracks [ros1msg]
-      	(6) /velodyne_points          78 msgs (10.02 Hz)   : sensor_msgs/PointCloud2 [ros1msg]
+    	(0) /diagnostics              52 msgs (6.6..6.7Hz)    : diagnostic_msgs/DiagnosticArray [ros1msg]
+    	(1) /image_color/compressed  234 msgs (29.9..30.1Hz)  : sensor_msgs/CompressedImage [ros1msg]
+    	(2) /tf                      774 msgs (99.3..99.5Hz)  : tf2_msgs/TFMessage [ros1msg]
+    	(3) /radar/points            156 msgs (19.9..20.0Hz)  : sensor_msgs/PointCloud2 [ros1msg]
+    	(4) /radar/range             156 msgs (19.9..20.0Hz)  : sensor_msgs/Range [ros1msg]
+    	(5) /radar/tracks            156 msgs (19.9..20.0Hz)  : radar_driver/RadarTracks [ros1msg]
+    	(6) /velodyne_points          78 msgs (9.9..10.0Hz)   : sensor_msgs/PointCloud2 [ros1msg]
+    channels:    7
     attachments: 0
+    metadata:    0
 
 <!-- cspell: enable -->
 
@@ -141,23 +147,29 @@ The `mcap` CLI can read files over **HTTP(S)** and from object stores: **Amazon 
 <!-- cspell: disable -->
 
     $ mcap info gs://your-remote-bucket/demo.mcap
-    library: mcap-go/#(devel)
-    profile: ros1
-    messages: 1606
-    duration: 7.780758504s
-    start: 2017-03-21T19:26:20.103843113-07:00 (1490149580.103843113)
-    end: 2017-03-21T19:26:27.884601617-07:00 (1490149587.884601617)
+    library:     mcap-cli/0.1.0 mcap-rust/0.25.0
+    profile:     ros1
+    messages:    1606
+    duration:    7.780758504s
+    start:       2017-03-22T02:26:20.103843113Z (1490149580.103843113)
+    end:         2017-03-22T02:26:27.884601617Z (1490149587.884601617)
     compression:
-    	zstd: [14/14 chunks] (50.73%)
+    	zstd: [14/14 chunks] [119.10 MiB/58.61 MiB (50.79%)] [7.53 MiB/sec]
+    chunks:
+    	max uncompressed size: 9.20 MiB
+    	max compressed size: 4.54 MiB
+    	overlaps: no
     channels:
-      	(0) /diagnostics              52 msgs (6.68 Hz)    : diagnostic_msgs/DiagnosticArray [ros1msg]
-      	(1) /image_color/compressed  234 msgs (30.07 Hz)   : sensor_msgs/CompressedImage [ros1msg]
-      	(2) /tf                      774 msgs (99.48 Hz)   : tf2_msgs/TFMessage [ros1msg]
-      	(3) /radar/points            156 msgs (20.05 Hz)   : sensor_msgs/PointCloud2 [ros1msg]
-      	(4) /radar/range             156 msgs (20.05 Hz)   : sensor_msgs/Range [ros1msg]
-      	(5) /radar/tracks            156 msgs (20.05 Hz)   : radar_driver/RadarTracks [ros1msg]
-      	(6) /velodyne_points          78 msgs (10.02 Hz)   : sensor_msgs/PointCloud2 [ros1msg]
+    	(0) /diagnostics              52 msgs (6.6..6.7Hz)    : diagnostic_msgs/DiagnosticArray [ros1msg]
+    	(1) /image_color/compressed  234 msgs (29.9..30.1Hz)  : sensor_msgs/CompressedImage [ros1msg]
+    	(2) /tf                      774 msgs (99.3..99.5Hz)  : tf2_msgs/TFMessage [ros1msg]
+    	(3) /radar/points            156 msgs (19.9..20.0Hz)  : sensor_msgs/PointCloud2 [ros1msg]
+    	(4) /radar/range             156 msgs (19.9..20.0Hz)  : sensor_msgs/Range [ros1msg]
+    	(5) /radar/tracks            156 msgs (19.9..20.0Hz)  : radar_driver/RadarTracks [ros1msg]
+    	(6) /velodyne_points          78 msgs (9.9..10.0Hz)   : sensor_msgs/PointCloud2 [ros1msg]
+    channels:    7
     attachments: 0
+    metadata:    0
 
 <!-- cspell: enable -->
 
@@ -201,3 +213,5 @@ The `mcap list` command can be used with chunks or attachments:
     51748769  4759213  1490149586627453408  1490149587217501700  zstd         4759160          9634744            0.493958
     56510103  4750731  1490149587227624742  1490149587814043200  zstd         4750678          9622778            0.493691
     61262859  217330   1490149587824113700  1490149587884601617  zstd         217277           217255             1.000101
+
+The current CLI appends one more column, `message index length`, giving the on-disk size of each chunk's message index records.
