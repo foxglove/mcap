@@ -136,13 +136,6 @@ fn cat_indexed(
     if summary.chunk_indexes.is_empty() {
         return Ok(None);
     }
-    if summary
-        .chunk_indexes
-        .iter()
-        .any(|chunk| chunk.message_index_offsets.is_empty())
-    {
-        return Ok(None);
-    }
 
     let needs_in_chunk_definitions = needs_in_chunk_definitions(&summary);
     let mut schemas = summary.schemas.clone();
@@ -251,21 +244,17 @@ fn cat_remote_indexed(
         }
         return Ok(RemoteCatResult::NeedsFullScan);
     }
-    if summary
+    let has_chunks_without_message_indexes = summary
         .chunk_indexes
         .iter()
-        .any(|chunk| chunk.message_index_offsets.is_empty())
-    {
-        if !source_options.allow_remote_scan {
-            bail!(
-                "{}: remote file has chunk indexes without message indexes; reading messages requires opt-in; {}",
-                source::redacted_display(file),
-                source::remote_scan_opt_in_suffix()
-            );
-        }
-        return Ok(RemoteCatResult::NeedsFullScan);
+        .any(|chunk| chunk.message_index_offsets.is_empty());
+    if has_chunks_without_message_indexes && !source_options.allow_remote_scan {
+        bail!(
+            "{}: remote file has chunk indexes without message indexes; reading messages requires opt-in; {}",
+            source::redacted_display(file),
+            source::remote_scan_opt_in_suffix()
+        );
     }
-
     let needs_in_chunk_definitions = needs_in_chunk_definitions(summary);
     let mut schemas = summary.schemas.clone();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
@@ -399,12 +388,13 @@ fn cat_remote_indexed(
     Ok(RemoteCatResult::Done)
 }
 
-/// Returns whether any chunk references channels that aren't repeated in the summary, so their
-/// definitions (and topics) must be read from the chunks themselves.
+/// Returns whether chunk definitions must be read before indexed iteration.
 ///
 /// When true, callers must (a) collect in-chunk definitions before resolving messages, and (b) skip
-/// reader-level topic filtering — which keys on `summary.channels` only — and filter per message
+/// reader-level topic filtering -- which keys on `summary.channels` only -- and filter per message
 /// instead, otherwise a chunk-local channel matching a `--topics` filter would be silently dropped.
+/// Chunks without message indexes also need this conservative path because the chunk index does not
+/// advertise which channel IDs may be found inside the chunk.
 ///
 /// Note: a file mixing summary channels with chunk-local ones can't be produced by the standard
 /// writer (its `repeat_channels`/`repeat_schemas` options are all-or-nothing: either every channel
@@ -413,10 +403,11 @@ fn cat_remote_indexed(
 /// isn't covered by an `mcap::Writer`-based regression test.
 fn needs_in_chunk_definitions(summary: &mcap::Summary) -> bool {
     summary.chunk_indexes.iter().any(|chunk| {
-        chunk
-            .message_index_offsets
-            .keys()
-            .any(|channel_id| !summary.channels.contains_key(channel_id))
+        chunk.message_index_offsets.is_empty()
+            || chunk
+                .message_index_offsets
+                .keys()
+                .any(|channel_id| !summary.channels.contains_key(channel_id))
     })
 }
 
@@ -1324,6 +1315,41 @@ mod tests {
         cursor.into_inner()
     }
 
+    fn build_out_of_order_chunked_mcap_without_message_indexes() -> Vec<u8> {
+        let mut cursor = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(None)
+                .emit_message_indexes(false)
+                .create(&mut cursor)
+                .expect("writer");
+
+            let schema_id = writer
+                .add_schema("Example", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+
+            for (sequence, log_time, data) in [(1, 0, 1), (2, 2, 2), (3, 1, 3)] {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id,
+                            sequence,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        &[data],
+                    )
+                    .expect("write message");
+            }
+
+            writer.finish().expect("finish");
+        }
+        cursor.into_inner()
+    }
+
     fn build_out_of_order_linear_mcap_without_summary() -> Vec<u8> {
         let mut cursor = Cursor::new(Vec::new());
         {
@@ -1701,6 +1727,41 @@ mod tests {
     }
 
     #[test]
+    fn cat_prefers_log_time_order_with_chunk_indexes_without_message_indexes() {
+        let mcap = build_out_of_order_chunked_mcap_without_message_indexes();
+        let summary = mcap::Summary::read(&mcap)
+            .expect("summary read")
+            .expect("summary should exist");
+        assert!(!summary.chunk_indexes.is_empty());
+        assert!(summary
+            .chunk_indexes
+            .iter()
+            .all(|chunk| chunk.message_index_offsets.is_empty()));
+
+        let mut indexed_out = Vec::new();
+        let mut json_transcoders = JsonTranscoders::default();
+        let indexed_result = cat_indexed(
+            &mut indexed_out,
+            &mcap,
+            &CatOptions::default(),
+            &mut json_transcoders,
+        )
+        .expect("indexed cat should succeed");
+        assert_eq!(indexed_result, Some(false));
+
+        let output = String::from_utf8(indexed_out).expect("valid utf8 output");
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(
+            lines,
+            vec![
+                "0 /demo [Example] [1]",
+                "1 /demo [Example] [3]",
+                "2 /demo [Example] [2]",
+            ]
+        );
+    }
+
+    #[test]
     fn cat_falls_back_to_linear_order_without_index() {
         let mcap = build_out_of_order_linear_mcap_without_summary();
         let mut out = Vec::new();
@@ -1717,7 +1778,7 @@ mod tests {
     }
 
     #[test]
-    fn cat_falls_back_for_chunk_index_without_message_indexes_and_in_chunk_channels() {
+    fn cat_indexed_reads_chunk_index_without_message_indexes_and_in_chunk_channels() {
         let mcap =
             include_bytes!("../../../../tests/conformance/data/OneMessage/OneMessage-ch-chx.mcap");
         let expected = message_lines_from_stream(mcap);
@@ -1731,13 +1792,15 @@ mod tests {
             &CatOptions::default(),
             &mut json_transcoders,
         )
-        .expect("indexed planner should fall back");
-        assert_eq!(indexed_result, None);
-        assert!(indexed_out.is_empty());
+        .expect("indexed cat should succeed");
+        assert_eq!(indexed_result, Some(false));
+        let indexed_output = String::from_utf8(indexed_out).expect("valid utf8 output");
+        let indexed_lines: Vec<&str> = indexed_output.lines().collect();
+        assert_eq!(indexed_lines, expected);
 
         let mut out = Vec::new();
         let broken_pipe = cat_mcap(&mut out, mcap, &CatOptions::default())
-            .expect("cat should succeed through linear fallback");
+            .expect("cat should succeed through indexed chunk scan");
         assert!(!broken_pipe);
 
         let output = String::from_utf8(out).expect("valid utf8 output");

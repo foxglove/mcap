@@ -11,6 +11,8 @@ const ONE_MESSAGE_UNINDEXED = "{dataDir}/OneMessage/OneMessage.mcap";
 const ONE_SCHEMALESS =
   "{dataDir}/OneSchemalessMessage/OneSchemalessMessage-ch-chx-mx-pad-rch-st.mcap";
 const TEN_MESSAGES = "{dataDir}/TenMessages/TenMessages-ch-chx-mx-pad-rch-rsh-st-sum.mcap";
+const TEN_MESSAGES_CHUNK_INDEX_WITHOUT_MESSAGE_INDEXES =
+  "{dataDir}/TenMessages/TenMessages-ch-chx-rch-rsh.mcap";
 const ONE_ATTACHMENT = "{dataDir}/OneAttachment/OneAttachment-ax-st-sum.mcap";
 // 8-byte magic + 1-byte header opcode + 8-byte header length + two empty MCAP strings.
 const ONE_ATTACHMENT_RECORD_OFFSET = "25";
@@ -130,6 +132,18 @@ export const cases: CliTestCase[] = [
     description: "Basic cat output matches for an indexed MCAP with one schemaless message.",
     tags: ["cat", "stdout"],
     invocation: { args: ["cat", ONE_SCHEMALESS] },
+    comparison: {
+      exitCode: 0,
+      stdout: { kind: "bytes" },
+      stderr: { kind: "text" },
+    },
+  },
+  {
+    id: "cat-chunk-index-without-message-indexes-log-time-order",
+    description:
+      "Cat emits log-time order for chunk-indexed files without message indexes when chunk indexes are sufficient.",
+    tags: ["cat", "stdout"],
+    invocation: { args: ["cat", TEN_MESSAGES_CHUNK_INDEX_WITHOUT_MESSAGE_INDEXES] },
     comparison: {
       exitCode: 0,
       stdout: { kind: "bytes" },
