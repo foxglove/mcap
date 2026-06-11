@@ -925,6 +925,13 @@ mod tests {
         assert_eq!(stats.messages.recovered, 300);
         assert_eq!(stats.headers.discarded, 1);
         assert!(stats.is_lossy());
+        // The source header was discarded, but the output is still stamped with the CLI writer
+        // identity rather than falling back to the crate default.
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
     }
 
     #[test]
