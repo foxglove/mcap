@@ -595,7 +595,9 @@ mod tests {
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
-            let mut options = mcap::WriteOptions::new().use_chunks(chunked);
+            let mut options = mcap::WriteOptions::new()
+                .use_chunks(chunked)
+                .library("test-recorder/0.0");
             if chunked {
                 options = options.chunk_size(Some(10));
             }

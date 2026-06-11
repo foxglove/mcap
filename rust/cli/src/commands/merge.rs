@@ -690,6 +690,7 @@ mod tests {
         {
             let mut writer = mcap::WriteOptions::new()
                 .profile(profile)
+                .library("test-recorder/0.0")
                 .emit_attachment_indexes(emit_attachment_indexes)
                 .emit_metadata_indexes(emit_metadata_indexes)
                 .emit_statistics(emit_statistics)
@@ -923,6 +924,7 @@ mod tests {
         )
         .expect("merge");
 
+        // The inputs' `test-recorder/0.0` library is overwritten with the CLI's own identity.
         let library = crate::parse::read_header(&merged)
             .expect("read header")
             .expect("header present")

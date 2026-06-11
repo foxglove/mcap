@@ -647,6 +647,7 @@ mod tests {
             let mut writer = mcap::WriteOptions::new()
                 .chunk_size(Some(1024 * 1024))
                 .compression(compression)
+                .library("test-recorder/0.0")
                 .create(&mut output)
                 .expect("writer");
             let schema_id = writer
@@ -905,6 +906,7 @@ mod tests {
     fn recover_stamps_cli_writer_library() {
         let input = write_test_input(Some(mcap::Compression::Zstd));
         let (output, _) = recover_to_vec(&input, "preserve");
+        // The fixture's `test-recorder/0.0` library is overwritten with the CLI's own identity.
         let library = crate::parse::read_header(&output)
             .expect("read header")
             .expect("header present")

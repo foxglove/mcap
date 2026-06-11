@@ -260,6 +260,7 @@ mod tests {
         {
             let mut writer = mcap::WriteOptions::new()
                 .chunk_size(Some(1024))
+                .library("test-recorder/0.0")
                 .create(&mut output)
                 .expect("writer");
             let schema_id = writer
@@ -397,6 +398,7 @@ mod tests {
             .expect("sort should succeed");
         let output = output.into_inner();
 
+        // The fixture's `test-recorder/0.0` library is overwritten with the CLI's own identity.
         let library = crate::parse::read_header(&output)
             .expect("read header")
             .expect("header present")
