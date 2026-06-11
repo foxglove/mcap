@@ -1,5 +1,5 @@
 add_executable(example_json_writer writer.cpp)
-target_link_libraries(example_json_writer ${CONAN_LIBS})
+target_link_libraries(example_json_writer ${MCAP_EXAMPLE_LIBS})
 target_compile_definitions(example_json_writer PRIVATE _USE_MATH_DEFINES)
 add_executable(example_json_reader reader.cpp)
-target_link_libraries(example_json_reader ${CONAN_LIBS})
+target_link_libraries(example_json_reader ${MCAP_EXAMPLE_LIBS})

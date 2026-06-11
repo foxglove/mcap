@@ -67,7 +67,7 @@ Run `make` to build the library using a Docker container. This requires Docker
 to be installed, and will produce Linux (ELF) binaries compiled in an Ubuntu
 container with the clang compiler. If you want to build binaries for another
 platform or using your own compiler, run `make build-host`. This requires a
-working C++ compiler toolchain and [Conan](https://conan.io/) to be installed.
+working C++ compiler toolchain and [Conan](https://conan.io/) 2.x to be installed.
 
 Output binaries can be found in:
 

@@ -23,8 +23,8 @@ jobs:
           lfs: false
       - uses: actions/cache@v5
         with:
-          path: ~/.conan/data
-          key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
+          path: ~/.conan2/p
+          key: ${{ runner.os }}-conan2-${{ hashFiles('cpp/**/conanfile.py') }}
       - run: make ci-format-check
       - run: make ci-${{ matrix.compiler }}
       - run: make test-host
@@ -32,7 +32,7 @@ jobs:
       - run: make run-examples-host
 
   cpp-windows:
-    runs-on: windows-2022
+    runs-on: windows-latest
     defaults:
       run:
         working-directory: cpp
@@ -42,12 +42,12 @@ jobs:
           lfs: false
       - uses: actions/cache@v5
         with:
-          path: ~/.conan/data
-          key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
+          path: ~/.conan2/p
+          key: ${{ runner.os }}-conan2-${{ hashFiles('cpp/**/conanfile.py') }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.10"
-      - run: pip install conan~=1.0
+      - run: pip install "conan>=2.0,<3"
       - run: bash build.sh --build-tests-only
       - run: ./test/build/Debug/bin/unit-tests
 
@@ -336,13 +336,13 @@ jobs:
             build: cargo build
             exe: ""
           - os: windows
-            image: windows-2022
+            image: windows-latest
             arch: amd64
             target: x86_64-pc-windows-msvc
             build: cargo build
             exe: ".exe"
           - os: windows
-            image: windows-2022
+            image: windows-latest
             arch: arm64
             target: aarch64-pc-windows-msvc
             build: cargo build
@@ -468,8 +468,8 @@ jobs:
           cache: yarn
       - uses: actions/cache@v5
         with:
-          path: ~/.conan/data
-          key: ${{ runner.os }}-${{ hashFiles('cpp/**/conanfile.py') }}
+          path: ~/.conan2/p
+          key: ${{ runner.os }}-conan2-${{ hashFiles('cpp/**/conanfile.py') }}
       - run: cd cpp && make ci-clang
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify

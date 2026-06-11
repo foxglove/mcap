@@ -25,15 +25,19 @@ target_include_directories(foxglove_proto_lib PUBLIC ${CMAKE_CURRENT_BINARY_DIR}
 if (MSVC)
     target_compile_options(foxglove_proto_lib PUBLIC /wd4100 /wd4267 /wd4244)
 else()
-    target_compile_options(foxglove_proto_lib PUBLIC -Wno-error=unused-parameter)
+    target_compile_options(foxglove_proto_lib PUBLIC
+      -Wno-error=unused-parameter
+      -Wno-error=shadow
+      -Wno-error=pedantic
+    )
 endif()
 
 add_executable(example_protobuf_writer writer.cpp BuildFileDescriptorSet.cpp)
-target_link_libraries(example_protobuf_writer ${CONAN_LIBS} foxglove_proto_lib)
+target_link_libraries(example_protobuf_writer ${MCAP_EXAMPLE_LIBS} foxglove_proto_lib)
 target_compile_definitions(example_protobuf_writer PRIVATE _USE_MATH_DEFINES)
 
 add_executable(example_protobuf_dynamic_reader dynamic_reader.cpp)
-target_link_libraries(example_protobuf_dynamic_reader ${CONAN_LIBS} ${Protobuf_LIBRARIES})
+target_link_libraries(example_protobuf_dynamic_reader ${MCAP_EXAMPLE_LIBS} ${Protobuf_LIBRARIES})
 if (MSVC)
     target_compile_options(example_protobuf_dynamic_reader PUBLIC /wd4100)
 else()
@@ -41,7 +45,7 @@ else()
 endif()
 
 add_executable(example_protobuf_static_reader static_reader.cpp)
-target_link_libraries(example_protobuf_static_reader ${CONAN_LIBS} foxglove_proto_lib)
+target_link_libraries(example_protobuf_static_reader ${MCAP_EXAMPLE_LIBS} foxglove_proto_lib)
 if (MSVC)
     target_compile_options(example_protobuf_static_reader PUBLIC /wd4100)
 else()
@@ -49,7 +53,8 @@ else()
 endif()
 
 add_executable(example_protobuf_unit_tests unit_tests.cpp BuildFileDescriptorSet.cpp)
-target_link_libraries(example_protobuf_unit_tests ${CONAN_LIBS} foxglove_proto_lib)
+find_package(Catch2 REQUIRED)
+target_link_libraries(example_protobuf_unit_tests Catch2::Catch2 ${MCAP_EXAMPLE_LIBS} foxglove_proto_lib)
 if (MSVC)
     target_compile_options(example_protobuf_unit_tests PUBLIC /wd4100)
 else()

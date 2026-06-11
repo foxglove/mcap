@@ -78,7 +78,7 @@ The Rust workspace is defined at the repo root and includes the `mcap` library c
 
 ## C++
 
-**Prerequisites:** Docker (builds run inside containers), Conan v1, CMake.
+**Prerequisites:** Docker (builds run inside containers), Conan 2, CMake.
 
 | Action | Command                       |
 | ------ | ----------------------------- |

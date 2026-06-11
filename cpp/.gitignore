@@ -6,3 +6,9 @@ build/
 CMakeCache.txt
 CMakeFiles/
 CMakeSettings.json
+
+# Conan 2 generated files (CMakeUserPresets.json plus editable env scripts)
+CMakeUserPresets.json
+conanbuild*
+conanrun*
+deactivate_conan*
