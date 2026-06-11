@@ -301,7 +301,7 @@ mod tests {
     }
 
     fn build_out_of_order_chunked_input(include_records: bool) -> Vec<u8> {
-        build_out_of_order_chunked_input_with_summary_repeats(include_records, true, true)
+        build_out_of_order_chunked_input_with_options(include_records, true, true, true)
     }
 
     fn build_out_of_order_chunked_input_with_summary_repeats(
@@ -309,12 +309,27 @@ mod tests {
         repeat_channels: bool,
         repeat_schemas: bool,
     ) -> Vec<u8> {
+        build_out_of_order_chunked_input_with_options(
+            include_records,
+            repeat_channels,
+            repeat_schemas,
+            true,
+        )
+    }
+
+    fn build_out_of_order_chunked_input_with_options(
+        include_records: bool,
+        repeat_channels: bool,
+        repeat_schemas: bool,
+        emit_message_indexes: bool,
+    ) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
             let mut writer = mcap::WriteOptions::new()
                 .chunk_size(Some(1024))
                 .repeat_channels(repeat_channels)
                 .repeat_schemas(repeat_schemas)
+                .emit_message_indexes(emit_message_indexes)
                 .library("test-recorder/0.0")
                 .create(&mut output)
                 .expect("writer");
@@ -630,6 +645,23 @@ mod tests {
     #[test]
     fn chunk_indexed_input_without_repeated_channels_falls_back_to_linear_sorting() {
         let input = build_out_of_order_chunked_input_with_summary_repeats(false, false, false);
+        let mut output = Cursor::new(Vec::new());
+        let sort_input = validate_sort_input(&input).expect("sort input should be valid");
+        assert!(matches!(sort_input, SortInput::Linear));
+
+        sort_to_writer(&input, &mut output, sort_input, &default_sort_options())
+            .expect("sort should succeed");
+        let output = output.into_inner();
+        let log_times: Vec<u64> = mcap::MessageStream::new(&output)
+            .expect("message stream")
+            .map(|message| message.expect("message").log_time)
+            .collect();
+        assert_eq!(log_times, vec![10, 30]);
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_channels_or_message_indexes_falls_back_to_linear_sorting() {
+        let input = build_out_of_order_chunked_input_with_options(false, false, false, false);
         let mut output = Cursor::new(Vec::new());
         let sort_input = validate_sort_input(&input).expect("sort input should be valid");
         assert!(matches!(sort_input, SortInput::Linear));

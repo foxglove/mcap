@@ -297,6 +297,10 @@ pub(crate) fn read_summary_for_indexed_transcode(input: &[u8]) -> Result<Option<
 }
 
 pub(crate) fn summary_supports_indexed_transcode(summary: &mcap::Summary) -> bool {
+    if !summary.chunk_indexes.is_empty() && summary.channels.is_empty() {
+        return false;
+    }
+
     if let Some(stats) = &summary.stats {
         if stats.channel_count as usize > summary.channels.len()
             || stats
@@ -621,7 +625,7 @@ mod tests {
     }
 
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
-        write_filter_test_input_with_summary_repeats(chunked, summaryless, true, true)
+        write_filter_test_input_with_options(chunked, summaryless, true, true, true)
     }
 
     fn write_filter_test_input_with_summary_repeats(
@@ -630,10 +634,27 @@ mod tests {
         repeat_channels: bool,
         repeat_schemas: bool,
     ) -> Vec<u8> {
+        write_filter_test_input_with_options(
+            chunked,
+            summaryless,
+            repeat_channels,
+            repeat_schemas,
+            true,
+        )
+    }
+
+    fn write_filter_test_input_with_options(
+        chunked: bool,
+        summaryless: bool,
+        repeat_channels: bool,
+        repeat_schemas: bool,
+        emit_message_indexes: bool,
+    ) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
             let mut options = mcap::WriteOptions::new()
                 .use_chunks(chunked)
+                .emit_message_indexes(emit_message_indexes)
                 .library("test-recorder/0.0");
             if chunked {
                 options = options.chunk_size(Some(10));
@@ -973,6 +994,29 @@ mod tests {
     #[test]
     fn chunk_indexed_input_without_repeated_channels_falls_back_to_linear_filtering() {
         let input = write_filter_test_input_with_summary_repeats(true, false, false, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 20,
+            end: 25,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 5);
+        assert_eq!(stats.topic_counts["camera_b"], 5);
+        assert!(!stats.topic_counts.contains_key("radar_a"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_channels_or_message_indexes_falls_back_to_linear_filtering() {
+        let input = write_filter_test_input_with_options(true, false, false, false, false);
         let opts = FilterOptions {
             output: None,
             include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
