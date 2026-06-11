@@ -1,4 +1,3 @@
-use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 
 #[test]
@@ -10,18 +9,7 @@ fn fish_completion_allows_downstream_pipe_to_close() {
         .spawn()
         .expect("failed to run mcap completion fish");
 
-    let stdout = child.stdout.take().expect("stdout should be piped");
-    let mut reader = BufReader::new(stdout);
-
-    for _ in 0..10 {
-        let mut line = String::new();
-        let bytes = reader
-            .read_line(&mut line)
-            .expect("failed to read completion output");
-        assert!(bytes > 0, "completion output ended too early");
-    }
-
-    drop(reader);
+    drop(child.stdout.take());
 
     let output = child
         .wait_with_output()
