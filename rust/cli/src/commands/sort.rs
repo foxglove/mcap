@@ -134,11 +134,7 @@ fn validate_sort_input(input: &[u8]) -> Result<SortInput> {
                 }
                 return Err(filter::incomplete_indexed_summary_error());
             }
-            if file_has_messages(input)? {
-                bail!(
-                    "Error reading file index: no chunk index records. You may need to run `mcap recover` if the file is corrupt or not chunk indexed."
-                );
-            }
+            Ok(SortInput::Linear)
         }
         None => {
             if file_has_messages(input)? {
@@ -146,9 +142,9 @@ fn validate_sort_input(input: &[u8]) -> Result<SortInput> {
                     "Error reading file index: summary section not available. You may need to run `mcap recover` if the file is corrupt or not chunk indexed."
                 );
             }
+            Ok(SortInput::Linear)
         }
     }
-    Ok(SortInput::Linear)
 }
 
 fn file_has_messages(input: &[u8]) -> Result<bool> {
@@ -232,6 +228,7 @@ fn copy_linear_messages_in_log_time_order<W: Write + Seek>(
     input: &[u8],
     writer: &mut mcap::Writer<W>,
 ) -> Result<()> {
+    // Without chunk indexes, sorting necessarily materializes messages before reordering.
     let mut messages = mcap::MessageStream::new(input)?
         .collect::<mcap::McapResult<Vec<_>>>()
         .context("failed to read messages")?;
@@ -650,6 +647,23 @@ mod tests {
         let text = err.to_string();
         assert!(text.contains("Error reading file index"));
         assert!(text.contains("mcap recover"));
+    }
+
+    #[test]
+    fn chunked_input_without_chunk_index_uses_linear_sorting() {
+        let input = build_out_of_order_chunked_input_with_options(false, true, true, true, false);
+        let mut output = Cursor::new(Vec::new());
+        let sort_input = validate_sort_input(&input).expect("sort input should be valid");
+        assert!(matches!(sort_input, SortInput::Linear));
+
+        sort_to_writer(&input, &mut output, sort_input, &default_sort_options())
+            .expect("sort should succeed");
+        let output = output.into_inner();
+        let log_times: Vec<u64> = mcap::MessageStream::new(&output)
+            .expect("message stream")
+            .map(|message| message.expect("message").log_time)
+            .collect();
+        assert_eq!(log_times, vec![10, 30]);
     }
 
     #[test]
