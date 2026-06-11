@@ -1169,6 +1169,12 @@ mod tests {
         CatOptions, JsonTranscoders, Ros1MessageDef, MESSAGE_PREVIEW_LEN,
     };
 
+    const NO_MESSAGE_INDEX_LOG_TIME_LINES: &[&str] = &[
+        "0 /demo [Example] [1]",
+        "1 /demo [Example] [3]",
+        "2 /demo [Example] [2]",
+    ];
+
     fn sample_message(schema_name: Option<&str>, data: Vec<u8>) -> mcap::Message<'static> {
         let schema = schema_name.map(|name| {
             Arc::new(mcap::Schema {
@@ -1565,14 +1571,7 @@ mod tests {
 
         let output = String::from_utf8(out).expect("valid utf8 output");
         let lines: Vec<&str> = output.lines().collect();
-        assert_eq!(
-            lines,
-            vec![
-                "0 /demo [Example] [1]",
-                "1 /demo [Example] [3]",
-                "2 /demo [Example] [2]",
-            ]
-        );
+        assert_eq!(lines.as_slice(), NO_MESSAGE_INDEX_LOG_TIME_LINES);
     }
 
     #[test]
@@ -1782,14 +1781,7 @@ mod tests {
 
         let output = String::from_utf8(indexed_out).expect("valid utf8 output");
         let lines: Vec<&str> = output.lines().collect();
-        assert_eq!(
-            lines,
-            vec![
-                "0 /demo [Example] [1]",
-                "1 /demo [Example] [3]",
-                "2 /demo [Example] [2]",
-            ]
-        );
+        assert_eq!(lines.as_slice(), NO_MESSAGE_INDEX_LOG_TIME_LINES);
     }
 
     #[test]
