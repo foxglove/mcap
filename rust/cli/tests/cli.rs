@@ -20,10 +20,14 @@ use tempfile::TempDir;
 
 /// Build a small chunked, indexed MCAP in memory with `num_messages` messages on `/example`.
 fn build_mcap(num_messages: u64) -> Vec<u8> {
+    build_mcap_with_options(true, &(0..num_messages).map(|i| i + 1).collect::<Vec<_>>())
+}
+
+fn build_mcap_with_options(use_chunks: bool, message_log_times: &[u64]) -> Vec<u8> {
     let mut buffer = Vec::new();
     {
         let mut writer = mcap::WriteOptions::new()
-            .use_chunks(true)
+            .use_chunks(use_chunks)
             // Small chunks so even a modest message count spans multiple chunks; this makes a
             // mid-file truncation land inside chunk data (needed for the lossy-recover test).
             .chunk_size(Some(256))
@@ -35,14 +39,14 @@ fn build_mcap(num_messages: u64) -> Vec<u8> {
         let channel_id = writer
             .add_channel(schema_id, "/example", "json", &BTreeMap::new())
             .expect("add channel");
-        for i in 0..num_messages {
+        for (i, log_time) in message_log_times.iter().copied().enumerate() {
             writer
                 .write_to_known_channel(
                     &MessageHeader {
                         channel_id,
                         sequence: i as u32,
-                        log_time: i + 1,
-                        publish_time: i + 1,
+                        log_time,
+                        publish_time: log_time,
                     },
                     format!("{{\"n\":{i}}}").as_bytes(),
                 )
@@ -149,6 +153,28 @@ fn exit_code_3_on_lossy_recover() {
         looks_like_mcap(&recovered),
         "recovered file should be valid MCAP"
     );
+}
+
+#[test]
+fn exit_code_doctor_non_strict_allows_out_of_order_top_level_messages() {
+    let dir = TempDir::new().unwrap();
+    let path = write_temp(
+        &dir,
+        "out_of_order.mcap",
+        &build_mcap_with_options(false, &[2, 1]),
+    );
+
+    let output = mcap(&["doctor", path_str(&path)]);
+    assert!(
+        output.status.success(),
+        "non-strict doctor should warn but exit 0; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Warning: Message.log_time"));
+
+    let output = mcap(&["doctor", "--strict-message-order", path_str(&path)]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Error: Message.log_time"));
 }
 
 // Reading from a non-seekable stdin pipe is only reachable end-to-end; the unit tests use

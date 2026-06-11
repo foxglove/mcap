@@ -58,7 +58,6 @@ struct Doctor {
     saw_footer: bool,
     saw_top_level_message: bool,
     message_index_warning_emitted: bool,
-    last_top_level_message_time: Option<u64>,
     global_max_log_time: Option<u64>,
     min_log_time: Option<u64>,
     max_log_time: Option<u64>,
@@ -93,7 +92,6 @@ impl Doctor {
             saw_footer: false,
             saw_top_level_message: false,
             message_index_warning_emitted: false,
-            last_top_level_message_time: None,
             global_max_log_time: None,
             min_log_time: None,
             max_log_time: None,
@@ -395,18 +393,7 @@ impl Doctor {
             ));
         }
 
-        if let Some(previous) = self.last_top_level_message_time {
-            // Top-level messages are required to be ordered by log time.
-            // `--strict-message-order` only governs ordering checks across chunked messages.
-            if header.log_time < previous {
-                let topic = channel_topic.as_deref().unwrap_or("<unknown>");
-                self.error(format!(
-                    "Message.log_time {} on {:?} is less than the previous message record time {}",
-                    header.log_time, topic, previous
-                ));
-            }
-        }
-        self.last_top_level_message_time = Some(header.log_time);
+        self.check_message_order(header.log_time, channel_topic.as_deref());
         self.observe_message_time(header.log_time);
     }
 
@@ -461,21 +448,7 @@ impl Doctor {
                         ));
                     }
 
-                    if let Some(latest_log_time) = self.global_max_log_time {
-                        if header.log_time < latest_log_time {
-                            let topic = channel_topic.as_deref().unwrap_or("<unknown>");
-                            let message = format!(
-                                "Message.log_time {} on {:?} is less than the latest log time {}",
-                                header.log_time, topic, latest_log_time
-                            );
-                            if self.strict_message_order {
-                                self.error(message);
-                            } else {
-                                self.warn(message);
-                            }
-                        }
-                    }
-
+                    self.check_message_order(header.log_time, channel_topic.as_deref());
                     min_log_time =
                         Some(min_log_time.map_or(header.log_time, |min| min.min(header.log_time)));
                     max_log_time =
@@ -521,6 +494,23 @@ impl Doctor {
         );
         self.min_log_time = Some(self.min_log_time.map_or(log_time, |min| min.min(log_time)));
         self.max_log_time = Some(self.max_log_time.map_or(log_time, |max| max.max(log_time)));
+    }
+
+    fn check_message_order(&mut self, log_time: u64, topic: Option<&str>) {
+        if let Some(latest_log_time) = self.global_max_log_time {
+            if log_time < latest_log_time {
+                let topic = topic.unwrap_or("<unknown>");
+                let message = format!(
+                    "Message.log_time {} on {:?} is less than the latest log time {}",
+                    log_time, topic, latest_log_time
+                );
+                if self.strict_message_order {
+                    self.error(message);
+                } else {
+                    self.warn(message);
+                }
+            }
+        }
     }
 
     fn validate_chunk_indexes(&mut self, mcap: &[u8]) {
@@ -720,7 +710,7 @@ mod tests {
     use super::diagnose_mcap;
     use mcap::records::op;
 
-    fn write_chunked_mcap(
+    fn write_mcap(
         configure: impl FnOnce(mcap::WriteOptions) -> mcap::WriteOptions,
         schema_id: Option<u16>,
         message_times: &[u64],
@@ -762,21 +752,21 @@ mod tests {
 
     #[test]
     fn no_error_on_messageless_chunks() {
-        let mcap = write_chunked_mcap(|opts| opts, Some(0), &[]);
+        let mcap = write_mcap(|opts| opts, Some(0), &[]);
         let diagnosis = diagnose_mcap(&mcap, false);
         assert!(diagnosis.errors.is_empty(), "{:?}", diagnosis.errors);
     }
 
     #[test]
     fn no_error_on_schemaless_messages() {
-        let mcap = write_chunked_mcap(|opts| opts, Some(0), &[10]);
+        let mcap = write_mcap(|opts| opts, Some(0), &[10]);
         let diagnosis = diagnose_mcap(&mcap, false);
         assert!(diagnosis.errors.is_empty(), "{:?}", diagnosis.errors);
     }
 
     #[test]
     fn requires_duplicated_schemas_for_indexed_messages() {
-        let mcap = write_chunked_mcap(
+        let mcap = write_mcap(
             |opts| opts.repeat_channels(false).repeat_schemas(false),
             None,
             &[10],
@@ -802,14 +792,40 @@ mod tests {
 
     #[test]
     fn passes_indexed_messages_with_repeated_schemas() {
-        let mcap = write_chunked_mcap(|opts| opts, None, &[10]);
+        let mcap = write_mcap(|opts| opts, None, &[10]);
         let diagnosis = diagnose_mcap(&mcap, false);
         assert!(diagnosis.errors.is_empty(), "{:?}", diagnosis.errors);
     }
 
     #[test]
-    fn strict_message_order_toggles_warning_vs_error() {
-        let mcap = write_chunked_mcap(|opts| opts, None, &[20, 10]);
+    fn strict_message_order_toggles_warning_vs_error_for_chunked_messages() {
+        let mcap = write_mcap(|opts| opts, None, &[20, 10]);
+
+        let non_strict = diagnose_mcap(&mcap, false);
+        assert!(
+            non_strict
+                .warnings
+                .iter()
+                .any(|msg| msg.contains("less than the latest log time")),
+            "{:?}",
+            non_strict.warnings
+        );
+        assert!(non_strict.errors.is_empty(), "{:?}", non_strict.errors);
+
+        let strict = diagnose_mcap(&mcap, true);
+        assert!(
+            strict
+                .errors
+                .iter()
+                .any(|msg| msg.contains("less than the latest log time")),
+            "{:?}",
+            strict.errors
+        );
+    }
+
+    #[test]
+    fn strict_message_order_toggles_warning_vs_error_for_top_level_messages() {
+        let mcap = write_mcap(|opts| opts.use_chunks(false), None, &[20, 10]);
 
         let non_strict = diagnose_mcap(&mcap, false);
         assert!(
@@ -835,7 +851,7 @@ mod tests {
 
     #[test]
     fn continues_scanning_after_corrupt_top_level_record() {
-        let mut mcap = write_chunked_mcap(
+        let mut mcap = write_mcap(
             |opts| {
                 opts.use_chunks(false)
                     .repeat_channels(false)
