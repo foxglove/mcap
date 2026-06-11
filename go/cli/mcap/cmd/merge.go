@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"container/heap"
+	"context"
 	"crypto/md5"
 	"encoding/binary"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 	"slices"
 
 	"github.com/foxglove/mcap/go/cli/mcap/utils"
@@ -39,6 +41,7 @@ var (
 	mergeOutputFile             string
 	mergeAllowDuplicateMetadata bool
 	coalesceChannels            string
+	mergeWorkers                int
 )
 
 type mergeOpts struct {
@@ -48,6 +51,22 @@ type mergeOpts struct {
 	chunked                bool
 	allowDuplicateMetadata bool
 	coalesceChannels       string
+	workers                int
+}
+
+// prefetchResult holds one event from a prefetch goroutine: either a message
+// or a metadata record (never both). Metadata records must be processed by the
+// main goroutine before the next message to preserve output ordering and to
+// avoid concurrent writes to the shared merger maps / output writer.
+type prefetchResult struct {
+	// Message event (schema/channel/message non-nil, metadata nil)
+	schema  *mcap.Schema
+	channel *mcap.Channel
+	message *mcap.Message
+	// Metadata event (metadata non-nil, schema/channel/message nil)
+	metadata *mcap.Metadata
+	// Terminal error (err non-nil signals end of stream or failure)
+	err error
 }
 
 // schemaID uniquely identifies a schema across the inputs.
@@ -258,18 +277,29 @@ func outputProfile(profiles []string) string {
 }
 
 func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
+	// Resolve worker count: 0 means "use all CPUs".
+	workers := m.opts.workers
+	if workers == 0 {
+		workers = runtime.NumCPU()
+	}
+	parallel := workers > 1
+
 	writer, err := mcap.NewWriter(w, &mcap.WriterOptions{
 		Chunked:     m.opts.chunked,
 		ChunkSize:   m.opts.chunkSize,
 		Compression: mcap.CompressionFormat(m.opts.compression),
 		IncludeCRC:  m.opts.includeCRC,
+		Workers:     workers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create writer: %w", err)
 	}
 
-	iterators := make([]mcap.MessageIterator, len(inputs))
 	profiles := make([]string, len(inputs))
+	// iterators is used only in serial mode (parallel mode uses prefetchChans).
+	iterators := make([]mcap.MessageIterator, len(inputs))
+	// prefetchChans[i] is non-nil only in parallel mode.
+	prefetchChans := make([]<-chan prefetchResult, len(inputs))
 	pq := utils.NewPriorityQueue(nil)
 
 	// Reset struct members
@@ -280,10 +310,23 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 	m.nextChannelID = 1
 	m.nextSchemaID = 1
 
-	// for each input reader, initialize an mcap reader and read the first
-	// message off. Insert the schema and channel into the output with
-	// renumbered IDs, and load the message (with renumbered IDs) into the
-	// priority queue.
+	var cancelPrefetch context.CancelFunc
+	var prefetchCtx context.Context
+	if parallel {
+		prefetchCtx, cancelPrefetch = context.WithCancel(context.Background())
+		defer cancelPrefetch() // ensure cancel on all exit paths (idempotent)
+	}
+
+	// Open each input and create its iterator.
+	//
+	// Serial mode  (workers == 1): the metadata callback calls addMetadata
+	// directly — safe because the main goroutine is the only caller.
+	//
+	// Parallel mode (workers > 1): the metadata callback sends the record
+	// through the per-input prefetch channel so the main goroutine remains
+	// the sole writer to the output and the sole mutator of the merger maps.
+	// This avoids the concurrent-map-write race that would occur if the
+	// callback were invoked from inside the prefetch goroutine's NextInto.
 	for inputID, input := range inputs {
 		reader, err := mcap.NewReader(input.reader)
 		if err != nil {
@@ -291,44 +334,133 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 		}
 		defer reader.Close() //nolint:gocritic // we actually want these deferred in the loop.
 		profiles[inputID] = reader.Header().Profile
-		opts := []mcap.ReadOpt{
-			mcap.UsingIndex(false),
-			mcap.WithMetadataCallback(func(metadata *mcap.Metadata) error {
-				return m.addMetadata(writer, metadata)
-			}),
+
+		if parallel {
+			// Buffer 256 results per input so goroutines stay ahead of the merge loop.
+			const prefetchBuf = 256
+			ch := make(chan prefetchResult, prefetchBuf)
+			prefetchChans[inputID] = ch
+
+			// Capture loop variables for the closures below.
+			capturedCh := ch
+			capturedCtx := prefetchCtx
+
+			opts := []mcap.ReadOpt{
+				mcap.UsingIndex(false),
+				// Route metadata through the channel; called from the goroutine
+				// but destined for the main goroutine to process.
+				mcap.WithMetadataCallback(func(md *mcap.Metadata) error {
+					select {
+					case capturedCh <- prefetchResult{metadata: md}:
+						return nil
+					case <-capturedCtx.Done():
+						return capturedCtx.Err()
+					}
+				}),
+			}
+			iterator, err := reader.Messages(opts...)
+			if err != nil {
+				cancelPrefetch()
+				return err
+			}
+
+			go func(iter mcap.MessageIterator, out chan<- prefetchResult, ctx context.Context) {
+				defer close(out)
+				for {
+					schema, channel, message, iterErr := iter.NextInto(nil)
+					select {
+					case out <- prefetchResult{schema: schema, channel: channel, message: message, err: iterErr}:
+					case <-ctx.Done():
+						return
+					}
+					if iterErr != nil {
+						return
+					}
+				}
+			}(iterator, ch, capturedCtx)
+		} else {
+			// Serial mode: metadata handled inline.
+			opts := []mcap.ReadOpt{
+				mcap.UsingIndex(false),
+				mcap.WithMetadataCallback(func(metadata *mcap.Metadata) error {
+					return m.addMetadata(writer, metadata)
+				}),
+			}
+			iterator, err := reader.Messages(opts...)
+			if err != nil {
+				return err
+			}
+			iterators[inputID] = iterator
 		}
-		iterator, err := reader.Messages(opts...)
-		if err != nil {
-			return err
-		}
-		iterators[inputID] = iterator
 	}
+
 	if err := writer.WriteHeader(&mcap.Header{Profile: outputProfile(profiles)}); err != nil {
+		if cancelPrefetch != nil {
+			cancelPrefetch()
+		}
 		return err
 	}
-	for inputID, iterator := range iterators {
+
+	// nextFromInput returns the next message from the given input.
+	// In parallel mode it drains any leading metadata events first, processing
+	// each one on the main goroutine (safe: no concurrent access to merger state).
+	nextFromInput := func(inputID int) (*mcap.Schema, *mcap.Channel, *mcap.Message, error) {
+		if parallel {
+			for {
+				r, ok := <-prefetchChans[inputID]
+				if !ok {
+					return nil, nil, nil, io.EOF
+				}
+				if r.err != nil {
+					return nil, nil, nil, r.err
+				}
+				if r.metadata != nil {
+					// Metadata: process here on the main goroutine, then keep reading.
+					if metaErr := m.addMetadata(writer, r.metadata); metaErr != nil {
+						return nil, nil, nil, metaErr
+					}
+					continue
+				}
+				return r.schema, r.channel, r.message, nil
+			}
+		}
+		return iterators[inputID].NextInto(nil)
+	}
+
+	// Seed the priority queue with the first message from each input.
+	for inputID := range inputs {
 		inputName := inputs[inputID].name
-		schema, channel, message, err := iterator.NextInto(nil)
+		schema, channel, message, err := nextFromInput(inputID)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// the file may be an empty mcap. if so, just ignore it.
 				continue
+			}
+			if cancelPrefetch != nil {
+				cancelPrefetch()
 			}
 			return fmt.Errorf("error on input %s: %w", inputName, err)
 		}
 		if schema != nil {
 			err = m.addSchema(writer, inputID, schema)
 			if err != nil {
+				if cancelPrefetch != nil {
+					cancelPrefetch()
+				}
 				return fmt.Errorf("failed to add initial schema for input %s: %w", inputName, err)
 			}
 		}
 		message.ChannelID, err = m.addChannel(writer, inputID, channel)
 		if err != nil {
+			if cancelPrefetch != nil {
+				cancelPrefetch()
+			}
 			return fmt.Errorf("failed to add initial channel for input %s: %w", inputName, err)
 		}
 		// push the first message onto the priority queue
 		heap.Push(pq, utils.NewTaggedMessage(inputID, message))
 	}
+
 	// there's one message per input on the heap now. Pop messages off,
 	// replacing them with the next message from the corresponding input.
 	for pq.Len() > 0 {
@@ -338,13 +470,16 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 		msg := heap.Pop(pq).(utils.TaggedMessage)
 		err = writer.WriteMessage(msg.Message)
 		if err != nil {
+			if cancelPrefetch != nil {
+				cancelPrefetch()
+			}
 			return fmt.Errorf("failed to write message: %w", err)
 		}
 
 		// Pull the next message off the iterator, to replace the one just
 		// popped from the queue. Before pushing this message, it must be
 		// renumbered and the related channels/schemas may need to be inserted.
-		newSchema, newChannel, newMessage, err := iterators[msg.InputID].NextInto(nil)
+		newSchema, newChannel, newMessage, err := nextFromInput(msg.InputID)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				// if the iterator is empty, skip this read. No further messages
@@ -353,6 +488,9 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 				// happens for each input the queue will be empty and the loop
 				// will break.
 				continue
+			}
+			if cancelPrefetch != nil {
+				cancelPrefetch()
 			}
 			return fmt.Errorf("error on input on %s: %w", inputs[msg.InputID].name, err)
 		}
@@ -367,16 +505,27 @@ func (m *mcapMerger) mergeInputs(w io.Writer, inputs []namedReader) error {
 					// if the schema is unknown, add it to the output
 					err := m.addSchema(writer, msg.InputID, newSchema)
 					if err != nil {
+						if cancelPrefetch != nil {
+							cancelPrefetch()
+						}
 						return fmt.Errorf("failed to add schema from %s: %w", inputs[msg.InputID].name, err)
 					}
 				}
 			}
 			newMessage.ChannelID, err = m.addChannel(writer, msg.InputID, newChannel)
 			if err != nil {
+				if cancelPrefetch != nil {
+					cancelPrefetch()
+				}
 				return fmt.Errorf("failed to add channel from %s: %w", inputs[msg.InputID].name, err)
 			}
 		}
 		heap.Push(pq, utils.NewTaggedMessage(msg.InputID, newMessage))
+	}
+
+	// All messages merged — cancel prefetch goroutines if running.
+	if cancelPrefetch != nil {
+		cancelPrefetch()
 	}
 
 	// append any attachments as they are encountered. if an input is unindexed,
@@ -524,6 +673,7 @@ var mergeCmd = &cobra.Command{
 			chunked:                mergeChunked,
 			allowDuplicateMetadata: mergeAllowDuplicateMetadata,
 			coalesceChannels:       coalesceChannels,
+			workers:                mergeWorkers,
 		}
 		merger := newMCAPMerger(opts)
 		var writer io.Writer
@@ -597,6 +747,17 @@ func init() {
  - auto: Coalesce channels with matching topic, schema and metadata
  - force: Same as auto but ignores metadata
  - none: Do not coalesce channels
+`,
+	)
+	mergeCmd.PersistentFlags().IntVarP(
+		&mergeWorkers,
+		"workers",
+		"",
+		1,
+		`number of parallel workers for compression/decompression.
+ - 1: single-threaded (default, same as before)
+ - N: use N goroutines for per-input prefetch + zstd encoder concurrency
+ - 0: use all available CPUs (runtime.NumCPU())
 `,
 	)
 }
