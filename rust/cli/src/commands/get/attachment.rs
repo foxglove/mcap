@@ -56,17 +56,12 @@ fn local_attachment_indexes(
         .attachment_indexes
         .iter()
         .any(|index| index.name == name);
-    if attachment_indexes_need_scan(&parsed) || missing_requested_name {
+    if parse::attachment_indexes_need_scan(&parsed)
+        || (missing_requested_name && parsed.statistics.is_none())
+    {
         return parse::collect_attachment_indexes_linear(mcap);
     }
     Ok(parsed.attachment_indexes)
-}
-
-fn attachment_indexes_need_scan(parsed: &parse::ParsedMcap) -> bool {
-    match &parsed.statistics {
-        Some(statistics) => statistics.attachment_count as usize > parsed.attachment_indexes.len(),
-        None => parsed.attachment_indexes.is_empty(),
-    }
 }
 
 fn write_attachment_data(data: &[u8], output: Option<&std::path::Path>) -> Result<()> {
@@ -119,8 +114,9 @@ fn select_attachment_index<'a>(
 
 #[cfg(test)]
 mod tests {
-    use super::select_attachment_index;
-    use mcap::records::AttachmentIndex;
+    use super::{local_attachment_indexes, select_attachment_index};
+    use crate::parse;
+    use mcap::records::{AttachmentIndex, Statistics};
 
     fn attachment(name: &str, offset: u64) -> AttachmentIndex {
         AttachmentIndex {
@@ -183,5 +179,22 @@ mod tests {
         let err = select_attachment_index(&indexes, "a", Some(999))
             .expect_err("single record should enforce provided offset");
         assert_eq!(err.to_string(), "failed to find attachment a at offset 999");
+    }
+
+    #[test]
+    fn missing_name_does_not_scan_when_attachment_indexes_are_complete() {
+        let parsed = parse::ParsedMcap {
+            statistics: Some(Statistics {
+                attachment_count: 1,
+                ..Default::default()
+            }),
+            attachment_indexes: vec![attachment("a", 10)],
+            ..Default::default()
+        };
+
+        let indexes =
+            local_attachment_indexes(&[], parsed, "missing").expect("complete index is enough");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "a");
     }
 }

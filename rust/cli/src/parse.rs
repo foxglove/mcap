@@ -7,6 +7,7 @@ use mcap::records::{self, Record};
 use mcap::sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions};
 
 const FOOTER_RECORD_LEN: usize = 1 + 8 + 8 + 8 + 4;
+const RECORD_PREFIX_LEN: u64 = 1 + 8;
 pub(crate) const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = FOOTER_RECORD_LEN + mcap::MAGIC.len();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -146,6 +147,20 @@ pub(crate) fn collect_metadata_indexes_linear(mcap: &[u8]) -> Result<Vec<records
     Ok(indexes)
 }
 
+pub(crate) fn attachment_indexes_need_scan(parsed: &ParsedMcap) -> bool {
+    match &parsed.statistics {
+        Some(statistics) => statistics.attachment_count as usize > parsed.attachment_indexes.len(),
+        None => parsed.attachment_indexes.is_empty(),
+    }
+}
+
+pub(crate) fn metadata_indexes_need_scan(parsed: &ParsedMcap) -> bool {
+    match &parsed.statistics {
+        Some(statistics) => statistics.metadata_count as usize > parsed.metadata_indexes.len(),
+        None => parsed.metadata_indexes.is_empty(),
+    }
+}
+
 fn scan_top_level_records<F>(mcap: &[u8], mut process: F) -> Result<()>
 where
     F: FnMut(Record<'_>, u64, u64) -> Result<()>,
@@ -153,7 +168,6 @@ where
     let mut reader = SansIoReader::new_with_options(
         LinearReaderOptions::default()
             .with_emit_chunks(true)
-            .with_validate_chunk_crcs(true)
             .with_record_length_limit(mcap.len()),
     );
     let mut remaining = mcap;
@@ -170,7 +184,7 @@ where
             }
             LinearReadEvent::Record { opcode, data } => {
                 let record_offset = next_record_offset;
-                let record_length = 9 + data.len() as u64;
+                let record_length = RECORD_PREFIX_LEN + data.len() as u64;
                 next_record_offset += record_length;
                 process(
                     mcap::parse_record(opcode, data)?,

@@ -70,17 +70,12 @@ fn local_metadata_indexes(
         .metadata_indexes
         .iter()
         .any(|index| index.name == name);
-    if metadata_indexes_need_scan(&parsed) || missing_requested_name {
+    if parse::metadata_indexes_need_scan(&parsed)
+        || (missing_requested_name && parsed.statistics.is_none())
+    {
         return parse::collect_metadata_indexes_linear(mcap);
     }
     Ok(parsed.metadata_indexes)
-}
-
-fn metadata_indexes_need_scan(parsed: &parse::ParsedMcap) -> bool {
-    match &parsed.statistics {
-        Some(statistics) => statistics.metadata_count as usize > parsed.metadata_indexes.len(),
-        None => parsed.metadata_indexes.is_empty(),
-    }
 }
 
 fn merged_metadata_for_name(
@@ -110,9 +105,10 @@ fn merged_metadata_for_name(
 mod tests {
     use std::collections::BTreeMap;
 
-    use mcap::records::MetadataIndex;
+    use mcap::records::{MetadataIndex, Statistics};
 
-    use super::merged_metadata_for_name;
+    use super::{local_metadata_indexes, merged_metadata_for_name};
+    use crate::parse;
 
     fn metadata_index(name: &str, offset: u64, length: u64) -> MetadataIndex {
         MetadataIndex {
@@ -174,5 +170,22 @@ mod tests {
                 ("c".to_string(), "3".to_string()),
             ])
         );
+    }
+
+    #[test]
+    fn missing_name_does_not_scan_when_metadata_indexes_are_complete() {
+        let parsed = parse::ParsedMcap {
+            statistics: Some(Statistics {
+                metadata_count: 1,
+                ..Default::default()
+            }),
+            metadata_indexes: vec![metadata_index("demo", 10, 20)],
+            ..Default::default()
+        };
+
+        let indexes =
+            local_metadata_indexes(&[], parsed, "missing").expect("complete index is enough");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "demo");
     }
 }
