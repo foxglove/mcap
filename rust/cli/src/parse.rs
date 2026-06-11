@@ -71,6 +71,11 @@ fn parse_mcap_from_summary(
     )?))
 }
 
+pub(crate) fn summary_section_has_chunk_indexes(mcap: &[u8]) -> Result<bool> {
+    Ok(parse_mcap_from_summary(mcap, None)?
+        .is_some_and(|summary| !summary.chunk_indexes.is_empty()))
+}
+
 pub(crate) fn parsed_mcap_from_summary_section(
     header: Option<records::Header>,
     summary: &[u8],
