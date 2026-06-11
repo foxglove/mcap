@@ -98,7 +98,7 @@ Report summary statistics on an MCAP file:
 <!-- cspell: disable -->
 
     $ mcap info demo.mcap
-    library:     mcap-cli/0.1.0 mcap-rust/0.25.0
+    library:     mcap-go/#(devel)
     profile:     ros1
     messages:    1606
     duration:    7.780758504s
@@ -147,7 +147,7 @@ The `mcap` CLI can read files over **HTTP(S)** and from object stores: **Amazon 
 <!-- cspell: disable -->
 
     $ mcap info gs://your-remote-bucket/demo.mcap
-    library:     mcap-cli/0.1.0 mcap-rust/0.25.0
+    library:     mcap-go/#(devel)
     profile:     ros1
     messages:    1606
     duration:    7.780758504s
@@ -195,23 +195,16 @@ AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
 
 #### List chunks in a file
 
-The `mcap list` command can be used with chunks or attachments:
+`mcap list chunks` prints the chunk index: each chunk's byte offset and length, message time range, compression, compressed/uncompressed sizes and ratio, and the size of its message index.
 
-    $ mcap list chunks ~/data/mcap/demo.mcap
-    offset    length   start                end                  compression  compressed size  uncompressed size  compression ratio
-    43        4529455  1490149580103843113  1490149580608392239  zstd         4529402          9400437            0.481829
-    4531299   4751426  1490149580618484655  1490149581212757989  zstd         4751373          9621973            0.493804
-    9284910   4726518  1490149581222848447  1490149581811286531  zstd         4726465          9617327            0.491453
-    14013453  4734289  1490149581821378989  1490149582418243031  zstd         4734236          9624850            0.491876
-    18749879  4742989  1490149582428402906  1490149583010292990  zstd         4742936          9646234            0.491688
-    23494877  4712785  1490149583020377156  1490149583617657323  zstd         4712732          9619341            0.489923
-    28209799  4662983  1490149583627720990  1490149584217852199  zstd         4662930          9533042            0.489133
-    32874919  4643191  1490149584227924615  1490149584813214116  zstd         4643138          9499481            0.488778
-    37520119  4726655  1490149584823300282  1490149585411567366  zstd         4726602          9591399            0.492796
-    42248895  4748884  1490149585421596866  1490149586021460449  zstd         4748831          9621776            0.493550
-    46999820  4746828  1490149586031607908  1490149586617282658  zstd         4746775          9632302            0.492798
-    51748769  4759213  1490149586627453408  1490149587217501700  zstd         4759160          9634744            0.493958
-    56510103  4750731  1490149587227624742  1490149587814043200  zstd         4750678          9622778            0.493691
-    61262859  217330   1490149587824113700  1490149587884601617  zstd         217277           217255             1.000101
+    $ mcap list chunks recording.mcap
+    offset  length  start       end         compression  compressed size  uncompressed size  compression ratio  message index length
+    60      312     1000000002  3000000004  zstd         259              436                0.594037           78
 
-The current CLI appends one more column, `message index length`, giving the on-disk size of each chunk's message index records.
+#### Recovering data from a corrupt file
+
+`mcap recover` reads a potentially corrupt or truncated MCAP file and writes a valid, readable copy, rebuilding the chunk indexes and summary section.
+
+    $ mcap recover damaged.mcap -o recovered.mcap
+
+By default (`--compression preserve`) the output keeps the input's compression; pass `--compression zstd|lz4|none` to choose a codec. The exit code reports how recovery went: `0` if every record was recovered, `3` if recovery was lossy (records were discarded or the file was truncated mid-record), and `1` if nothing could be recovered.
