@@ -42,4 +42,6 @@ Results go to stdout; diagnostics and warnings go to stderr. Use the `render` he
 
 ### Testing
 
-Tests live inline in each module under `#[cfg(test)]`. Argument-parsing behavior is covered in `cli.rs`/`main.rs`, and dispatch/handler behavior in the relevant command module. For MCAP inputs, build fixtures in-memory with `mcap::Writer` rather than committing files. Committed binary fixtures are used where the input can't be synthesized that way — notably the `convert` tests, which load real ROS bag/db3 files from `testdata/` (resolved via `CARGO_MANIFEST_DIR`).
+Most tests live inline in each module under `#[cfg(test)]`. Argument-parsing behavior is covered in `cli.rs`/`main.rs`, and dispatch/handler behavior in the relevant command module. For MCAP inputs, build fixtures in-memory with `mcap::Writer` rather than committing files. Committed binary fixtures are used where the input can't be synthesized that way — notably the `convert` tests, which load real ROS bag/db3 files from `testdata/` (resolved via `CARGO_MANIFEST_DIR`).
+
+End-to-end tests that run the built binary live in `tests/cli.rs` (spawned via `CARGO_BIN_EXE_mcap`). Keep them at the process boundary — only behavior the unit tests can't reach, such as real exit codes and reading a non-seekable stdin pipe — and cover command logic with unit tests instead. Tests group by name prefix (`exit_code_*`, `stdin_pipe_*`, `completion_*`).
