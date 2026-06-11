@@ -19,7 +19,7 @@ struct SortOptions {
 
 #[derive(Debug)]
 enum SortInput {
-    Indexed(mcap::Summary),
+    Indexed(Box<mcap::Summary>),
     Linear,
 }
 
@@ -123,7 +123,7 @@ fn validate_sort_input(input: &[u8]) -> Result<SortInput> {
         Some(summary) => {
             if !summary.chunk_indexes.is_empty() {
                 if filter::summary_supports_indexed_transcode(&summary) {
-                    return Ok(SortInput::Indexed(summary));
+                    return Ok(SortInput::Indexed(Box::new(summary)));
                 }
                 return Ok(SortInput::Linear);
             }
@@ -449,7 +449,7 @@ mod tests {
         sort_to_writer(
             &input,
             &mut output,
-            SortInput::Indexed(summary),
+            SortInput::Indexed(Box::new(summary)),
             &default_sort_options(),
         )
         .expect("sort should succeed");
@@ -472,7 +472,7 @@ mod tests {
         sort_to_writer(
             &input,
             &mut output,
-            SortInput::Indexed(summary),
+            SortInput::Indexed(Box::new(summary)),
             &default_sort_options(),
         )
         .expect("sort should succeed");
@@ -496,7 +496,7 @@ mod tests {
         sort_to_writer(
             &input,
             &mut output,
-            SortInput::Indexed(summary),
+            SortInput::Indexed(Box::new(summary)),
             &default_sort_options(),
         )
         .expect("sort should succeed");
