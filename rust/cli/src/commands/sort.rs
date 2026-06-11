@@ -136,23 +136,7 @@ fn validate_sort_input(input: &[u8]) -> Result<SortInput> {
             }
             Ok(SortInput::Linear)
         }
-        None => {
-            if file_has_messages(input)? {
-                bail!(
-                    "Error reading file index: summary section not available. You may need to run `mcap recover` if the file is corrupt or not chunk indexed."
-                );
-            }
-            Ok(SortInput::Linear)
-        }
-    }
-}
-
-fn file_has_messages(input: &[u8]) -> Result<bool> {
-    let mut messages = mcap::MessageStream::new(input)?;
-    match messages.next() {
-        Some(Ok(_)) => Ok(true),
-        Some(Err(err)) => Err(err.into()),
-        None => Ok(false),
+        None => Ok(SortInput::Linear),
     }
 }
 
@@ -527,14 +511,14 @@ mod tests {
     }
 
     #[test]
-    fn run_rejects_unindexed_input_without_truncating_existing_output() {
+    fn run_sorts_summaryless_input_with_messages() {
         let input = build_summaryless_message_input();
         let input_path = unique_temp_path("input");
         let output_path = unique_temp_path("output");
         std::fs::write(&input_path, input).expect("write input fixture");
-        std::fs::write(&output_path, b"do-not-truncate").expect("write output sentinel");
+        std::fs::write(&output_path, b"replace-me").expect("write output sentinel");
 
-        let err = super::run(
+        super::run(
             &CommandContext::default(),
             SortCommand {
                 file: input_path.clone(),
@@ -545,14 +529,13 @@ mod tests {
                 no_chunks: false,
             },
         )
-        .expect_err("unindexed input with messages should fail");
-        let text = err.to_string();
-        assert!(text.contains("Error reading file index"));
-        assert!(text.contains("mcap recover"));
-        assert_eq!(
-            std::fs::read(&output_path).expect("read output sentinel"),
-            b"do-not-truncate"
-        );
+        .expect("summaryless input with messages should sort");
+        let output = std::fs::read(&output_path).expect("read output");
+        let log_times: Vec<u64> = mcap::MessageStream::new(&output)
+            .expect("message stream")
+            .map(|message| message.expect("message").log_time)
+            .collect();
+        assert_eq!(log_times, vec![5]);
 
         let _ = std::fs::remove_file(input_path);
         let _ = std::fs::remove_file(output_path);
@@ -640,13 +623,10 @@ mod tests {
     }
 
     #[test]
-    fn validate_sort_input_rejects_unindexed_messages() {
+    fn summaryless_input_with_messages_uses_linear_sorting() {
         let input = build_summaryless_message_input();
-        let err =
-            validate_sort_input(&input).expect_err("unindexed input with messages should fail");
-        let text = err.to_string();
-        assert!(text.contains("Error reading file index"));
-        assert!(text.contains("mcap recover"));
+        let sort_input = validate_sort_input(&input).expect("sort input should be valid");
+        assert!(matches!(sort_input, SortInput::Linear));
     }
 
     #[test]
