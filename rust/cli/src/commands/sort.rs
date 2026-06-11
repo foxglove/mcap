@@ -5,6 +5,7 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 
 use crate::cli::{CompressionFormat, SortCommand};
+use crate::commands::filter;
 use crate::context::CommandContext;
 use crate::{parse, source};
 
@@ -16,6 +17,12 @@ struct SortOptions {
     chunked: bool,
 }
 
+#[derive(Debug)]
+enum SortInput {
+    Indexed(Box<mcap::Summary>),
+    Linear,
+}
+
 pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
     let opts = build_sort_options(&args);
     let input = source::load_path(
@@ -25,10 +32,10 @@ pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
     if !source::is_remote_url(&args.file) {
         ensure_distinct_input_output(&args.file, &args.output_file)?;
     }
-    let summary = validate_sort_input(input.as_slice())?;
+    let sort_input = validate_sort_input(input.as_slice())?;
     let output = std::fs::File::create(&args.output_file)
         .with_context(|| format!("failed to open output '{}'", args.output_file.display()))?;
-    sort_to_writer(input.as_slice(), output, summary, &opts)
+    sort_to_writer(input.as_slice(), output, sort_input, &opts)
 }
 
 fn ensure_distinct_input_output(input: &Path, output: &Path) -> Result<()> {
@@ -69,7 +76,7 @@ fn convert_compression(value: CompressionFormat) -> Option<mcap::Compression> {
 fn sort_to_writer<W: Write + Seek>(
     input: &[u8],
     sink: W,
-    summary: Option<mcap::Summary>,
+    sort_input: SortInput,
     opts: &SortOptions,
 ) -> Result<()> {
     let header = parse::read_header(input)?;
@@ -81,54 +88,55 @@ fn sort_to_writer<W: Write + Seek>(
         .calculate_data_section_crc(opts.include_crc)
         .calculate_summary_section_crc(opts.include_crc)
         .calculate_attachment_crcs(opts.include_crc);
+    write_options = write_options.library(crate::cli::LIBRARY_IDENTIFIER.clone());
     if let Some(header) = header {
-        write_options = write_options
-            .profile(header.profile)
-            .library(header.library);
+        write_options = write_options.profile(header.profile);
     }
 
     let mut writer = write_options
         .create(sink)
         .context("failed to create mcap writer")?;
 
-    if let Some(summary) = &summary {
-        copy_attachments_from_summary(input, summary, &mut writer)?;
-        copy_metadata_from_summary(input, summary, &mut writer)?;
-        if !summary.chunk_indexes.is_empty() {
+    match &sort_input {
+        SortInput::Indexed(summary) => {
+            copy_attachments_from_summary(input, summary, &mut writer)?;
+            copy_metadata_from_summary(input, summary, &mut writer)?;
             copy_messages_in_log_time_order(input, summary, &mut writer)?;
         }
-    } else {
-        copy_linear_non_message_records(input, &mut writer)?;
+        SortInput::Linear => {
+            copy_linear_non_message_records(input, &mut writer)?;
+            copy_linear_messages_in_log_time_order(input, &mut writer)?;
+        }
     }
 
     writer.finish().context("failed to finish mcap writer")?;
     Ok(())
 }
 
-fn validate_sort_input(input: &[u8]) -> Result<Option<mcap::Summary>> {
-    let summary = mcap::Summary::read(input).context("failed to read file index")?;
-    let has_chunk_indexes = summary
-        .as_ref()
-        .is_some_and(|summary| !summary.chunk_indexes.is_empty());
-    if !has_chunk_indexes && file_has_messages(input)? {
-        let reason = if summary.is_none() {
-            "summary section not available"
-        } else {
-            "no chunk index records"
-        };
-        bail!(
-            "Error reading file index: {reason}. You may need to run `mcap recover` if the file is corrupt or not chunk indexed."
-        );
-    }
-    Ok(summary)
-}
-
-fn file_has_messages(input: &[u8]) -> Result<bool> {
-    let mut messages = mcap::MessageStream::new(input)?;
-    match messages.next() {
-        Some(Ok(_)) => Ok(true),
-        Some(Err(err)) => Err(err.into()),
-        None => Ok(false),
+fn validate_sort_input(input: &[u8]) -> Result<SortInput> {
+    let summary = match mcap::Summary::read(input) {
+        Ok(summary) => summary,
+        Err(mcap::McapError::UnknownSchema(_, _))
+            if !parse::summary_section_has_chunk_indexes(input)? =>
+        {
+            return Ok(SortInput::Linear);
+        }
+        Err(mcap::McapError::UnknownSchema(_, _)) => {
+            return Err(filter::incomplete_indexed_summary_error());
+        }
+        Err(err) => return Err(err).context("failed to read file index"),
+    };
+    match summary {
+        Some(summary) => {
+            if !summary.chunk_indexes.is_empty() {
+                if filter::summary_supports_indexed_transcode(&summary) {
+                    return Ok(SortInput::Indexed(Box::new(summary)));
+                }
+                return Err(filter::incomplete_indexed_summary_error());
+            }
+            Ok(SortInput::Linear)
+        }
+        None => Ok(SortInput::Linear),
     }
 }
 
@@ -200,6 +208,30 @@ fn copy_messages_in_log_time_order<W: Write + Seek>(
     Ok(())
 }
 
+fn copy_linear_messages_in_log_time_order<W: Write + Seek>(
+    input: &[u8],
+    writer: &mut mcap::Writer<W>,
+) -> Result<()> {
+    // Without chunk indexes, sorting necessarily materializes messages before reordering.
+    let mut messages = mcap::MessageStream::new(input)?
+        .collect::<mcap::McapResult<Vec<_>>>()
+        .context("failed to read messages")?;
+    messages.sort_by_key(|message| {
+        (
+            message.log_time,
+            message.channel.id,
+            message.sequence,
+            message.publish_time,
+        )
+    });
+
+    for message in messages {
+        writer.write(&message)?;
+    }
+
+    Ok(())
+}
+
 fn copy_linear_non_message_records<W: Write + Seek>(
     input: &[u8],
     writer: &mut mcap::Writer<W>,
@@ -242,7 +274,7 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
-    use super::{sort_to_writer, validate_sort_input, SortOptions};
+    use super::{sort_to_writer, validate_sort_input, SortInput, SortOptions};
     use crate::cli::CompressionFormat;
     use crate::cli::SortCommand;
     use crate::context::CommandContext;
@@ -257,10 +289,39 @@ mod tests {
     }
 
     fn build_out_of_order_chunked_input(include_records: bool) -> Vec<u8> {
+        build_out_of_order_chunked_input_with_options(include_records, true, true, true, true)
+    }
+
+    fn build_out_of_order_chunked_input_with_summary_repeats(
+        include_records: bool,
+        repeat_channels: bool,
+        repeat_schemas: bool,
+    ) -> Vec<u8> {
+        build_out_of_order_chunked_input_with_options(
+            include_records,
+            repeat_channels,
+            repeat_schemas,
+            true,
+            true,
+        )
+    }
+
+    fn build_out_of_order_chunked_input_with_options(
+        include_records: bool,
+        repeat_channels: bool,
+        repeat_schemas: bool,
+        emit_message_indexes: bool,
+        emit_chunk_indexes: bool,
+    ) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
             let mut writer = mcap::WriteOptions::new()
                 .chunk_size(Some(1024))
+                .repeat_channels(repeat_channels)
+                .repeat_schemas(repeat_schemas)
+                .emit_message_indexes(emit_message_indexes)
+                .emit_chunk_indexes(emit_chunk_indexes)
+                .library("test-recorder/0.0")
                 .create(&mut output)
                 .expect("writer");
             let schema_id = writer
@@ -376,8 +437,13 @@ mod tests {
         let summary = mcap::Summary::read(&input)
             .expect("summary read")
             .expect("summary should exist");
-        sort_to_writer(&input, &mut output, Some(summary), &default_sort_options())
-            .expect("sort should succeed");
+        sort_to_writer(
+            &input,
+            &mut output,
+            SortInput::Indexed(Box::new(summary)),
+            &default_sort_options(),
+        )
+        .expect("sort should succeed");
         let output = output.into_inner();
 
         let log_times: Vec<u64> = mcap::MessageStream::new(&output)
@@ -388,14 +454,43 @@ mod tests {
     }
 
     #[test]
+    fn sort_stamps_cli_writer_library() {
+        let input = build_out_of_order_chunked_input(false);
+        let mut output = Cursor::new(Vec::new());
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary should exist");
+        sort_to_writer(
+            &input,
+            &mut output,
+            SortInput::Indexed(Box::new(summary)),
+            &default_sort_options(),
+        )
+        .expect("sort should succeed");
+        let output = output.into_inner();
+
+        // The fixture's `test-recorder/0.0` library is overwritten with the CLI's own identity.
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
+    }
+
+    #[test]
     fn copies_attachments_and_metadata() {
         let input = build_out_of_order_chunked_input(true);
         let mut output = Cursor::new(Vec::new());
         let summary = mcap::Summary::read(&input)
             .expect("summary read")
             .expect("summary should exist");
-        sort_to_writer(&input, &mut output, Some(summary), &default_sort_options())
-            .expect("sort should succeed");
+        sort_to_writer(
+            &input,
+            &mut output,
+            SortInput::Indexed(Box::new(summary)),
+            &default_sort_options(),
+        )
+        .expect("sort should succeed");
         let output = output.into_inner();
 
         let summary = mcap::Summary::read(&output)
@@ -416,14 +511,14 @@ mod tests {
     }
 
     #[test]
-    fn run_rejects_unindexed_input_without_truncating_existing_output() {
+    fn run_sorts_summaryless_input_with_messages() {
         let input = build_summaryless_message_input();
         let input_path = unique_temp_path("input");
         let output_path = unique_temp_path("output");
         std::fs::write(&input_path, input).expect("write input fixture");
-        std::fs::write(&output_path, b"do-not-truncate").expect("write output sentinel");
+        std::fs::write(&output_path, b"replace-me").expect("write output sentinel");
 
-        let err = super::run(
+        super::run(
             &CommandContext::default(),
             SortCommand {
                 file: input_path.clone(),
@@ -434,14 +529,13 @@ mod tests {
                 no_chunks: false,
             },
         )
-        .expect_err("unindexed input with messages should fail");
-        let text = err.to_string();
-        assert!(text.contains("Error reading file index"));
-        assert!(text.contains("mcap recover"));
-        assert_eq!(
-            std::fs::read(&output_path).expect("read output sentinel"),
-            b"do-not-truncate"
-        );
+        .expect("summaryless input with messages should sort");
+        let output = std::fs::read(&output_path).expect("read output");
+        let log_times: Vec<u64> = mcap::MessageStream::new(&output)
+            .expect("message stream")
+            .map(|message| message.expect("message").log_time)
+            .collect();
+        assert_eq!(log_times, vec![5]);
 
         let _ = std::fs::remove_file(input_path);
         let _ = std::fs::remove_file(output_path);
@@ -494,8 +588,13 @@ mod tests {
     fn allows_summaryless_inputs_without_messages() {
         let input = build_summaryless_metadata_only_input();
         let mut output = Cursor::new(Vec::new());
-        sort_to_writer(&input, &mut output, None, &default_sort_options())
-            .expect("summaryless metadata-only file should sort");
+        sort_to_writer(
+            &input,
+            &mut output,
+            SortInput::Linear,
+            &default_sort_options(),
+        )
+        .expect("summaryless metadata-only file should sort");
         let output = output.into_inner();
 
         let mut metadata_count = 0usize;
@@ -524,13 +623,65 @@ mod tests {
     }
 
     #[test]
-    fn validate_sort_input_rejects_unindexed_messages() {
+    fn summaryless_input_with_messages_uses_linear_sorting() {
         let input = build_summaryless_message_input();
-        let err =
-            validate_sort_input(&input).expect_err("unindexed input with messages should fail");
-        let text = err.to_string();
-        assert!(text.contains("Error reading file index"));
-        assert!(text.contains("mcap recover"));
+        let sort_input = validate_sort_input(&input).expect("sort input should be valid");
+        assert!(matches!(sort_input, SortInput::Linear));
+    }
+
+    #[test]
+    fn chunked_input_without_chunk_index_uses_linear_sorting() {
+        let input = build_out_of_order_chunked_input_with_options(false, true, true, true, false);
+        let mut output = Cursor::new(Vec::new());
+        let sort_input = validate_sort_input(&input).expect("sort input should be valid");
+        assert!(matches!(sort_input, SortInput::Linear));
+
+        sort_to_writer(&input, &mut output, sort_input, &default_sort_options())
+            .expect("sort should succeed");
+        let output = output.into_inner();
+        let log_times: Vec<u64> = mcap::MessageStream::new(&output)
+            .expect("message stream")
+            .map(|message| message.expect("message").log_time)
+            .collect();
+        assert_eq!(log_times, vec![10, 30]);
+    }
+
+    #[test]
+    fn chunked_input_without_chunk_index_falls_back_to_linear_sorting_on_unknown_schema() {
+        let input = build_out_of_order_chunked_input_with_options(false, true, false, true, false);
+        let mut output = Cursor::new(Vec::new());
+        let sort_input = validate_sort_input(&input).expect("sort input should be valid");
+        assert!(matches!(sort_input, SortInput::Linear));
+
+        sort_to_writer(&input, &mut output, sort_input, &default_sort_options())
+            .expect("sort should succeed");
+        let output = output.into_inner();
+        let log_times: Vec<u64> = mcap::MessageStream::new(&output)
+            .expect("message stream")
+            .map(|message| message.expect("message").log_time)
+            .collect();
+        assert_eq!(log_times, vec![10, 30]);
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_repeated_channels_errors() {
+        let input = build_out_of_order_chunked_input_with_summary_repeats(false, false, false);
+        let err = validate_sort_input(&input).expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_channels_or_message_indexes_errors() {
+        let input = build_out_of_order_chunked_input_with_options(false, false, false, false, true);
+        let err = validate_sort_input(&input).expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_repeated_schemas_errors() {
+        let input = build_out_of_order_chunked_input_with_summary_repeats(false, true, false);
+        let err = validate_sort_input(&input).expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
     }
 
     fn unique_temp_path(stem: &str) -> std::path::PathBuf {

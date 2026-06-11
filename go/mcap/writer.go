@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"sort"
+	"strings"
 
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
@@ -44,11 +45,15 @@ type Writer struct {
 	closed bool
 }
 
+func libraryIdentifier() string {
+	return "mcap-go/" + strings.TrimPrefix(Version, "v")
+}
+
 // WriteHeader writes a header record to the output.
 func (w *Writer) WriteHeader(header *Header) error {
 	var library string
 	if !w.opts.OverrideLibrary {
-		library = fmt.Sprintf("mcap go %s", Version)
+		library = libraryIdentifier()
 		if header.Library != "" && header.Library != library {
 			library += "; " + header.Library
 		}

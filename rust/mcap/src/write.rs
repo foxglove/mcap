@@ -146,7 +146,7 @@ impl Default for WriteOptions {
             #[cfg(not(feature = "zstd"))]
             compression: None,
             profile: String::new(),
-            library: String::from("mcap-rs-") + env!("CARGO_PKG_VERSION"),
+            library: crate::LIBRARY_IDENTIFIER.to_string(),
             chunk_size: Some(Self::DEFAULT_CHUNK_SIZE),
             use_chunks: true,
             disable_seeking: false,
@@ -1898,6 +1898,8 @@ mod tests {
 
     use super::*;
 
+    const DEFAULT_LIBRARY_LENGTH: u64 = crate::LIBRARY_IDENTIFIER.len() as u64;
+
     #[test]
     fn writes_all_channel_ids() {
         let file = std::io::Cursor::new(Vec::new());
@@ -2102,7 +2104,7 @@ mod tests {
             .into_inner()
             .stream_position()
             .expect("failed to get stream position");
-        assert_eq!(output_len, 487);
+        assert_eq!(output_len, 473 + DEFAULT_LIBRARY_LENGTH);
     }
 
     #[test]

@@ -391,7 +391,7 @@ mod tests {
         let mut parsed = ParsedMcap {
             header: Some(Header {
                 profile: "demo".to_string(),
-                library: "mcap-rust".to_string(),
+                library: mcap::LIBRARY_IDENTIFIER.to_string(),
             }),
             statistics: Some(Statistics {
                 message_count: 2,
@@ -428,7 +428,7 @@ mod tests {
         );
 
         let rendered = render_info(&parsed);
-        assert!(rendered.contains("library:     mcap-rust"));
+        assert!(rendered.contains(&format!("library:     {}", mcap::LIBRARY_IDENTIFIER)));
         assert!(rendered.contains("profile:     demo"));
         assert!(rendered.contains("messages:    2"));
         assert!(rendered.contains("channels:"));

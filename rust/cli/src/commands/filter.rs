@@ -9,7 +9,7 @@ use regex::Regex;
 
 use crate::cli::{parse_output_compression, parse_timestamp_or_nanos, FilterCommand};
 use crate::context::CommandContext;
-use crate::source;
+use crate::{parse, source};
 
 #[derive(Debug, Clone)]
 struct FilterOptions {
@@ -252,10 +252,9 @@ fn filter_to_writer<W: Write + Seek>(
         .compression(opts.compression)
         .disable_seeking(disable_seeking);
 
+    write_options = write_options.library(crate::cli::LIBRARY_IDENTIFIER.clone());
     if let Some(header) = read_header(input)? {
-        write_options = write_options
-            .profile(header.profile)
-            .library(header.library);
+        write_options = write_options.profile(header.profile);
     }
 
     let mut writer = write_options
@@ -280,12 +279,57 @@ fn filter_with_writer<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     opts: &FilterOptions,
 ) -> Result<()> {
-    if let Some(summary) = mcap::Summary::read(input)? {
+    if let Some(summary) = read_summary_for_indexed_transcode(input)? {
         if !summary.chunk_indexes.is_empty() {
             return filter_indexed(input, &summary, writer, opts);
         }
     }
     filter_linear(input, writer, opts)
+}
+
+pub(crate) fn read_summary_for_indexed_transcode(input: &[u8]) -> Result<Option<mcap::Summary>> {
+    match mcap::Summary::read(input) {
+        Ok(Some(summary)) if summary.chunk_indexes.is_empty() => Ok(None),
+        Ok(Some(summary)) if summary_supports_indexed_transcode(&summary) => Ok(Some(summary)),
+        Ok(Some(_)) => Err(incomplete_indexed_summary_error()),
+        Ok(None) => Ok(None),
+        Err(mcap::McapError::UnknownSchema(_, _))
+            if !parse::summary_section_has_chunk_indexes(input)? =>
+        {
+            Ok(None)
+        }
+        Err(mcap::McapError::UnknownSchema(_, _)) => Err(incomplete_indexed_summary_error()),
+        Err(err) => Err(err.into()),
+    }
+}
+
+pub(crate) fn incomplete_indexed_summary_error() -> anyhow::Error {
+    anyhow::anyhow!(
+        "chunk-indexed MCAP summary is missing channel or schema records; run `mcap recover` to rewrite the file"
+    )
+}
+
+pub(crate) fn summary_supports_indexed_transcode(summary: &mcap::Summary) -> bool {
+    if !summary.chunk_indexes.is_empty() && summary.channels.is_empty() {
+        return false;
+    }
+
+    if let Some(stats) = &summary.stats {
+        if stats.channel_count as usize > summary.channels.len()
+            || stats
+                .channel_message_counts
+                .keys()
+                .any(|channel_id| !summary.channels.contains_key(channel_id))
+        {
+            return false;
+        }
+    }
+
+    summary
+        .chunk_indexes
+        .iter()
+        .flat_map(|index| index.message_index_offsets.keys())
+        .all(|channel_id| summary.channels.contains_key(channel_id))
 }
 
 fn filter_indexed<W: Write + Seek>(
@@ -594,9 +638,40 @@ mod tests {
     }
 
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
+        write_filter_test_input_with_options(chunked, summaryless, true, true, true, true)
+    }
+
+    fn write_filter_test_input_with_summary_repeats(
+        chunked: bool,
+        summaryless: bool,
+        repeat_channels: bool,
+        repeat_schemas: bool,
+    ) -> Vec<u8> {
+        write_filter_test_input_with_options(
+            chunked,
+            summaryless,
+            repeat_channels,
+            repeat_schemas,
+            true,
+            true,
+        )
+    }
+
+    fn write_filter_test_input_with_options(
+        chunked: bool,
+        summaryless: bool,
+        repeat_channels: bool,
+        repeat_schemas: bool,
+        emit_message_indexes: bool,
+        emit_chunk_indexes: bool,
+    ) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
-            let mut options = mcap::WriteOptions::new().use_chunks(chunked);
+            let mut options = mcap::WriteOptions::new()
+                .use_chunks(chunked)
+                .emit_message_indexes(emit_message_indexes)
+                .emit_chunk_indexes(emit_chunk_indexes)
+                .library("test-recorder/0.0");
             if chunked {
                 options = options.chunk_size(Some(10));
             }
@@ -604,6 +679,10 @@ mod tests {
                 options = options
                     .emit_summary_records(false)
                     .emit_summary_offsets(false);
+            } else {
+                options = options
+                    .repeat_channels(repeat_channels)
+                    .repeat_schemas(repeat_schemas);
             }
             let mut writer = options.create(&mut output).expect("writer");
             let schema_id = writer
@@ -926,6 +1005,120 @@ mod tests {
         assert_eq!(stats.topic_counts["camera_a"], 5);
         assert_eq!(stats.topic_counts["camera_b"], 5);
         assert!(!stats.topic_counts.contains_key("radar_a"));
+    }
+
+    #[test]
+    fn chunked_input_without_chunk_index_falls_back_to_linear_filtering_on_unknown_schema() {
+        let input = write_filter_test_input_with_options(true, false, true, false, true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 20,
+            end: 25,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 5);
+        assert_eq!(stats.topic_counts["camera_b"], 5);
+        assert!(!stats.topic_counts.contains_key("radar_a"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_repeated_channels_errors() {
+        let input = write_filter_test_input_with_summary_repeats(true, false, false, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 20,
+            end: 25,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        };
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(&input, &mut output, &opts, false)
+            .expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_channels_or_message_indexes_errors() {
+        let input = write_filter_test_input_with_options(true, false, false, false, false, true);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 20,
+            end: 25,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        };
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(&input, &mut output, &opts, false)
+            .expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_repeated_schemas_errors() {
+        let input = write_filter_test_input_with_summary_repeats(true, false, true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        };
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(&input, &mut output, &opts, false)
+            .expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
+    }
+
+    #[test]
+    fn filter_stamps_cli_writer_library() {
+        let input = write_filter_test_input(true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Zstd),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        };
+        // The CLI is the writer of the output, so it stamps its own identity, not the source's.
+        let output = run_filter(&input, &opts);
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
     }
 
     #[test]

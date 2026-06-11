@@ -158,6 +158,8 @@ pub type McapResult<T> = Result<T, McapError>;
 pub const MAGIC: &[u8] = &[0x89, b'M', b'C', b'A', b'P', 0x30, b'\r', b'\n'];
 /// Crate version for the Rust MCAP library.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// Default Header.library identifier for the Rust MCAP library.
+pub const LIBRARY_IDENTIFIER: &str = concat!("mcap-rust/", env!("CARGO_PKG_VERSION"));
 
 /// Compression options for chunks of channels, schemas, and messages in an MCAP file
 #[derive(Debug, Copy, Clone)]
