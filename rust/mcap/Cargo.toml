@@ -9,10 +9,11 @@ documentation = "https://docs.rs/mcap"
 readme = "README.md"
 version = "0.24.0"
 edition = "2021"
+rust-version = "1.81"
 license = "MIT"
 
 [dependencies]
-binrw = "0.15.1"
+binrw = "0.15"
 byteorder = "1.4"
 crc32fast = "1.3"
 enumset = "1.0.11"
