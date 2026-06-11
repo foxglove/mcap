@@ -19,6 +19,7 @@ pub struct ParsedSchema {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ParsedMcap {
     pub header: Option<records::Header>,
+    pub summary_available: bool,
     pub statistics: Option<records::Statistics>,
     pub channels: std::collections::BTreeMap<u16, records::Channel>,
     pub schemas: std::collections::BTreeMap<u16, ParsedSchema>,
@@ -84,6 +85,7 @@ pub(crate) fn parsed_mcap_from_summary_section(
 ) -> Result<ParsedMcap> {
     let mut out = ParsedMcap {
         header,
+        summary_available: true,
         ..ParsedMcap::default()
     };
     for record in mcap::read::LinearReader::sans_magic(summary) {
@@ -148,6 +150,9 @@ pub(crate) fn collect_metadata_indexes_linear(mcap: &[u8]) -> Result<Vec<records
 }
 
 pub(crate) fn attachment_indexes_need_scan(parsed: &ParsedMcap) -> bool {
+    if !parsed.summary_available {
+        return false;
+    }
     match &parsed.statistics {
         Some(statistics) => statistics.attachment_count as usize > parsed.attachment_indexes.len(),
         None => parsed.attachment_indexes.is_empty(),
@@ -155,6 +160,9 @@ pub(crate) fn attachment_indexes_need_scan(parsed: &ParsedMcap) -> bool {
 }
 
 pub(crate) fn metadata_indexes_need_scan(parsed: &ParsedMcap) -> bool {
+    if !parsed.summary_available {
+        return false;
+    }
     match &parsed.statistics {
         Some(statistics) => statistics.metadata_count as usize > parsed.metadata_indexes.len(),
         None => parsed.metadata_indexes.is_empty(),

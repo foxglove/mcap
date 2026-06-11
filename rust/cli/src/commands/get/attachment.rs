@@ -57,7 +57,7 @@ fn local_attachment_indexes(
         .iter()
         .any(|index| index.name == name);
     if parse::attachment_indexes_need_scan(&parsed)
-        || (missing_requested_name && parsed.statistics.is_none())
+        || (missing_requested_name && parsed.summary_available && parsed.statistics.is_none())
     {
         parse::warn_index_scan("attachment");
         return parse::collect_attachment_indexes_linear(mcap);
@@ -187,6 +187,7 @@ mod tests {
     #[test]
     fn missing_name_does_not_scan_when_attachment_indexes_are_complete() {
         let parsed = parse::ParsedMcap {
+            summary_available: true,
             statistics: Some(Statistics {
                 attachment_count: 1,
                 ..Default::default()
@@ -197,6 +198,19 @@ mod tests {
 
         let indexes =
             local_attachment_indexes(&[], parsed, "missing").expect("complete index is enough");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "a");
+    }
+
+    #[test]
+    fn missing_name_does_not_rescan_summaryless_input() {
+        let parsed = parse::ParsedMcap {
+            attachment_indexes: vec![attachment("a", 10)],
+            ..Default::default()
+        };
+
+        let indexes =
+            local_attachment_indexes(&[], parsed, "missing").expect("linear parse is complete");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "a");
     }
@@ -222,7 +236,10 @@ mod tests {
                 .expect("attachment");
             writer.finish().expect("finish");
         }
-        let parsed = parse::parse_mcap(&mcap_bytes).expect("parse");
+        let parsed = parse::ParsedMcap {
+            summary_available: true,
+            ..Default::default()
+        };
 
         let indexes =
             local_attachment_indexes(&mcap_bytes, parsed, "missing").expect("linear scan");

@@ -71,7 +71,7 @@ fn local_metadata_indexes(
         .iter()
         .any(|index| index.name == name);
     if parse::metadata_indexes_need_scan(&parsed)
-        || (missing_requested_name && parsed.statistics.is_none())
+        || (missing_requested_name && parsed.summary_available && parsed.statistics.is_none())
     {
         parse::warn_index_scan("metadata");
         return parse::collect_metadata_indexes_linear(mcap);
@@ -176,6 +176,7 @@ mod tests {
     #[test]
     fn missing_name_does_not_scan_when_metadata_indexes_are_complete() {
         let parsed = parse::ParsedMcap {
+            summary_available: true,
             statistics: Some(Statistics {
                 metadata_count: 1,
                 ..Default::default()
@@ -186,6 +187,19 @@ mod tests {
 
         let indexes =
             local_metadata_indexes(&[], parsed, "missing").expect("complete index is enough");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "demo");
+    }
+
+    #[test]
+    fn missing_name_does_not_rescan_summaryless_input() {
+        let parsed = parse::ParsedMcap {
+            metadata_indexes: vec![metadata_index("demo", 10, 20)],
+            ..Default::default()
+        };
+
+        let indexes =
+            local_metadata_indexes(&[], parsed, "missing").expect("linear parse is complete");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "demo");
     }
@@ -208,7 +222,10 @@ mod tests {
                 .expect("metadata");
             writer.finish().expect("finish");
         }
-        let parsed = parse::parse_mcap(&mcap_bytes).expect("parse");
+        let parsed = parse::ParsedMcap {
+            summary_available: true,
+            ..Default::default()
+        };
 
         let indexes = local_metadata_indexes(&mcap_bytes, parsed, "missing").expect("linear scan");
         assert_eq!(indexes.len(), 1);
