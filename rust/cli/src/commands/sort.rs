@@ -81,10 +81,9 @@ fn sort_to_writer<W: Write + Seek>(
         .calculate_data_section_crc(opts.include_crc)
         .calculate_summary_section_crc(opts.include_crc)
         .calculate_attachment_crcs(opts.include_crc);
+    write_options = write_options.library(crate::cli::LIBRARY_IDENTIFIER.clone());
     if let Some(header) = header {
-        write_options = write_options
-            .profile(header.profile)
-            .library(header.library);
+        write_options = write_options.profile(header.profile);
     }
 
     let mut writer = write_options
@@ -261,6 +260,7 @@ mod tests {
         {
             let mut writer = mcap::WriteOptions::new()
                 .chunk_size(Some(1024))
+                .library("test-recorder/0.0")
                 .create(&mut output)
                 .expect("writer");
             let schema_id = writer
@@ -385,6 +385,25 @@ mod tests {
             .map(|message| message.expect("message").log_time)
             .collect();
         assert_eq!(log_times, vec![10, 30]);
+    }
+
+    #[test]
+    fn sort_stamps_cli_writer_library() {
+        let input = build_out_of_order_chunked_input(false);
+        let mut output = Cursor::new(Vec::new());
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary should exist");
+        sort_to_writer(&input, &mut output, Some(summary), &default_sort_options())
+            .expect("sort should succeed");
+        let output = output.into_inner();
+
+        // The fixture's `test-recorder/0.0` library is overwritten with the CLI's own identity.
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
     }
 
     #[test]

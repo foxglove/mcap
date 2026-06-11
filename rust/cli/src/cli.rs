@@ -16,6 +16,19 @@ pub(crate) static VERSION: LazyLock<String> = LazyLock::new(|| {
     )
 });
 
+/// The `Header.library` stamped on every MCAP this CLI authors. The CLI re-encodes the bytes, so it
+/// is the writer and names itself, pairing its own version with the underlying `mcap` crate's
+/// `mcap::LIBRARY_IDENTIFIER` (the two are versioned independently). The source file's library is not
+/// carried forward; lineage, if ever needed, belongs in a metadata record rather than this field.
+/// (`add` is exempt: it appends to an existing file without rewriting the header.)
+pub(crate) static LIBRARY_IDENTIFIER: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "mcap-cli/{} {}",
+        env!("CARGO_PKG_VERSION"),
+        mcap::LIBRARY_IDENTIFIER
+    )
+});
+
 #[derive(Parser, Debug, PartialEq, Eq)]
 #[command(
     name = "mcap",
@@ -561,6 +574,14 @@ pub(crate) fn parse_timestamp_or_nanos(value: &str) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::parse_timestamp_or_nanos;
+
+    #[test]
+    fn library_identifier_pairs_cli_and_crate_identifiers() {
+        let library = super::LIBRARY_IDENTIFIER.as_str();
+        assert!(library.starts_with("mcap-cli/"));
+        assert!(library.ends_with(mcap::LIBRARY_IDENTIFIER));
+        assert!(library.contains(" mcap-rust/"));
+    }
 
     #[test]
     fn parse_output_compression_supports_known_values() {
