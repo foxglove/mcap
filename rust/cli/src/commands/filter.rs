@@ -9,7 +9,7 @@ use regex::Regex;
 
 use crate::cli::{parse_output_compression, parse_timestamp_or_nanos, FilterCommand};
 use crate::context::CommandContext;
-use crate::source;
+use crate::{parse, source};
 
 #[derive(Debug, Clone)]
 struct FilterOptions {
@@ -290,10 +290,42 @@ fn filter_with_writer<W: Write + Seek>(
 pub(crate) fn read_summary_for_indexed_transcode(input: &[u8]) -> Result<Option<mcap::Summary>> {
     match mcap::Summary::read(input) {
         Ok(Some(summary)) if summary_supports_indexed_transcode(&summary) => Ok(Some(summary)),
-        Ok(Some(_)) | Ok(None) => Ok(None),
-        Err(mcap::McapError::UnknownSchema(_, _)) => Ok(None),
+        Ok(Some(summary)) if summary.chunk_indexes.is_empty() => Ok(Some(summary)),
+        Ok(Some(_)) => Err(incomplete_indexed_summary_error()),
+        Ok(None) => Ok(None),
+        Err(mcap::McapError::UnknownSchema(_, _)) if !summary_section_has_chunk_indexes(input)? => {
+            Ok(None)
+        }
+        Err(mcap::McapError::UnknownSchema(_, _)) => Err(incomplete_indexed_summary_error()),
         Err(err) => Err(err.into()),
     }
+}
+
+pub(crate) fn incomplete_indexed_summary_error() -> anyhow::Error {
+    anyhow::anyhow!(
+        "chunk-indexed MCAP summary is missing channel or schema records; run `mcap recover` to rewrite the file"
+    )
+}
+
+pub(crate) fn summary_section_has_chunk_indexes(input: &[u8]) -> Result<bool> {
+    let footer = mcap::read::footer(input)?;
+    if footer.summary_start == 0 {
+        return Ok(false);
+    }
+
+    let footer_start = input
+        .len()
+        .checked_sub(parse::FOOTER_RECORD_AND_END_MAGIC_LEN)
+        .context("input is too short to contain a footer")?;
+    let summary_start =
+        usize::try_from(footer.summary_start).context("summary offset is too large")?;
+    if summary_start > footer_start {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+
+    let summary =
+        parse::parsed_mcap_from_summary_section(None, &input[summary_start..footer_start])?;
+    Ok(!summary.chunk_indexes.is_empty())
 }
 
 pub(crate) fn summary_supports_indexed_transcode(summary: &mcap::Summary) -> bool {
@@ -625,7 +657,7 @@ mod tests {
     }
 
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
-        write_filter_test_input_with_options(chunked, summaryless, true, true, true)
+        write_filter_test_input_with_options(chunked, summaryless, true, true, true, true)
     }
 
     fn write_filter_test_input_with_summary_repeats(
@@ -640,6 +672,7 @@ mod tests {
             repeat_channels,
             repeat_schemas,
             true,
+            true,
         )
     }
 
@@ -649,12 +682,14 @@ mod tests {
         repeat_channels: bool,
         repeat_schemas: bool,
         emit_message_indexes: bool,
+        emit_chunk_indexes: bool,
     ) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
             let mut options = mcap::WriteOptions::new()
                 .use_chunks(chunked)
                 .emit_message_indexes(emit_message_indexes)
+                .emit_chunk_indexes(emit_chunk_indexes)
                 .library("test-recorder/0.0");
             if chunked {
                 options = options.chunk_size(Some(10));
@@ -992,7 +1027,30 @@ mod tests {
     }
 
     #[test]
-    fn chunk_indexed_input_without_repeated_channels_falls_back_to_linear_filtering() {
+    fn chunked_input_without_chunk_index_falls_back_to_linear_filtering_on_unknown_schema() {
+        let input = write_filter_test_input_with_options(true, false, true, false, true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 20,
+            end: 25,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 5);
+        assert_eq!(stats.topic_counts["camera_b"], 5);
+        assert!(!stats.topic_counts.contains_key("radar_a"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_repeated_channels_errors() {
         let input = write_filter_test_input_with_summary_repeats(true, false, false, false);
         let opts = FilterOptions {
             output: None,
@@ -1007,16 +1065,15 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
-        let output = run_filter(&input, &opts);
-        let stats = analyze_output(&output);
-        assert_eq!(stats.topic_counts["camera_a"], 5);
-        assert_eq!(stats.topic_counts["camera_b"], 5);
-        assert!(!stats.topic_counts.contains_key("radar_a"));
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(&input, &mut output, &opts, false)
+            .expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
     }
 
     #[test]
-    fn chunk_indexed_input_without_channels_or_message_indexes_falls_back_to_linear_filtering() {
-        let input = write_filter_test_input_with_options(true, false, false, false, false);
+    fn chunk_indexed_input_without_channels_or_message_indexes_errors() {
+        let input = write_filter_test_input_with_options(true, false, false, false, false, true);
         let opts = FilterOptions {
             output: None,
             include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
@@ -1030,15 +1087,14 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
-        let output = run_filter(&input, &opts);
-        let stats = analyze_output(&output);
-        assert_eq!(stats.topic_counts["camera_a"], 5);
-        assert_eq!(stats.topic_counts["camera_b"], 5);
-        assert!(!stats.topic_counts.contains_key("radar_a"));
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(&input, &mut output, &opts, false)
+            .expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
     }
 
     #[test]
-    fn chunk_indexed_input_without_repeated_schemas_falls_back_to_linear_filtering() {
+    fn chunk_indexed_input_without_repeated_schemas_errors() {
         let input = write_filter_test_input_with_summary_repeats(true, false, true, false);
         let opts = FilterOptions {
             output: None,
@@ -1053,11 +1109,10 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
-        let output = run_filter(&input, &opts);
-        let stats = analyze_output(&output);
-        assert_eq!(stats.topic_counts["camera_a"], 100);
-        assert_eq!(stats.topic_counts["camera_b"], 100);
-        assert_eq!(stats.topic_counts["radar_a"], 100);
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(&input, &mut output, &opts, false)
+            .expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
     }
 
     #[test]

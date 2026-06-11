@@ -116,7 +116,14 @@ fn sort_to_writer<W: Write + Seek>(
 fn validate_sort_input(input: &[u8]) -> Result<SortInput> {
     let summary = match mcap::Summary::read(input) {
         Ok(summary) => summary,
-        Err(mcap::McapError::UnknownSchema(_, _)) => return Ok(SortInput::Linear),
+        Err(mcap::McapError::UnknownSchema(_, _))
+            if !filter::summary_section_has_chunk_indexes(input)? =>
+        {
+            return Ok(SortInput::Linear);
+        }
+        Err(mcap::McapError::UnknownSchema(_, _)) => {
+            return Err(filter::incomplete_indexed_summary_error());
+        }
         Err(err) => return Err(err).context("failed to read file index"),
     };
     match summary {
@@ -125,7 +132,7 @@ fn validate_sort_input(input: &[u8]) -> Result<SortInput> {
                 if filter::summary_supports_indexed_transcode(&summary) {
                     return Ok(SortInput::Indexed(Box::new(summary)));
                 }
-                return Ok(SortInput::Linear);
+                return Err(filter::incomplete_indexed_summary_error());
             }
             if file_has_messages(input)? {
                 bail!(
@@ -301,7 +308,7 @@ mod tests {
     }
 
     fn build_out_of_order_chunked_input(include_records: bool) -> Vec<u8> {
-        build_out_of_order_chunked_input_with_options(include_records, true, true, true)
+        build_out_of_order_chunked_input_with_options(include_records, true, true, true, true)
     }
 
     fn build_out_of_order_chunked_input_with_summary_repeats(
@@ -314,6 +321,7 @@ mod tests {
             repeat_channels,
             repeat_schemas,
             true,
+            true,
         )
     }
 
@@ -322,6 +330,7 @@ mod tests {
         repeat_channels: bool,
         repeat_schemas: bool,
         emit_message_indexes: bool,
+        emit_chunk_indexes: bool,
     ) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
@@ -330,6 +339,7 @@ mod tests {
                 .repeat_channels(repeat_channels)
                 .repeat_schemas(repeat_schemas)
                 .emit_message_indexes(emit_message_indexes)
+                .emit_chunk_indexes(emit_chunk_indexes)
                 .library("test-recorder/0.0")
                 .create(&mut output)
                 .expect("writer");
@@ -643,54 +653,41 @@ mod tests {
     }
 
     #[test]
-    fn chunk_indexed_input_without_repeated_channels_falls_back_to_linear_sorting() {
+    fn chunked_input_without_chunk_index_falls_back_to_linear_sorting_on_unknown_schema() {
+        let input = build_out_of_order_chunked_input_with_options(false, true, false, true, false);
+        let mut output = Cursor::new(Vec::new());
+        let sort_input = validate_sort_input(&input).expect("sort input should be valid");
+        assert!(matches!(sort_input, SortInput::Linear));
+
+        sort_to_writer(&input, &mut output, sort_input, &default_sort_options())
+            .expect("sort should succeed");
+        let output = output.into_inner();
+        let log_times: Vec<u64> = mcap::MessageStream::new(&output)
+            .expect("message stream")
+            .map(|message| message.expect("message").log_time)
+            .collect();
+        assert_eq!(log_times, vec![10, 30]);
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_repeated_channels_errors() {
         let input = build_out_of_order_chunked_input_with_summary_repeats(false, false, false);
-        let mut output = Cursor::new(Vec::new());
-        let sort_input = validate_sort_input(&input).expect("sort input should be valid");
-        assert!(matches!(sort_input, SortInput::Linear));
-
-        sort_to_writer(&input, &mut output, sort_input, &default_sort_options())
-            .expect("sort should succeed");
-        let output = output.into_inner();
-        let log_times: Vec<u64> = mcap::MessageStream::new(&output)
-            .expect("message stream")
-            .map(|message| message.expect("message").log_time)
-            .collect();
-        assert_eq!(log_times, vec![10, 30]);
+        let err = validate_sort_input(&input).expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
     }
 
     #[test]
-    fn chunk_indexed_input_without_channels_or_message_indexes_falls_back_to_linear_sorting() {
-        let input = build_out_of_order_chunked_input_with_options(false, false, false, false);
-        let mut output = Cursor::new(Vec::new());
-        let sort_input = validate_sort_input(&input).expect("sort input should be valid");
-        assert!(matches!(sort_input, SortInput::Linear));
-
-        sort_to_writer(&input, &mut output, sort_input, &default_sort_options())
-            .expect("sort should succeed");
-        let output = output.into_inner();
-        let log_times: Vec<u64> = mcap::MessageStream::new(&output)
-            .expect("message stream")
-            .map(|message| message.expect("message").log_time)
-            .collect();
-        assert_eq!(log_times, vec![10, 30]);
+    fn chunk_indexed_input_without_channels_or_message_indexes_errors() {
+        let input = build_out_of_order_chunked_input_with_options(false, false, false, false, true);
+        let err = validate_sort_input(&input).expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
     }
 
     #[test]
-    fn chunk_indexed_input_without_repeated_schemas_falls_back_to_linear_sorting() {
+    fn chunk_indexed_input_without_repeated_schemas_errors() {
         let input = build_out_of_order_chunked_input_with_summary_repeats(false, true, false);
-        let mut output = Cursor::new(Vec::new());
-        let sort_input = validate_sort_input(&input).expect("sort input should be valid");
-        assert!(matches!(sort_input, SortInput::Linear));
-
-        sort_to_writer(&input, &mut output, sort_input, &default_sort_options())
-            .expect("sort should succeed");
-        let output = output.into_inner();
-        let log_times: Vec<u64> = mcap::MessageStream::new(&output)
-            .expect("message stream")
-            .map(|message| message.expect("message").log_time)
-            .collect();
-        assert_eq!(log_times, vec![10, 30]);
+        let err = validate_sort_input(&input).expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
     }
 
     fn unique_temp_path(stem: &str) -> std::path::PathBuf {
