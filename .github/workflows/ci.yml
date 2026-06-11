@@ -72,6 +72,16 @@ jobs:
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1
       - run: make lint
       - run: make test
+      - name: Check library version
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/go/mcap/v')
+        run: |
+          source_version="$(sed -nE 's/^var Version = "(.*)"$/\1/p' mcap/version.go)"
+          tag_version="${GITHUB_REF#refs/tags/go/mcap/}"
+          if [ "$source_version" != "$tag_version" ]; then
+            echo "::error::go/mcap/version.go Version ($source_version) does not match release tag ($tag_version)"
+            exit 1
+          fi
+          echo "go/mcap/version.go Version ($source_version) matches release tag"
 
   python:
     runs-on: ubuntu-latest
