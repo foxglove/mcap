@@ -462,10 +462,10 @@ mod tests {
         {
             let mut writer = mcap::WriteOptions::new()
                 .use_chunks(false)
-                .emit_attachment_indexes(false)
-                .emit_metadata_indexes(false)
                 .emit_summary_records(emit_summary_records)
                 .emit_summary_offsets(emit_summary_records)
+                .emit_attachment_indexes(false)
+                .emit_metadata_indexes(false)
                 .create(std::io::Cursor::new(&mut buffer))
                 .expect("writer");
             writer
