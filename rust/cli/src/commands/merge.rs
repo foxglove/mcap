@@ -178,7 +178,7 @@ fn merge_inputs<W: Write + Seek>(
 
     let mut write_options = mcap::WriteOptions::new()
         .profile(output_profile)
-        .library(crate::cli::WRITER_LIBRARY.clone())
+        .library(crate::cli::LIBRARY_IDENTIFIER.clone())
         .use_chunks(opts.chunked)
         .chunk_size(Some(opts.chunk_size))
         .compression(opts.compression)
@@ -927,7 +927,7 @@ mod tests {
             .expect("read header")
             .expect("header present")
             .library;
-        assert_eq!(library, *crate::cli::WRITER_LIBRARY);
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
     }
 
     #[test]

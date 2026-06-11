@@ -90,7 +90,7 @@ fn build_write_options(
 
     WriteOptions::new()
         .profile(profile)
-        .library(crate::cli::WRITER_LIBRARY.clone())
+        .library(crate::cli::LIBRARY_IDENTIFIER.clone())
         .use_chunks(chunked)
         .chunk_size(Some(chunk_size))
         .compression(compression)
@@ -476,7 +476,7 @@ size 123\n",
                 Some(Ok(mcap::records::Record::Header(header))) => {
                     assert_eq!(header.profile, "ros1", "{fixture}");
                     // convert authors a fresh MCAP, so it stamps the CLI writer identity.
-                    assert_eq!(header.library, *crate::cli::WRITER_LIBRARY, "{fixture}");
+                    assert_eq!(header.library, *crate::cli::LIBRARY_IDENTIFIER, "{fixture}");
                 }
                 other => panic!("{fixture}: expected MCAP header as first record, got {other:?}"),
             }

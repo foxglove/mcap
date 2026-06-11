@@ -27,8 +27,8 @@ pub(crate) static VERSION: LazyLock<String> = LazyLock::new(|| {
 /// header, so it leaves the original `library` untouched.
 ///
 /// Both the CLI and the underlying `mcap` crate identifier (`mcap::LIBRARY_IDENTIFIER`) are recorded
-/// because they version independently.
-pub(crate) static WRITER_LIBRARY: LazyLock<String> = LazyLock::new(|| {
+/// because they version independently. Named to parallel `mcap::LIBRARY_IDENTIFIER`.
+pub(crate) static LIBRARY_IDENTIFIER: LazyLock<String> = LazyLock::new(|| {
     format!(
         "mcap-cli/{} {}",
         env!("CARGO_PKG_VERSION"),
@@ -584,7 +584,7 @@ mod tests {
 
     #[test]
     fn writer_library_pairs_cli_and_crate_identifiers() {
-        let library = super::WRITER_LIBRARY.as_str();
+        let library = super::LIBRARY_IDENTIFIER.as_str();
         assert_eq!(
             library,
             format!(

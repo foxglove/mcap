@@ -81,7 +81,7 @@ fn sort_to_writer<W: Write + Seek>(
         .calculate_data_section_crc(opts.include_crc)
         .calculate_summary_section_crc(opts.include_crc)
         .calculate_attachment_crcs(opts.include_crc);
-    write_options = write_options.library(crate::cli::WRITER_LIBRARY.clone());
+    write_options = write_options.library(crate::cli::LIBRARY_IDENTIFIER.clone());
     if let Some(header) = header {
         write_options = write_options.profile(header.profile);
     }
@@ -401,7 +401,7 @@ mod tests {
             .expect("read header")
             .expect("header present")
             .library;
-        assert_eq!(library, *crate::cli::WRITER_LIBRARY);
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
     }
 
     #[test]

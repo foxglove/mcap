@@ -252,7 +252,7 @@ fn filter_to_writer<W: Write + Seek>(
         .compression(opts.compression)
         .disable_seeking(disable_seeking);
 
-    write_options = write_options.library(crate::cli::WRITER_LIBRARY.clone());
+    write_options = write_options.library(crate::cli::LIBRARY_IDENTIFIER.clone());
     if let Some(header) = read_header(input)? {
         write_options = write_options.profile(header.profile);
     }
@@ -953,11 +953,11 @@ mod tests {
         // The CLI is the writer of the output, so it stamps its own identity regardless of the
         // source library. No source provenance is carried forward.
         let output = run_filter(&input, &opts);
-        assert_eq!(output_library(&output), *crate::cli::WRITER_LIBRARY);
+        assert_eq!(output_library(&output), *crate::cli::LIBRARY_IDENTIFIER);
 
         // Re-filtering produces the same identity; nothing accumulates.
         let twice = run_filter(&output, &opts);
-        assert_eq!(output_library(&twice), *crate::cli::WRITER_LIBRARY);
+        assert_eq!(output_library(&twice), *crate::cli::LIBRARY_IDENTIFIER);
     }
 
     #[test]
