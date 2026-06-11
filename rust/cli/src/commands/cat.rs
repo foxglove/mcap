@@ -393,8 +393,6 @@ fn cat_remote_indexed(
 /// When true, callers must (a) collect in-chunk definitions before resolving messages, and (b) skip
 /// reader-level topic filtering -- which keys on `summary.channels` only -- and filter per message
 /// instead, otherwise a chunk-local channel matching a `--topics` filter would be silently dropped.
-/// Chunks without message indexes also need this conservative path because the chunk index does not
-/// advertise which channel IDs may be found inside the chunk.
 ///
 /// Note: a file mixing summary channels with chunk-local ones can't be produced by the standard
 /// writer (its `repeat_channels`/`repeat_schemas` options are all-or-nothing: either every channel
@@ -402,12 +400,14 @@ fn cat_remote_indexed(
 /// `--topics` path this guards is defensive against partial-repetition files from other tools and
 /// isn't covered by an `mcap::Writer`-based regression test.
 fn needs_in_chunk_definitions(summary: &mcap::Summary) -> bool {
+    if !summary.chunk_indexes.is_empty() && summary.channels.is_empty() {
+        return true;
+    }
     summary.chunk_indexes.iter().any(|chunk| {
-        chunk.message_index_offsets.is_empty()
-            || chunk
-                .message_index_offsets
-                .keys()
-                .any(|channel_id| !summary.channels.contains_key(channel_id))
+        chunk
+            .message_index_offsets
+            .keys()
+            .any(|channel_id| !summary.channels.contains_key(channel_id))
     })
 }
 
@@ -1549,6 +1549,33 @@ mod tests {
     }
 
     #[test]
+    fn remote_cat_with_scan_opt_in_uses_chunk_index_without_message_indexes() {
+        let body: &'static [u8] =
+            Box::leak(build_out_of_order_chunked_mcap_without_message_indexes().into_boxed_slice());
+        let url = serve_http(body);
+        let mut out = Vec::new();
+        let broken_pipe = super::cat_file(
+            &mut out,
+            Path::new(&url),
+            &CatOptions::default(),
+            crate::source::SourceOptions::new(true),
+        )
+        .expect("remote cat should use chunk indexes with opt-in");
+        assert!(!broken_pipe);
+
+        let output = String::from_utf8(out).expect("valid utf8 output");
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(
+            lines,
+            vec![
+                "0 /demo [Example] [1]",
+                "1 /demo [Example] [3]",
+                "2 /demo [Example] [2]",
+            ]
+        );
+    }
+
+    #[test]
     fn remote_cat_no_chunk_index_error_includes_redacted_url() {
         let mut buffer = Vec::new();
         {
@@ -1737,6 +1764,10 @@ mod tests {
             .chunk_indexes
             .iter()
             .all(|chunk| chunk.message_index_offsets.is_empty()));
+        assert!(
+            !needs_in_chunk_definitions(&summary),
+            "complete summaries do not need an up-front chunk definition scan"
+        );
 
         let mut indexed_out = Vec::new();
         let mut json_transcoders = JsonTranscoders::default();
