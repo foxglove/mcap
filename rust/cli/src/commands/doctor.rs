@@ -58,6 +58,7 @@ struct Doctor {
     saw_footer: bool,
     saw_top_level_message: bool,
     message_index_warning_emitted: bool,
+    last_top_level_message_time: Option<u64>,
     global_max_log_time: Option<u64>,
     min_log_time: Option<u64>,
     max_log_time: Option<u64>,
@@ -92,6 +93,7 @@ impl Doctor {
             saw_footer: false,
             saw_top_level_message: false,
             message_index_warning_emitted: false,
+            last_top_level_message_time: None,
             global_max_log_time: None,
             min_log_time: None,
             max_log_time: None,
@@ -393,7 +395,15 @@ impl Doctor {
             ));
         }
 
-        self.check_message_order(header.log_time, channel_topic.as_deref());
+        if let Some(previous) = self.last_top_level_message_time {
+            self.check_message_order(
+                header.log_time,
+                channel_topic.as_deref(),
+                previous,
+                "previous message record time",
+            );
+        }
+        self.last_top_level_message_time = Some(header.log_time);
         self.observe_message_time(header.log_time);
     }
 
@@ -448,7 +458,14 @@ impl Doctor {
                         ));
                     }
 
-                    self.check_message_order(header.log_time, channel_topic.as_deref());
+                    if let Some(latest_log_time) = self.global_max_log_time {
+                        self.check_message_order(
+                            header.log_time,
+                            channel_topic.as_deref(),
+                            latest_log_time,
+                            "latest log time",
+                        );
+                    }
                     min_log_time =
                         Some(min_log_time.map_or(header.log_time, |min| min.min(header.log_time)));
                     max_log_time =
@@ -496,19 +513,22 @@ impl Doctor {
         self.max_log_time = Some(self.max_log_time.map_or(log_time, |max| max.max(log_time)));
     }
 
-    fn check_message_order(&mut self, log_time: u64, topic: Option<&str>) {
-        if let Some(latest_log_time) = self.global_max_log_time {
-            if log_time < latest_log_time {
-                let topic = topic.unwrap_or("<unknown>");
-                let message = format!(
-                    "Message.log_time {} on {:?} is less than the latest log time {}",
-                    log_time, topic, latest_log_time
-                );
-                if self.strict_message_order {
-                    self.error(message);
-                } else {
-                    self.warn(message);
-                }
+    fn check_message_order(
+        &mut self,
+        log_time: u64,
+        topic: Option<&str>,
+        reference_time: u64,
+        reference_name: &str,
+    ) {
+        if log_time < reference_time {
+            let topic = topic.unwrap_or("<unknown>");
+            let message = format!(
+                "Message.log_time {log_time} on {topic:?} is less than the {reference_name} {reference_time}",
+            );
+            if self.strict_message_order {
+                self.error(message);
+            } else {
+                self.warn(message);
             }
         }
     }
@@ -832,7 +852,7 @@ mod tests {
             non_strict
                 .warnings
                 .iter()
-                .any(|msg| msg.contains("less than the latest log time")),
+                .any(|msg| msg.contains("less than the previous message record time")),
             "{:?}",
             non_strict.warnings
         );
@@ -843,10 +863,24 @@ mod tests {
             strict
                 .errors
                 .iter()
-                .any(|msg| msg.contains("less than the latest log time")),
+                .any(|msg| msg.contains("less than the previous message record time")),
             "{:?}",
             strict.errors
         );
+    }
+
+    #[test]
+    fn top_level_messages_keep_previous_message_order_baseline() {
+        let mcap = write_mcap(|opts| opts.use_chunks(false), None, &[100, 1, 2, 99]);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        assert_eq!(diagnosis.warnings.len(), 1, "{:?}", diagnosis.warnings);
+        assert!(
+            diagnosis.warnings[0].contains("less than the previous message record time"),
+            "{:?}",
+            diagnosis.warnings
+        );
+        assert!(diagnosis.errors.is_empty(), "{:?}", diagnosis.errors);
     }
 
     #[test]
