@@ -289,11 +289,13 @@ fn filter_with_writer<W: Write + Seek>(
 
 pub(crate) fn read_summary_for_indexed_transcode(input: &[u8]) -> Result<Option<mcap::Summary>> {
     match mcap::Summary::read(input) {
+        Ok(Some(summary)) if summary.chunk_indexes.is_empty() => Ok(None),
         Ok(Some(summary)) if summary_supports_indexed_transcode(&summary) => Ok(Some(summary)),
-        Ok(Some(summary)) if summary.chunk_indexes.is_empty() => Ok(Some(summary)),
         Ok(Some(_)) => Err(incomplete_indexed_summary_error()),
         Ok(None) => Ok(None),
-        Err(mcap::McapError::UnknownSchema(_, _)) if !summary_section_has_chunk_indexes(input)? => {
+        Err(mcap::McapError::UnknownSchema(_, _))
+            if !parse::summary_section_has_chunk_indexes(input)? =>
+        {
             Ok(None)
         }
         Err(mcap::McapError::UnknownSchema(_, _)) => Err(incomplete_indexed_summary_error()),
@@ -305,27 +307,6 @@ pub(crate) fn incomplete_indexed_summary_error() -> anyhow::Error {
     anyhow::anyhow!(
         "chunk-indexed MCAP summary is missing channel or schema records; run `mcap recover` to rewrite the file"
     )
-}
-
-pub(crate) fn summary_section_has_chunk_indexes(input: &[u8]) -> Result<bool> {
-    let footer = mcap::read::footer(input)?;
-    if footer.summary_start == 0 {
-        return Ok(false);
-    }
-
-    let footer_start = input
-        .len()
-        .checked_sub(parse::FOOTER_RECORD_AND_END_MAGIC_LEN)
-        .context("input is too short to contain a footer")?;
-    let summary_start =
-        usize::try_from(footer.summary_start).context("summary offset is too large")?;
-    if summary_start > footer_start {
-        return Err(mcap::McapError::UnexpectedEof.into());
-    }
-
-    let summary =
-        parse::parsed_mcap_from_summary_section(None, &input[summary_start..footer_start])?;
-    Ok(!summary.chunk_indexes.is_empty())
 }
 
 pub(crate) fn summary_supports_indexed_transcode(summary: &mcap::Summary) -> bool {

@@ -117,7 +117,7 @@ fn validate_sort_input(input: &[u8]) -> Result<SortInput> {
     let summary = match mcap::Summary::read(input) {
         Ok(summary) => summary,
         Err(mcap::McapError::UnknownSchema(_, _))
-            if !filter::summary_section_has_chunk_indexes(input)? =>
+            if !parse::summary_section_has_chunk_indexes(input)? =>
         {
             return Ok(SortInput::Linear);
         }
