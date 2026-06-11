@@ -1385,9 +1385,9 @@ export const cases: CliTestCase[] = [
       summary:
         "Both recover commands stamp their own writer identity into Header.library; the identifier strings differ (Rust `mcap-cli/<v> mcap-rust/<v>`, Go `mcap-go/<v>`).",
       reason:
-        "Header.library identifies the software that wrote the file, and recover authors a fresh, re-encoded MCAP, so each CLI stamps its own identity rather than claiming the original recorder wrote the output. Both carry a non-empty source library forward as a trailing `; `-separated origin segment (User-Agent style); the TEN_MESSAGES fixture has an empty source library, so each writes only its own identity with no origin. The identifier strings differ by implementation: Rust writes the CLI plus underlying-crate tokens (`mcap-cli/<v> mcap-rust/<v>`), while Go writes `mcap-go/<v>`. Go also accretes distinct tokens across version bumps (e.g. `mcap-go/1.9.0; mcap-go/1.8.0`), whereas Rust keeps a single origin so repeated CLI passes are idempotent.",
+        "Header.library identifies the software that wrote the file, and recover authors a fresh, re-encoded MCAP, so each CLI stamps its own identity rather than claiming the original recorder wrote the output. Rust writes a fixed writer identity — the CLI plus underlying-crate tokens (`mcap-cli/<v> mcap-rust/<v>`) — and does not carry the source library forward (lineage, if ever wanted, belongs in a metadata record, not concatenated into this field). Go writes `mcap-go/<v>` and appends any differing source library as a trailing `; `-separated segment, so across version bumps the field accretes distinct tokens (e.g. `mcap-go/1.9.0; mcap-go/1.8.0`). The TEN_MESSAGES fixture has an empty source library, so each writes just its own identity.",
       desiredBehavior:
-        "Rust recover should stamp the CLI writer identity (`mcap-cli/<v> mcap-rust/<v>`) and preserve any non-empty source library as a single trailing `; ` origin; the differing identifier string from Go is expected.",
+        "Rust recover should stamp the fixed CLI writer identity (`mcap-cli/<v> mcap-rust/<v>`) without carrying source provenance; the differing identifier string from Go is expected.",
       goBehavior: {
         exitCode: 0,
         files: [

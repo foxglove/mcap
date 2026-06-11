@@ -16,6 +16,26 @@ pub(crate) static VERSION: LazyLock<String> = LazyLock::new(|| {
     )
 });
 
+/// The `Header.library` value stamped on every MCAP this CLI authors (compress, decompress, filter,
+/// sort, recover, merge, convert).
+///
+/// The spec defines `library` as identifying the *writer* of the file. Any command that re-encodes
+/// or authors output produces a fresh serialization, so the CLI is the writer and names itself —
+/// just like every MCAP SDK writer stamps its own identifier. The source file's library is not
+/// carried forward: a single free-form field is the wrong place for data lineage, and nothing reads
+/// it that way. `add` is the lone exception; it splices into an existing file without rewriting the
+/// header, so it leaves the original `library` untouched.
+///
+/// Both the CLI and the underlying `mcap` crate identifier (`mcap::LIBRARY_IDENTIFIER`) are recorded
+/// because they version independently.
+pub(crate) static WRITER_LIBRARY: LazyLock<String> = LazyLock::new(|| {
+    format!(
+        "mcap-cli/{} {}",
+        env!("CARGO_PKG_VERSION"),
+        mcap::LIBRARY_IDENTIFIER
+    )
+});
+
 #[derive(Parser, Debug, PartialEq, Eq)]
 #[command(
     name = "mcap",
@@ -561,6 +581,23 @@ pub(crate) fn parse_timestamp_or_nanos(value: &str) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::parse_timestamp_or_nanos;
+
+    #[test]
+    fn writer_library_pairs_cli_and_crate_identifiers() {
+        let library = super::WRITER_LIBRARY.as_str();
+        assert_eq!(
+            library,
+            format!(
+                "mcap-cli/{} {}",
+                env!("CARGO_PKG_VERSION"),
+                mcap::LIBRARY_IDENTIFIER
+            )
+        );
+        assert!(library.starts_with("mcap-cli/"));
+        assert!(library.contains(" mcap-rust/"));
+        // Strict writer identity: no source provenance is appended.
+        assert!(!library.contains(';'));
+    }
 
     #[test]
     fn parse_output_compression_supports_known_values() {

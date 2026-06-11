@@ -81,12 +81,9 @@ fn sort_to_writer<W: Write + Seek>(
         .calculate_data_section_crc(opts.include_crc)
         .calculate_summary_section_crc(opts.include_crc)
         .calculate_attachment_crcs(opts.include_crc);
+    write_options = write_options.library(crate::cli::WRITER_LIBRARY.clone());
     if let Some(header) = header {
-        write_options = write_options
-            .profile(header.profile)
-            .library(crate::library::stamp_library(Some(&header.library)));
-    } else {
-        write_options = write_options.library(crate::library::stamp_library(None));
+        write_options = write_options.profile(header.profile);
     }
 
     let mut writer = write_options
@@ -390,7 +387,7 @@ mod tests {
     }
 
     #[test]
-    fn sort_stamps_writer_and_preserves_source_library() {
+    fn sort_stamps_cli_writer_library() {
         let input = build_out_of_order_chunked_input(false);
         let mut output = Cursor::new(Vec::new());
         let summary = mcap::Summary::read(&input)
@@ -404,10 +401,7 @@ mod tests {
             .expect("read header")
             .expect("header present")
             .library;
-        assert_eq!(
-            library,
-            crate::library::stamp_library(Some(mcap::LIBRARY_IDENTIFIER))
-        );
+        assert_eq!(library, *crate::cli::WRITER_LIBRARY);
     }
 
     #[test]

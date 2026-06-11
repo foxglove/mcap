@@ -1,7 +1,6 @@
 mod cli;
 mod commands;
 mod context;
-mod library;
 mod logsetup;
 mod parse;
 mod render;

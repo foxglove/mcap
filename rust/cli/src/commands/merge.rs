@@ -178,7 +178,7 @@ fn merge_inputs<W: Write + Seek>(
 
     let mut write_options = mcap::WriteOptions::new()
         .profile(output_profile)
-        .library(crate::library::writer_library())
+        .library(crate::cli::WRITER_LIBRARY.clone())
         .use_chunks(opts.chunked)
         .chunk_size(Some(opts.chunk_size))
         .compression(opts.compression)
@@ -912,7 +912,7 @@ mod tests {
     }
 
     #[test]
-    fn merge_stamps_writer_library_without_origin() {
+    fn merge_stamps_cli_writer_library() {
         let a = build_mcap("p", &[], &[], &[], true, true);
         let b = build_mcap("p", &[], &[], &[], true, true);
 
@@ -927,7 +927,7 @@ mod tests {
             .expect("read header")
             .expect("header present")
             .library;
-        assert_eq!(library, crate::library::writer_library());
+        assert_eq!(library, *crate::cli::WRITER_LIBRARY);
     }
 
     #[test]

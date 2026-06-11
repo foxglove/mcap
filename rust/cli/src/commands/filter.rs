@@ -252,12 +252,9 @@ fn filter_to_writer<W: Write + Seek>(
         .compression(opts.compression)
         .disable_seeking(disable_seeking);
 
+    write_options = write_options.library(crate::cli::WRITER_LIBRARY.clone());
     if let Some(header) = read_header(input)? {
-        write_options = write_options
-            .profile(header.profile)
-            .library(crate::library::stamp_library(Some(&header.library)));
-    } else {
-        write_options = write_options.library(crate::library::stamp_library(None));
+        write_options = write_options.profile(header.profile);
     }
 
     let mut writer = write_options
@@ -938,7 +935,7 @@ mod tests {
     }
 
     #[test]
-    fn filter_stamps_writer_and_preserves_source_library() {
+    fn filter_stamps_cli_writer_library() {
         let input = write_filter_test_input(true, false);
         let opts = FilterOptions {
             output: None,
@@ -953,16 +950,14 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
-        // The fixture is written with the library crate default, which is a foreign (non-CLI)
-        // writer string, so it is preserved as the origin segment.
+        // The CLI is the writer of the output, so it stamps its own identity regardless of the
+        // source library. No source provenance is carried forward.
         let output = run_filter(&input, &opts);
-        let expected = crate::library::stamp_library(Some(mcap::LIBRARY_IDENTIFIER));
-        assert_eq!(output_library(&output), expected);
-        assert!(output_library(&output).starts_with("mcap-cli/"));
+        assert_eq!(output_library(&output), *crate::cli::WRITER_LIBRARY);
 
-        // Re-filtering the CLI output is idempotent: the writer refreshes, the origin is retained.
+        // Re-filtering produces the same identity; nothing accumulates.
         let twice = run_filter(&output, &opts);
-        assert_eq!(output_library(&twice), expected);
+        assert_eq!(output_library(&twice), *crate::cli::WRITER_LIBRARY);
     }
 
     #[test]
