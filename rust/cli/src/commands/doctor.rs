@@ -219,6 +219,9 @@ impl Doctor {
                 if self.statistics.is_some() {
                     self.error("File contains multiple Statistics records");
                 }
+                if self.in_summary_section {
+                    self.validate_statistics_summary_channels(&statistics);
+                }
                 self.statistics = Some(statistics);
             }
             mcap::records::Record::DataEnd(_) => {
@@ -659,6 +662,25 @@ impl Doctor {
             ));
         }
     }
+
+    fn validate_statistics_summary_channels(&mut self, statistics: &mcap::records::Statistics) {
+        if statistics.channel_message_counts.is_empty() {
+            return;
+        }
+
+        let mut required_channel_ids: BTreeSet<u16> =
+            self.channels_in_data_section.keys().copied().collect();
+        required_channel_ids.extend(statistics.channel_message_counts.keys().copied());
+
+        for channel_id in required_channel_ids {
+            if !self.channel_ids_in_summary_section.contains(&channel_id) {
+                self.error(format!(
+                    "Statistics.channel_message_counts is non-empty, but Channel {} is missing from the summary section before the Statistics record",
+                    channel_id
+                ));
+            }
+        }
+    }
 }
 
 struct RawRecordRef<'a> {
@@ -808,6 +830,45 @@ mod tests {
     }
 
     #[test]
+    fn statistics_requires_summary_channels() {
+        let mcap = write_chunked_mcap(
+            |opts| opts.use_chunks(false).repeat_channels(false),
+            Some(0),
+            &[10],
+        );
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+
+        assert!(
+            diagnosis.errors.iter().any(|msg| msg.contains(
+                "Channel 1 is missing from the summary section before the Statistics record"
+            )),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    #[test]
+    fn statistics_requires_summary_channels_before_statistics() {
+        let mut mcap = write_chunked_mcap(
+            |opts| opts.use_chunks(false).calculate_summary_section_crc(false),
+            Some(0),
+            &[10],
+        );
+        move_first_summary_channel_after_statistics(&mut mcap);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+
+        assert!(
+            diagnosis.errors.iter().any(|msg| msg.contains(
+                "Channel 1 is missing from the summary section before the Statistics record"
+            )),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    #[test]
     fn strict_message_order_toggles_warning_vs_error() {
         let mcap = write_chunked_mcap(|opts| opts, None, &[20, 10]);
 
@@ -893,18 +954,48 @@ mod tests {
         body[cursor..cursor + 4].copy_from_slice(&u32::MAX.to_le_bytes());
     }
 
+    fn move_first_summary_channel_after_statistics(mcap: &mut Vec<u8>) {
+        let data_end_offset =
+            first_record_offset(mcap, op::DATA_END).expect("data end record should exist");
+        let summary_start = record_end(mcap, data_end_offset);
+        let channel_offset = first_record_offset_after(mcap, op::CHANNEL, summary_start)
+            .expect("summary channel record should exist");
+        let statistics_offset = first_record_offset_after(mcap, op::STATISTICS, channel_offset)
+            .expect("summary statistics record should exist");
+        assert!(channel_offset < statistics_offset);
+
+        let channel_end = record_end(mcap, channel_offset);
+        let statistics_end = record_end(mcap, statistics_offset);
+
+        let mut reordered = Vec::with_capacity(mcap.len());
+        reordered.extend_from_slice(&mcap[..channel_offset]);
+        reordered.extend_from_slice(&mcap[statistics_offset..statistics_end]);
+        reordered.extend_from_slice(&mcap[channel_end..statistics_offset]);
+        reordered.extend_from_slice(&mcap[channel_offset..channel_end]);
+        reordered.extend_from_slice(&mcap[statistics_end..]);
+        *mcap = reordered;
+    }
+
     fn first_record_offset(mcap: &[u8], opcode: u8) -> Option<usize> {
+        first_record_offset_after(mcap, opcode, mcap::MAGIC.len())
+    }
+
+    fn first_record_offset_after(mcap: &[u8], opcode: u8, min_offset: usize) -> Option<usize> {
         let mut offset = mcap::MAGIC.len();
         let end_magic_start = mcap.len().saturating_sub(mcap::MAGIC.len());
         while offset + 9 <= end_magic_start {
             let record_opcode = mcap[offset];
-            if record_opcode == opcode {
+            if offset >= min_offset && record_opcode == opcode {
                 return Some(offset);
             }
             let len = read_record_len(mcap, offset) as usize;
             offset += 9 + len;
         }
         None
+    }
+
+    fn record_end(mcap: &[u8], offset: usize) -> usize {
+        offset + 9 + read_record_len(mcap, offset) as usize
     }
 
     fn read_record_len(mcap: &[u8], offset: usize) -> u64 {
