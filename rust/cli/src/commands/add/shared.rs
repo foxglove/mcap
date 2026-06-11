@@ -849,8 +849,8 @@ mod tests {
 
     #[test]
     fn amend_preserves_original_header_library() -> Result<()> {
-        // `add` splices records without rewriting the header, so the source library is preserved
-        // verbatim rather than replaced with the CLI writer identity.
+        // add splices records without rewriting the header, so the source library survives intact
+        // rather than being replaced with the CLI writer identity.
         let input = make_input_mcap_with_library(true, true, true, true, "my-recorder/9.9")?;
         let output = amend_mcap_bytes(
             &input,
@@ -865,7 +865,6 @@ mod tests {
             .expect("header present")
             .library;
         assert_eq!(library, "my-recorder/9.9");
-        assert_ne!(library, *crate::cli::LIBRARY_IDENTIFIER);
         Ok(())
     }
 
