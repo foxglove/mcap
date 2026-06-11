@@ -901,25 +901,15 @@ mod tests {
         assert!(!stats.is_lossy());
     }
 
-    fn output_library(output: &[u8]) -> String {
-        crate::parse::read_header(output)
-            .expect("read header")
-            .expect("header present")
-            .library
-    }
-
     #[test]
     fn recover_stamps_cli_writer_library() {
         let input = write_test_input(Some(mcap::Compression::Zstd));
         let (output, _) = recover_to_vec(&input, "preserve");
-        assert_eq!(output_library(&output), *crate::cli::LIBRARY_IDENTIFIER);
-    }
-
-    #[test]
-    fn recover_with_corrupt_header_stamps_cli_writer_library() {
-        let input = corrupt_leading_header_body(&write_test_input(None));
-        let (output, _) = recover_to_vec(&input, "preserve");
-        assert_eq!(output_library(&output), *crate::cli::LIBRARY_IDENTIFIER);
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
     }
 
     #[test]

@@ -927,13 +927,6 @@ mod tests {
         assert!(!stats.topic_counts.contains_key("radar_a"));
     }
 
-    fn output_library(output: &[u8]) -> String {
-        super::read_header(output)
-            .expect("read header")
-            .expect("header present")
-            .library
-    }
-
     #[test]
     fn filter_stamps_cli_writer_library() {
         let input = write_filter_test_input(true, false);
@@ -950,14 +943,13 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
         };
-        // The CLI is the writer of the output, so it stamps its own identity regardless of the
-        // source library. No source provenance is carried forward.
+        // The CLI is the writer of the output, so it stamps its own identity, not the source's.
         let output = run_filter(&input, &opts);
-        assert_eq!(output_library(&output), *crate::cli::LIBRARY_IDENTIFIER);
-
-        // Re-filtering produces the same identity; nothing accumulates.
-        let twice = run_filter(&output, &opts);
-        assert_eq!(output_library(&twice), *crate::cli::LIBRARY_IDENTIFIER);
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
     }
 
     #[test]

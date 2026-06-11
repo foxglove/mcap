@@ -16,18 +16,11 @@ pub(crate) static VERSION: LazyLock<String> = LazyLock::new(|| {
     )
 });
 
-/// The `Header.library` value stamped on every MCAP this CLI authors (compress, decompress, filter,
-/// sort, recover, merge, convert).
-///
-/// The spec defines `library` as identifying the *writer* of the file. Any command that re-encodes
-/// or authors output produces a fresh serialization, so the CLI is the writer and names itself —
-/// just like every MCAP SDK writer stamps its own identifier. The source file's library is not
-/// carried forward: a single free-form field is the wrong place for data lineage, and nothing reads
-/// it that way. `add` is the lone exception; it splices into an existing file without rewriting the
-/// header, so it leaves the original `library` untouched.
-///
-/// Both the CLI and the underlying `mcap` crate identifier (`mcap::LIBRARY_IDENTIFIER`) are recorded
-/// because they version independently. Named to parallel `mcap::LIBRARY_IDENTIFIER`.
+/// The `Header.library` stamped on every MCAP this CLI authors. The CLI re-encodes the bytes, so it
+/// is the writer and names itself, pairing its own version with the underlying `mcap` crate's
+/// `mcap::LIBRARY_IDENTIFIER` (the two version independently). The source file's library is not
+/// carried forward; lineage, if ever needed, belongs in a metadata record rather than this field.
+/// (`add` is exempt: it appends to an existing file without rewriting the header.)
 pub(crate) static LIBRARY_IDENTIFIER: LazyLock<String> = LazyLock::new(|| {
     format!(
         "mcap-cli/{} {}",
