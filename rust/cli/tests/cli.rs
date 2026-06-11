@@ -101,12 +101,8 @@ fn stdout(output: &Output) -> std::borrow::Cow<'_, str> {
     String::from_utf8_lossy(&output.stdout)
 }
 
-// ---------------------------------------------------------------------------
-// Exit codes (process-level; not covered by the in-process unit tests)
-// ---------------------------------------------------------------------------
-
 #[test]
-fn info_on_valid_file_exits_zero() {
+fn exit_code_0_on_valid_file() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(&dir, "in.mcap", &build_mcap(3));
     let output = mcap(&["info", path_str(&path)]);
@@ -115,7 +111,7 @@ fn info_on_valid_file_exits_zero() {
 }
 
 #[test]
-fn missing_required_flag_exits_2() {
+fn exit_code_2_on_missing_required_flag() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(&dir, "in.mcap", &build_mcap(1));
     // `sort` requires `--output-file`; clap reports the missing argument with exit code 2.
@@ -123,7 +119,7 @@ fn missing_required_flag_exits_2() {
 }
 
 #[test]
-fn unknown_global_flag_exits_2() {
+fn exit_code_2_on_unknown_global_flag() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(&dir, "in.mcap", &build_mcap(1));
     // `--config` was a Go-only global flag; the Rust CLI rejects it as an unknown argument.
@@ -132,7 +128,7 @@ fn unknown_global_flag_exits_2() {
 }
 
 #[test]
-fn version_subcommand_is_rejected_but_flag_works() {
+fn exit_code_2_on_version_subcommand() {
     // The Go CLI had a `version` subcommand; the Rust CLI exposes `--version` instead, so the
     // subcommand is an unrecognized argument (exit 2).
     assert_eq!(mcap(&["version"]).status.code(), Some(2));
@@ -140,7 +136,7 @@ fn version_subcommand_is_rejected_but_flag_works() {
 }
 
 #[test]
-fn recover_truncated_file_exits_3_and_writes_output() {
+fn exit_code_3_on_lossy_recover() {
     let dir = TempDir::new().unwrap();
     let full = build_mcap(20);
     // Truncate mid-file so chunk data is cut off: some messages are lost, which recover signals
@@ -156,19 +152,17 @@ fn recover_truncated_file_exits_3_and_writes_output() {
     );
 }
 
-// ---------------------------------------------------------------------------
-// Non-seekable stdin pipes (unit tests only use seekable in-memory buffers)
-// ---------------------------------------------------------------------------
-
+// Reading from a non-seekable stdin pipe is only reachable end-to-end; the unit tests use
+// seekable in-memory buffers.
 #[test]
-fn cat_reads_stdin_pipe() {
+fn stdin_pipe_cat() {
     let output = mcap_with_stdin(&["cat"], &build_mcap(3));
     assert!(output.status.success());
     assert!(stdout(&output).contains("/example"));
 }
 
 #[test]
-fn filter_reads_stdin_pipe() {
+fn stdin_pipe_filter() {
     let dir = TempDir::new().unwrap();
     let out_path = dir.path().join("filtered.mcap");
     let output = mcap_with_stdin(
@@ -188,7 +182,7 @@ fn filter_reads_stdin_pipe() {
 }
 
 #[test]
-fn compress_reads_stdin_pipe() {
+fn stdin_pipe_compress() {
     let dir = TempDir::new().unwrap();
     let out_path = dir.path().join("compressed.mcap");
     let output = mcap_with_stdin(
@@ -208,7 +202,7 @@ fn compress_reads_stdin_pipe() {
 }
 
 #[test]
-fn decompress_reads_stdin_pipe() {
+fn stdin_pipe_decompress() {
     let dir = TempDir::new().unwrap();
     let out_path = dir.path().join("decompressed.mcap");
     let output = mcap_with_stdin(&["decompress", "-o", path_str(&out_path)], &build_mcap(3));
@@ -217,10 +211,6 @@ fn decompress_reads_stdin_pipe() {
         &std::fs::read(&out_path).expect("decompress output")
     ));
 }
-
-// ---------------------------------------------------------------------------
-// Completion
-// ---------------------------------------------------------------------------
 
 #[test]
 fn completion_outputs_a_script() {
@@ -233,7 +223,7 @@ fn completion_outputs_a_script() {
 // `mcap completion fish | head`); the captured-output helpers can't model a closed pipe.
 #[cfg(unix)]
 #[test]
-fn fish_completion_allows_downstream_pipe_to_close() {
+fn completion_survives_closed_downstream_pipe() {
     let (read_end, write_end) = UnixStream::pair().expect("failed to create pipe");
     drop(read_end);
 
@@ -250,10 +240,6 @@ fn fish_completion_allows_downstream_pipe_to_close() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
-
-// ---------------------------------------------------------------------------
-// Surface smoke
-// ---------------------------------------------------------------------------
 
 #[test]
 fn help_lists_commands() {
