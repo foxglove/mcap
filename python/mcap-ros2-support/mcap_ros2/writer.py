@@ -2,10 +2,10 @@ import time
 from io import BufferedWriter
 from typing import IO, Any, Dict, Optional, Union
 
-import mcap
 from mcap.exceptions import McapError
 from mcap.records import Schema
 from mcap.well_known import SchemaEncoding
+from mcap.writer import LIBRARY_IDENTIFIER as MCAP_LIBRARY_IDENTIFIER
 from mcap.writer import CompressionType
 from mcap.writer import Writer as McapWriter
 
@@ -20,8 +20,7 @@ class McapROS2WriteError(McapError):
 
 
 def _library_identifier():
-    mcap_version = getattr(mcap, "__version__", "<=0.0.10")
-    return f"mcap-ros2-support {__version__}; mcap {mcap_version}"
+    return f"{MCAP_LIBRARY_IDENTIFIER} mcap-ros2-support/{__version__}"
 
 
 class Writer:

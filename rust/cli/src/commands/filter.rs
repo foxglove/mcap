@@ -252,10 +252,9 @@ fn filter_to_writer<W: Write + Seek>(
         .compression(opts.compression)
         .disable_seeking(disable_seeking);
 
+    write_options = write_options.library(crate::cli::LIBRARY_IDENTIFIER.clone());
     if let Some(header) = read_header(input)? {
-        write_options = write_options
-            .profile(header.profile)
-            .library(header.library);
+        write_options = write_options.profile(header.profile);
     }
 
     let mut writer = write_options
@@ -596,7 +595,9 @@ mod tests {
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
-            let mut options = mcap::WriteOptions::new().use_chunks(chunked);
+            let mut options = mcap::WriteOptions::new()
+                .use_chunks(chunked)
+                .library("test-recorder/0.0");
             if chunked {
                 options = options.chunk_size(Some(10));
             }
@@ -926,6 +927,31 @@ mod tests {
         assert_eq!(stats.topic_counts["camera_a"], 5);
         assert_eq!(stats.topic_counts["camera_b"], 5);
         assert!(!stats.topic_counts.contains_key("radar_a"));
+    }
+
+    #[test]
+    fn filter_stamps_cli_writer_library() {
+        let input = write_filter_test_input(true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Zstd),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        };
+        // The CLI is the writer of the output, so it stamps its own identity, not the source's.
+        let output = run_filter(&input, &opts);
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
     }
 
     #[test]

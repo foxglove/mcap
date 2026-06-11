@@ -8,6 +8,8 @@ use anyhow::Result;
 use memmap2::Mmap;
 use tempfile::tempfile;
 
+const DEFAULT_LIBRARY_LENGTH: u64 = mcap::LIBRARY_IDENTIFIER.len() as u64;
+
 #[test]
 fn smoke() -> Result<()> {
     let mapped = map_mcap("../../tests/conformance/data/OneMetadata/OneMetadata.mcap")?;
@@ -57,7 +59,7 @@ fn round_trip() -> Result<()> {
         }),
         metadata_indexes: vec![mcap::records::MetadataIndex {
             // offset depends on the length of the embedded library string, which includes the crate version
-            offset: 33 + (env!("CARGO_PKG_VERSION").len() as u64),
+            offset: 25 + DEFAULT_LIBRARY_LENGTH,
             length: 41,
             name: String::from("myMetadata"),
         }],

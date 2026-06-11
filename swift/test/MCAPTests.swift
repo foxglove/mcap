@@ -7,6 +7,22 @@ import Testing
 
 struct MCAPTests {
   @Test
+  func defaultLibraryIdentifier() async throws {
+    let buffer = Buffer()
+    let writer = MCAPWriter(buffer)
+    await writer.start()
+    await writer.end()
+
+    let reader = MCAPStreamedReader()
+    reader.append(buffer.data)
+    let header = try reader.nextRecord() as! Header
+
+    #expect(header.profile == "")
+    #expect(header.library == mcapLibraryIdentifier)
+    #expect(header.library.hasPrefix("mcap-swift/"))
+  }
+
+  @Test
   func empty() async throws {
     let buffer = Buffer()
     let writer = MCAPWriter(buffer)

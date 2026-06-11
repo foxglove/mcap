@@ -11,6 +11,7 @@ export * from "./constants.ts";
 export * from "./hasMcapPrefix.ts";
 export * from "./parse.ts";
 export * from "./TempBuffer.ts";
+export * from "./version.ts";
 export type * from "./types.ts";
 
 // Backwards compatibility

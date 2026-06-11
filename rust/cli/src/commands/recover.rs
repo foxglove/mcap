@@ -27,8 +27,8 @@ enum CompressionSelection {
 
 // Recovery status model:
 // - info!: non-lossy recovery decisions or metadata fallback. These may explain output differences
-//   (for example, a corrupt leading header means the output gets a default profile/library) but do
-//   not imply message/attachment/metadata loss by themselves.
+//   (for example, a corrupt leading header means the output gets a default profile) but do not
+//   imply message/attachment/metadata loss by themselves.
 // - warn!: corrupt or malformed input records that are skipped, messages dropped because their
 //   channel could not be recovered, or an early stop caused by truncation/corrupt chunk payloads.
 //   Every warning corresponds to data loss and therefore to exit code 3.
@@ -228,10 +228,9 @@ fn build_writer<W: Write + Seek>(
         .compression(compression)
         .disable_seeking(disable_seeking);
 
+    write_options = write_options.library(crate::cli::LIBRARY_IDENTIFIER.clone());
     if let Some(header) = header {
-        write_options = write_options
-            .profile(header.profile)
-            .library(header.library);
+        write_options = write_options.profile(header.profile);
     }
 
     write_options
@@ -648,6 +647,7 @@ mod tests {
             let mut writer = mcap::WriteOptions::new()
                 .chunk_size(Some(1024 * 1024))
                 .compression(compression)
+                .library("test-recorder/0.0")
                 .create(&mut output)
                 .expect("writer");
             let schema_id = writer
@@ -903,6 +903,18 @@ mod tests {
     }
 
     #[test]
+    fn recover_stamps_cli_writer_library() {
+        let input = write_test_input(Some(mcap::Compression::Zstd));
+        let (output, _) = recover_to_vec(&input, "preserve");
+        // The fixture's `test-recorder/0.0` library is overwritten with the CLI's own identity.
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
+    }
+
+    #[test]
     fn recovers_data_after_corrupt_leading_header() {
         let input = corrupt_leading_header_body(&write_test_input(None));
         let (output, stats) = recover_to_vec(&input, "preserve");
@@ -913,6 +925,13 @@ mod tests {
         assert_eq!(stats.messages.recovered, 300);
         assert_eq!(stats.headers.discarded, 1);
         assert!(stats.is_lossy());
+        // The source header was discarded, but the output is still stamped with the CLI writer
+        // identity rather than falling back to the crate default.
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
     }
 
     #[test]

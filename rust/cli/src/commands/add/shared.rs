@@ -769,12 +769,29 @@ mod tests {
         emit_summary_offsets: bool,
         emit_summary_records: bool,
     ) -> Result<Vec<u8>> {
+        make_input_mcap_with_library(
+            data_crc,
+            summary_crc,
+            emit_summary_offsets,
+            emit_summary_records,
+            mcap::LIBRARY_IDENTIFIER,
+        )
+    }
+
+    fn make_input_mcap_with_library(
+        data_crc: bool,
+        summary_crc: bool,
+        emit_summary_offsets: bool,
+        emit_summary_records: bool,
+        library: &str,
+    ) -> Result<Vec<u8>> {
         let cursor = Cursor::new(Vec::new());
         let mut writer = mcap::WriteOptions::new()
             .calculate_data_section_crc(data_crc)
             .calculate_summary_section_crc(summary_crc)
             .emit_summary_offsets(emit_summary_offsets)
             .emit_summary_records(emit_summary_records)
+            .library(library)
             .create(cursor)?;
         let schema_id = writer.add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)?;
         let channel_id = writer.add_channel(schema_id, "/demo", "json", &BTreeMap::new())?;
@@ -827,6 +844,27 @@ mod tests {
 
         let message_count = mcap::MessageStream::new(&output)?.count();
         assert_eq!(message_count, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn amend_preserves_original_header_library() -> Result<()> {
+        // add splices records without rewriting the header, so the source library survives intact
+        // rather than being replaced with the CLI writer identity.
+        let input = make_input_mcap_with_library(true, true, true, true, "my-recorder/9.9")?;
+        let output = amend_mcap_bytes(
+            &input,
+            &[],
+            &[records::Metadata {
+                name: "demo".to_string(),
+                metadata: BTreeMap::new(),
+            }],
+        )?;
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, "my-recorder/9.9");
         Ok(())
     }
 

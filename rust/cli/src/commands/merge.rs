@@ -178,6 +178,7 @@ fn merge_inputs<W: Write + Seek>(
 
     let mut write_options = mcap::WriteOptions::new()
         .profile(output_profile)
+        .library(crate::cli::LIBRARY_IDENTIFIER.clone())
         .use_chunks(opts.chunked)
         .chunk_size(Some(opts.chunk_size))
         .compression(opts.compression)
@@ -689,6 +690,7 @@ mod tests {
         {
             let mut writer = mcap::WriteOptions::new()
                 .profile(profile)
+                .library("test-recorder/0.0")
                 .emit_attachment_indexes(emit_attachment_indexes)
                 .emit_metadata_indexes(emit_metadata_indexes)
                 .emit_statistics(emit_statistics)
@@ -908,6 +910,26 @@ mod tests {
             _ => panic!("expected header"),
         };
         assert!(header.profile.is_empty());
+    }
+
+    #[test]
+    fn merge_stamps_cli_writer_library() {
+        let a = build_mcap("p", &[], &[], &[], true, true);
+        let b = build_mcap("p", &[], &[], &[], true, true);
+
+        let merged = merge_bytes(
+            &[("a", a.as_slice()), ("b", b.as_slice())],
+            CoalesceChannels::Auto,
+            false,
+        )
+        .expect("merge");
+
+        // The inputs' `test-recorder/0.0` library is overwritten with the CLI's own identity.
+        let library = crate::parse::read_header(&merged)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
     }
 
     #[test]

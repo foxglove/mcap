@@ -98,7 +98,7 @@ Report summary statistics on an MCAP file:
 <!-- cspell: disable -->
 
     $ mcap info demo.mcap
-    library: mcap go #(devel)
+    library: mcap-go/#(devel)
     profile: ros1
     messages: 1606
     duration: 7.780758504s
@@ -141,7 +141,7 @@ The `mcap` CLI can read files over **HTTP(S)** and from object stores: **Amazon 
 <!-- cspell: disable -->
 
     $ mcap info gs://your-remote-bucket/demo.mcap
-    library: mcap go #(devel)
+    library: mcap-go/#(devel)
     profile: ros1
     messages: 1606
     duration: 7.780758504s
