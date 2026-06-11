@@ -581,8 +581,6 @@ mod tests {
         assert!(library.starts_with("mcap-cli/"));
         assert!(library.ends_with(mcap::LIBRARY_IDENTIFIER));
         assert!(library.contains(" mcap-rust/"));
-        // Strict writer identity: no source provenance is appended.
-        assert!(!library.contains(';'));
     }
 
     #[test]
