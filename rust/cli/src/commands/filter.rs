@@ -279,12 +279,40 @@ fn filter_with_writer<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     opts: &FilterOptions,
 ) -> Result<()> {
-    if let Some(summary) = mcap::Summary::read(input)? {
+    if let Some(summary) = read_summary_for_indexed_transcode(input)? {
         if !summary.chunk_indexes.is_empty() {
             return filter_indexed(input, &summary, writer, opts);
         }
     }
     filter_linear(input, writer, opts)
+}
+
+pub(crate) fn read_summary_for_indexed_transcode(input: &[u8]) -> Result<Option<mcap::Summary>> {
+    match mcap::Summary::read(input) {
+        Ok(Some(summary)) if summary_supports_indexed_transcode(&summary) => Ok(Some(summary)),
+        Ok(Some(_)) | Ok(None) => Ok(None),
+        Err(mcap::McapError::UnknownSchema(_, _)) => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
+pub(crate) fn summary_supports_indexed_transcode(summary: &mcap::Summary) -> bool {
+    if let Some(stats) = &summary.stats {
+        if stats.channel_count as usize > summary.channels.len()
+            || stats
+                .channel_message_counts
+                .keys()
+                .any(|channel_id| !summary.channels.contains_key(channel_id))
+        {
+            return false;
+        }
+    }
+
+    summary
+        .chunk_indexes
+        .iter()
+        .flat_map(|index| index.message_index_offsets.keys())
+        .all(|channel_id| summary.channels.contains_key(channel_id))
 }
 
 fn filter_indexed<W: Write + Seek>(
@@ -593,6 +621,15 @@ mod tests {
     }
 
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
+        write_filter_test_input_with_summary_repeats(chunked, summaryless, true, true)
+    }
+
+    fn write_filter_test_input_with_summary_repeats(
+        chunked: bool,
+        summaryless: bool,
+        repeat_channels: bool,
+        repeat_schemas: bool,
+    ) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
             let mut options = mcap::WriteOptions::new()
@@ -605,6 +642,10 @@ mod tests {
                 options = options
                     .emit_summary_records(false)
                     .emit_summary_offsets(false);
+            } else {
+                options = options
+                    .repeat_channels(repeat_channels)
+                    .repeat_schemas(repeat_schemas);
             }
             let mut writer = options.create(&mut output).expect("writer");
             let schema_id = writer
@@ -927,6 +968,52 @@ mod tests {
         assert_eq!(stats.topic_counts["camera_a"], 5);
         assert_eq!(stats.topic_counts["camera_b"], 5);
         assert!(!stats.topic_counts.contains_key("radar_a"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_repeated_channels_falls_back_to_linear_filtering() {
+        let input = write_filter_test_input_with_summary_repeats(true, false, false, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 20,
+            end: 25,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 5);
+        assert_eq!(stats.topic_counts["camera_b"], 5);
+        assert!(!stats.topic_counts.contains_key("radar_a"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_repeated_schemas_falls_back_to_linear_filtering() {
+        let input = write_filter_test_input_with_summary_repeats(true, false, true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 100);
+        assert_eq!(stats.topic_counts["camera_b"], 100);
+        assert_eq!(stats.topic_counts["radar_a"], 100);
     }
 
     #[test]
