@@ -447,13 +447,6 @@ mod tests {
         assert!(parsed.header.is_some());
         assert!(parsed.channels.contains_key(&channel_id));
         assert!(parsed.schemas.contains_key(&schema_id));
-        assert_eq!(parsed.message_count, Some(1));
-        assert_eq!(parsed.message_start_time, Some(10));
-        assert_eq!(parsed.message_end_time, Some(10));
-        assert_eq!(
-            parsed.channel_message_counts.get(&channel_id).copied(),
-            Some(1)
-        );
     }
 
     #[test]

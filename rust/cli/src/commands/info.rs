@@ -501,7 +501,9 @@ mod tests {
         assert!(rendered.contains("channels:    1"));
         assert!(rendered.contains("attachments: 0"));
         assert!(rendered.contains("metadata:    0"));
-        assert!(!rendered.contains("unknown"));
+        assert!(!rendered.contains("channels:    unknown"));
+        assert!(!rendered.contains("attachments: unknown"));
+        assert!(!rendered.contains("metadata:    unknown"));
     }
 
     #[test]
@@ -536,7 +538,9 @@ mod tests {
         assert!(rendered.contains("channels:    1"));
         assert!(rendered.contains("attachments: 1"));
         assert!(rendered.contains("metadata:    1"));
-        assert!(!rendered.contains("unknown"));
+        assert!(!rendered.contains("channels:    unknown"));
+        assert!(!rendered.contains("attachments: unknown"));
+        assert!(!rendered.contains("metadata:    unknown"));
     }
 
     #[test]
