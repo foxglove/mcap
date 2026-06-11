@@ -1,16 +1,17 @@
-//! End-to-end tests that exercise the built `mcap` binary as a real process.
+//! End-to-end tests that run the built `mcap` binary as a real process.
 //!
-//! These cover behavior that the in-process unit tests cannot reach: actual process
-//! exit codes (including clap's argument-error code), reading a non-seekable stdin
-//! pipe, and writing real output files. The per-command logic is covered by the unit
-//! tests in `src/`; this file deliberately stays at the process boundary.
+//! These cover behavior the in-process unit tests in `src/` cannot reach: real process
+//! exit codes (including clap's argument-error code), reading a non-seekable stdin pipe,
+//! and writing real output files. Per-command logic stays covered by the unit tests;
+//! this file stays at the process boundary. Completion-specific behavior lives in
+//! `completion.rs`.
 
 use std::collections::BTreeMap;
-use std::io::Cursor;
+use std::io::{Cursor, Write};
+use std::path::Path;
+use std::process::{Command, Output, Stdio};
 
-use assert_cmd::Command;
 use mcap::records::MessageHeader;
-use predicates::prelude::*;
 use tempfile::TempDir;
 
 /// Build a small chunked, indexed MCAP in memory with `num_messages` messages on `/example`.
@@ -48,8 +49,30 @@ fn build_mcap(num_messages: u64) -> Vec<u8> {
     buffer
 }
 
-fn mcap_cmd() -> Command {
-    Command::cargo_bin("mcap").expect("mcap binary should build")
+/// Run the `mcap` binary with `args` and capture its output.
+fn mcap(args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_mcap"))
+        .args(args)
+        .output()
+        .expect("failed to run mcap")
+}
+
+/// Run the `mcap` binary with `args`, feeding `stdin` through a (non-seekable) pipe.
+fn mcap_with_stdin(args: &[&str], stdin: &[u8]) -> Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_mcap"))
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("failed to spawn mcap");
+    child
+        .stdin
+        .take()
+        .expect("child stdin")
+        .write_all(stdin)
+        .expect("failed to write stdin");
+    child.wait_with_output().expect("failed to wait for mcap")
 }
 
 fn looks_like_mcap(bytes: &[u8]) -> bool {
@@ -62,6 +85,14 @@ fn write_temp(dir: &TempDir, name: &str, bytes: &[u8]) -> std::path::PathBuf {
     path
 }
 
+fn path_str(path: &Path) -> &str {
+    path.to_str().expect("temp path should be valid UTF-8")
+}
+
+fn stdout(output: &Output) -> std::borrow::Cow<'_, str> {
+    String::from_utf8_lossy(&output.stdout)
+}
+
 // ---------------------------------------------------------------------------
 // Exit codes (process-level; not covered by the in-process unit tests)
 // ---------------------------------------------------------------------------
@@ -70,12 +101,9 @@ fn write_temp(dir: &TempDir, name: &str, bytes: &[u8]) -> std::path::PathBuf {
 fn info_on_valid_file_exits_zero() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(&dir, "in.mcap", &build_mcap(3));
-    mcap_cmd()
-        .arg("info")
-        .arg(&path)
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("messages:"));
+    let output = mcap(&["info", path_str(&path)]);
+    assert!(output.status.success());
+    assert!(stdout(&output).contains("messages:"));
 }
 
 #[test]
@@ -83,7 +111,7 @@ fn missing_required_flag_exits_2() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(&dir, "in.mcap", &build_mcap(1));
     // `sort` requires `--output-file`; clap reports the missing argument with exit code 2.
-    mcap_cmd().arg("sort").arg(&path).assert().code(2);
+    assert_eq!(mcap(&["sort", path_str(&path)]).status.code(), Some(2));
 }
 
 #[test]
@@ -91,19 +119,16 @@ fn unknown_global_flag_exits_2() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(&dir, "in.mcap", &build_mcap(1));
     // `--config` was a Go-only global flag; the Rust CLI rejects it as an unknown argument.
-    mcap_cmd()
-        .args(["--config", "x.yaml", "info"])
-        .arg(&path)
-        .assert()
-        .code(2);
+    let output = mcap(&["--config", "x.yaml", "info", path_str(&path)]);
+    assert_eq!(output.status.code(), Some(2));
 }
 
 #[test]
-fn version_subcommand_is_rejected() {
+fn version_subcommand_is_rejected_but_flag_works() {
     // The Go CLI had a `version` subcommand; the Rust CLI exposes `--version` instead, so the
     // subcommand is an unrecognized argument (exit 2).
-    mcap_cmd().arg("version").assert().code(2);
-    mcap_cmd().arg("--version").assert().success();
+    assert_eq!(mcap(&["version"]).status.code(), Some(2));
+    assert!(mcap(&["--version"]).status.success());
 }
 
 #[test]
@@ -112,19 +137,11 @@ fn recover_truncated_file_exits_3_and_writes_output() {
     let full = build_mcap(20);
     // Truncate mid-file so chunk data is cut off: some messages are lost, which recover signals
     // with exit code 3 while still producing a valid output file.
-    let truncated = &full[..full.len() / 2];
-    let input = write_temp(&dir, "truncated.mcap", truncated);
-    let output = dir.path().join("recovered.mcap");
-
-    mcap_cmd()
-        .arg("recover")
-        .arg(&input)
-        .arg("-o")
-        .arg(&output)
-        .assert()
-        .code(3);
-
-    let recovered = std::fs::read(&output).expect("recover should write output");
+    let input = write_temp(&dir, "truncated.mcap", &full[..full.len() / 2]);
+    let output_path = dir.path().join("recovered.mcap");
+    let output = mcap(&["recover", path_str(&input), "-o", path_str(&output_path)]);
+    assert_eq!(output.status.code(), Some(3));
+    let recovered = std::fs::read(&output_path).expect("recover should write output");
     assert!(
         looks_like_mcap(&recovered),
         "recovered file should be valid MCAP"
@@ -137,80 +154,72 @@ fn recover_truncated_file_exits_3_and_writes_output() {
 
 #[test]
 fn cat_reads_stdin_pipe() {
-    mcap_cmd()
-        .arg("cat")
-        .write_stdin(build_mcap(3))
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("/example"));
+    let output = mcap_with_stdin(&["cat"], &build_mcap(3));
+    assert!(output.status.success());
+    assert!(stdout(&output).contains("/example"));
 }
 
 #[test]
 fn filter_reads_stdin_pipe() {
     let dir = TempDir::new().unwrap();
-    let output = dir.path().join("filtered.mcap");
-    mcap_cmd()
-        .args(["filter", "-o"])
-        .arg(&output)
-        .args(["--output-compression", "none"])
-        .write_stdin(build_mcap(3))
-        .assert()
-        .success();
-    let out = std::fs::read(&output).expect("filter should write output");
-    assert!(looks_like_mcap(&out));
+    let out_path = dir.path().join("filtered.mcap");
+    let output = mcap_with_stdin(
+        &[
+            "filter",
+            "-o",
+            path_str(&out_path),
+            "--output-compression",
+            "none",
+        ],
+        &build_mcap(3),
+    );
+    assert!(output.status.success());
+    assert!(looks_like_mcap(
+        &std::fs::read(&out_path).expect("filter output")
+    ));
 }
 
 #[test]
 fn compress_reads_stdin_pipe() {
     let dir = TempDir::new().unwrap();
-    let output = dir.path().join("compressed.mcap");
-    mcap_cmd()
-        .args(["compress", "-o"])
-        .arg(&output)
-        .args(["--compression", "zstd"])
-        .write_stdin(build_mcap(3))
-        .assert()
-        .success();
+    let out_path = dir.path().join("compressed.mcap");
+    let output = mcap_with_stdin(
+        &[
+            "compress",
+            "-o",
+            path_str(&out_path),
+            "--compression",
+            "zstd",
+        ],
+        &build_mcap(3),
+    );
+    assert!(output.status.success());
     assert!(looks_like_mcap(
-        &std::fs::read(&output).expect("compress output")
+        &std::fs::read(&out_path).expect("compress output")
     ));
 }
 
 #[test]
 fn decompress_reads_stdin_pipe() {
     let dir = TempDir::new().unwrap();
-    let output = dir.path().join("decompressed.mcap");
-    mcap_cmd()
-        .args(["decompress", "-o"])
-        .arg(&output)
-        .write_stdin(build_mcap(3))
-        .assert()
-        .success();
+    let out_path = dir.path().join("decompressed.mcap");
+    let output = mcap_with_stdin(&["decompress", "-o", path_str(&out_path)], &build_mcap(3));
+    assert!(output.status.success());
     assert!(looks_like_mcap(
-        &std::fs::read(&output).expect("decompress output")
+        &std::fs::read(&out_path).expect("decompress output")
     ));
 }
 
 // ---------------------------------------------------------------------------
-// Surface smoke tests
+// Surface smoke
 // ---------------------------------------------------------------------------
 
 #[test]
 fn help_lists_commands() {
-    mcap_cmd()
-        .arg("--help")
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("convert"))
-        .stdout(predicate::str::contains("recover"))
-        .stdout(predicate::str::contains("completion"));
-}
-
-#[test]
-fn completion_generates_a_script() {
-    mcap_cmd()
-        .args(["completion", "bash"])
-        .assert()
-        .success()
-        .stdout(predicate::str::is_empty().not());
+    let output = mcap(&["--help"]);
+    assert!(output.status.success());
+    let stdout = stdout(&output);
+    for command in ["convert", "recover", "completion"] {
+        assert!(stdout.contains(command), "help should list `{command}`");
+    }
 }
