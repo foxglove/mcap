@@ -406,7 +406,7 @@ mod tests {
             .library;
         assert_eq!(
             library,
-            crate::library::stamp_library(Some(&format!("mcap-rs-{}", mcap::VERSION)))
+            crate::library::stamp_library(Some(mcap::LIBRARY_IDENTIFIER))
         );
     }
 

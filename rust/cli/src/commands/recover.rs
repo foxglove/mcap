@@ -916,7 +916,7 @@ mod tests {
         let (output, _) = recover_to_vec(&input, "preserve");
         assert_eq!(
             output_library(&output),
-            crate::library::stamp_library(Some(&format!("mcap-rs-{}", mcap::VERSION)))
+            crate::library::stamp_library(Some(mcap::LIBRARY_IDENTIFIER))
         );
     }
 

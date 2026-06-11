@@ -956,7 +956,7 @@ mod tests {
         // The fixture is written with the library crate default, which is a foreign (non-CLI)
         // writer string, so it is preserved as the origin segment.
         let output = run_filter(&input, &opts);
-        let expected = crate::library::stamp_library(Some(&format!("mcap-rs-{}", mcap::VERSION)));
+        let expected = crate::library::stamp_library(Some(mcap::LIBRARY_IDENTIFIER));
         assert_eq!(output_library(&output), expected);
         assert!(output_library(&output).starts_with("mcap-cli/"));
 

@@ -10,9 +10,9 @@
 //! mcap-cli/<cli-version> mcap-rust/<lib-version>[; <original-source-library>]
 //! ```
 //!
-//! `mcap-rust/<lib-version>` names the underlying `mcap` crate (which self-identifies as
-//! `mcap-rs-<version>` when used directly); the CLI uses the `User-Agent`-style `name/version`
-//! token to match its own `--version` output.
+//! The `mcap-rust/<lib-version>` segment is the underlying `mcap` crate's own identifier
+//! (`mcap::LIBRARY_IDENTIFIER`); the leading `mcap-cli/<cli-version>` segment adds the CLI's
+//! identity in the same `User-Agent`-style `name/version` form.
 //!
 //! The origin is bounded to a single segment and is never the CLI itself, so repeatedly processing
 //! a file is idempotent: the leading writer token refreshes to the current version while the
@@ -25,13 +25,13 @@
 /// Prefix identifying a `library` string previously written by this CLI (any version).
 const CLI_PREFIX: &str = "mcap-cli/";
 
-/// The writer identity for the current build: the CLI version paired with the underlying library
-/// crate version.
+/// The writer identity for the current build: the CLI version paired with the underlying `mcap`
+/// crate's own identifier (`mcap::LIBRARY_IDENTIFIER`, e.g. `mcap-rust/<version>`).
 pub(crate) fn writer_library() -> String {
     format!(
-        "{CLI_PREFIX}{} mcap-rust/{}",
+        "{CLI_PREFIX}{} {}",
         env!("CARGO_PKG_VERSION"),
-        mcap::VERSION
+        mcap::LIBRARY_IDENTIFIER
     )
 }
 
