@@ -1383,9 +1383,9 @@ export const cases: CliTestCase[] = [
     knownDifference: {
       id: "recover-library-header",
       summary:
-        "Rust recover preserves the source Header.library verbatim; Go recover re-stamps it with the go/mcap writer identity (mcap go vX.Y.Z).",
+        "Rust recover preserves the source Header.library verbatim; Go recover re-stamps it with the go/mcap writer identity (mcap-go/X.Y.Z).",
       reason:
-        "Header.library identifies the software that produced the data, which for a single-input transform like recover is still the original recorder. Rust preserves it verbatim, so the value is stable across repeated transforms. Go re-stamps `mcap go vX.Y.Z` and prepends any earlier, differing library (a dedup guard at writer.go skips an identical one), so across version bumps the field accretes distinct tokens (e.g. `mcap go v1.9.0; mcap go v1.8.0`) and stops cleanly identifying the original producer. The TEN_MESSAGES fixture has an empty source library, so Rust writes the empty original while Go writes `mcap go vX.Y.Z`. (Rust's single-input transforms — filter/compress/decompress/recover/sort — all preserve; merge/convert intentionally stamp the mcap-rs identity since there is no single source library to carry forward.)",
+        "Header.library identifies the software that produced the data, which for a single-input transform like recover is still the original recorder. Rust preserves it verbatim, so the value is stable across repeated transforms. Go re-stamps `mcap-go/X.Y.Z` and prepends any earlier, differing library (a dedup guard at writer.go skips an identical one), so across version bumps the field accretes distinct tokens (e.g. `mcap-go/1.9.0; mcap-go/1.8.0`) and stops cleanly identifying the original producer. The TEN_MESSAGES fixture has an empty source library, so Rust writes the empty original while Go writes `mcap-go/X.Y.Z`. (Rust's single-input transforms — filter/compress/decompress/recover/sort — all preserve; merge/convert intentionally stamp the mcap-rust identity since there is no single source library to carry forward.)",
       desiredBehavior:
         "Rust recover should keep preserving the source Header.library verbatim rather than re-stamping it; rewrite provenance, if needed, belongs in a separate record rather than concatenated into the library field.",
       goBehavior: {
@@ -1394,7 +1394,7 @@ export const cases: CliTestCase[] = [
           {
             path: "recovered.mcap",
             exists: true,
-            mcapSummary: { libraryContains: "mcap go" },
+            mcapSummary: { libraryContains: "mcap-go/" },
           },
         ],
       },

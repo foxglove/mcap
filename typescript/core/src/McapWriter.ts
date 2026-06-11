@@ -22,6 +22,7 @@ import type {
   Statistics,
   IReadable,
 } from "./types.ts";
+import { LIBRARY_IDENTIFIER } from "./version.ts";
 
 export type McapWriterOptions = {
   writable: IWritable;
@@ -182,7 +183,7 @@ export class McapWriter {
     return writer;
   }
 
-  async start(header: Header): Promise<void> {
+  async start(header: Header = { profile: "", library: LIBRARY_IDENTIFIER }): Promise<void> {
     if (this.#appendMode) {
       throw new Error(`Cannot call start() when writer is in append mode`);
     }

@@ -106,7 +106,7 @@ public final class MCAPWriter {
     buffer.removeAll(keepingCapacity: true)
   }
 
-  public func start(library: String, profile: String) async {
+  public func start(library: String = mcapLibraryIdentifier, profile: String = "") async {
     buffer.append(mcapMagic)
     Header(profile: profile, library: library).serialize(to: &buffer)
   }

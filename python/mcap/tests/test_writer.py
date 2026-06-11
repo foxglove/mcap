@@ -8,9 +8,9 @@ from typing import List
 import lz4.frame
 import pytest
 
-from mcap.records import Chunk, ChunkIndex, Statistics
+from mcap.records import Chunk, ChunkIndex, Header, Statistics
 from mcap.stream_reader import StreamReader
-from mcap.writer import CompressionType, Writer
+from mcap.writer import LIBRARY_IDENTIFIER, CompressionType, Writer
 
 
 @contextlib.contextmanager
@@ -72,6 +72,20 @@ def test_lz4_chunks():
         uncompressed_data: bytes = lz4.frame.decompress(chunk.data)
         assert chunk.uncompressed_size == len(uncompressed_data)
         assert chunk.uncompressed_crc == zlib.crc32(uncompressed_data)
+
+
+def test_default_library_identifier():
+    io = BytesIO()
+    writer = Writer(io)
+    writer.start()
+    writer.finish()
+
+    io.seek(0)
+    records = list(StreamReader(io).records)
+    header = next(r for r in records if isinstance(r, Header))
+
+    assert header.library == LIBRARY_IDENTIFIER
+    assert header.library.startswith("mcap-python/")
 
 
 @pytest.mark.parametrize(
