@@ -161,6 +161,10 @@ pub(crate) fn metadata_indexes_need_scan(parsed: &ParsedMcap) -> bool {
     }
 }
 
+pub(crate) fn warn_index_scan(record_kind: &str) {
+    eprintln!("Warning: {record_kind} indexes not available; full scan may be slow.");
+}
+
 fn scan_top_level_records<F>(mcap: &[u8], mut process: F) -> Result<()>
 where
     F: FnMut(Record<'_>, u64, u64) -> Result<()>,
@@ -603,6 +607,50 @@ mod tests {
         assert_eq!(metadata_indexes[0].name, "demo");
         assert!(mcap::read::attachment(&buffer, &attachment_indexes[0]).is_ok());
         assert!(mcap::read::metadata(&buffer, &metadata_indexes[0]).is_ok());
+    }
+
+    #[test]
+    fn collect_linear_attachment_indexes_tracks_offsets_after_chunks() {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .emit_attachment_indexes(false)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer.add_schema("demo", "json", b"{}").expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 1,
+                        publish_time: 1,
+                    },
+                    br#"{"k":"v"}"#,
+                )
+                .expect("message");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 10,
+                    create_time: 11,
+                    name: "after-chunk.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: Cow::Borrowed(b"chunk-safe"),
+                })
+                .expect("attachment");
+            writer.finish().expect("finish writer");
+        }
+
+        let indexes = collect_attachment_indexes_linear(&buffer).expect("attachment indexes");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "after-chunk.bin");
+        let attachment = mcap::read::attachment(&buffer, &indexes[0]).expect("attachment");
+        assert_eq!(attachment.data.as_ref(), b"chunk-safe");
     }
 
     #[test]

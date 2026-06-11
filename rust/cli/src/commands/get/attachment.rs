@@ -59,6 +59,7 @@ fn local_attachment_indexes(
     if parse::attachment_indexes_need_scan(&parsed)
         || (missing_requested_name && parsed.statistics.is_none())
     {
+        parse::warn_index_scan("attachment");
         return parse::collect_attachment_indexes_linear(mcap);
     }
     Ok(parsed.attachment_indexes)
@@ -114,6 +115,8 @@ fn select_attachment_index<'a>(
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
+
     use super::{local_attachment_indexes, select_attachment_index};
     use crate::parse;
     use mcap::records::{AttachmentIndex, Statistics};
@@ -194,6 +197,35 @@ mod tests {
 
         let indexes =
             local_attachment_indexes(&[], parsed, "missing").expect("complete index is enough");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "a");
+    }
+
+    #[test]
+    fn missing_name_scans_when_attachment_index_completeness_is_unknown() {
+        let mut mcap_bytes = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .emit_attachment_indexes(false)
+                .create(std::io::Cursor::new(&mut mcap_bytes))
+                .expect("writer");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 1,
+                    create_time: 1,
+                    name: "a".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: Cow::Borrowed(b"payload"),
+                })
+                .expect("attachment");
+            writer.finish().expect("finish");
+        }
+        let parsed = parse::parse_mcap(&mcap_bytes).expect("parse");
+
+        let indexes =
+            local_attachment_indexes(&mcap_bytes, parsed, "missing").expect("linear scan");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "a");
     }

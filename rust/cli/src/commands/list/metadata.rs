@@ -48,6 +48,7 @@ fn collect_metadata_records(
     let mut records = Vec::new();
     let parsed = parse::parse_mcap(mcap)?;
     let indexes = if parse::metadata_indexes_need_scan(&parsed) {
+        parse::warn_index_scan("metadata");
         parse::collect_metadata_indexes_linear(mcap)?
     } else {
         parsed.metadata_indexes

@@ -13,6 +13,7 @@ pub fn run(ctx: &CommandContext, args: ListAttachmentsCommand) -> Result<()> {
             let mcap = source::load_path(&args.file, source_options)?;
             let parsed = parse::parse_mcap(&mcap)?;
             if parse::attachment_indexes_need_scan(&parsed) {
+                parse::warn_index_scan("attachment");
                 parse::collect_attachment_indexes_linear(&mcap)?
             } else {
                 parsed.attachment_indexes

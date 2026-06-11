@@ -73,6 +73,7 @@ fn local_metadata_indexes(
     if parse::metadata_indexes_need_scan(&parsed)
         || (missing_requested_name && parsed.statistics.is_none())
     {
+        parse::warn_index_scan("metadata");
         return parse::collect_metadata_indexes_linear(mcap);
     }
     Ok(parsed.metadata_indexes)
@@ -185,6 +186,31 @@ mod tests {
 
         let indexes =
             local_metadata_indexes(&[], parsed, "missing").expect("complete index is enough");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "demo");
+    }
+
+    #[test]
+    fn missing_name_scans_when_metadata_index_completeness_is_unknown() {
+        let mut mcap_bytes = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .emit_metadata_indexes(false)
+                .create(std::io::Cursor::new(&mut mcap_bytes))
+                .expect("writer");
+            writer
+                .write_metadata(&mcap::records::Metadata {
+                    name: "demo".to_string(),
+                    metadata: BTreeMap::from([("foo".to_string(), "bar".to_string())]),
+                })
+                .expect("metadata");
+            writer.finish().expect("finish");
+        }
+        let parsed = parse::parse_mcap(&mcap_bytes).expect("parse");
+
+        let indexes = local_metadata_indexes(&mcap_bytes, parsed, "missing").expect("linear scan");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "demo");
     }
