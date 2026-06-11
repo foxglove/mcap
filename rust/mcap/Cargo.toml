@@ -9,6 +9,7 @@ documentation = "https://docs.rs/mcap"
 readme = "README.md"
 version = "0.24.0"
 edition = "2021"
+rust-version = "1.81"
 license = "MIT"
 
 [dependencies]
