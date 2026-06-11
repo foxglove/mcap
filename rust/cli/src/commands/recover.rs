@@ -27,8 +27,8 @@ enum CompressionSelection {
 
 // Recovery status model:
 // - info!: non-lossy recovery decisions or metadata fallback. These may explain output differences
-//   (for example, a corrupt leading header means the output gets a default profile and no preserved
-//   source library) but do not imply message/attachment/metadata loss by themselves.
+//   (for example, a corrupt leading header means the output gets a default profile) but do not
+//   imply message/attachment/metadata loss by themselves.
 // - warn!: corrupt or malformed input records that are skipped, messages dropped because their
 //   channel could not be recovered, or an early stop caused by truncation/corrupt chunk payloads.
 //   Every warning corresponds to data loss and therefore to exit code 3.
