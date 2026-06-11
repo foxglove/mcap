@@ -112,6 +112,9 @@ pub(crate) fn parsed_mcap_from_summary_section(
 fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
     let mut out = ParsedMcap {
         header,
+        message_count: Some(0),
+        attachment_count: Some(0),
+        metadata_count: Some(0),
         ..ParsedMcap::default()
     };
     for record in mcap::read::LinearReader::new(mcap)? {
@@ -494,6 +497,25 @@ mod tests {
             parsed.channel_message_counts.get(&channel_id).copied(),
             Some(2)
         );
+    }
+
+    #[test]
+    fn parse_mcap_scan_fallback_reports_zero_counts() {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_statistics(false)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            writer.finish().expect("finish writer");
+        }
+
+        let parsed =
+            parse_mcap_with_scan_fallback(&buffer, true).expect("parse mcap with scan fallback");
+        assert!(parsed.statistics.is_none());
+        assert_eq!(parsed.message_count, Some(0));
+        assert_eq!(parsed.attachment_count, Some(0));
+        assert_eq!(parsed.metadata_count, Some(0));
     }
 
     #[test]

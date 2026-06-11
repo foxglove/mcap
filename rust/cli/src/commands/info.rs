@@ -507,6 +507,22 @@ mod tests {
     }
 
     #[test]
+    fn info_render_includes_zero_scanned_message_count() {
+        let parsed = ParsedMcap {
+            message_count: Some(0),
+            attachment_count: Some(0),
+            metadata_count: Some(0),
+            ..ParsedMcap::default()
+        };
+
+        let rendered = render_info(&parsed);
+        assert!(rendered.contains("messages:    0"));
+        assert!(rendered.contains("channels:    0"));
+        assert!(rendered.contains("attachments: 0"));
+        assert!(rendered.contains("metadata:    0"));
+    }
+
+    #[test]
     fn info_render_uses_summary_record_counts_without_statistics() {
         let mut parsed = ParsedMcap::default();
         parsed.channels.insert(
