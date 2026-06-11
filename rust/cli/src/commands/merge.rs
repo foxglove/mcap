@@ -198,8 +198,8 @@ fn merge_inputs<W: Write + Seek>(
 
     let summaries = inputs
         .iter()
-        // Match Go CLI behavior by treating summary lookup as best effort and
-        // falling back to linear scans when summary parsing fails.
+        // Treat summary lookup as best effort and fall back to linear scans when
+        // summary parsing fails.
         .map(|input| mcap::Summary::read(input.data).unwrap_or_default())
         .collect::<Vec<_>>();
 

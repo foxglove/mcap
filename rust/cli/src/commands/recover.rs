@@ -148,8 +148,7 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome>
     );
 
     // A clean recovery exits 0; warning-level data loss reports `CommandOutcome::Warnings` (exit 3)
-    // so `main` sets the exit code only after every output sink has been flushed and dropped. This
-    // diverges from the Go CLI, which always exits 0 once recovery starts.
+    // so `main` sets the exit code only after every output sink has been flushed and dropped.
     if stats.is_lossy() {
         let discarded: Vec<_> = stats
             .discarded_counts()

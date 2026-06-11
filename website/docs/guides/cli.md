@@ -94,7 +94,7 @@ Report summary statistics on an MCAP file:
 <!-- cspell: disable -->
 
     $ mcap info demo.mcap
-    library: mcap-go/#(devel)
+    library: mcap-cli/#(devel) mcap-rust/#(devel)
     profile: ros1
     messages: 1606
     duration: 7.780758504s
@@ -137,7 +137,7 @@ All commands except `convert` support reading from remote files stored in **GCS*
 <!-- cspell: disable -->
 
     $ mcap info gs://your-remote-bucket/demo.mcap
-    library: mcap-go/#(devel)
+    library: mcap-cli/#(devel) mcap-rust/#(devel)
     profile: ros1
     messages: 1606
     duration: 7.780758504s

@@ -195,11 +195,10 @@ fn parse_timestamp_args(
     nanoseconds: u64,
     seconds: u64,
 ) -> Result<u64> {
-    // Mirrors Go CLI precedence:
+    // Preserve timestamp precedence:
     // --start/--end (string RFC3339 or nanos) > --*-nsecs > --*-secs.
-    // --*-secs and --*-nsecs are mutually exclusive via clap's conflicts_with,
-    // matching the Go CLI. If both somehow arrive, this precedence order still
-    // applies as a fallback.
+    // --*-secs and --*-nsecs are mutually exclusive via clap's conflicts_with.
+    // If both somehow arrive, this precedence order still applies as a fallback.
     if let Some(value) = date_or_nanos {
         return parse_timestamp_or_nanos(value);
     }

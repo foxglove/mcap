@@ -72,9 +72,6 @@ jobs:
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.59.1
       - run: make lint
       - run: make test
-      - name: Check library version
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/go/mcap/v')
-        run: make -C cli/mcap build && ./check_tag.sh cli/mcap/bin/mcap
 
   python:
     runs-on: ubuntu-latest
@@ -409,36 +406,6 @@ jobs:
           body_path: ${{ github.workspace }}-CHANGELOG.txt
           draft: false
 
-  cli-conformance:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          lfs: true
-      - run: corepack enable
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24.x
-          cache: yarn
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go/go.work
-          cache: true
-          cache-dependency-path: |
-            go/go.work
-            go/go.work.sum
-            go/**/go.mod
-            go/**/go.sum
-      - uses: dtolnay/rust-toolchain@stable
-      - run: yarn install --immutable
-      - run: make -C go/cli/mcap build
-      - run: cargo build -p mcap-cli
-      - run: yarn test:conformance:generate-inputs --verify
-      - run: >
-          yarn test:cli-conformance
-          --go-bin "${{ github.workspace }}/go/cli/mcap/bin/mcap"
-          --rust-bin "${{ github.workspace }}/target/debug/mcap"
-
   conformance-lint:
     runs-on: ubuntu-latest
     steps:
@@ -453,7 +420,6 @@ jobs:
       - run: yarn install --immutable
       - run: yarn workspace @foxglove/mcap-conformance lint:ci
       - run: yarn workspace @foxglove/mcap-conformance build
-      - run: yarn workspace @foxglove/mcap-cli-conformance lint:ci
 
   conformance-cpp:
     runs-on: ubuntu-latest

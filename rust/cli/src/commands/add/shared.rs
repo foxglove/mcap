@@ -359,8 +359,7 @@ fn parse_existing_layout(input: &[u8]) -> Result<ExistingLayout> {
     Ok(ExistingLayout {
         emit_summary_offsets: footer.summary_offset_start != 0,
         // A data section CRC of 0 is ambiguous: it can mean either "CRC disabled"
-        // or a rare legitimate CRC value of 0. We follow the existing Go CLI
-        // convention and treat 0 as disabled.
+        // or a rare legitimate CRC value of 0. Treat 0 as disabled.
         data_crc_enabled: data_end.data_section_crc != 0,
         summary_crc_enabled: footer.summary_crc != 0,
         old_data_end_crc: data_end.data_section_crc,
