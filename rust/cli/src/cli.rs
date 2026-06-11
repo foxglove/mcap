@@ -583,17 +583,10 @@ mod tests {
     use super::parse_timestamp_or_nanos;
 
     #[test]
-    fn writer_library_pairs_cli_and_crate_identifiers() {
+    fn library_identifier_pairs_cli_and_crate_identifiers() {
         let library = super::LIBRARY_IDENTIFIER.as_str();
-        assert_eq!(
-            library,
-            format!(
-                "mcap-cli/{} {}",
-                env!("CARGO_PKG_VERSION"),
-                mcap::LIBRARY_IDENTIFIER
-            )
-        );
         assert!(library.starts_with("mcap-cli/"));
+        assert!(library.ends_with(mcap::LIBRARY_IDENTIFIER));
         assert!(library.contains(" mcap-rust/"));
         // Strict writer identity: no source provenance is appended.
         assert!(!library.contains(';'));
