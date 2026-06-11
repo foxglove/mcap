@@ -47,12 +47,24 @@ fn collect_metadata_records(
 ) -> Result<Vec<(mcap::records::MetadataIndex, mcap::records::Metadata)>> {
     let mut records = Vec::new();
     let parsed = parse::parse_mcap(mcap)?;
-    for index in parsed.metadata_indexes {
+    let indexes = if metadata_indexes_need_scan(&parsed) {
+        parse::collect_metadata_indexes_linear(mcap)?
+    } else {
+        parsed.metadata_indexes
+    };
+    for index in indexes {
         let metadata = mcap::read::metadata(mcap, &index)
             .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
         records.push((index, metadata));
     }
     Ok(records)
+}
+
+fn metadata_indexes_need_scan(parsed: &parse::ParsedMcap) -> bool {
+    match &parsed.statistics {
+        Some(statistics) => statistics.metadata_count as usize > parsed.metadata_indexes.len(),
+        None => parsed.metadata_indexes.is_empty(),
+    }
 }
 
 fn render_metadata_rows(

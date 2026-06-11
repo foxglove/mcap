@@ -33,7 +33,8 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
     } else {
         let mcap = source::load_path(&args.file, source_options)?;
         let parsed = parse::parse_mcap(&mcap)?;
-        let index = select_attachment_index(&parsed.attachment_indexes, &args.name, args.offset)?;
+        let indexes = local_attachment_indexes(&mcap, parsed, &args.name)?;
+        let index = select_attachment_index(&indexes, &args.name, args.offset)?;
         let attachment = mcap::read::attachment(&mcap, index).with_context(|| {
             format!(
                 "failed to read attachment {} at offset {}",
@@ -44,6 +45,28 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn local_attachment_indexes(
+    mcap: &[u8],
+    parsed: parse::ParsedMcap,
+    name: &str,
+) -> Result<Vec<mcap::records::AttachmentIndex>> {
+    let missing_requested_name = !parsed
+        .attachment_indexes
+        .iter()
+        .any(|index| index.name == name);
+    if attachment_indexes_need_scan(&parsed) || missing_requested_name {
+        return parse::collect_attachment_indexes_linear(mcap);
+    }
+    Ok(parsed.attachment_indexes)
+}
+
+fn attachment_indexes_need_scan(parsed: &parse::ParsedMcap) -> bool {
+    match &parsed.statistics {
+        Some(statistics) => statistics.attachment_count as usize > parsed.attachment_indexes.len(),
+        None => parsed.attachment_indexes.is_empty(),
+    }
 }
 
 fn write_attachment_data(data: &[u8], output: Option<&std::path::Path>) -> Result<()> {

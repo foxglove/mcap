@@ -13,7 +13,8 @@ pub fn run(ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
     } else {
         let mcap = source::load_path(&args.file, source_options)?;
         let parsed = parse::parse_mcap(&mcap)?;
-        merged_metadata_for_name(&mcap, &parsed.metadata_indexes, &args.name)?
+        let indexes = local_metadata_indexes(&mcap, parsed, &args.name)?;
+        merged_metadata_for_name(&mcap, &indexes, &args.name)?
     };
     let pretty =
         serde_json::to_string_pretty(&metadata).context("failed to serialize metadata to JSON")?;
@@ -58,6 +59,28 @@ fn merged_remote_metadata_for_name(
         }
     }
     Ok(output)
+}
+
+fn local_metadata_indexes(
+    mcap: &[u8],
+    parsed: parse::ParsedMcap,
+    name: &str,
+) -> Result<Vec<mcap::records::MetadataIndex>> {
+    let missing_requested_name = !parsed
+        .metadata_indexes
+        .iter()
+        .any(|index| index.name == name);
+    if metadata_indexes_need_scan(&parsed) || missing_requested_name {
+        return parse::collect_metadata_indexes_linear(mcap);
+    }
+    Ok(parsed.metadata_indexes)
+}
+
+fn metadata_indexes_need_scan(parsed: &parse::ParsedMcap) -> bool {
+    match &parsed.statistics {
+        Some(statistics) => statistics.metadata_count as usize > parsed.metadata_indexes.len(),
+        None => parsed.metadata_indexes.is_empty(),
+    }
 }
 
 fn merged_metadata_for_name(
