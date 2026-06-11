@@ -18,7 +18,7 @@ pub(crate) static VERSION: LazyLock<String> = LazyLock::new(|| {
 
 /// The `Header.library` stamped on every MCAP this CLI authors. The CLI re-encodes the bytes, so it
 /// is the writer and names itself, pairing its own version with the underlying `mcap` crate's
-/// `mcap::LIBRARY_IDENTIFIER` (the two version independently). The source file's library is not
+/// `mcap::LIBRARY_IDENTIFIER` (the two are versioned independently). The source file's library is not
 /// carried forward; lineage, if ever needed, belongs in a metadata record rather than this field.
 /// (`add` is exempt: it appends to an existing file without rewriting the header.)
 pub(crate) static LIBRARY_IDENTIFIER: LazyLock<String> = LazyLock::new(|| {
