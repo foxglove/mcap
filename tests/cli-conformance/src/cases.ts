@@ -1376,18 +1376,18 @@ export const cases: CliTestCase[] = [
   {
     id: "known-difference-recover-library-header",
     description:
-      "Recover sets the output Header.library differently: Rust preserves the source library, Go writes its own writer identity.",
+      "Recover stamps the output Header.library with each CLI's own writer identity, using different identifier strings.",
     tags: ["known-difference", "recover"],
     setup: [{ type: "copy", from: TEN_MESSAGES, to: "{caseWorkDir}/input.mcap" }],
     invocation: { args: ["recover", "input.mcap", "-o", "recovered.mcap"] },
     knownDifference: {
       id: "recover-library-header",
       summary:
-        "Rust recover preserves the source Header.library verbatim; Go recover re-stamps it with the go/mcap writer identity (mcap-go/X.Y.Z).",
+        "Both recover commands stamp their own writer identity into Header.library; the identifier strings differ (Rust `mcap-cli/<v> mcap-rust/<v>`, Go `mcap-go/<v>`).",
       reason:
-        "Header.library identifies the software that produced the data, which for a single-input transform like recover is still the original recorder. Rust preserves it verbatim, so the value is stable across repeated transforms. Go re-stamps `mcap-go/X.Y.Z` and prepends any earlier, differing library (a dedup guard at writer.go skips an identical one), so across version bumps the field accretes distinct tokens (e.g. `mcap-go/1.9.0; mcap-go/1.8.0`) and stops cleanly identifying the original producer. The TEN_MESSAGES fixture has an empty source library, so Rust writes the empty original while Go writes `mcap-go/X.Y.Z`. (Rust's single-input transforms — filter/compress/decompress/recover/sort — all preserve; merge/convert intentionally stamp the mcap-rust identity since there is no single source library to carry forward.)",
+        "Header.library identifies the software that wrote the file, and recover authors a fresh, re-encoded MCAP, so each CLI stamps its own identity rather than claiming the original recorder wrote the output. Both carry a non-empty source library forward as a trailing `; `-separated origin segment (User-Agent style); the TEN_MESSAGES fixture has an empty source library, so each writes only its own identity with no origin. The identifier strings differ by implementation: Rust writes the CLI plus underlying-crate tokens (`mcap-cli/<v> mcap-rust/<v>`), while Go writes `mcap-go/<v>`. Go also accretes distinct tokens across version bumps (e.g. `mcap-go/1.9.0; mcap-go/1.8.0`), whereas Rust keeps a single origin so repeated CLI passes are idempotent.",
       desiredBehavior:
-        "Rust recover should keep preserving the source Header.library verbatim rather than re-stamping it; rewrite provenance, if needed, belongs in a separate record rather than concatenated into the library field.",
+        "Rust recover should stamp the CLI writer identity (`mcap-cli/<v> mcap-rust/<v>`) and preserve any non-empty source library as a single trailing `; ` origin; the differing identifier string from Go is expected.",
       goBehavior: {
         exitCode: 0,
         files: [
@@ -1404,7 +1404,7 @@ export const cases: CliTestCase[] = [
           {
             path: "recovered.mcap",
             exists: true,
-            mcapSummary: { library: "" },
+            mcapSummary: { libraryContains: "mcap-cli/" },
           },
         ],
       },
