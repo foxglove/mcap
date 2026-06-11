@@ -1442,6 +1442,108 @@ export const cases: CliTestCase[] = [
       },
     },
   },
+  // ---------------------------------------------------------------------------
+  // Known differences: Go doctor / recover correctness bugs
+  // ---------------------------------------------------------------------------
+  {
+    id: "known-difference-doctor-crash-on-malformed-chunk-index",
+    description:
+      "Go doctor crashes with SIGSEGV when a ChunkIndex record fails to parse; Rust doctor reports the error and continues.",
+    tags: ["known-difference", "doctor"],
+    setup: [
+      {
+        // Minimal MCAP: magic, empty header, data end, a truncated (4-byte)
+        // ChunkIndex record that will fail to parse, footer, closing magic.
+        type: "writeBytes",
+        to: "{caseWorkDir}/malformed.mcap",
+        bytes: [
+          // Opening magic
+          0x89, 0x4d, 0x43, 0x41, 0x50, 0x30, 0x0d, 0x0a,
+          // Header (opcode 0x01, length 8): profile="" library=""
+          0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          0x00, 0x00,
+          // DataEnd (opcode 0x0F, length 4): crc=0
+          0x0f, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          // ChunkIndex (opcode 0x08, length 4): TRUNCATED — only 4 zero bytes
+          // instead of the ~72+ bytes needed for a valid ChunkIndex.
+          0x08, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          // Footer (opcode 0x02, length 20): summary_start=38, offset_start=0, crc=0
+          0x02, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x26, 0x00, 0x00, 0x00, 0x00, 0x00,
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          // Closing magic
+          0x89, 0x4d, 0x43, 0x41, 0x50, 0x30, 0x0d, 0x0a,
+        ],
+      },
+    ],
+    invocation: { args: ["doctor", "malformed.mcap"] },
+    knownDifference: {
+      id: "doctor-crash-on-malformed-chunk-index",
+      summary:
+        "Go doctor dereferences a nil parse result when a ChunkIndex record is malformed, causing a SIGSEGV; Rust doctor logs the parse error and continues checking the file.",
+      reason:
+        "Go doctor logs the parse error but does not skip the current record, so the nil result is dereferenced on the next line (doctor.go:489). This pattern affects every record type in the Go doctor loop. Rust doctor uses Result-based control flow that makes it impossible to use a failed parse result.",
+      desiredBehavior:
+        "Rust doctor should continue reporting the parse error and any additional structural problems without crashing; the Go crash is a bug.",
+      trackingIssue: "FG-14850",
+      goBehavior: {
+        exitCode: 2,
+        stdout: { kind: "contains", value: "Failed to parse chunk index" },
+      },
+      rustBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "Failed to parse top-level record" },
+      },
+    },
+  },
+  {
+    id: "known-difference-doctor-crash-on-malformed-attachment-index",
+    description:
+      "Go doctor crashes with SIGSEGV when an AttachmentIndex record fails to parse; Rust doctor reports the error and continues.",
+    tags: ["known-difference", "doctor"],
+    setup: [
+      {
+        // Minimal MCAP with a truncated AttachmentIndex record (opcode 0x0A).
+        type: "writeBytes",
+        to: "{caseWorkDir}/malformed-attachment-index.mcap",
+        bytes: [
+          // Opening magic
+          0x89, 0x4d, 0x43, 0x41, 0x50, 0x30, 0x0d, 0x0a,
+          // Header (opcode 0x01, length 8): profile="" library=""
+          0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          0x00, 0x00,
+          // DataEnd (opcode 0x0F, length 4): crc=0
+          0x0f, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          // AttachmentIndex (opcode 0x0A, length 4): TRUNCATED — only 4 zero
+          // bytes instead of the ~50+ bytes needed for a valid AttachmentIndex.
+          0x0a, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          // Footer (opcode 0x02, length 20): summary_start=38, offset_start=0, crc=0
+          0x02, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x26, 0x00, 0x00, 0x00, 0x00, 0x00,
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          // Closing magic
+          0x89, 0x4d, 0x43, 0x41, 0x50, 0x30, 0x0d, 0x0a,
+        ],
+      },
+    ],
+    invocation: { args: ["doctor", "malformed-attachment-index.mcap"] },
+    knownDifference: {
+      id: "doctor-crash-on-malformed-attachment-index",
+      summary:
+        "Go doctor dereferences a nil parse result when an AttachmentIndex record is malformed, causing a SIGSEGV; Rust doctor logs the parse error and continues.",
+      reason:
+        "Same nil-dereference pattern as the ChunkIndex case: Go logs the error but falls through to use the nil result (doctor.go:498). Rust control flow prevents use of a failed parse result.",
+      desiredBehavior:
+        "Rust doctor should continue reporting the parse error without crashing; the Go crash is a bug.",
+      trackingIssue: "FG-14850",
+      goBehavior: {
+        exitCode: 2,
+        stdout: { kind: "contains", value: "Failed to parse attachment index" },
+      },
+      rustBehavior: {
+        exitCode: "nonzero",
+        stderr: { kind: "contains", value: "Failed to parse top-level record" },
+      },
+    },
+  },
 ];
 
 export function validateCases(testCases: readonly CliTestCase[]): string[] {
