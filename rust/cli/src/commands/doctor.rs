@@ -220,6 +220,7 @@ impl Doctor {
                     self.error("File contains multiple Statistics records");
                 }
                 if self.in_summary_section {
+                    // Validate inline so later Channel records cannot satisfy the ordering rule.
                     self.validate_statistics_summary_channels(&statistics);
                 }
                 self.statistics = Some(statistics);
@@ -675,7 +676,7 @@ impl Doctor {
         for channel_id in required_channel_ids {
             if !self.channel_ids_in_summary_section.contains(&channel_id) {
                 self.error(format!(
-                    "Statistics.channel_message_counts is non-empty, but Channel {} is missing from the summary section before the Statistics record",
+                    "Statistics.channel_message_counts is non-empty, but Channel with ID {} is missing from the summary section before the Statistics record",
                     channel_id
                 ));
             }
@@ -839,10 +840,10 @@ mod tests {
 
         let diagnosis = diagnose_mcap(&mcap, false);
 
+        let expected =
+            "Channel with ID 1 is missing from the summary section before the Statistics record";
         assert!(
-            diagnosis.errors.iter().any(|msg| msg.contains(
-                "Channel 1 is missing from the summary section before the Statistics record"
-            )),
+            diagnosis.errors.iter().any(|msg| msg.contains(expected)),
             "{:?}",
             diagnosis.errors
         );
@@ -859,10 +860,10 @@ mod tests {
 
         let diagnosis = diagnose_mcap(&mcap, false);
 
+        let expected =
+            "Channel with ID 1 is missing from the summary section before the Statistics record";
         assert!(
-            diagnosis.errors.iter().any(|msg| msg.contains(
-                "Channel 1 is missing from the summary section before the Statistics record"
-            )),
+            diagnosis.errors.iter().any(|msg| msg.contains(expected)),
             "{:?}",
             diagnosis.errors
         );
