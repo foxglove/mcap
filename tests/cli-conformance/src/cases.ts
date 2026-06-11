@@ -1484,6 +1484,7 @@ export const cases: CliTestCase[] = [
         "Go doctor logs the parse error but does not skip the current record, so the nil result is dereferenced on the next line (doctor.go:489). This pattern affects every record type in the Go doctor loop. Rust doctor uses Result-based control flow that makes it impossible to use a failed parse result.",
       desiredBehavior:
         "Rust doctor should continue reporting the parse error and any additional structural problems without crashing; the Go crash is a bug.",
+      trackingIssue: "FG-14850",
       goBehavior: {
         exitCode: 2,
         stdout: { kind: "contains", value: "Failed to parse chunk index" },
@@ -1532,6 +1533,7 @@ export const cases: CliTestCase[] = [
         "Same nil-dereference pattern as the ChunkIndex case: Go logs the error but falls through to use the nil result (doctor.go:498). Rust control flow prevents use of a failed parse result.",
       desiredBehavior:
         "Rust doctor should continue reporting the parse error without crashing; the Go crash is a bug.",
+      trackingIssue: "FG-14850",
       goBehavior: {
         exitCode: 2,
         stdout: { kind: "contains", value: "Failed to parse attachment index" },
@@ -1540,38 +1542,6 @@ export const cases: CliTestCase[] = [
         exitCode: "nonzero",
         stderr: { kind: "contains", value: "Failed to parse top-level record" },
       },
-    },
-  },
-  {
-    id: "known-difference-recover-writer-chunk-index-serialization",
-    description:
-      "Go mcap writer's WriteChunkIndex may produce internally inconsistent records when MessageIndexOffsets references channels not in the writer's channel list; Rust writer serializes the map atomically with a runtime length assertion.",
-    tags: ["known-difference", "recover"],
-    // This is a latent correctness bug in the Go writer's WriteChunkIndex method.
-    // It declares the message_index_offsets byte length from len(map) but only
-    // serializes entries for channels in w.channelIDs. When the map has channels
-    // not yet registered, the declared length exceeds written bytes, producing an
-    // internally inconsistent record. The Rust writer iterates the BTreeMap
-    // directly with an assert_eq! verifying written bytes match.
-    //
-    // Recovering a valid MCAP and checking the output is valid exercises this path
-    // because recover writes chunks via WriteChunkWithIndexes before registering
-    // channels, relying on the deferred AddChannel call to catch up. In the Go
-    // writer this CAN produce a mismatched ChunkIndex (depending on timing); the
-    // Rust writer is structurally immune.
-    invocation: {
-      args: ["recover", TEN_MESSAGES, "-o", "recovered.mcap", "--compression", "none"],
-    },
-    comparison: {
-      exitCode: 0,
-      stdout: { kind: "ignore" },
-      stderr: { kind: "ignore" },
-      files: [
-        {
-          path: "recovered.mcap",
-          comparator: { kind: "mcap", mode: "content", allowSemanticFallback: true },
-        },
-      ],
     },
   },
 ];
