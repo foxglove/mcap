@@ -170,7 +170,7 @@ pub(crate) fn metadata_indexes_need_scan(parsed: &ParsedMcap) -> bool {
 }
 
 pub(crate) fn warn_index_scan(record_kind: &str) {
-    eprintln!("Warning: {record_kind} indexes not available; full scan may be slow.");
+    eprintln!("Warning: {record_kind} indexes incomplete or unavailable; full scan may be slow.");
 }
 
 fn scan_top_level_records<F>(mcap: &[u8], mut process: F) -> Result<()>
