@@ -10,7 +10,7 @@ use crate::{parse, render, source};
 pub fn run(ctx: &CommandContext, args: InfoCommand) -> Result<()> {
     let parsed = source::parse_mcap_from_path(
         &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()),
+        source::SourceOptions::new(ctx.allow_remote_scan()).scan_data_without_statistics(true),
     )?;
     print!("{}", render_info(&parsed));
     Ok(())
@@ -27,22 +27,25 @@ fn render_info(parsed: &parse::ParsedMcap) -> String {
         let _ = writeln!(&mut out, "profile:     unknown");
     }
 
+    let message_count = message_count(parsed);
+    let message_time_range = message_time_range(parsed);
     let mut duration_seconds = 0.0f64;
-    if let Some(stats) = &parsed.statistics {
-        let _ = writeln!(&mut out, "messages:    {}", stats.message_count);
-        let (duration_ns, signed_duration) =
-            format_duration(stats.message_start_time, stats.message_end_time);
+    if let Some(count) = message_count {
+        let _ = writeln!(&mut out, "messages:    {count}");
+    }
+    if let Some((message_start_time, message_end_time)) = message_time_range {
+        let (duration_ns, signed_duration) = format_duration(message_start_time, message_end_time);
         duration_seconds = duration_ns / 1e9;
         let _ = writeln!(&mut out, "duration:    {signed_duration}");
         let _ = writeln!(
             &mut out,
             "start:       {}",
-            render::formatted_time(stats.message_start_time)
+            render::formatted_time(message_start_time)
         );
         let _ = writeln!(
             &mut out,
             "end:         {}",
-            render::formatted_time(stats.message_end_time)
+            render::formatted_time(message_end_time)
         );
     }
 
@@ -119,17 +122,52 @@ fn render_info(parsed: &parse::ParsedMcap) -> String {
     let rows = render_channel_summary_rows(parsed, duration_seconds);
     out.push_str(&render::format_table(&rows));
 
-    if let Some(stats) = &parsed.statistics {
-        let _ = writeln!(&mut out, "channels:    {}", stats.channel_count);
-        let _ = writeln!(&mut out, "attachments: {}", stats.attachment_count);
-        let _ = writeln!(&mut out, "metadata:    {}", stats.metadata_count);
-    } else {
-        let _ = writeln!(&mut out, "channels:    unknown");
-        let _ = writeln!(&mut out, "attachments: unknown");
-        let _ = writeln!(&mut out, "metadata:    unknown");
-    }
+    let _ = writeln!(&mut out, "channels:    {}", channel_count(parsed));
+    let _ = writeln!(&mut out, "attachments: {}", attachment_count(parsed));
+    let _ = writeln!(&mut out, "metadata:    {}", metadata_count(parsed));
 
     out
+}
+
+fn message_count(parsed: &parse::ParsedMcap) -> Option<u64> {
+    parsed
+        .statistics
+        .as_ref()
+        .map(|stats| stats.message_count)
+        .or(parsed.message_count)
+}
+
+fn message_time_range(parsed: &parse::ParsedMcap) -> Option<(u64, u64)> {
+    if let Some(stats) = &parsed.statistics {
+        return Some((stats.message_start_time, stats.message_end_time));
+    }
+    Some((parsed.message_start_time?, parsed.message_end_time?))
+}
+
+fn channel_count(parsed: &parse::ParsedMcap) -> u32 {
+    parsed
+        .statistics
+        .as_ref()
+        .map(|stats| stats.channel_count)
+        .unwrap_or(parsed.channels.len() as u32)
+}
+
+fn attachment_count(parsed: &parse::ParsedMcap) -> u32 {
+    parsed
+        .statistics
+        .as_ref()
+        .map(|stats| stats.attachment_count)
+        .or(parsed.attachment_count)
+        .unwrap_or(parsed.attachment_indexes.len() as u32)
+}
+
+fn metadata_count(parsed: &parse::ParsedMcap) -> u32 {
+    parsed
+        .statistics
+        .as_ref()
+        .map(|stats| stats.metadata_count)
+        .or(parsed.metadata_count)
+        .unwrap_or(parsed.metadata_indexes.len() as u32)
 }
 
 fn render_channel_summary_rows(
@@ -144,20 +182,13 @@ fn render_channel_summary_rows(
         .copied()
         .map(digits_u16)
         .unwrap_or(1);
-    let max_count_width = parsed
-        .statistics
-        .as_ref()
-        .map(|stats| {
+    let channel_message_counts = channel_message_counts(parsed);
+    let max_count_width = channel_message_counts
+        .map(|counts| {
             parsed
                 .channels
                 .keys()
-                .map(|channel_id| {
-                    stats
-                        .channel_message_counts
-                        .get(channel_id)
-                        .copied()
-                        .unwrap_or_default()
-                })
+                .map(|channel_id| counts.get(channel_id).copied().unwrap_or_default())
                 .max()
                 .unwrap_or_default()
                 .to_string()
@@ -166,12 +197,8 @@ fn render_channel_summary_rows(
         .unwrap_or(0);
 
     for channel in parsed.channels.values() {
-        let msg_col = if let Some(stats) = &parsed.statistics {
-            let count = stats
-                .channel_message_counts
-                .get(&channel.id)
-                .copied()
-                .unwrap_or_default();
+        let msg_col = if let Some(counts) = channel_message_counts {
+            let count = counts.get(&channel.id).copied().unwrap_or_default();
             if count > 1 && duration_seconds > 0.0 {
                 let max_hz = count as f64 / duration_seconds;
                 let min_hz = (count - 1) as f64 / duration_seconds;
@@ -210,6 +237,16 @@ fn render_channel_summary_rows(
         ]);
     }
     rows
+}
+
+fn channel_message_counts(parsed: &parse::ParsedMcap) -> Option<&BTreeMap<u16, u64>> {
+    if let Some(stats) = &parsed.statistics {
+        return Some(&stats.channel_message_counts);
+    }
+    parsed
+        .message_count
+        .is_some()
+        .then_some(&parsed.channel_message_counts)
 }
 
 fn format_duration(start: u64, end: u64) -> (f64, String) {
@@ -352,7 +389,7 @@ mod tests {
 
     use super::{count_chunk_overlaps, format_duration, render_channel_summary_rows, render_info};
     use crate::parse::{ParsedMcap, ParsedSchema};
-    use mcap::records::{self, ChunkIndex, Header, Statistics};
+    use mcap::records::{self, AttachmentIndex, ChunkIndex, Header, MetadataIndex, Statistics};
 
     #[test]
     fn overlaps_counts_concurrent_chunks() {
@@ -433,6 +470,73 @@ mod tests {
         assert!(rendered.contains("messages:    2"));
         assert!(rendered.contains("channels:"));
         assert!(rendered.contains("/demo"));
+    }
+
+    #[test]
+    fn info_render_uses_scanned_counts_without_statistics() {
+        let mut parsed = ParsedMcap {
+            message_count: Some(1),
+            message_start_time: Some(10),
+            message_end_time: Some(10),
+            attachment_count: Some(0),
+            metadata_count: Some(0),
+            ..ParsedMcap::default()
+        };
+        parsed.channels.insert(
+            7,
+            records::Channel {
+                id: 7,
+                schema_id: 0,
+                topic: "/demo".to_string(),
+                message_encoding: "json".to_string(),
+                metadata: BTreeMap::new(),
+            },
+        );
+        parsed.channel_message_counts.insert(7, 1);
+
+        let rendered = render_info(&parsed);
+        assert!(rendered.contains("messages:    1"));
+        assert!(rendered.contains("duration:    0ns"));
+        assert!(rendered.contains("1 msgs"));
+        assert!(rendered.contains("channels:    1"));
+        assert!(rendered.contains("attachments: 0"));
+        assert!(rendered.contains("metadata:    0"));
+        assert!(!rendered.contains("unknown"));
+    }
+
+    #[test]
+    fn info_render_uses_summary_record_counts_without_statistics() {
+        let mut parsed = ParsedMcap::default();
+        parsed.channels.insert(
+            7,
+            records::Channel {
+                id: 7,
+                schema_id: 0,
+                topic: "/demo".to_string(),
+                message_encoding: "json".to_string(),
+                metadata: BTreeMap::new(),
+            },
+        );
+        parsed.attachment_indexes.push(AttachmentIndex {
+            offset: 22,
+            length: 10,
+            log_time: 2,
+            create_time: 3,
+            data_size: 44,
+            name: "demo.bin".to_string(),
+            media_type: "application/octet-stream".to_string(),
+        });
+        parsed.metadata_indexes.push(MetadataIndex {
+            offset: 7,
+            length: 42,
+            name: "demo".to_string(),
+        });
+
+        let rendered = render_info(&parsed);
+        assert!(rendered.contains("channels:    1"));
+        assert!(rendered.contains("attachments: 1"));
+        assert!(rendered.contains("metadata:    1"));
+        assert!(!rendered.contains("unknown"));
     }
 
     #[test]
