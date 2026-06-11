@@ -58,15 +58,9 @@ The [`mcap` CLI tool](../cli.md#installation) also supports converting ROS 2 `.d
 $ mcap convert multiple_files_1.db3 demo.mcap
 ```
 
-The `mcap` CLI conversion support for SQLite bags works by emulating the behavior of the ROS 2 resource discovery mechanism. This may produce different results from recording the bag directly in MCAP using the [rosbag2 MCAP storage plugin](https://github.com/ros-tooling/rosbag2_storage_mcap). If you have difficulty converting bags successfully using the CLI, consider using the `ros2 bag convert` method described above.
+`mcap convert` reads the message definitions embedded in the `.db3` file. ROS 2 Iron and later embed message definitions when recording, so these bags convert directly without a sourced workspace. Converting may still produce different results from recording the bag directly in MCAP using the [rosbag2 MCAP storage plugin](https://github.com/ros-tooling/rosbag2_storage_mcap).
 
-`mcap convert` will search the path stored in your $AMENT_PREFIX_PATH environment variable to locate the ROS message definitions on your hard drive.
-
-Alternatively, you can specify a colon-separated list of directories for the CLI tool to search using the ament-prefix-path flag:
-
-```
-$ mcap convert ros2_input.db3 ros1_output.mcap --ament-prefix-path=/your/first/directory;/your/second/directory
-```
+Bags recorded before ROS 2 Iron do not contain embedded message definitions and cannot be converted directly by the CLI. To convert them, use the `ros2 bag convert` method described above with the original ROS 2 workspace sourced.
 
 You can also use the mcap CLI tool to inspect MCAP files, validate them, and even echo their messages to `stdout`. For a full list of possible commands, check out the [mcap CLI documentation](../cli.md).
 
