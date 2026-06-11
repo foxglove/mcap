@@ -395,10 +395,10 @@ fn cat_remote_indexed(
 /// instead, otherwise a chunk-local channel matching a `--topics` filter would be silently dropped.
 ///
 /// Note: a file mixing summary channels with chunk-local ones can't be produced by the standard
-/// writer (its `repeat_channels`/`repeat_schemas` options are all-or-nothing: either every channel
-/// is in the summary, making this false, or none is, making `included_topics` empty). So the mixed +
-/// `--topics` path this guards is defensive against partial-repetition files from other tools and
-/// isn't covered by an `mcap::Writer`-based regression test.
+/// writer (its `repeat_channels`/`repeat_schemas` options are all-or-nothing). The mixed + `--topics`
+/// path this guards is only possible when chunk indexes include message-index channel IDs, so it is
+/// defensive against partial-repetition files from other tools and isn't covered by an
+/// `mcap::Writer`-based regression test.
 fn needs_in_chunk_definitions(summary: &mcap::Summary) -> bool {
     if !summary.chunk_indexes.is_empty() && summary.channels.is_empty() {
         return true;
