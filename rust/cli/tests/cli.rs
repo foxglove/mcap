@@ -3,13 +3,17 @@
 //! These cover behavior the in-process unit tests in `src/` cannot reach: real process
 //! exit codes (including clap's argument-error code), reading a non-seekable stdin pipe,
 //! and writing real output files. Per-command logic stays covered by the unit tests;
-//! this file stays at the process boundary. Completion-specific behavior lives in
-//! `completion.rs`.
+//! this file stays at the process boundary.
 
 use std::collections::BTreeMap;
 use std::io::{Cursor, Write};
 use std::path::Path;
 use std::process::{Command, Output, Stdio};
+
+#[cfg(unix)]
+use std::os::fd::OwnedFd;
+#[cfg(unix)]
+use std::os::unix::net::UnixStream;
 
 use mcap::records::MessageHeader;
 use tempfile::TempDir;
@@ -208,6 +212,39 @@ fn decompress_reads_stdin_pipe() {
     assert!(looks_like_mcap(
         &std::fs::read(&out_path).expect("decompress output")
     ));
+}
+
+// ---------------------------------------------------------------------------
+// Completion
+// ---------------------------------------------------------------------------
+
+#[test]
+fn completion_outputs_a_script() {
+    let output = mcap(&["completion", "bash"]);
+    assert!(output.status.success(), "completion bash should succeed");
+    assert!(!output.stdout.is_empty(), "completion should emit a script");
+}
+
+// Uses a raw closed-pipe stdout fd to reproduce a downstream reader exiting early (e.g.
+// `mcap completion fish | head`); the captured-output helpers can't model a closed pipe.
+#[cfg(unix)]
+#[test]
+fn fish_completion_allows_downstream_pipe_to_close() {
+    let (read_end, write_end) = UnixStream::pair().expect("failed to create pipe");
+    drop(read_end);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_mcap"))
+        .args(["completion", "fish"])
+        .stdout(Stdio::from(OwnedFd::from(write_end)))
+        .output()
+        .expect("failed to run mcap completion fish");
+
+    assert!(
+        output.status.success(),
+        "completion should exit successfully after a downstream pipe closes; status: {:?}; stderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 // ---------------------------------------------------------------------------
