@@ -4,9 +4,3 @@ updates:
     directory: "/"
     schedule:
       interval: "daily"
-  - package-ecosystem: "gomod"
-    directory: "/go/cli/mcap/"
-    schedule:
-      interval: "daily"
-    allow:
-      - dependency-name: "github.com/foxglove/*"

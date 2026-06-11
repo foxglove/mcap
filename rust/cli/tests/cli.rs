@@ -122,15 +122,14 @@ fn exit_code_2_on_missing_required_flag() {
 fn exit_code_2_on_unknown_global_flag() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(&dir, "in.mcap", &build_mcap(1));
-    // `--config` was a Go-only global flag; the Rust CLI rejects it as an unknown argument.
+    // Unknown global flags are rejected before command dispatch.
     let output = mcap(&["--config", "x.yaml", "info", path_str(&path)]);
     assert_eq!(output.status.code(), Some(2));
 }
 
 #[test]
 fn exit_code_2_on_version_subcommand() {
-    // The Go CLI had a `version` subcommand; the Rust CLI exposes `--version` instead, so the
-    // subcommand is an unrecognized argument (exit 2).
+    // Version is exposed as a global flag, so `version` is an unrecognized argument (exit 2).
     assert_eq!(mcap(&["version"]).status.code(), Some(2));
     assert!(mcap(&["--version"]).status.success());
 }

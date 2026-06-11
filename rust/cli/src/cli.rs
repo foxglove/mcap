@@ -380,8 +380,7 @@ pub struct MergeCommand {
     /// - none: do not coalesce channels
     ///
     /// Note: coalescing channels may produce non-monotonic or colliding
-    /// sequence values within a coalesced output channel (matches Go CLI
-    /// behavior).
+    /// sequence values within a coalesced output channel.
     #[arg(long, value_enum, default_value = "auto")]
     pub coalesce_channels: CoalesceChannels,
 }

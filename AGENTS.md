@@ -61,7 +61,7 @@ The Python directory contains four packages: `mcap`, `mcap-protobuf-support`, `m
 | Test   | `cd go && make test`      |
 | Lint   | `cd go && make lint`      |
 
-The Go workspace (`go/go.work`) includes the core library (`go/mcap`), ROS tools (`go/ros`), CLI (`go/cli/mcap`), and conformance tests.
+The Go workspace (`go/go.work`) includes the core library (`go/mcap`), ROS tools (`go/ros`), and conformance tests.
 
 ## Rust
 

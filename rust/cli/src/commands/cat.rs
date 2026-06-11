@@ -684,8 +684,7 @@ fn write_json_message(
     json_transcoders: &mut JsonTranscoders,
 ) -> Result<bool> {
     let encoded_data = json_transcoders.encode(channel, data)?;
-    // Unlike the Go CLI's current manual string concatenation, escaping here keeps
-    // JSON valid for topics containing quotes or backslashes.
+    // Escaping keeps JSON valid for topics containing quotes or backslashes.
     let topic = serde_json::to_string(&channel.topic).context("failed to encode topic")?;
     let result: io::Result<()> = (|| {
         write!(
