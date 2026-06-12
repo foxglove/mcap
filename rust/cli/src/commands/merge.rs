@@ -90,6 +90,27 @@ struct PendingMessage {
     data: Vec<u8>,
 }
 
+impl PendingMessage {
+    fn new(
+        input_idx: usize,
+        input_order: usize,
+        channel: Arc<mcap::Channel<'static>>,
+        header: MessageHeader,
+        data: Vec<u8>,
+    ) -> Self {
+        Self {
+            input_idx,
+            input_order,
+            input_channel_id: header.channel_id,
+            channel,
+            sequence: header.sequence,
+            log_time: header.log_time,
+            publish_time: header.publish_time,
+            data,
+        }
+    }
+}
+
 impl PartialEq for PendingMessage {
     fn eq(&self, other: &Self) -> bool {
         self.log_time == other.log_time
@@ -420,7 +441,7 @@ fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
     let length = u64::from_le_bytes(header[1..9].try_into().expect("slice has length 8"));
     let length = usize::try_from(length)
         .with_context(|| format!("message index length out of range at offset {offset}"))?;
-    let body_start = start + 9;
+    let body_start = header_end;
     let body_end = body_start
         .checked_add(length)
         .ok_or_else(|| anyhow::anyhow!("message index length overflows at offset {offset}"))?;
@@ -579,16 +600,13 @@ impl<'a> IndexedInputMessageReader<'a> {
                         })?;
                     let input_order = self.input_order;
                     self.input_order += 1;
-                    return Ok(Some(PendingMessage {
-                        input_idx: self.input_idx,
+                    return Ok(Some(PendingMessage::new(
+                        self.input_idx,
                         input_order,
-                        input_channel_id: header.channel_id,
                         channel,
-                        sequence: header.sequence,
-                        log_time: header.log_time,
-                        publish_time: header.publish_time,
-                        data: data.to_vec(),
-                    }));
+                        header,
+                        data.to_vec(),
+                    )));
                 }
             }
         }
@@ -605,16 +623,13 @@ impl MaterializedInputMessages {
         while let Some((channel, header, data)) = next_message_from_input(&mut reader)
             .with_context(|| format!("failed reading messages from '{}'", input.name))?
         {
-            messages.push(PendingMessage {
+            messages.push(PendingMessage::new(
                 input_idx,
                 input_order,
-                input_channel_id: header.channel_id,
                 channel,
-                sequence: header.sequence,
-                log_time: header.log_time,
-                publish_time: header.publish_time,
+                header,
                 data,
-            });
+            ));
             input_order += 1;
         }
         messages.sort_by_key(|message| (message.log_time, message.input_order));
