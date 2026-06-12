@@ -8,10 +8,12 @@ use clap_complete::Shell;
 use crate::logsetup;
 
 pub(crate) static VERSION: LazyLock<String> = LazyLock::new(|| {
+    // `GIT_SHORT_SHA` is the abbreviated commit (set by `build.rs`), or `unknown` when
+    // the build had no provenance (no git checkout and not a `git archive` tarball).
     format!(
         "{} ({}) mcap-rust/{}",
         env!("CARGO_PKG_VERSION"),
-        env!("GIT_SHA"),
+        env!("GIT_SHORT_SHA"),
         mcap::VERSION
     )
 });

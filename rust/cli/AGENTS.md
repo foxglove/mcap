@@ -19,7 +19,7 @@ A few modules carry more than their name implies:
 | `source.rs`  | Input abstraction over local files (memory-mapped) and remote object stores. Owns summary/index range reads, remote materialization, and `--allow-remote-scan` gating. |
 | `parse.rs`   | `ParsedMcap` plus summary-first / linear-scan parsing and the exact-record parsers used by remote range reads.                                                         |
 | `context.rs` | `CommandContext`, the global options (verbosity, color, `allow_remote_scan`) threaded into every handler.                                                              |
-| `build.rs`   | Embeds the git SHA into the binary via the `GIT_SHA` env var.                                                                                                          |
+| `build.rs`   | Resolves commit sha (git rev-parse or export-subst) into `GIT_SHORT_SHA` env var.                                                                                      |
 
 ## Conventions
 
