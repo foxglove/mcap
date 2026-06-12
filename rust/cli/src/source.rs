@@ -1289,6 +1289,25 @@ mod tests {
     }
 
     #[test]
+    fn distinct_local_input_output_allows_single_component_missing_output() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input = dir.path().join("input.mcap");
+        let output_name = format!(
+            "mcap-cli-missing-output-{}-{}.mcap",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        );
+        std::fs::write(&input, b"placeholder").expect("write input");
+        let _ = std::fs::remove_file(&output_name);
+
+        super::ensure_distinct_local_input_output(&input, Path::new(&output_name))
+            .expect("single-component missing output should resolve through current directory");
+    }
+
+    #[test]
     fn distinct_local_input_output_allows_missing_input() {
         let dir = tempfile::TempDir::new().expect("temp dir");
         let input = dir.path().join("missing.mcap");

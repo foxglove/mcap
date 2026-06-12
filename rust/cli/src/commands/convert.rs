@@ -152,13 +152,6 @@ mod tests {
         path
     }
 
-    fn temp_path(name: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!(
-            "mcap-cli-convert-test-{}-{name}",
-            std::process::id()
-        ))
-    }
-
     fn build_sample_mcap(include_crc: bool) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         let opts = build_write_options(CompressionFormat::None, 1024, include_crc, true, "ros1");
@@ -280,30 +273,6 @@ size 123\n",
         std::fs::remove_file(path).expect("remove temp input");
         assert!(err.to_string().contains("Git LFS pointer"));
         assert!(err.to_string().contains("git lfs pull"));
-    }
-
-    #[test]
-    fn distinct_path_check_allows_single_component_missing_output() {
-        let input_path = temp_input("distinct-input.db3", b"placeholder");
-        let output_path = temp_path("single-component-output.mcap");
-        let file_name = output_path.file_name().expect("file name");
-        let current_dir_output = std::env::current_dir()
-            .expect("current dir")
-            .join(file_name);
-        let _ = std::fs::remove_file(&current_dir_output);
-
-        crate::source::ensure_distinct_local_input_output(&input_path, Path::new(file_name))
-            .expect("single-component output should resolve through current directory");
-        std::fs::remove_file(input_path).expect("remove temp input");
-    }
-
-    #[test]
-    fn distinct_path_check_rejects_same_file_paths() {
-        let path = temp_input("same-path.db3", b"placeholder");
-        let err = crate::source::ensure_distinct_local_input_output(&path, &path)
-            .expect_err("same input/output should fail");
-        assert!(err.to_string().contains("input and output paths"));
-        std::fs::remove_file(path).expect("remove temp input");
     }
 
     #[test]
