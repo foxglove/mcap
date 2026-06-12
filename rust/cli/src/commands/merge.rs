@@ -381,6 +381,55 @@ fn write_metadata_records<W: Write + Seek>(
     Ok(())
 }
 
+fn summary_indexes_all_messages(input: &[u8], summary: &mcap::Summary) -> bool {
+    let Some(stats) = summary.stats.as_ref() else {
+        return false;
+    };
+    let mut offsets = HashSet::new();
+    let mut indexed_messages = 0u64;
+    for offset in summary
+        .chunk_indexes
+        .iter()
+        .flat_map(|chunk| chunk.message_index_offsets.values())
+    {
+        if offsets.insert(*offset) {
+            let Ok(count) = message_index_count(input, *offset) else {
+                return false;
+            };
+            indexed_messages = indexed_messages.saturating_add(count as u64);
+        }
+    }
+    indexed_messages == stats.message_count
+}
+
+fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
+    let start = usize::try_from(offset).with_context(|| {
+        format!("message index offset out of range for this platform: {offset}")
+    })?;
+    let header = input
+        .get(start..start + 9)
+        .ok_or_else(|| anyhow::anyhow!("message index header out of bounds at offset {offset}"))?;
+    let opcode = header[0];
+    if opcode != mcap::records::op::MESSAGE_INDEX {
+        bail!("expected MessageIndex record at offset {offset}");
+    }
+    let length = u64::from_le_bytes(header[1..9].try_into().expect("slice has length 8"));
+    let length = usize::try_from(length)
+        .with_context(|| format!("message index length out of range at offset {offset}"))?;
+    let body_start = start + 9;
+    let body_end = body_start
+        .checked_add(length)
+        .ok_or_else(|| anyhow::anyhow!("message index length overflows at offset {offset}"))?;
+    let body = input
+        .get(body_start..body_end)
+        .ok_or_else(|| anyhow::anyhow!("message index body out of bounds at offset {offset}"))?;
+
+    match mcap::parse_record(opcode, body)? {
+        Record::MessageIndex(index) => Ok(index.records.len()),
+        _ => bail!("expected MessageIndex record at offset {offset}"),
+    }
+}
+
 impl<'a> InputMessageReader<'a> {
     fn new(input: &InputRef<'a>) -> Result<Self> {
         Ok(Self {
@@ -614,6 +663,7 @@ fn merge_messages<W: Write + Seek>(
         if let Some(summary) = summaries[input_idx].as_ref() {
             if !summary.chunk_indexes.is_empty()
                 && super::filter::summary_supports_indexed_transcode(summary)
+                && summary_indexes_all_messages(input.data, summary)
             {
                 streams.push(MergeMessageStream::Indexed(IndexedInputMessageReader::new(
                     input_idx,
@@ -1217,6 +1267,31 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(ordered_log_times, vec![1, 5, 10]);
+    }
+
+    #[test]
+    fn indexed_fast_path_requires_all_messages_in_indexes() {
+        let input = build_mcap(
+            "profile",
+            &[TestMessage {
+                channel_id: 1,
+                topic: "/demo".to_string(),
+                metadata: BTreeMap::new(),
+                log_time: 1,
+                payload: vec![1],
+            }],
+            &[],
+            &[],
+            true,
+            true,
+        );
+        let mut summary = mcap::Summary::read(&input)
+            .expect("summary")
+            .expect("summary present");
+        assert!(summary_indexes_all_messages(&input, &summary));
+
+        summary.stats.as_mut().expect("stats present").message_count += 1;
+        assert!(!summary_indexes_all_messages(&input, &summary));
     }
 
     #[test]
