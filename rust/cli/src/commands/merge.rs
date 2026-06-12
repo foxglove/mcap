@@ -76,6 +76,7 @@ enum MergeMessageStream<'a> {
 }
 
 type InputMessage = (Arc<mcap::Channel<'static>>, MessageHeader, Vec<u8>);
+const MESSAGE_INDEX_ENTRY_SIZE: usize = 16;
 
 #[derive(Debug, Clone)]
 struct PendingMessage {
@@ -406,8 +407,11 @@ fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
     let start = usize::try_from(offset).with_context(|| {
         format!("message index offset out of range for this platform: {offset}")
     })?;
+    let header_end = start
+        .checked_add(9)
+        .ok_or_else(|| anyhow::anyhow!("message index header overflows at offset {offset}"))?;
     let header = input
-        .get(start..start + 9)
+        .get(start..header_end)
         .ok_or_else(|| anyhow::anyhow!("message index header out of bounds at offset {offset}"))?;
     let opcode = header[0];
     if opcode != mcap::records::op::MESSAGE_INDEX {
@@ -428,8 +432,7 @@ fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
         bail!("message index body too short at offset {offset}");
     }
     let byte_len = u32::from_le_bytes(body[2..6].try_into().expect("slice has length 4")) as usize;
-    let entry_size = std::mem::size_of::<mcap::records::MessageIndexEntry>();
-    if !byte_len.is_multiple_of(entry_size) {
+    if !byte_len.is_multiple_of(MESSAGE_INDEX_ENTRY_SIZE) {
         bail!("message index entries are misaligned at offset {offset}");
     }
     let expected_len = 6usize
@@ -438,7 +441,7 @@ fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
     if body.len() != expected_len {
         bail!("message index length mismatch at offset {offset}");
     }
-    Ok(byte_len / entry_size)
+    Ok(byte_len / MESSAGE_INDEX_ENTRY_SIZE)
 }
 
 impl<'a> InputMessageReader<'a> {
@@ -993,6 +996,94 @@ mod tests {
         output.into_inner()
     }
 
+    fn build_indexed_mcap_with_loose_message() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::<u8>::new());
+        let channel_id;
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_summary_offsets(false)
+                .calculate_data_section_crc(false)
+                .calculate_summary_section_crc(false)
+                .calculate_chunk_crcs(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("example", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            channel_id = writer
+                .add_channel(schema_id, "/mixed", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 10,
+                        publish_time: 10,
+                    },
+                    &[10],
+                )
+                .expect("chunked message");
+            writer.finish().expect("finish");
+        }
+
+        let mut bytes = output.into_inner();
+        let loose_message = message_record(channel_id, 2, 1, &[1]);
+        let data_end_offset = record_offset(&bytes, mcap::records::op::DATA_END);
+        bytes.splice(
+            data_end_offset..data_end_offset,
+            loose_message.iter().copied(),
+        );
+        patch_footer_summary_start(&mut bytes, loose_message.len() as u64);
+        patch_statistics_message_count(&mut bytes, 2);
+        bytes
+    }
+
+    fn message_record(channel_id: u16, sequence: u32, log_time: u64, payload: &[u8]) -> Vec<u8> {
+        let mut body = Vec::new();
+        body.extend_from_slice(&channel_id.to_le_bytes());
+        body.extend_from_slice(&sequence.to_le_bytes());
+        body.extend_from_slice(&log_time.to_le_bytes());
+        body.extend_from_slice(&log_time.to_le_bytes());
+        body.extend_from_slice(payload);
+        wrap_record(mcap::records::op::MESSAGE, &body)
+    }
+
+    fn wrap_record(opcode: u8, body: &[u8]) -> Vec<u8> {
+        let mut record = Vec::with_capacity(9 + body.len());
+        record.push(opcode);
+        record.extend_from_slice(&(body.len() as u64).to_le_bytes());
+        record.extend_from_slice(body);
+        record
+    }
+
+    fn record_offset(bytes: &[u8], target_opcode: u8) -> usize {
+        let mut offset = mcap::MAGIC.len();
+        let records_end = bytes.len() - mcap::MAGIC.len();
+        while offset < records_end {
+            let opcode = bytes[offset];
+            let length =
+                u64::from_le_bytes(bytes[offset + 1..offset + 9].try_into().unwrap()) as usize;
+            if opcode == target_opcode {
+                return offset;
+            }
+            offset += 9 + length;
+        }
+        panic!("record opcode 0x{target_opcode:02x} not found");
+    }
+
+    fn patch_footer_summary_start(bytes: &mut [u8], delta: u64) {
+        let offset = record_offset(bytes, mcap::records::op::FOOTER) + 9;
+        let current = u64::from_le_bytes(bytes[offset..offset + 8].try_into().unwrap());
+        bytes[offset..offset + 8].copy_from_slice(&(current + delta).to_le_bytes());
+    }
+
+    fn patch_statistics_message_count(bytes: &mut [u8], message_count: u64) {
+        let offset = record_offset(bytes, mcap::records::op::STATISTICS) + 9;
+        bytes[offset..offset + 8].copy_from_slice(&message_count.to_le_bytes());
+    }
+
     fn merge_bytes(
         inputs: &[(&str, &[u8])],
         coalesce_channels: CoalesceChannels,
@@ -1303,6 +1394,27 @@ mod tests {
 
         summary.stats.as_mut().expect("stats present").message_count += 1;
         assert!(!summary_indexes_all_messages(&input, &summary));
+    }
+
+    #[test]
+    fn merge_keeps_loose_messages_when_indexed_summary_is_incomplete() {
+        let input = build_indexed_mcap_with_loose_message();
+
+        let merged = merge_bytes(
+            &[("mixed", input.as_slice())],
+            CoalesceChannels::Auto,
+            false,
+        )
+        .expect("merge");
+        let messages = mcap::MessageStream::new(&merged)
+            .expect("stream")
+            .map(|message| {
+                let message = message.expect("message");
+                (message.log_time, message.data.to_vec())
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(messages, vec![(1, vec![1]), (10, vec![10])]);
     }
 
     #[test]
