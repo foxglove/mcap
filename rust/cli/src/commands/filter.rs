@@ -133,6 +133,9 @@ pub(crate) fn run_transcode(
     source_options: source::SourceOptions,
 ) -> Result<()> {
     let opts = build_filter_options_from_transcode_options(&args)?;
+    if let (Some(input), Some(output)) = (args.file.as_deref(), opts.output.as_deref()) {
+        source::ensure_distinct_local_input_output(input, output)?;
+    }
     let input = source::load_input(args.file.as_deref(), source_options)?;
 
     if let Some(output) = &opts.output {
@@ -615,6 +618,7 @@ mod tests {
 
     use super::{build_filter_options, filter_to_writer, include_topic, FilterOptions};
     use crate::cli::FilterCommand;
+    use crate::context::CommandContext;
 
     fn default_filter_command() -> FilterCommand {
         FilterCommand {
@@ -755,6 +759,19 @@ mod tests {
         let mut output = Cursor::new(Vec::new());
         filter_to_writer(input, &mut output, opts, false).expect("filter should succeed");
         output.into_inner()
+    }
+
+    fn unique_temp_path(stem: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "mcap-cli-filter-{stem}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        path
     }
 
     #[derive(Default)]
@@ -1173,5 +1190,38 @@ mod tests {
 
         let _ = std::fs::remove_file(input_path);
         let _ = std::fs::remove_file(output_path);
+    }
+
+    #[test]
+    fn run_rejects_same_input_and_output_without_truncating() {
+        let input = write_filter_test_input(true, false);
+        let path = unique_temp_path("same-path.mcap");
+        std::fs::write(&path, &input).expect("write input");
+
+        let err = super::run(
+            &CommandContext::default(),
+            FilterCommand {
+                file: Some(path.clone()),
+                output: Some(path.clone()),
+                include_topic_regex: Vec::new(),
+                exclude_topic_regex: Vec::new(),
+                last_per_channel_topic_regex: Vec::new(),
+                start: None,
+                start_secs: 0,
+                start_nsecs: 0,
+                end: None,
+                end_secs: 0,
+                end_nsecs: 0,
+                include_metadata: false,
+                include_attachments: false,
+                output_compression: "zstd".to_string(),
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            },
+        )
+        .expect_err("same input/output should fail");
+
+        assert!(err.to_string().contains("input and output paths"));
+        assert_eq!(std::fs::read(&path).expect("read input"), input);
+        let _ = std::fs::remove_file(path);
     }
 }

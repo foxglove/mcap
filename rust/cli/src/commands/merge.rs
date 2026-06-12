@@ -114,6 +114,12 @@ pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     let opts = build_merge_options(args);
     let source_options = crate::source::SourceOptions::new(ctx.allow_remote_scan());
 
+    if let Some(output_path) = &opts.output_file {
+        for input_path in &opts.files {
+            crate::source::ensure_distinct_local_input_output(input_path, output_path)?;
+        }
+    }
+
     let mut mapped_inputs = Vec::with_capacity(opts.files.len());
     let mut input_names = Vec::with_capacity(opts.files.len());
     for path in &opts.files {
@@ -766,6 +772,19 @@ mod tests {
         Ok(output.into_inner())
     }
 
+    fn unique_temp_path(stem: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "mcap-cli-merge-{stem}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        path
+    }
+
     #[test]
     fn build_merge_options_maps_cli_fields() {
         let options = build_merge_options(MergeCommand {
@@ -810,6 +829,32 @@ mod tests {
         .expect_err("remote merge input should require opt-in");
 
         assert!(err.to_string().contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn run_rejects_same_input_and_output_without_truncating() {
+        let input = build_mcap("profile", &[], &[], &[], true, true);
+        let path = unique_temp_path("same-path.mcap");
+        std::fs::write(&path, &input).expect("write input");
+
+        let err = run(
+            &CommandContext::default(),
+            MergeCommand {
+                files: vec![path.clone()],
+                output_file: Some(path.clone()),
+                compression: CompressionFormat::Zstd,
+                chunk_size: 1024,
+                no_crc: false,
+                no_chunks: false,
+                allow_duplicate_metadata: false,
+                coalesce_channels: CoalesceChannels::Auto,
+            },
+        )
+        .expect_err("same input/output should fail");
+
+        assert!(err.to_string().contains("input and output paths"));
+        assert_eq!(std::fs::read(&path).expect("read input"), input);
+        let _ = std::fs::remove_file(path);
     }
 
     #[test]

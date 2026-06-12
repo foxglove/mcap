@@ -152,6 +152,52 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
 }
 
+pub fn ensure_distinct_local_input_output(input: &Path, output: &Path) -> Result<()> {
+    if is_remote_url(input) {
+        return Ok(());
+    }
+
+    let input_path = match input.canonicalize() {
+        Ok(path) => path,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("failed to resolve input path '{}'", input.display()));
+        }
+    };
+    let output_path = match output.canonicalize() {
+        Ok(path) => path,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            let parent = output
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            let file_name = output
+                .file_name()
+                .with_context(|| format!("invalid output path '{}'", output.display()))?;
+            match parent.canonicalize() {
+                Ok(parent_path) => parent_path.join(file_name),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                Err(err) => {
+                    return Err(err).with_context(|| {
+                        format!("failed to resolve output parent '{}'", parent.display())
+                    });
+                }
+            }
+        }
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("failed to resolve output path '{}'", output.display()));
+        }
+    };
+
+    anyhow::ensure!(
+        input_path != output_path,
+        "input and output paths must be different"
+    );
+    Ok(())
+}
+
 pub fn open_seekable_mcap_source(path: &Path) -> Result<std::fs::File> {
     std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))
 }
@@ -1151,6 +1197,54 @@ mod tests {
     use crate::render::human_bytes;
     use mcap::records;
     use object_store::ObjectStoreExt;
+
+    #[test]
+    fn distinct_local_input_output_rejects_same_file() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input = dir.path().join("input.mcap");
+        std::fs::write(&input, b"placeholder").expect("write input");
+
+        let err = super::ensure_distinct_local_input_output(&input, &input)
+            .expect_err("same input/output should fail");
+        assert!(err.to_string().contains("input and output paths"));
+    }
+
+    #[test]
+    fn distinct_local_input_output_rejects_existing_output_alias() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input = dir.path().join("input.mcap");
+        let output = dir.path().join("output-link.mcap");
+        std::fs::write(&input, b"placeholder").expect("write input");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&input, &output).expect("symlink");
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file(&input, &output).expect("symlink");
+
+        let err = super::ensure_distinct_local_input_output(&input, &output)
+            .expect_err("aliased output should fail");
+        assert!(err.to_string().contains("input and output paths"));
+    }
+
+    #[test]
+    fn distinct_local_input_output_allows_missing_output() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input = dir.path().join("input.mcap");
+        let output = dir.path().join("new-output.mcap");
+        std::fs::write(&input, b"placeholder").expect("write input");
+
+        super::ensure_distinct_local_input_output(&input, &output)
+            .expect("missing output should be allowed");
+    }
+
+    #[test]
+    fn distinct_local_input_output_allows_missing_input() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input = dir.path().join("missing.mcap");
+        let output = dir.path().join("output.mcap");
+
+        super::ensure_distinct_local_input_output(&input, &output)
+            .expect("missing input should be left to command open errors");
+    }
 
     fn serve_http(body: &'static [u8], supports_ranges: bool) -> String {
         serve_http_with_headers(body, supports_ranges, &[])

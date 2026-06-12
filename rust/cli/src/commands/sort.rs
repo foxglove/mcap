@@ -1,8 +1,7 @@
 use std::borrow::Cow;
 use std::io::{Seek, Write};
-use std::path::Path;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 use crate::cli::{CompressionFormat, SortCommand};
 use crate::commands::filter;
@@ -25,35 +24,15 @@ enum SortInput {
 
 pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
     let opts = build_sort_options(&args);
+    source::ensure_distinct_local_input_output(&args.file, &args.output_file)?;
     let input = source::load_path(
         &args.file,
         source::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
-    if !source::is_remote_url(&args.file) {
-        ensure_distinct_input_output(&args.file, &args.output_file)?;
-    }
     let sort_input = validate_sort_input(input.as_slice())?;
     let output = std::fs::File::create(&args.output_file)
         .with_context(|| format!("failed to open output '{}'", args.output_file.display()))?;
     sort_to_writer(input.as_slice(), output, sort_input, &opts)
-}
-
-fn ensure_distinct_input_output(input: &Path, output: &Path) -> Result<()> {
-    let input_path = std::fs::canonicalize(input)
-        .with_context(|| format!("failed to canonicalize input '{}'", input.display()))?;
-
-    if !output.exists() {
-        return Ok(());
-    }
-
-    let output_path = std::fs::canonicalize(output)
-        .with_context(|| format!("failed to canonicalize output '{}'", output.display()))?;
-
-    if input_path == output_path {
-        bail!("input and output paths resolve to the same file");
-    }
-
-    Ok(())
 }
 
 fn build_sort_options(args: &SortCommand) -> SortOptions {
@@ -545,7 +524,7 @@ mod tests {
     fn run_rejects_same_input_and_output_file() {
         let input = build_out_of_order_chunked_input(false);
         let file_path = unique_temp_path("same-file");
-        std::fs::write(&file_path, input).expect("write input fixture");
+        std::fs::write(&file_path, &input).expect("write input fixture");
 
         let err = super::run(
             &CommandContext::default(),
@@ -559,9 +538,8 @@ mod tests {
             },
         )
         .expect_err("same input/output path should fail");
-        assert!(err
-            .to_string()
-            .contains("input and output paths resolve to the same file"));
+        assert!(err.to_string().contains("input and output paths"));
+        assert_eq!(std::fs::read(&file_path).expect("read input"), input);
 
         let _ = std::fs::remove_file(file_path);
     }
