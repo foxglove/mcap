@@ -1,4 +1,5 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::cmp::Ordering;
+use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
 use std::io::{IsTerminal as _, Seek, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -55,6 +56,25 @@ struct InputMessageReader<'a> {
     channels: HashMap<u16, Arc<mcap::Channel<'static>>>,
 }
 
+struct IndexedInputMessageReader<'a> {
+    input_idx: usize,
+    input_order: usize,
+    name: &'a str,
+    data: &'a [u8],
+    summary: Box<mcap::Summary>,
+    reader: mcap::sans_io::IndexedReader,
+}
+
+struct MaterializedInputMessages {
+    messages: Vec<PendingMessage>,
+    next: usize,
+}
+
+enum MergeMessageStream<'a> {
+    Indexed(IndexedInputMessageReader<'a>),
+    Materialized(MaterializedInputMessages),
+}
+
 type InputMessage = (Arc<mcap::Channel<'static>>, MessageHeader, Vec<u8>);
 
 #[derive(Debug, Clone)]
@@ -67,6 +87,32 @@ struct PendingMessage {
     log_time: u64,
     publish_time: u64,
     data: Vec<u8>,
+}
+
+impl PartialEq for PendingMessage {
+    fn eq(&self, other: &Self) -> bool {
+        self.log_time == other.log_time
+            && self.input_idx == other.input_idx
+            && self.input_order == other.input_order
+    }
+}
+
+impl Eq for PendingMessage {}
+
+impl PartialOrd for PendingMessage {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PendingMessage {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .log_time
+            .cmp(&self.log_time)
+            .then_with(|| other.input_idx.cmp(&self.input_idx))
+            .then_with(|| other.input_order.cmp(&self.input_order))
+    }
 }
 
 #[derive(Default)]
@@ -179,6 +225,7 @@ fn merge_inputs<W: Write + Seek>(
 
     merge_messages(
         inputs,
+        &summaries,
         &mut writer,
         opts.coalesce_channels,
         opts.allow_duplicate_metadata,
@@ -296,6 +343,44 @@ fn write_attachments<W: Write + Seek>(
     Ok(())
 }
 
+fn write_metadata_records<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
+    state: &mut MetadataState,
+    input: &InputRef<'_>,
+    summary: Option<&mcap::Summary>,
+    allow_duplicate_metadata: bool,
+) -> Result<()> {
+    if let Some(summary) = summary {
+        let metadata_count = summary.stats.as_ref().map(|stats| stats.metadata_count);
+        if metadata_count == Some(summary.metadata_indexes.len() as u32) {
+            let mut indexes = summary.metadata_indexes.clone();
+            indexes.sort_by_key(|index| index.offset);
+            for index in indexes {
+                let metadata = mcap::read::metadata(input.data, &index).with_context(|| {
+                    format!(
+                        "failed to read metadata '{}' at offset {} from '{}'",
+                        index.name, index.offset, input.name
+                    )
+                })?;
+                write_merged_metadata(writer, state, metadata, allow_duplicate_metadata)?;
+            }
+            return Ok(());
+        }
+    }
+
+    for record in mcap::read::LinearReader::new(input.data)
+        .with_context(|| format!("failed to read '{}'", input.name))?
+    {
+        if let Record::Metadata(metadata) =
+            record.with_context(|| format!("failed to parse '{}'", input.name))?
+        {
+            write_merged_metadata(writer, state, metadata, allow_duplicate_metadata)?;
+        }
+    }
+
+    Ok(())
+}
+
 impl<'a> InputMessageReader<'a> {
     fn new(input: &InputRef<'a>) -> Result<Self> {
         Ok(Self {
@@ -308,12 +393,7 @@ impl<'a> InputMessageReader<'a> {
     }
 }
 
-fn next_message_from_input<W: Write + Seek>(
-    input: &mut InputMessageReader<'_>,
-    writer: &mut mcap::Writer<W>,
-    metadata_state: &mut MetadataState,
-    allow_duplicate_metadata: bool,
-) -> Result<Option<InputMessage>> {
+fn next_message_from_input(input: &mut InputMessageReader<'_>) -> Result<Option<InputMessage>> {
     for record in input.records.by_ref() {
         let record = record.with_context(|| format!("failed to parse '{}'", input.name))?;
         match record {
@@ -375,9 +455,6 @@ fn next_message_from_input<W: Write + Seek>(
                     input.channels.insert(channel.id, parsed_channel);
                 }
             }
-            Record::Metadata(metadata) => {
-                write_merged_metadata(writer, metadata_state, metadata, allow_duplicate_metadata)?;
-            }
             Record::Message { header, data } => {
                 let channel = input
                     .channels
@@ -398,33 +475,72 @@ fn next_message_from_input<W: Write + Seek>(
     Ok(None)
 }
 
-fn merge_messages<W: Write + Seek>(
-    inputs: &[InputRef<'_>],
-    writer: &mut mcap::Writer<W>,
-    coalesce_channels: CoalesceChannels,
-    allow_duplicate_metadata: bool,
-) -> Result<()> {
-    let mut streams = inputs
-        .iter()
-        .map(InputMessageReader::new)
-        .collect::<Result<Vec<_>>>()?;
-
-    let mut id_maps = IdMaps {
-        next_output_channel_id: 1,
-        ..IdMaps::default()
-    };
-    let mut metadata_state = MetadataState::default();
-
-    let mut messages = Vec::<PendingMessage>::new();
-    for (input_idx, stream) in streams.iter_mut().enumerate() {
-        let mut input_order = 0usize;
-        while let Some((channel, header, data)) = next_message_from_input(
-            stream,
-            writer,
-            &mut metadata_state,
-            allow_duplicate_metadata,
+impl<'a> IndexedInputMessageReader<'a> {
+    fn new(input_idx: usize, input: &InputRef<'a>, summary: mcap::Summary) -> Result<Self> {
+        let reader = mcap::sans_io::IndexedReader::new_with_options(
+            &summary,
+            mcap::sans_io::IndexedReaderOptions::new()
+                .with_order(mcap::sans_io::indexed_reader::ReadOrder::LogTime),
         )
-        .with_context(|| format!("failed reading messages from '{}'", inputs[input_idx].name))?
+        .with_context(|| format!("failed to create indexed reader for '{}'", input.name))?;
+
+        Ok(Self {
+            input_idx,
+            input_order: 0,
+            name: input.name,
+            data: input.data,
+            summary: Box::new(summary),
+            reader,
+        })
+    }
+
+    fn next_message(&mut self) -> Result<Option<PendingMessage>> {
+        while let Some(event) = self.reader.next_event() {
+            match event.with_context(|| format!("failed to read indexed '{}'", self.name))? {
+                mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                    let chunk_data = checked_slice(self.data, offset, length)?;
+                    self.reader.insert_chunk_record_data(offset, chunk_data)?;
+                }
+                mcap::sans_io::IndexedReadEvent::Message { header, data } => {
+                    let channel = self
+                        .summary
+                        .channels
+                        .get(&header.channel_id)
+                        .cloned()
+                        .ok_or_else(|| {
+                            anyhow::anyhow!(
+                                "message references unknown channel {} in '{}'",
+                                header.channel_id,
+                                self.name
+                            )
+                        })?;
+                    let input_order = self.input_order;
+                    self.input_order += 1;
+                    return Ok(Some(PendingMessage {
+                        input_idx: self.input_idx,
+                        input_order,
+                        input_channel_id: header.channel_id,
+                        channel,
+                        sequence: header.sequence,
+                        log_time: header.log_time,
+                        publish_time: header.publish_time,
+                        data: data.to_vec(),
+                    }));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+}
+
+impl MaterializedInputMessages {
+    fn new(input_idx: usize, input: &InputRef<'_>) -> Result<Self> {
+        let mut reader = InputMessageReader::new(input)?;
+        let mut messages = Vec::new();
+        let mut input_order = 0usize;
+        while let Some((channel, header, data)) = next_message_from_input(&mut reader)
+            .with_context(|| format!("failed reading messages from '{}'", input.name))?
         {
             messages.push(PendingMessage {
                 input_idx,
@@ -438,15 +554,94 @@ fn merge_messages<W: Write + Seek>(
             });
             input_order += 1;
         }
+        messages.sort_by_key(|message| (message.log_time, message.input_order));
+
+        Ok(Self { messages, next: 0 })
     }
 
-    messages.sort_by_key(|message| (message.log_time, message.input_idx, message.input_order));
+    fn next_message(&mut self) -> Option<PendingMessage> {
+        let message = self.messages.get(self.next).cloned()?;
+        self.next += 1;
+        Some(message)
+    }
+}
 
-    for message in messages {
+impl MergeMessageStream<'_> {
+    fn next_message(&mut self) -> Result<Option<PendingMessage>> {
+        match self {
+            MergeMessageStream::Indexed(reader) => reader.next_message(),
+            MergeMessageStream::Materialized(messages) => Ok(messages.next_message()),
+        }
+    }
+}
+
+fn checked_slice(input: &[u8], offset: u64, length: usize) -> Result<&[u8]> {
+    let start = usize::try_from(offset)
+        .with_context(|| format!("chunk offset out of range for this platform: {offset}"))?;
+    let end = start
+        .checked_add(length)
+        .ok_or_else(|| anyhow::anyhow!("chunk read overflow at offset {offset}"))?;
+    input.get(start..end).ok_or_else(|| {
+        anyhow::anyhow!("chunk read out of bounds at offset {offset} length {length}")
+    })
+}
+
+fn merge_messages<W: Write + Seek>(
+    inputs: &[InputRef<'_>],
+    summaries: &[Option<mcap::Summary>],
+    writer: &mut mcap::Writer<W>,
+    coalesce_channels: CoalesceChannels,
+    allow_duplicate_metadata: bool,
+) -> Result<()> {
+    let mut id_maps = IdMaps {
+        next_output_channel_id: 1,
+        ..IdMaps::default()
+    };
+    let mut metadata_state = MetadataState::default();
+
+    for (input_idx, input) in inputs.iter().enumerate() {
+        write_metadata_records(
+            writer,
+            &mut metadata_state,
+            input,
+            summaries[input_idx].as_ref(),
+            allow_duplicate_metadata,
+        )?;
+    }
+
+    let mut streams = Vec::<MergeMessageStream<'_>>::with_capacity(inputs.len());
+    for (input_idx, input) in inputs.iter().enumerate() {
+        if let Some(summary) = summaries[input_idx].as_ref() {
+            if !summary.chunk_indexes.is_empty()
+                && super::filter::summary_supports_indexed_transcode(summary)
+            {
+                streams.push(MergeMessageStream::Indexed(IndexedInputMessageReader::new(
+                    input_idx,
+                    input,
+                    summary.clone(),
+                )?));
+                continue;
+            }
+        }
+        // Without usable message indexes, guaranteeing log-time order requires sorting this input.
+        streams.push(MergeMessageStream::Materialized(
+            MaterializedInputMessages::new(input_idx, input)?,
+        ));
+    }
+
+    let mut heap = BinaryHeap::<PendingMessage>::new();
+    for stream in &mut streams {
+        if let Some(message) = stream.next_message()? {
+            heap.push(message);
+        }
+    }
+
+    while let Some(message) = heap.pop() {
+        let input_idx = message.input_idx;
         let output_channel_id = ensure_output_channel_id(
             &mut id_maps,
             writer,
-            message.input_idx,
+            input_idx,
             message.input_channel_id,
             &message.channel,
             coalesce_channels,
@@ -461,6 +656,10 @@ fn merge_messages<W: Write + Seek>(
             },
             &message.data,
         )?;
+
+        if let Some(next) = streams[input_idx].next_message()? {
+            heap.push(next);
+        }
     }
 
     Ok(())
@@ -686,6 +885,46 @@ mod tests {
             }
             for attachment in attachments {
                 writer.attach(attachment).expect("write attachment");
+            }
+
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    fn build_non_indexed_mcap(profile: &str, messages: &[TestMessage]) -> Vec<u8> {
+        let mut output = Cursor::new(Vec::<u8>::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .profile(profile)
+                .library("test-recorder/0.0")
+                .use_chunks(false)
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("example", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let mut channels = BTreeMap::new();
+
+            for message in messages {
+                let channel_id = *channels.entry(message.channel_id).or_insert_with(|| {
+                    writer
+                        .add_channel(schema_id, &message.topic, "json", &message.metadata)
+                        .expect("channel")
+                });
+                writer
+                    .write_to_known_channel(
+                        &MessageHeader {
+                            channel_id,
+                            sequence: message.log_time as u32,
+                            log_time: message.log_time,
+                            publish_time: message.log_time,
+                        },
+                        message.payload.as_slice(),
+                    )
+                    .expect("write message");
             }
 
             writer.finish().expect("finish");
@@ -932,6 +1171,52 @@ mod tests {
                 (20, "/left".to_string(), vec![5]),
             ]
         );
+    }
+
+    #[test]
+    fn merge_sorts_non_indexed_unsorted_inputs() {
+        let left = build_non_indexed_mcap(
+            "profile",
+            &[
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/left".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 10,
+                    payload: vec![2],
+                },
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/left".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 1,
+                    payload: vec![1],
+                },
+            ],
+        );
+        let right = build_non_indexed_mcap(
+            "profile",
+            &[TestMessage {
+                channel_id: 1,
+                topic: "/right".to_string(),
+                metadata: BTreeMap::new(),
+                log_time: 5,
+                payload: vec![3],
+            }],
+        );
+
+        let merged = merge_bytes(
+            &[("left", left.as_slice()), ("right", right.as_slice())],
+            CoalesceChannels::Auto,
+            false,
+        )
+        .expect("merge");
+        let ordered_log_times = mcap::MessageStream::new(&merged)
+            .expect("stream")
+            .map(|message| message.expect("message").log_time)
+            .collect::<Vec<_>>();
+
+        assert_eq!(ordered_log_times, vec![1, 5, 10]);
     }
 
     #[test]
