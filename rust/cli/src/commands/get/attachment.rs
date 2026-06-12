@@ -157,19 +157,6 @@ mod tests {
         mcap_bytes
     }
 
-    fn unique_temp_path(stem: &str) -> std::path::PathBuf {
-        let mut path = std::env::temp_dir();
-        path.push(format!(
-            "mcap-cli-get-attachment-{stem}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("system time should be after epoch")
-                .as_nanos()
-        ));
-        path
-    }
-
     #[test]
     fn selects_single_match_without_offset() {
         let indexes = vec![attachment("a", 10)];
@@ -181,7 +168,8 @@ mod tests {
     #[test]
     fn run_rejects_same_input_and_output_without_truncating() {
         let input = mcap_with_attachment();
-        let path = unique_temp_path("same-path.mcap");
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let path = dir.path().join("same-path.mcap");
         std::fs::write(&path, &input).expect("write input");
 
         let err = super::run(
@@ -197,7 +185,6 @@ mod tests {
 
         assert!(err.to_string().contains("input and output paths"));
         assert_eq!(std::fs::read(&path).expect("read input"), input);
-        let _ = std::fs::remove_file(path);
     }
 
     #[test]
