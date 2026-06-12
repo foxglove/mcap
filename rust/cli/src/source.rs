@@ -152,6 +152,90 @@ pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
 }
 
+pub fn ensure_distinct_local_input_output(input: &Path, output: &Path) -> Result<()> {
+    if is_remote_url(input) {
+        return Ok(());
+    }
+
+    let input_path = match input.canonicalize() {
+        Ok(path) => path,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("failed to resolve input path '{}'", input.display()));
+        }
+    };
+    let (output_path, output_exists) = match output.canonicalize() {
+        Ok(path) => (path, true),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            let parent = output
+                .parent()
+                .filter(|parent| !parent.as_os_str().is_empty())
+                .unwrap_or_else(|| Path::new("."));
+            let file_name = output
+                .file_name()
+                .with_context(|| format!("invalid output path '{}'", output.display()))?;
+            match parent.canonicalize() {
+                Ok(parent_path) => (parent_path.join(file_name), false),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                Err(err) => {
+                    return Err(err).with_context(|| {
+                        format!("failed to resolve output parent '{}'", parent.display())
+                    });
+                }
+            }
+        }
+        Err(err) => {
+            return Err(err)
+                .with_context(|| format!("failed to resolve output path '{}'", output.display()));
+        }
+    };
+
+    anyhow::ensure!(
+        !local_paths_refer_to_same_file(input, output, &input_path, &output_path, output_exists)?,
+        "input and output paths must be different"
+    );
+    Ok(())
+}
+
+fn local_paths_refer_to_same_file(
+    input: &Path,
+    output: &Path,
+    input_path: &Path,
+    output_path: &Path,
+    output_exists: bool,
+) -> Result<bool> {
+    if input_path == output_path {
+        return Ok(true);
+    }
+    if !output_exists {
+        return Ok(false);
+    }
+
+    local_paths_have_same_file_id(input, output)
+}
+
+#[cfg(unix)]
+fn local_paths_have_same_file_id(input: &Path, output: &Path) -> Result<bool> {
+    use std::os::unix::fs::MetadataExt;
+
+    let input_metadata = input
+        .metadata()
+        .with_context(|| format!("failed to stat input path '{}'", input.display()))?;
+    let output_metadata = output
+        .metadata()
+        .with_context(|| format!("failed to stat output path '{}'", output.display()))?;
+    Ok(input_metadata.dev() == output_metadata.dev()
+        && input_metadata.ino() == output_metadata.ino())
+}
+
+#[cfg(not(unix))]
+fn local_paths_have_same_file_id(_input: &Path, _output: &Path) -> Result<bool> {
+    // Same-path and symlink aliases are still caught by canonical path equality above. Detecting
+    // NTFS hard links would require platform-specific file IDs beyond the standard library.
+    Ok(false)
+}
+
 pub fn open_seekable_mcap_source(path: &Path) -> Result<std::fs::File> {
     std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))
 }
@@ -1151,6 +1235,87 @@ mod tests {
     use crate::render::human_bytes;
     use mcap::records;
     use object_store::ObjectStoreExt;
+
+    #[test]
+    fn distinct_local_input_output_rejects_same_file() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input = dir.path().join("input.mcap");
+        std::fs::write(&input, b"placeholder").expect("write input");
+
+        let err = super::ensure_distinct_local_input_output(&input, &input)
+            .expect_err("same input/output should fail");
+        assert!(err.to_string().contains("input and output paths"));
+    }
+
+    #[test]
+    fn distinct_local_input_output_rejects_existing_output_alias() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input = dir.path().join("input.mcap");
+        let output = dir.path().join("output-link.mcap");
+        std::fs::write(&input, b"placeholder").expect("write input");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&input, &output).expect("symlink");
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file(&input, &output).expect("symlink");
+
+        let err = super::ensure_distinct_local_input_output(&input, &output)
+            .expect_err("aliased output should fail");
+        assert!(err.to_string().contains("input and output paths"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn distinct_local_input_output_rejects_existing_output_hard_link() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input = dir.path().join("input.mcap");
+        let output = dir.path().join("output-hard-link.mcap");
+        std::fs::write(&input, b"placeholder").expect("write input");
+        std::fs::hard_link(&input, &output).expect("hard link");
+
+        let err = super::ensure_distinct_local_input_output(&input, &output)
+            .expect_err("hard-linked output should fail");
+        assert!(err.to_string().contains("input and output paths"));
+    }
+
+    #[test]
+    fn distinct_local_input_output_allows_missing_output() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input = dir.path().join("input.mcap");
+        let output = dir.path().join("new-output.mcap");
+        std::fs::write(&input, b"placeholder").expect("write input");
+
+        super::ensure_distinct_local_input_output(&input, &output)
+            .expect("missing output should be allowed");
+    }
+
+    #[test]
+    fn distinct_local_input_output_allows_single_component_missing_output() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input = dir.path().join("input.mcap");
+        let output_name = format!(
+            "mcap-cli-missing-output-{}-{}.mcap",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        );
+        std::fs::write(&input, b"placeholder").expect("write input");
+        let _ = std::fs::remove_file(&output_name);
+
+        super::ensure_distinct_local_input_output(&input, Path::new(&output_name))
+            .expect("single-component missing output should resolve through current directory");
+    }
+
+    #[test]
+    fn distinct_local_input_output_allows_missing_input() {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input = dir.path().join("missing.mcap");
+        let output = dir.path().join("output.mcap");
+
+        super::ensure_distinct_local_input_output(&input, &output)
+            .expect("missing input should be left to command open errors");
+    }
 
     fn serve_http(body: &'static [u8], supports_ranges: bool) -> String {
         serve_http_with_headers(body, supports_ranges, &[])

@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{bail, Context, Result};
 use mcap::{Compression, WriteOptions};
 
 use crate::cli::{CompressionFormat, ConvertCommand};
@@ -24,7 +24,7 @@ pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
         crate::source::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
     if !is_remote {
-        ensure_distinct_paths(materialized_input.path(), &args.output)?;
+        crate::source::ensure_distinct_local_input_output(materialized_input.path(), &args.output)?;
     }
     let opts = build_write_options(
         args.compression,
@@ -130,46 +130,6 @@ fn read_prefix(input: &mut File, buffer: &mut [u8]) -> std::io::Result<usize> {
     Ok(bytes_read)
 }
 
-fn ensure_distinct_paths(input: &Path, output: &Path) -> Result<()> {
-    let input_path = input
-        .canonicalize()
-        .with_context(|| format!("failed to resolve input path '{}'", input.display()))?;
-    let output_path = match output.canonicalize() {
-        Ok(path) => path,
-        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-            let parent = output
-                .parent()
-                .filter(|parent| !parent.as_os_str().is_empty())
-                .unwrap_or_else(|| Path::new("."));
-            let file_name = output
-                .file_name()
-                .with_context(|| format!("invalid output path '{}'", output.display()))?;
-            let parent_path = match parent.canonicalize() {
-                Ok(path) => path,
-                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
-                    return Ok(());
-                }
-                Err(err) => {
-                    return Err(err).with_context(|| {
-                        format!("failed to resolve output parent '{}'", parent.display())
-                    });
-                }
-            };
-            parent_path.join(file_name)
-        }
-        Err(err) => {
-            return Err(err)
-                .with_context(|| format!("failed to resolve output path '{}'", output.display()));
-        }
-    };
-
-    ensure!(
-        input_path != output_path,
-        "input and output paths must be different"
-    );
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
@@ -179,7 +139,7 @@ mod tests {
 
     use anyhow::Result;
 
-    use super::{build_write_options, ensure_distinct_paths, reject_lfs_pointer, ConvertInput};
+    use super::{build_write_options, reject_lfs_pointer, ConvertInput};
     use crate::cli::{CompressionFormat, ConvertCommand};
     use crate::context::CommandContext;
 
@@ -190,13 +150,6 @@ mod tests {
         ));
         std::fs::write(&path, bytes).expect("write temp input");
         path
-    }
-
-    fn temp_path(name: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!(
-            "mcap-cli-convert-test-{}-{name}",
-            std::process::id()
-        ))
     }
 
     fn build_sample_mcap(include_crc: bool) -> Vec<u8> {
@@ -323,29 +276,6 @@ size 123\n",
     }
 
     #[test]
-    fn distinct_path_check_allows_single_component_missing_output() {
-        let input_path = temp_input("distinct-input.db3", b"placeholder");
-        let output_path = temp_path("single-component-output.mcap");
-        let file_name = output_path.file_name().expect("file name");
-        let current_dir_output = std::env::current_dir()
-            .expect("current dir")
-            .join(file_name);
-        let _ = std::fs::remove_file(&current_dir_output);
-
-        ensure_distinct_paths(&input_path, Path::new(file_name))
-            .expect("single-component output should resolve through current directory");
-        std::fs::remove_file(input_path).expect("remove temp input");
-    }
-
-    #[test]
-    fn distinct_path_check_rejects_same_file_paths() {
-        let path = temp_input("same-path.db3", b"placeholder");
-        let err = ensure_distinct_paths(&path, &path).expect_err("same input/output should fail");
-        assert!(err.to_string().contains("input and output paths"));
-        std::fs::remove_file(path).expect("remove temp input");
-    }
-
-    #[test]
     fn run_reports_missing_input_as_open_error() {
         let err = super::run(
             &CommandContext::default(),
@@ -361,6 +291,31 @@ size 123\n",
         .expect_err("missing input should fail");
 
         assert!(err.to_string().contains("failed to open input"));
+    }
+
+    #[test]
+    fn run_rejects_same_input_and_output_without_truncating() {
+        let input_path = temp_input("same-path.db3", b"not a sqlite db");
+
+        let err = super::run(
+            &CommandContext::default(),
+            ConvertCommand {
+                input: input_path.clone(),
+                output: input_path.clone(),
+                compression: CompressionFormat::None,
+                chunk_size: 8 * 1024 * 1024,
+                no_crc: true,
+                no_chunks: false,
+            },
+        )
+        .expect_err("same input/output should fail");
+
+        assert!(err.to_string().contains("input and output paths"));
+        assert_eq!(
+            std::fs::read(&input_path).expect("read input"),
+            b"not a sqlite db"
+        );
+        std::fs::remove_file(input_path).expect("remove temp input");
     }
 
     #[test]

@@ -120,6 +120,9 @@ impl RecoverStats {
 /// - 3: successful recovery with warning-level data loss (`CommandOutcome::Warnings`)
 pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome> {
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    if let (Some(input), Some(output)) = (args.file.as_deref(), args.output.as_deref()) {
+        source::ensure_distinct_local_input_output(input, output)?;
+    }
     let input = source::open_streaming_input(args.file.as_deref(), source_options)?;
     let compression = resolve_compression(&args.compression)?;
 
@@ -637,6 +640,8 @@ mod tests {
     use mcap::records::{op, MessageHeader, Record};
 
     use super::{recover_to_sink, RecoverStats};
+    use crate::cli::RecoverCommand;
+    use crate::context::CommandContext;
 
     const OPCODE_LEN_SIZE: usize = 1 + 8;
 
@@ -899,6 +904,28 @@ mod tests {
         assert_eq!(stats.attachments.recovered, 1);
         assert_eq!(stats.metadata.recovered, 1);
         assert!(!stats.is_lossy());
+    }
+
+    #[test]
+    fn run_rejects_same_input_and_output_without_truncating() {
+        let input = write_test_input(Some(mcap::Compression::Zstd));
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let path = dir.path().join("same-path.mcap");
+        std::fs::write(&path, &input).expect("write input");
+
+        let err = super::run(
+            &CommandContext::default(),
+            RecoverCommand {
+                file: Some(path.clone()),
+                output: Some(path.clone()),
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                compression: "preserve".to_string(),
+            },
+        )
+        .expect_err("same input/output should fail");
+
+        assert!(err.to_string().contains("input and output paths"));
+        assert_eq!(std::fs::read(&path).expect("read input"), input);
     }
 
     #[test]

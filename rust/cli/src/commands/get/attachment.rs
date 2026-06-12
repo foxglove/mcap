@@ -12,6 +12,9 @@ const PLEASE_REDIRECT: &str =
 
 pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    if let Some(output) = args.output.as_deref() {
+        source::ensure_distinct_local_input_output(&args.file, output)?;
+    }
     if let Some(remote) = source::try_open_remote_mcap(&args.file, source_options)? {
         let index = select_attachment_index(
             &remote.summary().attachment_indexes,
@@ -118,6 +121,8 @@ mod tests {
     use std::borrow::Cow;
 
     use super::{local_attachment_indexes, select_attachment_index};
+    use crate::cli::GetAttachmentCommand;
+    use crate::context::CommandContext;
     use crate::parse;
     use mcap::records::{AttachmentIndex, Statistics};
 
@@ -133,12 +138,53 @@ mod tests {
         }
     }
 
+    fn mcap_with_attachment() -> Vec<u8> {
+        let mut mcap_bytes = Vec::new();
+        {
+            let mut writer =
+                mcap::Writer::new(std::io::Cursor::new(&mut mcap_bytes)).expect("writer");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 1,
+                    create_time: 1,
+                    name: "a".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: Cow::Borrowed(b"payload"),
+                })
+                .expect("attachment");
+            writer.finish().expect("finish");
+        }
+        mcap_bytes
+    }
+
     #[test]
     fn selects_single_match_without_offset() {
         let indexes = vec![attachment("a", 10)];
         let selected =
             select_attachment_index(&indexes, "a", None).expect("attachment should resolve");
         assert_eq!(selected.offset, 10);
+    }
+
+    #[test]
+    fn run_rejects_same_input_and_output_without_truncating() {
+        let input = mcap_with_attachment();
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let path = dir.path().join("same-path.mcap");
+        std::fs::write(&path, &input).expect("write input");
+
+        let err = super::run(
+            &CommandContext::default(),
+            GetAttachmentCommand {
+                file: path.clone(),
+                name: "a".to_string(),
+                offset: None,
+                output: Some(path.clone()),
+            },
+        )
+        .expect_err("same input/output should fail");
+
+        assert!(err.to_string().contains("input and output paths"));
+        assert_eq!(std::fs::read(&path).expect("read input"), input);
     }
 
     #[test]
