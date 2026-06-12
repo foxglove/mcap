@@ -231,6 +231,8 @@ fn local_paths_have_same_file_id(input: &Path, output: &Path) -> Result<bool> {
 
 #[cfg(not(unix))]
 fn local_paths_have_same_file_id(_input: &Path, _output: &Path) -> Result<bool> {
+    // Same-path and symlink aliases are still caught by canonical path equality above. Detecting
+    // NTFS hard links would require platform-specific file IDs beyond the standard library.
     Ok(false)
 }
 
