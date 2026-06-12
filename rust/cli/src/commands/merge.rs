@@ -424,10 +424,21 @@ fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
         .get(body_start..body_end)
         .ok_or_else(|| anyhow::anyhow!("message index body out of bounds at offset {offset}"))?;
 
-    match mcap::parse_record(opcode, body)? {
-        Record::MessageIndex(index) => Ok(index.records.len()),
-        _ => bail!("expected MessageIndex record at offset {offset}"),
+    if body.len() < 6 {
+        bail!("message index body too short at offset {offset}");
     }
+    let byte_len = u32::from_le_bytes(body[2..6].try_into().expect("slice has length 4")) as usize;
+    let entry_size = std::mem::size_of::<mcap::records::MessageIndexEntry>();
+    if !byte_len.is_multiple_of(entry_size) {
+        bail!("message index entries are misaligned at offset {offset}");
+    }
+    let expected_len = 6usize
+        .checked_add(byte_len)
+        .ok_or_else(|| anyhow::anyhow!("message index byte length overflows at offset {offset}"))?;
+    if body.len() != expected_len {
+        bail!("message index length mismatch at offset {offset}");
+    }
+    Ok(byte_len / entry_size)
 }
 
 impl<'a> InputMessageReader<'a> {
