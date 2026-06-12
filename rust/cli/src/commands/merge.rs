@@ -1,5 +1,4 @@
-use std::cmp::Ordering;
-use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::{IsTerminal as _, Seek, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -61,38 +60,13 @@ type InputMessage = (Arc<mcap::Channel<'static>>, MessageHeader, Vec<u8>);
 #[derive(Debug, Clone)]
 struct PendingMessage {
     input_idx: usize,
+    input_order: usize,
     input_channel_id: u16,
     channel: Arc<mcap::Channel<'static>>,
     sequence: u32,
     log_time: u64,
     publish_time: u64,
     data: Vec<u8>,
-}
-
-impl PartialEq for PendingMessage {
-    fn eq(&self, other: &Self) -> bool {
-        self.log_time == other.log_time
-            && self.input_idx == other.input_idx
-            && self.input_channel_id == other.input_channel_id
-    }
-}
-
-impl Eq for PendingMessage {}
-
-impl PartialOrd for PendingMessage {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for PendingMessage {
-    fn cmp(&self, other: &Self) -> Ordering {
-        other
-            .log_time
-            .cmp(&self.log_time)
-            .then_with(|| other.input_idx.cmp(&self.input_idx))
-            .then_with(|| other.input_channel_id.cmp(&self.input_channel_id))
-    }
 }
 
 #[derive(Default)]
@@ -441,22 +415,20 @@ fn merge_messages<W: Write + Seek>(
     };
     let mut metadata_state = MetadataState::default();
 
-    let mut heap = BinaryHeap::<PendingMessage>::new();
+    let mut messages = Vec::<PendingMessage>::new();
     for (input_idx, stream) in streams.iter_mut().enumerate() {
-        if let Some((channel, header, data)) = next_message_from_input(
+        let mut input_order = 0usize;
+        while let Some((channel, header, data)) = next_message_from_input(
             stream,
             writer,
             &mut metadata_state,
             allow_duplicate_metadata,
         )
-        .with_context(|| {
-            format!(
-                "failed reading initial message from '{}'",
-                inputs[input_idx].name
-            )
-        })? {
-            heap.push(PendingMessage {
+        .with_context(|| format!("failed reading messages from '{}'", inputs[input_idx].name))?
+        {
+            messages.push(PendingMessage {
                 input_idx,
+                input_order,
                 input_channel_id: header.channel_id,
                 channel,
                 sequence: header.sequence,
@@ -464,10 +436,13 @@ fn merge_messages<W: Write + Seek>(
                 publish_time: header.publish_time,
                 data,
             });
+            input_order += 1;
         }
     }
 
-    while let Some(message) = heap.pop() {
+    messages.sort_by_key(|message| (message.log_time, message.input_idx, message.input_order));
+
+    for message in messages {
         let output_channel_id = ensure_output_channel_id(
             &mut id_maps,
             writer,
@@ -486,29 +461,6 @@ fn merge_messages<W: Write + Seek>(
             },
             &message.data,
         )?;
-
-        if let Some((channel, header, data)) = next_message_from_input(
-            &mut streams[message.input_idx],
-            writer,
-            &mut metadata_state,
-            allow_duplicate_metadata,
-        )
-        .with_context(|| {
-            format!(
-                "failed reading next message from '{}'",
-                inputs[message.input_idx].name
-            )
-        })? {
-            heap.push(PendingMessage {
-                input_idx: message.input_idx,
-                input_channel_id: header.channel_id,
-                channel,
-                sequence: header.sequence,
-                log_time: header.log_time,
-                publish_time: header.publish_time,
-                data,
-            });
-        }
     }
 
     Ok(())
@@ -884,6 +836,100 @@ mod tests {
                 // Tie at log_time=10 resolves by input index: left before right.
                 (10, "/left".to_string(), vec![3]),
                 (10, "/right".to_string(), vec![4]),
+            ]
+        );
+    }
+
+    #[test]
+    fn merge_sorts_unsorted_inputs_and_preserves_tie_order() {
+        let left = build_mcap(
+            "profile",
+            &[
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/left".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 20,
+                    payload: vec![5],
+                },
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/left".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 5,
+                    payload: vec![1],
+                },
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/left".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 10,
+                    payload: vec![2],
+                },
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/left".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 10,
+                    payload: vec![3],
+                },
+            ],
+            &[],
+            &[],
+            true,
+            true,
+        );
+        let right = build_mcap(
+            "profile",
+            &[
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/right".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 7,
+                    payload: vec![6],
+                },
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/right".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 10,
+                    payload: vec![4],
+                },
+            ],
+            &[],
+            &[],
+            true,
+            true,
+        );
+
+        let merged = merge_bytes(
+            &[("left", left.as_slice()), ("right", right.as_slice())],
+            CoalesceChannels::Auto,
+            false,
+        )
+        .expect("merge");
+        let ordered_messages = mcap::MessageStream::new(&merged)
+            .expect("stream")
+            .map(|message| {
+                let message = message.expect("message");
+                (
+                    message.log_time,
+                    message.channel.topic.clone(),
+                    message.data.to_vec(),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            ordered_messages,
+            vec![
+                (5, "/left".to_string(), vec![1]),
+                (7, "/right".to_string(), vec![6]),
+                (10, "/left".to_string(), vec![2]),
+                (10, "/left".to_string(), vec![3]),
+                (10, "/right".to_string(), vec![4]),
+                (20, "/left".to_string(), vec![5]),
             ]
         );
     }
