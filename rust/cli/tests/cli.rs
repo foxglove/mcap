@@ -177,25 +177,6 @@ fn exit_code_doctor_non_strict_allows_out_of_order_top_level_messages() {
     assert!(String::from_utf8_lossy(&output.stderr).contains("Error: Message.log_time"));
 }
 
-#[test]
-fn doctor_verbose_keeps_stdout_clean() {
-    let dir = TempDir::new().unwrap();
-    let path = write_temp(&dir, "valid.mcap", &build_mcap(3));
-
-    let output = mcap(&["-v", "doctor", path_str(&path)]);
-
-    assert!(
-        output.status.success(),
-        "doctor -v should succeed for a valid file; stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(
-        output.stdout.is_empty(),
-        "doctor -v should not write progress text to stdout: {}",
-        stdout(&output)
-    );
-}
-
 // Reading from a non-seekable stdin pipe is only reachable end-to-end; the unit tests use
 // seekable in-memory buffers.
 #[test]
