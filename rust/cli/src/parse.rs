@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use anyhow::{bail, Context as _, Result};
@@ -21,6 +21,12 @@ pub struct ParsedMcap {
     pub header: Option<records::Header>,
     pub summary_available: bool,
     pub statistics: Option<records::Statistics>,
+    pub message_count: Option<u64>,
+    pub message_start_time: Option<u64>,
+    pub message_end_time: Option<u64>,
+    pub channel_message_counts: BTreeMap<u16, u64>,
+    pub attachment_count: Option<u32>,
+    pub metadata_count: Option<u32>,
     pub channels: std::collections::BTreeMap<u16, records::Channel>,
     pub schemas: std::collections::BTreeMap<u16, ParsedSchema>,
     pub chunk_indexes: Vec<records::ChunkIndex>,
@@ -29,8 +35,21 @@ pub struct ParsedMcap {
 }
 
 pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
+    parse_mcap_with_scan_fallback(mcap, false)
+}
+
+pub fn parse_mcap_with_scan_fallback(
+    mcap: &[u8],
+    scan_without_statistics: bool,
+) -> Result<ParsedMcap> {
     let header = read_header(mcap)?;
     if let Some(parsed_from_summary) = parse_mcap_from_summary(mcap, header.clone())? {
+        if scan_without_statistics && parsed_from_summary.statistics.is_none() {
+            eprintln!(
+                "Warning: Statistics record not available; full scan may be slow. Run `mcap doctor` for details."
+            );
+            return parse_mcap_linear(mcap, header);
+        }
         return Ok(parsed_from_summary);
     }
 
@@ -97,6 +116,9 @@ pub(crate) fn parsed_mcap_from_summary_section(
 fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
     let mut out = ParsedMcap {
         header,
+        message_count: Some(0),
+        attachment_count: Some(0),
+        metadata_count: Some(0),
         ..ParsedMcap::default()
     };
     scan_top_level_records(mcap, |record, offset, length| {
@@ -228,6 +250,18 @@ fn collect_record(
         Record::Statistics(statistics) => {
             out.statistics = Some(statistics);
         }
+        Record::Message { header, .. } => {
+            increment_optional_u64(&mut out.message_count, "message")?;
+            increment_map_count(&mut out.channel_message_counts, header.channel_id)?;
+            out.message_start_time = Some(
+                out.message_start_time
+                    .map_or(header.log_time, |start| start.min(header.log_time)),
+            );
+            out.message_end_time = Some(
+                out.message_end_time
+                    .map_or(header.log_time, |end| end.max(header.log_time)),
+            );
+        }
         Record::Channel(channel) => {
             if let Some(existing) = out.channels.get(&channel.id) {
                 if existing != &channel {
@@ -254,6 +288,7 @@ fn collect_record(
         Record::AttachmentIndex(index) => out.attachment_indexes.push(index),
         Record::MetadataIndex(index) => out.metadata_indexes.push(index),
         Record::Attachment { header, data, .. } => {
+            increment_optional_u32(&mut out.attachment_count, "attachment")?;
             if let Some((offset, length)) = position {
                 out.attachment_indexes.push(records::AttachmentIndex {
                     offset,
@@ -267,6 +302,7 @@ fn collect_record(
             }
         }
         Record::Metadata(metadata) => {
+            increment_optional_u32(&mut out.metadata_count, "metadata")?;
             if let Some((offset, length)) = position {
                 out.metadata_indexes.push(records::MetadataIndex {
                     offset,
@@ -277,6 +313,34 @@ fn collect_record(
         }
         _ => {}
     }
+    Ok(())
+}
+
+fn increment_optional_u64(count: &mut Option<u64>, label: &str) -> Result<()> {
+    *count = Some(
+        count
+            .unwrap_or_default()
+            .checked_add(1)
+            .with_context(|| format!("{label} count exceeds u64::MAX"))?,
+    );
+    Ok(())
+}
+
+fn increment_optional_u32(count: &mut Option<u32>, label: &str) -> Result<()> {
+    *count = Some(
+        count
+            .unwrap_or_default()
+            .checked_add(1)
+            .with_context(|| format!("{label} count exceeds u32::MAX"))?,
+    );
+    Ok(())
+}
+
+fn increment_map_count(counts: &mut BTreeMap<u16, u64>, channel_id: u16) -> Result<()> {
+    let count = counts.entry(channel_id).or_default();
+    *count = count
+        .checked_add(1)
+        .with_context(|| format!("message count for channel {channel_id} exceeds u64::MAX"))?;
     Ok(())
 }
 
@@ -479,7 +543,7 @@ mod tests {
 
     use super::{
         collect_attachment_indexes_linear, collect_metadata_indexes_linear, parse_mcap,
-        parse_mcap_from_summary, parse_summary_section,
+        parse_mcap_from_summary, parse_mcap_with_scan_fallback, parse_summary_section,
     };
     use mcap::records;
 
@@ -544,6 +608,72 @@ mod tests {
         assert!(parsed.header.is_some());
         assert!(parsed.channels.contains_key(&channel_id));
         assert!(parsed.schemas.contains_key(&schema_id));
+    }
+
+    #[test]
+    fn parse_mcap_scan_fallback_counts_records_when_summary_lacks_statistics() {
+        let mut buffer = Vec::new();
+        let channel_id = {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_statistics(false)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            for (sequence, log_time) in [(1, 10), (2, 40)] {
+                writer
+                    .write_to_known_channel(
+                        &records::MessageHeader {
+                            channel_id,
+                            sequence,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        br#"{"k":"v"}"#,
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish writer");
+            channel_id
+        };
+
+        let summary_only = parse_mcap(&buffer).expect("parse mcap from summary");
+        assert!(summary_only.statistics.is_none());
+        assert_eq!(summary_only.message_count, None);
+
+        let parsed =
+            parse_mcap_with_scan_fallback(&buffer, true).expect("parse mcap with scan fallback");
+        assert!(parsed.statistics.is_none());
+        assert_eq!(parsed.message_count, Some(2));
+        assert_eq!(parsed.message_start_time, Some(10));
+        assert_eq!(parsed.message_end_time, Some(40));
+        assert_eq!(
+            parsed.channel_message_counts.get(&channel_id).copied(),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn parse_mcap_scan_fallback_reports_zero_counts() {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_statistics(false)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            writer.finish().expect("finish writer");
+        }
+
+        let parsed =
+            parse_mcap_with_scan_fallback(&buffer, true).expect("parse mcap with scan fallback");
+        assert!(parsed.statistics.is_none());
+        assert_eq!(parsed.message_count, Some(0));
+        assert_eq!(parsed.attachment_count, Some(0));
+        assert_eq!(parsed.metadata_count, Some(0));
     }
 
     #[test]
