@@ -77,11 +77,20 @@ impl InputData {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SourceOptions {
     pub allow_remote_scan: bool,
+    pub scan_data_without_statistics: bool,
 }
 
 impl SourceOptions {
     pub fn new(allow_remote_scan: bool) -> Self {
-        Self { allow_remote_scan }
+        Self {
+            allow_remote_scan,
+            ..Self::default()
+        }
+    }
+
+    pub fn scan_data_without_statistics(mut self, scan_data_without_statistics: bool) -> Self {
+        self.scan_data_without_statistics = scan_data_without_statistics;
+        self
     }
 }
 
@@ -155,10 +164,16 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
                     .map_err(|err| remote_read_error(path, err))?
                 {
                     let header = read_header_from_seekable(&mut reader)?;
-                    return parse::parsed_mcap_from_summary_section(header, &summary_bytes)
+                    let parsed = parse::parsed_mcap_from_summary_section(header, &summary_bytes)
                         .map_err(|err| {
                             remote_read_error(path, classify_remote_summary_error(&reader, err))
-                        });
+                        })?;
+                    if parsed.statistics.is_some()
+                        || !options.scan_data_without_statistics
+                        || !options.allow_remote_scan
+                    {
+                        return Ok(parsed);
+                    }
                 }
                 if !options.allow_remote_scan {
                     bail!(
@@ -180,7 +195,7 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     }
 
     let mcap = load_path(path, options)?;
-    let parsed = parse::parse_mcap(&mcap);
+    let parsed = parse::parse_mcap_with_scan_fallback(&mcap, options.scan_data_without_statistics);
     if is_remote_url(path) {
         parsed.map_err(|err| remote_read_error(path, err))
     } else {
