@@ -2,14 +2,23 @@ use anyhow::Result;
 
 use crate::cli::ListAttachmentsCommand;
 use crate::context::CommandContext;
-use crate::{render, source};
+use crate::{parse, render, source};
 
 pub fn run(ctx: &CommandContext, args: ListAttachmentsCommand) -> Result<()> {
-    let parsed = source::parse_mcap_from_path(
-        &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()),
-    )?;
-    let mut indexes = parsed.attachment_indexes;
+    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let mut indexes =
+        if let Some(remote) = source::try_open_remote_mcap(&args.file, source_options)? {
+            remote.summary().attachment_indexes.clone()
+        } else {
+            let mcap = source::load_path(&args.file, source_options)?;
+            let parsed = parse::parse_mcap(&mcap)?;
+            if parse::attachment_indexes_need_scan(&parsed) {
+                parse::warn_index_scan("attachment");
+                parse::collect_attachment_indexes_linear(&mcap)?
+            } else {
+                parsed.attachment_indexes
+            }
+        };
     indexes.sort_by_key(|index| index.offset);
     render::print_table(&render_attachment_rows(&indexes));
     Ok(())

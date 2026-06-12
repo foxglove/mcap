@@ -13,7 +13,8 @@ pub fn run(ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
     } else {
         let mcap = source::load_path(&args.file, source_options)?;
         let parsed = parse::parse_mcap(&mcap)?;
-        merged_metadata_for_name(&mcap, &parsed.metadata_indexes, &args.name)?
+        let indexes = local_metadata_indexes(&mcap, parsed, &args.name)?;
+        merged_metadata_for_name(&mcap, &indexes, &args.name)?
     };
     let pretty =
         serde_json::to_string_pretty(&metadata).context("failed to serialize metadata to JSON")?;
@@ -60,6 +61,24 @@ fn merged_remote_metadata_for_name(
     Ok(output)
 }
 
+fn local_metadata_indexes(
+    mcap: &[u8],
+    parsed: parse::ParsedMcap,
+    name: &str,
+) -> Result<Vec<mcap::records::MetadataIndex>> {
+    let missing_requested_name = !parsed
+        .metadata_indexes
+        .iter()
+        .any(|index| index.name == name);
+    if parse::metadata_indexes_need_scan(&parsed)
+        || (missing_requested_name && parsed.summary_available && parsed.statistics.is_none())
+    {
+        parse::warn_index_scan("metadata");
+        return parse::collect_metadata_indexes_linear(mcap);
+    }
+    Ok(parsed.metadata_indexes)
+}
+
 fn merged_metadata_for_name(
     mcap: &[u8],
     indexes: &[mcap::records::MetadataIndex],
@@ -87,9 +106,10 @@ fn merged_metadata_for_name(
 mod tests {
     use std::collections::BTreeMap;
 
-    use mcap::records::MetadataIndex;
+    use mcap::records::{MetadataIndex, Statistics};
 
-    use super::merged_metadata_for_name;
+    use super::{local_metadata_indexes, merged_metadata_for_name};
+    use crate::parse;
 
     fn metadata_index(name: &str, offset: u64, length: u64) -> MetadataIndex {
         MetadataIndex {
@@ -151,5 +171,64 @@ mod tests {
                 ("c".to_string(), "3".to_string()),
             ])
         );
+    }
+
+    #[test]
+    fn missing_name_does_not_scan_when_metadata_indexes_are_complete() {
+        let parsed = parse::ParsedMcap {
+            summary_available: true,
+            statistics: Some(Statistics {
+                metadata_count: 1,
+                ..Default::default()
+            }),
+            metadata_indexes: vec![metadata_index("demo", 10, 20)],
+            ..Default::default()
+        };
+
+        let indexes =
+            local_metadata_indexes(&[], parsed, "missing").expect("complete index is enough");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "demo");
+    }
+
+    #[test]
+    fn missing_name_does_not_rescan_summaryless_input() {
+        let parsed = parse::ParsedMcap {
+            metadata_indexes: vec![metadata_index("demo", 10, 20)],
+            ..Default::default()
+        };
+
+        let indexes =
+            local_metadata_indexes(&[], parsed, "missing").expect("linear parse is complete");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "demo");
+    }
+
+    #[test]
+    fn missing_name_scans_when_metadata_index_completeness_is_unknown() {
+        let mut mcap_bytes = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .emit_metadata_indexes(false)
+                .create(std::io::Cursor::new(&mut mcap_bytes))
+                .expect("writer");
+            writer
+                .write_metadata(&mcap::records::Metadata {
+                    name: "demo".to_string(),
+                    metadata: BTreeMap::from([("foo".to_string(), "bar".to_string())]),
+                })
+                .expect("metadata");
+            writer.finish().expect("finish");
+        }
+        let parsed = parse::ParsedMcap {
+            summary_available: true,
+            ..Default::default()
+        };
+
+        let indexes = local_metadata_indexes(&mcap_bytes, parsed, "missing").expect("linear scan");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "demo");
     }
 }

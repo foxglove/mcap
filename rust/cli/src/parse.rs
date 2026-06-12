@@ -4,8 +4,10 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context as _, Result};
 use mcap::records::{self, Record};
+use mcap::sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions};
 
 const FOOTER_RECORD_LEN: usize = 1 + 8 + 8 + 8 + 4;
+const RECORD_PREFIX_LEN: u64 = 1 + 8;
 pub(crate) const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = FOOTER_RECORD_LEN + mcap::MAGIC.len();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +19,7 @@ pub struct ParsedSchema {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ParsedMcap {
     pub header: Option<records::Header>,
+    pub summary_available: bool,
     pub statistics: Option<records::Statistics>,
     pub message_count: Option<u64>,
     pub message_start_time: Option<u64>,
@@ -101,10 +104,11 @@ pub(crate) fn parsed_mcap_from_summary_section(
 ) -> Result<ParsedMcap> {
     let mut out = ParsedMcap {
         header,
+        summary_available: true,
         ..ParsedMcap::default()
     };
     for record in mcap::read::LinearReader::sans_magic(summary) {
-        collect_record(&mut out, record?)?;
+        collect_record(&mut out, record?, None)?;
     }
     Ok(out)
 }
@@ -117,21 +121,122 @@ fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<Par
         metadata_count: Some(0),
         ..ParsedMcap::default()
     };
-    for record in mcap::read::LinearReader::new(mcap)? {
-        let record = record?;
+    scan_top_level_records(mcap, |record, offset, length| {
         if let Record::Chunk { header, data } = record {
             for nested_record in mcap::read::ChunkReader::new(header, data.as_ref())? {
-                collect_record(&mut out, nested_record?)?;
+                collect_record(&mut out, nested_record?, None)?;
             }
         } else {
-            collect_record(&mut out, record)?;
+            collect_record(&mut out, record, Some((offset, length)))?;
         }
-    }
+        Ok(())
+    })?;
 
     Ok(out)
 }
 
-fn collect_record(out: &mut ParsedMcap, record: Record<'_>) -> Result<()> {
+pub(crate) fn collect_attachment_indexes_linear(
+    mcap: &[u8],
+) -> Result<Vec<records::AttachmentIndex>> {
+    let mut indexes = Vec::new();
+    scan_top_level_records(mcap, |record, offset, length| {
+        if let Record::Attachment { header, data, .. } = record {
+            indexes.push(records::AttachmentIndex {
+                offset,
+                length,
+                log_time: header.log_time,
+                create_time: header.create_time,
+                data_size: data.len() as u64,
+                name: header.name,
+                media_type: header.media_type,
+            });
+        }
+        Ok(())
+    })?;
+    Ok(indexes)
+}
+
+pub(crate) fn collect_metadata_indexes_linear(mcap: &[u8]) -> Result<Vec<records::MetadataIndex>> {
+    let mut indexes = Vec::new();
+    scan_top_level_records(mcap, |record, offset, length| {
+        if let Record::Metadata(metadata) = record {
+            indexes.push(records::MetadataIndex {
+                offset,
+                length,
+                name: metadata.name,
+            });
+        }
+        Ok(())
+    })?;
+    Ok(indexes)
+}
+
+pub(crate) fn attachment_indexes_need_scan(parsed: &ParsedMcap) -> bool {
+    if !parsed.summary_available {
+        return false;
+    }
+    match &parsed.statistics {
+        Some(statistics) => statistics.attachment_count as usize > parsed.attachment_indexes.len(),
+        None => parsed.attachment_indexes.is_empty(),
+    }
+}
+
+pub(crate) fn metadata_indexes_need_scan(parsed: &ParsedMcap) -> bool {
+    if !parsed.summary_available {
+        return false;
+    }
+    match &parsed.statistics {
+        Some(statistics) => statistics.metadata_count as usize > parsed.metadata_indexes.len(),
+        None => parsed.metadata_indexes.is_empty(),
+    }
+}
+
+pub(crate) fn warn_index_scan(record_kind: &str) {
+    eprintln!("Warning: {record_kind} indexes incomplete or unavailable; full scan may be slow.");
+}
+
+fn scan_top_level_records<F>(mcap: &[u8], mut process: F) -> Result<()>
+where
+    F: FnMut(Record<'_>, u64, u64) -> Result<()>,
+{
+    let mut reader = SansIoReader::new_with_options(
+        LinearReaderOptions::default()
+            .with_emit_chunks(true)
+            .with_record_length_limit(mcap.len()),
+    );
+    let mut remaining = mcap;
+    let mut next_record_offset = mcap::MAGIC.len() as u64;
+
+    while let Some(event) = reader.next_event() {
+        match event? {
+            LinearReadEvent::ReadRequest(need) => {
+                let read = need.min(remaining.len());
+                let dst = reader.insert(read);
+                dst.copy_from_slice(&remaining[..read]);
+                reader.notify_read(read);
+                remaining = &remaining[read..];
+            }
+            LinearReadEvent::Record { opcode, data } => {
+                let record_offset = next_record_offset;
+                let record_length = RECORD_PREFIX_LEN + data.len() as u64;
+                next_record_offset += record_length;
+                process(
+                    mcap::parse_record(opcode, data)?,
+                    record_offset,
+                    record_length,
+                )?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn collect_record(
+    out: &mut ParsedMcap,
+    record: Record<'_>,
+    position: Option<(u64, u64)>,
+) -> Result<()> {
     match record {
         Record::Header(header) => {
             if let Some(existing) = &out.header {
@@ -179,13 +284,33 @@ fn collect_record(out: &mut ParsedMcap, record: Record<'_>) -> Result<()> {
                 out.schemas.insert(schema.header.id, schema);
             }
         }
-        Record::Attachment { .. } => {
-            increment_optional_u32(&mut out.attachment_count, "attachment")?
-        }
-        Record::Metadata(_) => increment_optional_u32(&mut out.metadata_count, "metadata")?,
         Record::ChunkIndex(index) => out.chunk_indexes.push(index),
         Record::AttachmentIndex(index) => out.attachment_indexes.push(index),
         Record::MetadataIndex(index) => out.metadata_indexes.push(index),
+        Record::Attachment { header, data, .. } => {
+            increment_optional_u32(&mut out.attachment_count, "attachment")?;
+            if let Some((offset, length)) = position {
+                out.attachment_indexes.push(records::AttachmentIndex {
+                    offset,
+                    length,
+                    log_time: header.log_time,
+                    create_time: header.create_time,
+                    data_size: data.len() as u64,
+                    name: header.name,
+                    media_type: header.media_type,
+                });
+            }
+        }
+        Record::Metadata(metadata) => {
+            increment_optional_u32(&mut out.metadata_count, "metadata")?;
+            if let Some((offset, length)) = position {
+                out.metadata_indexes.push(records::MetadataIndex {
+                    offset,
+                    length,
+                    name: metadata.name,
+                });
+            }
+        }
         _ => {}
     }
     Ok(())
@@ -413,12 +538,45 @@ fn collect_definition_record(
 
 #[cfg(test)]
 mod tests {
+    use std::borrow::Cow;
     use std::collections::BTreeMap;
 
     use super::{
-        parse_mcap, parse_mcap_from_summary, parse_mcap_with_scan_fallback, parse_summary_section,
+        collect_attachment_indexes_linear, collect_metadata_indexes_linear, parse_mcap,
+        parse_mcap_from_summary, parse_mcap_with_scan_fallback, parse_summary_section,
     };
     use mcap::records;
+
+    fn write_unindexed_attachment_and_metadata(emit_summary_records: bool) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .use_chunks(false)
+                .emit_summary_records(emit_summary_records)
+                .emit_summary_offsets(emit_summary_records)
+                .emit_attachment_indexes(false)
+                .emit_metadata_indexes(false)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 10,
+                    create_time: 11,
+                    name: "demo.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: Cow::Borrowed(b"hello"),
+                })
+                .expect("attachment");
+            writer
+                .write_metadata(&records::Metadata {
+                    name: "demo".to_string(),
+                    metadata: BTreeMap::from([("key".to_string(), "value".to_string())]),
+                })
+                .expect("metadata");
+            writer.finish().expect("finish writer");
+        }
+        buffer
+    }
 
     #[test]
     fn parse_mcap_collects_channels_and_schemas() {
@@ -552,6 +710,85 @@ mod tests {
         assert!(parsed.header.is_some());
         assert!(parsed.channels.contains_key(&channel_id));
         assert!(parsed.schemas.contains_key(&schema_id));
+    }
+
+    #[test]
+    fn parse_mcap_linear_collects_unindexed_attachment_and_metadata_offsets() {
+        let buffer = write_unindexed_attachment_and_metadata(false);
+        let parsed = parse_mcap(&buffer).expect("parse mcap");
+
+        assert_eq!(parsed.attachment_indexes.len(), 1);
+        assert_eq!(parsed.metadata_indexes.len(), 1);
+        let attachment = mcap::read::attachment(&buffer, &parsed.attachment_indexes[0])
+            .expect("attachment can be read from synthesized index");
+        assert_eq!(attachment.name, "demo.bin");
+        assert_eq!(attachment.data.as_ref(), b"hello");
+        let metadata = mcap::read::metadata(&buffer, &parsed.metadata_indexes[0])
+            .expect("metadata can be read from synthesized index");
+        assert_eq!(metadata.name, "demo");
+        assert_eq!(metadata.metadata["key"], "value");
+    }
+
+    #[test]
+    fn collect_linear_indexes_finds_records_when_summary_indexes_are_omitted() {
+        let buffer = write_unindexed_attachment_and_metadata(true);
+        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        assert!(parsed.attachment_indexes.is_empty());
+        assert!(parsed.metadata_indexes.is_empty());
+
+        let attachment_indexes =
+            collect_attachment_indexes_linear(&buffer).expect("attachment indexes");
+        let metadata_indexes = collect_metadata_indexes_linear(&buffer).expect("metadata indexes");
+        assert_eq!(attachment_indexes.len(), 1);
+        assert_eq!(metadata_indexes.len(), 1);
+        assert_eq!(attachment_indexes[0].name, "demo.bin");
+        assert_eq!(metadata_indexes[0].name, "demo");
+        assert!(mcap::read::attachment(&buffer, &attachment_indexes[0]).is_ok());
+        assert!(mcap::read::metadata(&buffer, &metadata_indexes[0]).is_ok());
+    }
+
+    #[test]
+    fn collect_linear_attachment_indexes_tracks_offsets_after_chunks() {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .emit_attachment_indexes(false)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer.add_schema("demo", "json", b"{}").expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 1,
+                        publish_time: 1,
+                    },
+                    br#"{"k":"v"}"#,
+                )
+                .expect("message");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 10,
+                    create_time: 11,
+                    name: "after-chunk.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: Cow::Borrowed(b"chunk-safe"),
+                })
+                .expect("attachment");
+            writer.finish().expect("finish writer");
+        }
+
+        let indexes = collect_attachment_indexes_linear(&buffer).expect("attachment indexes");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "after-chunk.bin");
+        let attachment = mcap::read::attachment(&buffer, &indexes[0]).expect("attachment");
+        assert_eq!(attachment.data.as_ref(), b"chunk-safe");
     }
 
     #[test]
