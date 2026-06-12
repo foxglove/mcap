@@ -51,7 +51,7 @@ Run `mcap --help` for detailed usage information, or `mcap <command> --help` for
       get         Get a record from an MCAP file
       info        Report statistics about an MCAP file
       list        List records of an MCAP file
-      merge       Merge a selection of MCAP files by record timestamp
+      merge       Merge MCAP files
       recover     Recover data from a potentially corrupt MCAP file
       sort        Read an MCAP file and write messages sorted by log time
       help        Print this message or the help of the given subcommand(s)

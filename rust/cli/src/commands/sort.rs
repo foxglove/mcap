@@ -193,18 +193,13 @@ fn copy_linear_messages_in_log_time_order<W: Write + Seek>(
 ) -> Result<()> {
     // Without chunk indexes, sorting necessarily materializes messages before reordering.
     let mut messages = mcap::MessageStream::new(input)?
+        .enumerate()
+        .map(|(input_order, message)| message.map(|message| (input_order, message)))
         .collect::<mcap::McapResult<Vec<_>>>()
         .context("failed to read messages")?;
-    messages.sort_by_key(|message| {
-        (
-            message.log_time,
-            message.channel.id,
-            message.sequence,
-            message.publish_time,
-        )
-    });
+    messages.sort_by_key(|(input_order, message)| (message.log_time, *input_order));
 
-    for message in messages {
+    for (_, message) in messages {
         writer.write(&message)?;
     }
 
@@ -389,6 +384,52 @@ mod tests {
         output.into_inner()
     }
 
+    fn build_summaryless_equal_time_message_input() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .use_chunks(false)
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("Example", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let first_channel_id = writer
+                .add_channel(schema_id, "/first", "json", &BTreeMap::new())
+                .expect("first channel");
+            let second_channel_id = writer
+                .add_channel(schema_id, "/second", "json", &BTreeMap::new())
+                .expect("second channel");
+
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id: second_channel_id,
+                        sequence: 1,
+                        log_time: 5,
+                        publish_time: 5,
+                    },
+                    &[2],
+                )
+                .expect("second message");
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id: first_channel_id,
+                        sequence: 2,
+                        log_time: 5,
+                        publish_time: 5,
+                    },
+                    &[1],
+                )
+                .expect("first message");
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
     fn build_summaryless_metadata_only_input() -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
@@ -518,6 +559,27 @@ mod tests {
 
         let _ = std::fs::remove_file(input_path);
         let _ = std::fs::remove_file(output_path);
+    }
+
+    #[test]
+    fn linear_sort_preserves_input_order_for_equal_log_times() {
+        let input = build_summaryless_equal_time_message_input();
+        let mut output = Cursor::new(Vec::new());
+
+        sort_to_writer(
+            &input,
+            &mut output,
+            SortInput::Linear,
+            &default_sort_options(),
+        )
+        .expect("sort should succeed");
+        let output = output.into_inner();
+
+        let payloads: Vec<Vec<u8>> = mcap::MessageStream::new(&output)
+            .expect("message stream")
+            .map(|message| message.expect("message").data.to_vec())
+            .collect();
+        assert_eq!(payloads, vec![vec![2], vec![1]]);
     }
 
     #[test]

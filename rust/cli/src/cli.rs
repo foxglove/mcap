@@ -95,7 +95,7 @@ pub enum Command {
     Info(InfoCommand),
     /// List records of an MCAP file
     List(ListCommand),
-    /// Merge a selection of MCAP files by record timestamp
+    /// Merge MCAP files
     Merge(MergeCommand),
     /// Recover data from a potentially corrupt MCAP file
     Recover(RecoverCommand),
