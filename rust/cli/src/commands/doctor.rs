@@ -12,9 +12,6 @@ pub fn run(ctx: &CommandContext, args: DoctorCommand) -> Result<()> {
         &args.file,
         source::SourceOptions::new(ctx.allow_remote_scan()),
     )?;
-    if ctx.verbose() > 0 {
-        println!("Examining {}", args.file.display());
-    }
 
     let diagnosis = diagnose_mcap(&mcap, args.strict_message_order);
     for warning in &diagnosis.warnings {
