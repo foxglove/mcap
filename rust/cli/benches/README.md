@@ -6,15 +6,15 @@ checked into the repository.
 
 ## Quick run
 
-Build the release CLI once, then run the benchmark target:
+Run the benchmark target:
 
 ```sh
-cargo build --release -p mcap-cli
 cargo bench -p mcap-cli --bench cli_commands
 ```
 
-Criterion writes reports under `target/criterion/`. Use Criterion's benchmark filter to run a single
-suite:
+Cargo provides the bench-built `mcap` binary by default. Set `MCAP_CLI_BENCH_BIN` to compare a
+different binary. Criterion writes reports under `target/criterion/`. Use Criterion's benchmark
+filter to run a single suite:
 
 ```sh
 cargo bench -p mcap-cli --bench cli_commands -- merge

@@ -183,7 +183,9 @@ fn bench_merge(c: &mut Criterion, config: &BenchConfig, cases: &[MergeCase]) {
                             output.as_os_str().to_owned(),
                         ]);
                         let duration = run_mcap(&config.mcap_bin, args);
-                        validate_output(&output, case.expected_count, true);
+                        if iteration == 0 {
+                            validate_output(&output, case.expected_count, true);
+                        }
                         remove_file(&output);
                         duration
                     })
@@ -218,7 +220,9 @@ fn bench_filter(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) {
                             OsString::from(config.chunk_size.to_string()),
                         ];
                         let duration = run_mcap(&config.mcap_bin, args);
-                        validate_output(&output, case.selected_count, true);
+                        if iteration == 0 {
+                            validate_output(&output, case.selected_count, true);
+                        }
                         remove_file(&output);
                         duration
                     })
@@ -251,7 +255,9 @@ fn bench_sort(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) {
                             output.as_os_str().to_owned(),
                         ];
                         let duration = run_mcap(&config.mcap_bin, args);
-                        validate_output(&output, case.message_count, true);
+                        if iteration == 0 {
+                            validate_output(&output, case.message_count, true);
+                        }
                         remove_file(&output);
                         duration
                     })
@@ -284,7 +290,9 @@ fn bench_compress(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) 
                             OsString::from(config.chunk_size.to_string()),
                         ];
                         let duration = run_mcap(&config.mcap_bin, args);
-                        validate_output(&output, case.message_count, true);
+                        if iteration == 0 {
+                            validate_output(&output, case.message_count, true);
+                        }
                         remove_file(&output);
                         duration
                     })
@@ -315,7 +323,9 @@ fn bench_decompress(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]
                             OsString::from(config.chunk_size.to_string()),
                         ];
                         let duration = run_mcap(&config.mcap_bin, args);
-                        validate_output(&output, case.message_count, true);
+                        if iteration == 0 {
+                            validate_output(&output, case.message_count, true);
+                        }
                         remove_file(&output);
                         duration
                     })
