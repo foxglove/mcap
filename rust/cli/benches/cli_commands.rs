@@ -69,7 +69,7 @@ fn bench_cli_commands(c: &mut Criterion) {
     std::fs::create_dir_all(config.outputs_dir()).expect("create benchmark output dir");
     assert!(
         config.mcap_bin.exists(),
-        "mcap binary '{}' does not exist; run `cargo build --release -p mcap-cli` or set MCAP_CLI_BENCH_BIN",
+        "mcap binary '{}' does not exist; set MCAP_CLI_BENCH_BIN to a built mcap binary",
         config.mcap_bin.display()
     );
 

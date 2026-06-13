@@ -32,7 +32,7 @@ variables when collecting comparison data:
 | `MCAP_CLI_BENCH_INPUTS`           |                     `4` | Number of inputs for `merge` benchmarks.                 |
 | `MCAP_CLI_BENCH_CHUNK_SIZE`       |               `4194304` | Generated output chunk size in bytes.                    |
 | `MCAP_CLI_BENCH_DIR`              | `target/mcap-cli-bench` | Directory for generated inputs and per-run outputs.      |
-| `MCAP_CLI_BENCH_BIN`              |   `target/release/mcap` | CLI binary to execute.                                   |
+| `MCAP_CLI_BENCH_BIN`              |      Cargo bench binary | CLI binary to execute.                                   |
 | `MCAP_CLI_BENCH_SAMPLE_SIZE`      |                    `10` | Criterion sample size; values below 10 are raised to 10. |
 | `MCAP_CLI_BENCH_WARMUP_MS`        |                   `250` | Criterion warmup duration.                               |
 | `MCAP_CLI_BENCH_MEASUREMENT_SECS` |                     `2` | Criterion measurement duration.                          |
