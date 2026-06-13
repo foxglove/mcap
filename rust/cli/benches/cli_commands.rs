@@ -126,6 +126,8 @@ struct SuiteSelection {
 
 impl SuiteSelection {
     fn from_args() -> Self {
+        // Mirror the documented Criterion filters (`-- merge`, `-- filter`) so filtered runs only
+        // generate inputs for selected suites.
         let filters = std::env::args()
             .skip(1)
             .filter(|arg| !arg.starts_with('-'))
