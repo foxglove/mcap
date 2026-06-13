@@ -13,7 +13,7 @@ const DEFAULT_CHUNK_SIZE: u64 = 4 * 1024 * 1024;
 const DEFAULT_SAMPLE_SIZE: usize = 10;
 const DEFAULT_WARMUP_MS: u64 = 250;
 const DEFAULT_MEASUREMENT_SECS: u64 = 2;
-const PAYLOAD_SIZES: &[usize] = &[1024, 10 * 1024, 100 * 1024, 1024 * 1024];
+const PAYLOAD_SIZES: &[usize] = &[100, 1024, 10 * 1024, 100 * 1024, 1024 * 1024];
 
 #[derive(Debug, Clone)]
 struct BenchConfig {
@@ -665,6 +665,7 @@ fn env_usize(name: &str, default: usize) -> usize {
 
 fn size_label(bytes: usize) -> String {
     match bytes {
+        100 => "100B".to_string(),
         1024 => "1KiB".to_string(),
         10240 => "10KiB".to_string(),
         102400 => "100KiB".to_string(),

@@ -47,8 +47,8 @@ cargo bench -p mcap-cli --bench cli_commands -- merge
 
 ## Generated inputs and cleanup
 
-Each suite uses deterministic pseudo-random message payloads at `1 KiB`, `10 KiB`, `100 KiB`, and
-`1 MiB` sizes. The benchmark validates each command output for basic MCAP correctness, expected
+Each suite uses deterministic pseudo-random message payloads at `100B`, `1KiB`, `10KiB`, `100KiB`,
+and `1MiB` sizes. The benchmark validates each command output for basic MCAP correctness, expected
 message count, summary presence, and log-time ordering where applicable.
 
 Generated inputs are cached under `MCAP_CLI_BENCH_DIR` and reused when the benchmark parameters
