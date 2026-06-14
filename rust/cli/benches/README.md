@@ -1,6 +1,6 @@
-# MCAP CLI command benchmarks
+# MCAP CLI benchmarks
 
-This directory contains Criterion benchmarks for the `mcap` CLI. The benchmarks generate synthetic
+This directory contains benchmarks for the `mcap` CLI. The benchmarks generate synthetic
 MCAP inputs at runtime and run the real `mcap` binary, so large benchmark fixtures do not need to be
 checked into the repository.
 
