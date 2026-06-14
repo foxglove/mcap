@@ -28,7 +28,7 @@ variables when collecting comparison data:
 
 | Variable                          |                 Default | Description                                              |
 | --------------------------------- | ----------------------: | -------------------------------------------------------- |
-| `MCAP_CLI_BENCH_TOTAL_MIB`        |                    `16` | Total generated payload bytes per payload-size case.     |
+| `MCAP_CLI_BENCH_TOTAL_MIB`        |                   `256` | Total generated payload bytes per payload-size case.     |
 | `MCAP_CLI_BENCH_INPUTS`           |                     `4` | Number of inputs for `merge` benchmarks.                 |
 | `MCAP_CLI_BENCH_CHUNK_SIZE`       |               `4194304` | Generated output chunk size in bytes.                    |
 | `MCAP_CLI_BENCH_DIR`              | `target/mcap-cli-bench` | Directory for generated inputs and per-run outputs.      |

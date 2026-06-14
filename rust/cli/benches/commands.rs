@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
-const DEFAULT_TOTAL_MIB: u64 = 16;
+const DEFAULT_TOTAL_MIB: u64 = 256;
 const DEFAULT_MERGE_INPUTS: usize = 4;
 const DEFAULT_CHUNK_SIZE: u64 = 4 * 1024 * 1024;
 const DEFAULT_SAMPLE_SIZE: usize = 10;
