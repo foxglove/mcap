@@ -37,5 +37,5 @@ futures-util = "0.3.32"
 criterion = "0.8.2"
 
 [[bench]]
-name = "cli_commands"
+name = "commands"
 harness = false

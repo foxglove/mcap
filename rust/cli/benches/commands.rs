@@ -62,7 +62,7 @@ fn criterion_config() -> Criterion {
         )))
 }
 
-fn bench_cli_commands(c: &mut Criterion) {
+fn bench_commands(c: &mut Criterion) {
     let config = BenchConfig::from_env();
     let suites = SuiteSelection::from_args();
     std::fs::create_dir_all(config.inputs_dir()).expect("create benchmark input dir");
@@ -677,6 +677,6 @@ fn size_label(bytes: usize) -> String {
 criterion_group! {
     name = benches;
     config = criterion_config();
-    targets = bench_cli_commands
+    targets = bench_commands
 }
 criterion_main!(benches);

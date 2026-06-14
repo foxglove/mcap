@@ -9,7 +9,7 @@ checked into the repository.
 Run the benchmark target:
 
 ```sh
-cargo bench -p mcap-cli --bench cli_commands
+cargo bench -p mcap-cli --bench commands
 ```
 
 Cargo provides the bench-built `mcap` binary by default. Set `MCAP_CLI_BENCH_BIN` to compare a
@@ -17,8 +17,8 @@ different binary. Criterion writes reports under `target/criterion/`. Use Criter
 filter to run a single suite:
 
 ```sh
-cargo bench -p mcap-cli --bench cli_commands -- merge
-cargo bench -p mcap-cli --bench cli_commands -- filter
+cargo bench -p mcap-cli --bench commands -- merge
+cargo bench -p mcap-cli --bench commands -- filter
 ```
 
 ## Workload controls
@@ -42,7 +42,7 @@ Example larger run:
 ```sh
 MCAP_CLI_BENCH_TOTAL_MIB=1024 \
 MCAP_CLI_BENCH_INPUTS=8 \
-cargo bench -p mcap-cli --bench cli_commands -- merge
+cargo bench -p mcap-cli --bench commands -- merge
 ```
 
 ## Generated inputs and cleanup
