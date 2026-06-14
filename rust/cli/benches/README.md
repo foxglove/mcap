@@ -4,9 +4,9 @@ This directory contains benchmarks for the `mcap` CLI. The benchmarks generate s
 MCAP inputs at runtime and run the real `mcap` binary, so large benchmark fixtures do not need to be
 checked into the repository.
 
-## Quick run
+## Running benchmarks
 
-Run the benchmark target:
+Run the full benchmark target:
 
 ```sh
 cargo bench -p mcap-cli --bench commands
@@ -14,17 +14,19 @@ cargo bench -p mcap-cli --bench commands
 
 Cargo provides the bench-built `mcap` binary by default. Set `MCAP_CLI_BENCH_BIN` to compare a
 different binary. Criterion writes reports under `target/criterion/`. Use Criterion's benchmark
-filter to run a single suite:
+filter to run a single command, input mode, or specific case:
 
 ```sh
 cargo bench -p mcap-cli --bench commands -- merge
-cargo bench -p mcap-cli --bench commands -- filter
+cargo bench -p mcap-cli --bench commands -- indexed
+cargo bench -p mcap-cli --bench commands -- filter/linear
+cargo bench -p mcap-cli --bench commands -- merge/indexed/100KiB
 ```
 
 ## Workload controls
 
-The default workload is intentionally small enough for local iteration. Increase it with environment
-variables when collecting comparison data:
+The default workload is large enough to reduce fixed overhead noise. Override it with environment
+variables for faster local iteration or larger comparison runs:
 
 | Variable                          |                 Default | Description                                              |
 | --------------------------------- | ----------------------: | -------------------------------------------------------- |
@@ -47,9 +49,11 @@ cargo bench -p mcap-cli --bench commands -- merge
 
 ## Generated inputs and cleanup
 
-Each suite uses deterministic pseudo-random message payloads at `100B`, `1KiB`, `10KiB`, `100KiB`,
-and `1MiB` sizes. The benchmark validates each command output for basic MCAP correctness, expected
-message count, summary presence, and log-time ordering where applicable.
+Each suite runs both `indexed` inputs (summary, chunk indexes, and message indexes present) and
+`linear` inputs (summary omitted, forcing a scan fallback). It uses deterministic pseudo-random
+message payloads at `100B`, `1KiB`, `10KiB`, `100KiB`, and `1MiB` sizes. The benchmark validates
+each command output for basic MCAP correctness, expected message count, summary presence, and
+log-time ordering where applicable.
 
 Generated inputs are cached under `MCAP_CLI_BENCH_DIR` and reused when the benchmark parameters
 match the filename. Delete that directory if a previous run was interrupted or after large runs to

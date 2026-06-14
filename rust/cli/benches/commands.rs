@@ -49,6 +49,21 @@ enum InputOrder {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InputMode {
+    Indexed,
+    Linear,
+}
+
+impl InputMode {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Indexed => "indexed",
+            Self::Linear => "linear",
+        }
+    }
+}
+
 fn criterion_config() -> Criterion {
     Criterion::default()
         .sample_size(env_usize("MCAP_CLI_BENCH_SAMPLE_SIZE", DEFAULT_SAMPLE_SIZE).max(10))
@@ -73,45 +88,53 @@ fn bench_commands(c: &mut Criterion) {
         config.mcap_bin.display()
     );
 
-    if suites.merge {
-        let merge_cases = PAYLOAD_SIZES
-            .iter()
-            .copied()
-            .map(|payload_size| config.merge_case(payload_size))
-            .collect::<Vec<_>>();
-        bench_merge(c, &config, &merge_cases);
-    }
-
-    if suites.filter || suites.decompress {
-        let input_cases = PAYLOAD_SIZES
-            .iter()
-            .copied()
-            .map(|payload_size| config.input_case(payload_size, InputOrder::Ordered, Some("zstd")))
-            .collect::<Vec<_>>();
-        if suites.filter {
-            bench_filter(c, &config, &input_cases);
+    for mode in suites.modes() {
+        if suites.merge {
+            let merge_cases = PAYLOAD_SIZES
+                .iter()
+                .copied()
+                .map(|payload_size| config.merge_case(mode, payload_size))
+                .collect::<Vec<_>>();
+            bench_merge(c, &config, mode, &merge_cases);
         }
-        if suites.decompress {
-            bench_decompress(c, &config, &input_cases);
+
+        if suites.filter || suites.decompress {
+            let input_cases = PAYLOAD_SIZES
+                .iter()
+                .copied()
+                .map(|payload_size| {
+                    config.input_case(mode, payload_size, InputOrder::Ordered, Some("zstd"))
+                })
+                .collect::<Vec<_>>();
+            if suites.filter {
+                bench_filter(c, &config, mode, &input_cases);
+            }
+            if suites.decompress {
+                bench_decompress(c, &config, mode, &input_cases);
+            }
         }
-    }
 
-    if suites.sort {
-        let sort_cases = PAYLOAD_SIZES
-            .iter()
-            .copied()
-            .map(|payload_size| config.input_case(payload_size, InputOrder::Reversed, Some("zstd")))
-            .collect::<Vec<_>>();
-        bench_sort(c, &config, &sort_cases);
-    }
+        if suites.sort {
+            let sort_cases = PAYLOAD_SIZES
+                .iter()
+                .copied()
+                .map(|payload_size| {
+                    config.input_case(mode, payload_size, InputOrder::Reversed, Some("zstd"))
+                })
+                .collect::<Vec<_>>();
+            bench_sort(c, &config, mode, &sort_cases);
+        }
 
-    if suites.compress {
-        let uncompressed_cases = PAYLOAD_SIZES
-            .iter()
-            .copied()
-            .map(|payload_size| config.input_case(payload_size, InputOrder::Ordered, None))
-            .collect::<Vec<_>>();
-        bench_compress(c, &config, &uncompressed_cases);
+        if suites.compress {
+            let uncompressed_cases = PAYLOAD_SIZES
+                .iter()
+                .copied()
+                .map(|payload_size| {
+                    config.input_case(mode, payload_size, InputOrder::Ordered, None)
+                })
+                .collect::<Vec<_>>();
+            bench_compress(c, &config, mode, &uncompressed_cases);
+        }
     }
 }
 
@@ -122,12 +145,15 @@ struct SuiteSelection {
     sort: bool,
     compress: bool,
     decompress: bool,
+    indexed: bool,
+    linear: bool,
 }
 
 impl SuiteSelection {
     fn from_args() -> Self {
-        // Mirror the documented Criterion filters (`-- merge`, `-- filter`) so filtered runs only
-        // generate inputs for selected suites.
+        // Mirror documented Criterion filters (`-- merge`, `-- indexed`) so filtered runs only
+        // generate inputs for selected suites. This intentionally handles positional filters, not
+        // arbitrary Criterion flag values.
         let filters = std::env::args()
             .skip(1)
             .filter(|arg| !arg.starts_with('-'))
@@ -140,29 +166,31 @@ impl SuiteSelection {
         let any_suite = ["merge", "filter", "sort", "compress", "decompress"]
             .iter()
             .any(|name| selected(name));
-
-        if !any_suite {
-            return Self {
-                merge: true,
-                filter: true,
-                sort: true,
-                compress: true,
-                decompress: true,
-            };
-        }
+        let any_mode = ["indexed", "linear"].iter().any(|name| selected(name));
 
         Self {
-            merge: selected("merge"),
-            filter: selected("filter"),
-            sort: selected("sort"),
-            compress: selected("compress"),
-            decompress: selected("decompress"),
+            merge: !any_suite || selected("merge"),
+            filter: !any_suite || selected("filter"),
+            sort: !any_suite || selected("sort"),
+            compress: !any_suite || selected("compress"),
+            decompress: !any_suite || selected("decompress"),
+            indexed: !any_mode || selected("indexed"),
+            linear: !any_mode || selected("linear"),
         }
+    }
+
+    fn modes(self) -> impl Iterator<Item = InputMode> {
+        [
+            (self.indexed, InputMode::Indexed),
+            (self.linear, InputMode::Linear),
+        ]
+        .into_iter()
+        .filter_map(|(enabled, mode)| enabled.then_some(mode))
     }
 }
 
-fn bench_merge(c: &mut Criterion, config: &BenchConfig, cases: &[MergeCase]) {
-    let mut group = c.benchmark_group("cli/merge");
+fn bench_merge(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[MergeCase]) {
+    let mut group = c.benchmark_group(format!("cli/merge/{}", mode.label()));
     for case in cases {
         group.throughput(Throughput::Bytes(config.total_bytes()));
         group.bench_with_input(
@@ -171,7 +199,8 @@ fn bench_merge(c: &mut Criterion, config: &BenchConfig, cases: &[MergeCase]) {
             |bench, case| {
                 bench.iter_custom(|iters| {
                     run_measured(iters, |iteration| {
-                        let output = config.output_path("merge", case.payload_size, iteration);
+                        let output =
+                            config.output_path("merge", mode, case.payload_size, iteration);
                         let mut args = vec![OsString::from("merge")];
                         args.extend(case.paths.iter().map(|path| path.as_os_str().to_owned()));
                         args.extend([
@@ -196,8 +225,8 @@ fn bench_merge(c: &mut Criterion, config: &BenchConfig, cases: &[MergeCase]) {
     group.finish();
 }
 
-fn bench_filter(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) {
-    let mut group = c.benchmark_group("cli/filter");
+fn bench_filter(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
+    let mut group = c.benchmark_group(format!("cli/filter/{}", mode.label()));
     for case in cases {
         group.throughput(Throughput::Bytes(config.total_bytes()));
         group.bench_with_input(
@@ -206,7 +235,8 @@ fn bench_filter(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) {
             |bench, case| {
                 bench.iter_custom(|iters| {
                     run_measured(iters, |iteration| {
-                        let output = config.output_path("filter", case.payload_size, iteration);
+                        let output =
+                            config.output_path("filter", mode, case.payload_size, iteration);
                         let args = vec![
                             OsString::from("filter"),
                             case.path.as_os_str().to_owned(),
@@ -233,8 +263,8 @@ fn bench_filter(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) {
     group.finish();
 }
 
-fn bench_sort(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) {
-    let mut group = c.benchmark_group("cli/sort");
+fn bench_sort(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
+    let mut group = c.benchmark_group(format!("cli/sort/{}", mode.label()));
     for case in cases {
         group.throughput(Throughput::Bytes(config.total_bytes()));
         group.bench_with_input(
@@ -243,7 +273,7 @@ fn bench_sort(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) {
             |bench, case| {
                 bench.iter_custom(|iters| {
                     run_measured(iters, |iteration| {
-                        let output = config.output_path("sort", case.payload_size, iteration);
+                        let output = config.output_path("sort", mode, case.payload_size, iteration);
                         let args = vec![
                             OsString::from("sort"),
                             case.path.as_os_str().to_owned(),
@@ -268,8 +298,8 @@ fn bench_sort(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) {
     group.finish();
 }
 
-fn bench_compress(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) {
-    let mut group = c.benchmark_group("cli/compress");
+fn bench_compress(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
+    let mut group = c.benchmark_group(format!("cli/compress/{}", mode.label()));
     for case in cases {
         group.throughput(Throughput::Bytes(config.total_bytes()));
         group.bench_with_input(
@@ -278,7 +308,8 @@ fn bench_compress(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) 
             |bench, case| {
                 bench.iter_custom(|iters| {
                     run_measured(iters, |iteration| {
-                        let output = config.output_path("compress", case.payload_size, iteration);
+                        let output =
+                            config.output_path("compress", mode, case.payload_size, iteration);
                         let args = vec![
                             OsString::from("compress"),
                             case.path.as_os_str().to_owned(),
@@ -303,8 +334,8 @@ fn bench_compress(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) 
     group.finish();
 }
 
-fn bench_decompress(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]) {
-    let mut group = c.benchmark_group("cli/decompress");
+fn bench_decompress(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
+    let mut group = c.benchmark_group(format!("cli/decompress/{}", mode.label()));
     for case in cases {
         group.throughput(Throughput::Bytes(config.total_bytes()));
         group.bench_with_input(
@@ -313,7 +344,8 @@ fn bench_decompress(c: &mut Criterion, config: &BenchConfig, cases: &[InputCase]
             |bench, case| {
                 bench.iter_custom(|iters| {
                     run_measured(iters, |iteration| {
-                        let output = config.output_path("decompress", case.payload_size, iteration);
+                        let output =
+                            config.output_path("decompress", mode, case.payload_size, iteration);
                         let args = vec![
                             OsString::from("decompress"),
                             case.path.as_os_str().to_owned(),
@@ -361,16 +393,18 @@ impl BenchConfig {
 
     fn input_case(
         &self,
+        mode: InputMode,
         payload_size: usize,
         order: InputOrder,
         compression: Option<&'static str>,
     ) -> InputCase {
         let message_count = message_count(self.total_bytes(), payload_size, 1);
         let selected_count = message_count.div_ceil(2);
-        let path = self.input_path(payload_size, message_count, order, compression, 0);
+        let path = self.input_path(mode, payload_size, message_count, order, compression, 0);
         if !path.exists() {
             write_input(
                 &path,
+                mode,
                 payload_size,
                 message_count,
                 order,
@@ -386,7 +420,7 @@ impl BenchConfig {
         }
     }
 
-    fn merge_case(&self, payload_size: usize) -> MergeCase {
+    fn merge_case(&self, mode: InputMode, payload_size: usize) -> MergeCase {
         let messages_per_input = message_count(self.total_bytes(), payload_size, self.merge_inputs);
         let paths = (0..self.merge_inputs)
             .map(|input_idx| {
@@ -395,6 +429,7 @@ impl BenchConfig {
                     input_count: self.merge_inputs,
                 };
                 let path = self.input_path(
+                    mode,
                     payload_size,
                     messages_per_input,
                     order,
@@ -404,6 +439,7 @@ impl BenchConfig {
                 if !path.exists() {
                     write_input(
                         &path,
+                        mode,
                         payload_size,
                         messages_per_input,
                         order,
@@ -423,6 +459,7 @@ impl BenchConfig {
 
     fn input_path(
         &self,
+        mode: InputMode,
         payload_size: usize,
         message_count: usize,
         order: InputOrder,
@@ -436,15 +473,28 @@ impl BenchConfig {
         };
         let compression_label = compression.unwrap_or("none");
         self.inputs_dir().join(format!(
-            "payload{}_messages{}_chunk{}_{}_{}_part{}.mcap",
-            payload_size, message_count, self.chunk_size, order_label, compression_label, input_idx
+            "payload{}_messages{}_chunk{}_{}_{}_{}_part{}.mcap",
+            payload_size,
+            message_count,
+            self.chunk_size,
+            mode.label(),
+            order_label,
+            compression_label,
+            input_idx
         ))
     }
 
-    fn output_path(&self, command: &str, payload_size: usize, iteration: u64) -> PathBuf {
+    fn output_path(
+        &self,
+        command: &str,
+        mode: InputMode,
+        payload_size: usize,
+        iteration: u64,
+    ) -> PathBuf {
         self.outputs_dir().join(format!(
-            "{}_payload{}_pid{}_iter{}.mcap",
+            "{}_{}_payload{}_pid{}_iter{}.mcap",
             command,
+            mode.label(),
             payload_size,
             std::process::id(),
             iteration
@@ -454,6 +504,7 @@ impl BenchConfig {
 
 fn write_input(
     path: &Path,
+    mode: InputMode,
     payload_size: usize,
     message_count: usize,
     order: InputOrder,
@@ -468,11 +519,17 @@ fn write_input(
     };
 
     let file = std::fs::File::create(path).expect("create generated MCAP");
-    let mut writer = mcap::WriteOptions::new()
+    let mut write_options = mcap::WriteOptions::new()
         .profile("bench")
         .library("mcap-cli-bench")
         .compression(compression)
-        .chunk_size(Some(chunk_size))
+        .chunk_size(Some(chunk_size));
+    if mode == InputMode::Linear {
+        write_options = write_options
+            .emit_summary_records(false)
+            .emit_summary_offsets(false);
+    }
+    let mut writer = write_options
         .create(std::io::BufWriter::new(file))
         .expect("create MCAP writer");
 
