@@ -1785,7 +1785,7 @@ mod tests {
                 Err(err) => err,
             };
         let message = format!("{err:#}");
-        assert!(message.contains("remote summary section"));
+        assert!(message.contains("Remote summary section"));
         assert!(message.contains("--allow-remote-scan"));
     }
 
