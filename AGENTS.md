@@ -12,6 +12,10 @@ This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) log fil
 - **Conformance tests** orchestrate cross-language testing via the TypeScript harness: `yarn test:conformance:generate-inputs && yarn test:conformance`. They require Git LFS data and pre-built binaries for each target language.
 - **Releasing** — see [RELEASING.md](./RELEASING.md) for the release process for each language.
 
+## Pull requests
+
+PR titles should start with a lowercase keyword prefix followed by a colon, usually the package or subsystem being edited, such as `cli:`, `rust:`, `python:`, `go:`, `typescript:`, `cpp:`, `swift:`, `ci:`, or `docs:`.
+
 ## TypeScript
 
 **Prerequisites:** Node.js ≥ 18.12 with `corepack enable` (activates the Yarn version pinned via `packageManager` in `package.json`). Yarn Classic (1.x) is incompatible — the repo requires Yarn 4.x.
