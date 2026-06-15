@@ -9,7 +9,6 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 
 const DEFAULT_TOTAL_MB: u64 = 256;
 const DEFAULT_MERGE_INPUTS: usize = 4;
-const DEFAULT_CHUNK_BYTES: u64 = 4_000_000;
 const DEFAULT_SAMPLE_SIZE: usize = 10;
 const DEFAULT_WARMUP_MS: u64 = 250;
 const DEFAULT_MEASUREMENT_SECS: u64 = 2;
@@ -375,7 +374,10 @@ impl BenchConfig {
             mcap_bin: env_path("MCAP_CLI_BENCH_BIN").unwrap_or_else(default_mcap_bin),
             total_mb: env_u64("MCAP_CLI_BENCH_TOTAL_MB", DEFAULT_TOTAL_MB),
             merge_inputs: env_usize("MCAP_CLI_BENCH_INPUTS", DEFAULT_MERGE_INPUTS).max(1),
-            chunk_bytes: env_u64("MCAP_CLI_BENCH_CHUNK_BYTES", DEFAULT_CHUNK_BYTES),
+            chunk_bytes: env_u64(
+                "MCAP_CLI_BENCH_CHUNK_BYTES",
+                mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            ),
         }
     }
 
