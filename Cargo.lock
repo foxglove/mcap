@@ -1266,6 +1266,7 @@ dependencies = [
  "clap",
  "clap_complete",
  "crc32fast",
+ "criterion",
  "futures-util",
  "log",
  "lz4",
