@@ -23,18 +23,18 @@ pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage
 // the summary section. One read proves range support (for HTTP), discovers the file
 // size via `Content-Range`, and in the common case already contains the whole summary
 // section (footer + summary + summary offset records). When the summary is larger than
-// this, exactly one additional range request back-fills the missing prefix. Roughly 262 kB
+// this, exactly one additional range request back-fills the missing prefix. 250 kB
 // comfortably covers the summaries of typical multi-hundred-MB to low-GB files while
 // keeping the per-open transfer small on bandwidth-constrained links.
-const REMOTE_SUMMARY_TAIL_BYTES: u64 = 256 * 1024;
+const REMOTE_SUMMARY_TAIL_BYTES: u64 = 250_000;
 // Guards remote summary discovery against corrupt or hostile footers that point
 // `summary_start` near the beginning of a large file, which would otherwise turn
 // an index-only operation into a near-full-file range read without opt-in.
-const MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN: usize = 16 * 1024 * 1024;
+const MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN: usize = 20_000_000;
 // Bounds aggregate metadata body reads for list/multi-match metadata commands.
 // Single indexed metadata/attachment records are deliberately uncapped beyond
 // the remote file size because they are explicit user-selected record reads.
-pub(crate) const MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN: u64 = 64 * 1024 * 1024;
+pub(crate) const MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN: u64 = 100_000_000;
 
 pub enum InputData {
     Mapped(Mmap),

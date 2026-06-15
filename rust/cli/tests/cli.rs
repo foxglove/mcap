@@ -68,7 +68,7 @@ fn mcap(args: &[&str]) -> Output {
 /// Run the `mcap` binary with `args`, feeding `stdin` through a (non-seekable) pipe.
 ///
 /// Writes the whole payload before draining stdout, so it must only be used with small inputs:
-/// a payload large enough to fill the OS pipe buffer (~66 kB) while the child is blocked
+/// a payload large enough to fill the OS pipe buffer while the child is blocked
 /// writing stdout would deadlock. All current callers pipe a few hundred bytes.
 fn mcap_with_stdin(args: &[&str], stdin: &[u8]) -> Output {
     let mut child = Command::new(env!("CARGO_BIN_EXE_mcap"))

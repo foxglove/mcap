@@ -53,8 +53,9 @@ pub fn human_bytes(num_bytes: u64) -> String {
     let prefixes = ["B", "kB", "MB", "GB", "TB", "PB"];
     for (index, prefix) in prefixes.iter().enumerate() {
         let displayed = num_bytes as f64 / 1000f64.powi(index as i32);
-        if displayed < 1000.0 {
-            return format!("{displayed:.2} {prefix}");
+        let rounded = (displayed * 100.0).round() / 100.0;
+        if rounded < 1000.0 {
+            return format!("{rounded:.2} {prefix}");
         }
     }
 
@@ -178,5 +179,6 @@ mod tests {
         assert_eq!(human_bytes(1000), "1.00 kB");
         assert_eq!(human_bytes(2 * 1000), "2.00 kB");
         assert_eq!(human_bytes(2 * 1000 * 1000), "2.00 MB");
+        assert_eq!(human_bytes(999_996), "1.00 MB");
     }
 }

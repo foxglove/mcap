@@ -12,10 +12,10 @@ use crate::commands::CommandOutcome;
 use crate::context::CommandContext;
 use crate::source;
 
-// 1.07 GB upper limit on top-level record lengths while scanning the stream. This only bounds
+// 1 GB upper limit on top-level record lengths while scanning the stream. This only bounds
 // records read by the linear reader (including a compressed chunk record's own length); it does
 // not bound chunk decompression, so a chunk's decoded `uncompressed_size` can still exceed this.
-const RECOVER_RECORD_LENGTH_LIMIT: usize = 1024 * 1024 * 1024;
+const RECOVER_RECORD_LENGTH_LIMIT: usize = 1_000_000_000;
 
 #[derive(Debug, Clone, Copy)]
 enum CompressionSelection {
