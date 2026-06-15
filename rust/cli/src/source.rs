@@ -1212,7 +1212,6 @@ mod tests {
     use std::thread;
 
     use super::load_path;
-    use crate::render::human_bytes;
     use mcap::records;
     use object_store::ObjectStoreExt;
 
