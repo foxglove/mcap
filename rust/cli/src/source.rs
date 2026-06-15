@@ -23,18 +23,14 @@ pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage
 // the summary section. One read proves range support (for HTTP), discovers the file
 // size via `Content-Range`, and in the common case already contains the whole summary
 // section (footer + summary + summary offset records). When the summary is larger than
-// this, exactly one additional range request back-fills the missing prefix. 256 KiB
+// this, exactly one additional range request back-fills the missing prefix. 250 kB
 // comfortably covers the summaries of typical multi-hundred-MB to low-GB files while
 // keeping the per-open transfer small on bandwidth-constrained links.
-const REMOTE_SUMMARY_TAIL_BYTES: u64 = 256 * 1024;
+const REMOTE_SUMMARY_TAIL_BYTES: u64 = 250_000;
 // Guards remote summary discovery against corrupt or hostile footers that point
 // `summary_start` near the beginning of a large file, which would otherwise turn
 // an index-only operation into a near-full-file range read without opt-in.
-const MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN: usize = 16 * 1024 * 1024;
-// Bounds aggregate metadata body reads for list/multi-match metadata commands.
-// Single indexed metadata/attachment records are deliberately uncapped beyond
-// the remote file size because they are explicit user-selected record reads.
-pub(crate) const MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN: u64 = 64 * 1024 * 1024;
+const MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN: usize = 100_000_000;
 
 pub enum InputData {
     Mapped(Mmap),
@@ -1001,22 +997,6 @@ pub(crate) fn remote_scan_opt_in_suffix() -> &'static str {
     "pass --allow-remote-scan to continue"
 }
 
-pub(crate) fn require_remote_metadata_budget(
-    total_bytes: u64,
-    options: SourceOptions,
-    description: &str,
-) -> Result<()> {
-    if options.allow_remote_scan || total_bytes <= MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN {
-        return Ok(());
-    }
-    bail!(
-        "remote {description} would read {} (exceeds {} cap without --allow-remote-scan); {}",
-        human_bytes(total_bytes),
-        human_bytes(MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN),
-        remote_scan_opt_in_suffix()
-    );
-}
-
 fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()> {
     if options.allow_remote_scan {
         return Ok(());
@@ -1232,7 +1212,6 @@ mod tests {
     use std::thread;
 
     use super::load_path;
-    use crate::render::human_bytes;
     use mcap::records;
     use object_store::ObjectStoreExt;
 
@@ -1798,21 +1777,6 @@ mod tests {
         let message = format!("{err:#}");
         assert!(message.contains("Remote summary section"));
         assert!(message.contains("--allow-remote-scan"));
-    }
-
-    #[test]
-    fn remote_metadata_budget_requires_scan_for_oversized_total() {
-        let err = super::require_remote_metadata_budget(
-            super::MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN + 1,
-            super::SourceOptions::default(),
-            "metadata records",
-        )
-        .expect_err("oversized metadata range total should require scan opt-in");
-        assert!(err.to_string().contains("metadata records"));
-        assert!(err
-            .to_string()
-            .contains(&human_bytes(super::MAX_REMOTE_METADATA_BYTES_WITHOUT_SCAN)));
-        assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
     #[test]

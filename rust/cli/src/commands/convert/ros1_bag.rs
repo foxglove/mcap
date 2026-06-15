@@ -24,7 +24,7 @@ const KEY_TIME: &str = "time";
 const KEY_TYPE: &str = "type";
 const KEY_MD5SUM: &str = "md5sum";
 const KEY_MESSAGE_DEFINITION: &str = "message_definition";
-const MAX_RECORD_SECTION_SIZE: u32 = 1 << 30; // 1 GiB
+const MAX_RECORD_SECTION_SIZE: u32 = 1_000_000_000; // 1 GB
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct SchemaKey {
