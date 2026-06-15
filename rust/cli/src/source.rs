@@ -1107,7 +1107,7 @@ fn read_summary_bytes_from_remote(
     }
     let summary_len = usize::try_from(footer_start - footer.summary_start)
         .context("remote summary section is too large to read on this platform")?;
-    require_remote_indexed_read_budget(summary_len as u64, options, "Remote summary section")?;
+    require_remote_indexed_read_budget(summary_len as u64, options, "remote summary section")?;
 
     // `[summary_start, footer_start)` is the summary + summary offset region. The
     // portion at or after `tail.start` is already in the prefetched tail; only the
@@ -1785,7 +1785,7 @@ mod tests {
                 Err(err) => err,
             };
         let message = format!("{err:#}");
-        assert!(message.contains("Remote summary section"));
+        assert!(message.contains("remote summary section"));
         assert!(message.contains("--allow-remote-scan"));
     }
 

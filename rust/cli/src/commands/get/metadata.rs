@@ -40,8 +40,7 @@ fn merged_remote_metadata_for_name(
     if matching_indexes.len() > 1 {
         let total_bytes = matching_indexes
             .iter()
-            .map(|index| index.length)
-            .sum::<u64>();
+            .fold(0u64, |total, index| total.saturating_add(index.length));
         source::require_remote_indexed_read_budget(
             total_bytes,
             source_options,
