@@ -30,7 +30,7 @@ variables for faster local iteration or larger comparison runs:
 
 | Variable                          |                 Default | Description                                              |
 | --------------------------------- | ----------------------: | -------------------------------------------------------- |
-| `MCAP_CLI_BENCH_TOTAL_MB`         |                   `256` | Total generated payload bytes per payload-size case.     |
+| `MCAP_CLI_BENCH_TOTAL_MB`         |                   `250` | Total generated payload bytes per payload-size case.     |
 | `MCAP_CLI_BENCH_INPUTS`           |                     `4` | Number of inputs for `merge` benchmarks.                 |
 | `MCAP_CLI_BENCH_CHUNK_BYTES`      |     Rust writer default | Generated output chunk size in bytes.                    |
 | `MCAP_CLI_BENCH_DIR`              | `target/mcap-cli-bench` | Directory for generated inputs and per-run outputs.      |
