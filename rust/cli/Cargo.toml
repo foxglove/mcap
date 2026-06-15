@@ -32,3 +32,10 @@ object_store = { version = "0.13.2", features = ["aws", "gcp", "azure", "http"] 
 tokio = { version = "1.52.3", features = ["net", "rt", "time"] }
 url = "2.5.8"
 futures-util = "0.3.32"
+
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "commands"
+harness = false
