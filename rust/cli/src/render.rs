@@ -50,16 +50,16 @@ fn format_rfc3339_trimmed(dt: chrono::DateTime<chrono::Utc>) -> String {
 }
 
 pub fn human_bytes(num_bytes: u64) -> String {
-    let prefixes = ["B", "KiB", "MiB", "GiB"];
+    let prefixes = ["B", "kB", "MB", "GB", "TB", "PB"];
     for (index, prefix) in prefixes.iter().enumerate() {
-        let displayed = num_bytes as f64 / 1024f64.powi(index as i32);
-        if displayed <= 1024.0 {
+        let displayed = num_bytes as f64 / 1000f64.powi(index as i32);
+        if displayed < 1000.0 {
             return format!("{displayed:.2} {prefix}");
         }
     }
 
     let last = prefixes.len() - 1;
-    let displayed = num_bytes as f64 / 1024f64.powi(last as i32);
+    let displayed = num_bytes as f64 / 1000f64.powi(last as i32);
     format!("{displayed:.2} {}", prefixes[last])
 }
 
@@ -174,6 +174,9 @@ mod tests {
     #[test]
     fn human_bytes_scales_units() {
         assert_eq!(human_bytes(2), "2.00 B");
-        assert_eq!(human_bytes(2 * 1024), "2.00 KiB");
+        assert_eq!(human_bytes(999), "999.00 B");
+        assert_eq!(human_bytes(1000), "1.00 kB");
+        assert_eq!(human_bytes(2 * 1000), "2.00 kB");
+        assert_eq!(human_bytes(2 * 1000 * 1000), "2.00 MB");
     }
 }

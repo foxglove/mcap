@@ -23,7 +23,7 @@ pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage
 // the summary section. One read proves range support (for HTTP), discovers the file
 // size via `Content-Range`, and in the common case already contains the whole summary
 // section (footer + summary + summary offset records). When the summary is larger than
-// this, exactly one additional range request back-fills the missing prefix. 256 KiB
+// this, exactly one additional range request back-fills the missing prefix. Roughly 262 kB
 // comfortably covers the summaries of typical multi-hundred-MB to low-GB files while
 // keeping the per-open transfer small on bandwidth-constrained links.
 const REMOTE_SUMMARY_TAIL_BYTES: u64 = 256 * 1024;

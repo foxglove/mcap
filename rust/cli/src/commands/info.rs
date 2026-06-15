@@ -87,11 +87,7 @@ fn render_info(parsed: &parse::ParsedMcap) -> String {
             );
             if duration_seconds > 0.0 {
                 let throughput = (stats.compressed_size as f64 / duration_seconds).max(0.0);
-                let _ = write!(
-                    &mut out,
-                    " [{}/sec]",
-                    render::human_bytes(throughput as u64)
-                );
+                let _ = write!(&mut out, " [{}/s]", render::human_bytes(throughput as u64));
             }
             let _ = writeln!(&mut out);
         }
@@ -463,11 +459,24 @@ mod tests {
                 metadata: BTreeMap::new(),
             },
         );
+        parsed.chunk_indexes.push(ChunkIndex {
+            message_start_time: 1_000_000_000,
+            message_end_time: 2_500_000_000,
+            chunk_start_offset: 0,
+            chunk_length: 0,
+            message_index_offsets: BTreeMap::new(),
+            message_index_length: 0,
+            compression: "zstd".to_string(),
+            compressed_size: 1_500_000,
+            uncompressed_size: 3_000_000,
+        });
 
         let rendered = render_info(&parsed);
         assert!(rendered.contains(&format!("library:     {}", mcap::LIBRARY_IDENTIFIER)));
         assert!(rendered.contains("profile:     demo"));
         assert!(rendered.contains("messages:    2"));
+        assert!(rendered.contains("zstd: [1/1 chunks] [3.00 MB/1.50 MB (50.00%)] [1.00 MB/s]"));
+        assert!(rendered.contains("max uncompressed size: 3.00 MB"));
         assert!(rendered.contains("channels:"));
         assert!(rendered.contains("/demo"));
     }
