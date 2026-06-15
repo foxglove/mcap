@@ -4,6 +4,10 @@ Release numbering follows a major.minor.patch format, abbreviated as "X.Y.Z" bel
 
 CI will build the appropriate packages once tags are pushed, as described below.
 
+## Release notes
+
+Draft release notes from the diff between the previous package tag and the new release commit. Review the actual diffs rather than relying on commit titles alone, omit unrelated commits, and group user-facing bullets under "New features", "Bug fixes", and "Performance" when applicable. Include the relevant PR number(s) in parentheses after each bullet.
+
 ## Go library
 
 1. Update the `Version` in go/mcap/version.go
