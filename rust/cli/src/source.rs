@@ -27,10 +27,9 @@ pub const PLEASE_SUPPLY_FILE: &str = "please supply a file. see --help for usage
 // comfortably covers the summaries of typical multi-hundred-MB to low-GB files while
 // keeping the per-open transfer small on bandwidth-constrained links.
 const REMOTE_SUMMARY_TAIL_BYTES: u64 = 250_000;
-// Guards remote summary discovery against corrupt or hostile footers that point
-// `summary_start` near the beginning of a large file, which would otherwise turn
-// an index-only operation into a near-full-file range read without opt-in.
-const MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN: usize = 100_000_000;
+// Guards aggregate remote reads that should stay index-like (summary bytes, or
+// multiple metadata records selected from indexes) from becoming unexpectedly large.
+pub(crate) const MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN: u64 = 100_000_000;
 
 pub enum InputData {
     Mapped(Mmap),
@@ -997,6 +996,22 @@ pub(crate) fn remote_scan_opt_in_suffix() -> &'static str {
     "pass --allow-remote-scan to continue"
 }
 
+pub(crate) fn require_remote_indexed_read_budget(
+    total_bytes: u64,
+    options: SourceOptions,
+    description: &str,
+) -> Result<()> {
+    if options.allow_remote_scan || total_bytes <= MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN {
+        return Ok(());
+    }
+    bail!(
+        "{description} would read {} (exceeds {} cap without --allow-remote-scan); {}",
+        human_bytes(total_bytes),
+        human_bytes(MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN),
+        remote_scan_opt_in_suffix()
+    );
+}
+
 fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()> {
     if options.allow_remote_scan {
         return Ok(());
@@ -1092,14 +1107,7 @@ fn read_summary_bytes_from_remote(
     }
     let summary_len = usize::try_from(footer_start - footer.summary_start)
         .context("remote summary section is too large to read on this platform")?;
-    if summary_len > MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN && !options.allow_remote_scan {
-        bail!(
-            "remote summary section is {} (exceeds {} cap without --allow-remote-scan); {}",
-            human_bytes(summary_len as u64),
-            human_bytes(MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN as u64),
-            remote_scan_opt_in_suffix()
-        );
-    }
+    require_remote_indexed_read_budget(summary_len as u64, options, "Remote summary section")?;
 
     // `[summary_start, footer_start)` is the summary + summary offset region. The
     // portion at or after `tail.start` is already in the prefetched tail; only the
@@ -1212,6 +1220,7 @@ mod tests {
     use std::thread;
 
     use super::load_path;
+    use crate::render::human_bytes;
     use mcap::records;
     use object_store::ObjectStoreExt;
 
@@ -1753,7 +1762,8 @@ mod tests {
 
     #[test]
     fn remote_summary_read_requires_scan_for_oversized_summary_section() {
-        let len = super::MAX_REMOTE_SUMMARY_BYTES_WITHOUT_SCAN
+        let len = usize::try_from(super::MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN)
+            .expect("remote indexed budget should fit usize")
             + crate::parse::FOOTER_RECORD_AND_END_MAGIC_LEN
             + mcap::MAGIC.len()
             + 1;
@@ -1777,6 +1787,21 @@ mod tests {
         let message = format!("{err:#}");
         assert!(message.contains("Remote summary section"));
         assert!(message.contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn remote_indexed_read_budget_requires_scan_for_oversized_total() {
+        let err = super::require_remote_indexed_read_budget(
+            super::MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN + 1,
+            super::SourceOptions::default(),
+            "remote metadata records",
+        )
+        .expect_err("oversized indexed read should require scan opt-in");
+        assert!(err.to_string().contains("remote metadata records"));
+        assert!(err
+            .to_string()
+            .contains(&human_bytes(super::MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN)));
+        assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
     #[test]

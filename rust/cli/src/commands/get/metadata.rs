@@ -9,7 +9,7 @@ use crate::{parse, source};
 pub fn run(ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let metadata = if let Some(remote) = source::try_open_remote_mcap(&args.file, source_options)? {
-        merged_remote_metadata_for_name(&remote, &args.name)?
+        merged_remote_metadata_for_name(&remote, &args.name, source_options)?
     } else {
         let mcap = source::load_path(&args.file, source_options)?;
         let parsed = parse::parse_mcap(&mcap)?;
@@ -25,6 +25,7 @@ pub fn run(ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
 fn merged_remote_metadata_for_name(
     remote: &source::RemoteMcap,
     name: &str,
+    source_options: source::SourceOptions,
 ) -> Result<BTreeMap<String, String>> {
     let mut matching_indexes: Vec<&mcap::records::MetadataIndex> = remote
         .summary()
@@ -36,6 +37,17 @@ fn merged_remote_metadata_for_name(
         anyhow::bail!("metadata {name} does not exist");
     }
     matching_indexes.sort_by_key(|index| index.offset);
+    if matching_indexes.len() > 1 {
+        let total_bytes = matching_indexes
+            .iter()
+            .map(|index| index.length)
+            .sum::<u64>();
+        source::require_remote_indexed_read_budget(
+            total_bytes,
+            source_options,
+            "remote metadata records",
+        )?;
+    }
 
     let mut output = BTreeMap::new();
     for index in matching_indexes {
