@@ -105,10 +105,10 @@ Report summary statistics on an MCAP file:
     start:       2017-03-22T02:26:20.103843113Z (1490149580.103843113)
     end:         2017-03-22T02:26:27.884601617Z (1490149587.884601617)
     compression:
-    	zstd: [14/14 chunks] [119.10 MiB/58.61 MiB (50.79%)] [7.53 MiB/sec]
+    	zstd: [14/14 chunks] [124.89 MB/61.46 MB (50.79%)] [7.90 MB/s]
     chunks:
-    	max uncompressed size: 9.20 MiB
-    	max compressed size: 4.54 MiB
+    	max uncompressed size: 9.65 MB
+    	max compressed size: 4.76 MB
     	overlaps: no
     channels:
     	(0) /diagnostics              52 msgs (6.6..6.7Hz)    : diagnostic_msgs/DiagnosticArray [ros1msg]
@@ -154,10 +154,10 @@ The `mcap` CLI can read files over **HTTP(S)** and from object stores: **Amazon 
     start:       2017-03-22T02:26:20.103843113Z (1490149580.103843113)
     end:         2017-03-22T02:26:27.884601617Z (1490149587.884601617)
     compression:
-    	zstd: [14/14 chunks] [119.10 MiB/58.61 MiB (50.79%)] [7.53 MiB/sec]
+    	zstd: [14/14 chunks] [124.89 MB/61.46 MB (50.79%)] [7.90 MB/s]
     chunks:
-    	max uncompressed size: 9.20 MiB
-    	max compressed size: 4.54 MiB
+    	max uncompressed size: 9.65 MB
+    	max compressed size: 4.76 MB
     	overlaps: no
     channels:
     	(0) /diagnostics              52 msgs (6.6..6.7Hz)    : diagnostic_msgs/DiagnosticArray [ros1msg]

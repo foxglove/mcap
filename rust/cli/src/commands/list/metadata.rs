@@ -24,9 +24,12 @@ fn collect_remote_metadata_records(
         .summary()
         .metadata_indexes
         .iter()
-        .map(|index| index.length)
-        .sum::<u64>();
-    source::require_remote_metadata_budget(total_bytes, source_options, "metadata records")?;
+        .fold(0u64, |total, index| total.saturating_add(index.length));
+    source::require_remote_indexed_read_budget(
+        total_bytes,
+        source_options,
+        "remote metadata records",
+    )?;
 
     let mut records = Vec::new();
     for index in &remote.summary().metadata_indexes {
