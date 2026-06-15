@@ -7,21 +7,21 @@ use std::time::{Duration, Instant};
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
-const DEFAULT_TOTAL_MIB: u64 = 256;
+const DEFAULT_TOTAL_MB: u64 = 256;
 const DEFAULT_MERGE_INPUTS: usize = 4;
-const DEFAULT_CHUNK_SIZE: u64 = 4 * 1024 * 1024;
+const DEFAULT_CHUNK_BYTES: u64 = 4_000_000;
 const DEFAULT_SAMPLE_SIZE: usize = 10;
 const DEFAULT_WARMUP_MS: u64 = 250;
 const DEFAULT_MEASUREMENT_SECS: u64 = 2;
-const PAYLOAD_SIZES: &[usize] = &[100, 1024, 10 * 1024, 100 * 1024, 1024 * 1024];
+const PAYLOAD_SIZES: &[usize] = &[100, 1_000, 10_000, 100_000, 1_000_000];
 
 #[derive(Debug, Clone)]
 struct BenchConfig {
     root: PathBuf,
     mcap_bin: PathBuf,
-    total_mib: u64,
+    total_mb: u64,
     merge_inputs: usize,
-    chunk_size: u64,
+    chunk_bytes: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -207,7 +207,7 @@ fn bench_merge(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: 
                             OsString::from("--compression"),
                             OsString::from("zstd"),
                             OsString::from("--chunk-size"),
-                            OsString::from(config.chunk_size.to_string()),
+                            OsString::from(config.chunk_bytes.to_string()),
                             OsString::from("--output-file"),
                             output.as_os_str().to_owned(),
                         ]);
@@ -247,7 +247,7 @@ fn bench_filter(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases:
                             OsString::from("--output-compression"),
                             OsString::from("zstd"),
                             OsString::from("--chunk-size"),
-                            OsString::from(config.chunk_size.to_string()),
+                            OsString::from(config.chunk_bytes.to_string()),
                         ];
                         let duration = run_mcap(&config.mcap_bin, args);
                         if iteration == 0 {
@@ -280,7 +280,7 @@ fn bench_sort(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &
                             OsString::from("--compression"),
                             OsString::from("zstd"),
                             OsString::from("--chunk-size"),
-                            OsString::from(config.chunk_size.to_string()),
+                            OsString::from(config.chunk_bytes.to_string()),
                             OsString::from("--output-file"),
                             output.as_os_str().to_owned(),
                         ];
@@ -318,7 +318,7 @@ fn bench_compress(c: &mut Criterion, config: &BenchConfig, mode: InputMode, case
                             OsString::from("--compression"),
                             OsString::from("zstd"),
                             OsString::from("--chunk-size"),
-                            OsString::from(config.chunk_size.to_string()),
+                            OsString::from(config.chunk_bytes.to_string()),
                         ];
                         let duration = run_mcap(&config.mcap_bin, args);
                         if iteration == 0 {
@@ -352,7 +352,7 @@ fn bench_decompress(c: &mut Criterion, config: &BenchConfig, mode: InputMode, ca
                             OsString::from("--output"),
                             output.as_os_str().to_owned(),
                             OsString::from("--chunk-size"),
-                            OsString::from(config.chunk_size.to_string()),
+                            OsString::from(config.chunk_bytes.to_string()),
                         ];
                         let duration = run_mcap(&config.mcap_bin, args);
                         if iteration == 0 {
@@ -373,14 +373,14 @@ impl BenchConfig {
         Self {
             root: env_path("MCAP_CLI_BENCH_DIR").unwrap_or_else(default_bench_dir),
             mcap_bin: env_path("MCAP_CLI_BENCH_BIN").unwrap_or_else(default_mcap_bin),
-            total_mib: env_u64("MCAP_CLI_BENCH_TOTAL_MIB", DEFAULT_TOTAL_MIB),
+            total_mb: env_u64("MCAP_CLI_BENCH_TOTAL_MB", DEFAULT_TOTAL_MB),
             merge_inputs: env_usize("MCAP_CLI_BENCH_INPUTS", DEFAULT_MERGE_INPUTS).max(1),
-            chunk_size: env_u64("MCAP_CLI_BENCH_CHUNK_SIZE", DEFAULT_CHUNK_SIZE),
+            chunk_bytes: env_u64("MCAP_CLI_BENCH_CHUNK_BYTES", DEFAULT_CHUNK_BYTES),
         }
     }
 
     fn total_bytes(&self) -> u64 {
-        self.total_mib * 1024 * 1024
+        self.total_mb * 1_000_000
     }
 
     fn inputs_dir(&self) -> PathBuf {
@@ -409,7 +409,7 @@ impl BenchConfig {
                 message_count,
                 order,
                 compression,
-                self.chunk_size,
+                self.chunk_bytes,
             );
         }
         InputCase {
@@ -444,7 +444,7 @@ impl BenchConfig {
                         messages_per_input,
                         order,
                         Some("zstd"),
-                        self.chunk_size,
+                        self.chunk_bytes,
                     );
                 }
                 path
@@ -476,7 +476,7 @@ impl BenchConfig {
             "payload{}_messages{}_chunk{}_{}_{}_{}_part{}.mcap",
             payload_size,
             message_count,
-            self.chunk_size,
+            self.chunk_bytes,
             mode.label(),
             order_label,
             compression_label,
@@ -509,7 +509,7 @@ fn write_input(
     message_count: usize,
     order: InputOrder,
     compression: Option<&str>,
-    chunk_size: u64,
+    chunk_bytes: u64,
 ) {
     let compression = match compression {
         Some("zstd") => Some(mcap::Compression::Zstd),
@@ -523,7 +523,7 @@ fn write_input(
         .profile("bench")
         .library("mcap-cli-bench")
         .compression(compression)
-        .chunk_size(Some(chunk_size));
+        .chunk_size(Some(chunk_bytes));
     if mode == InputMode::Linear {
         write_options = write_options
             .emit_summary_records(false)
@@ -723,10 +723,10 @@ fn env_usize(name: &str, default: usize) -> usize {
 fn size_label(bytes: usize) -> String {
     match bytes {
         100 => "100B".to_string(),
-        1024 => "1KiB".to_string(),
-        10240 => "10KiB".to_string(),
-        102400 => "100KiB".to_string(),
-        1048576 => "1MiB".to_string(),
+        1_000 => "1KB".to_string(),
+        10_000 => "10KB".to_string(),
+        100_000 => "100KB".to_string(),
+        1_000_000 => "1MB".to_string(),
         _ => format!("{bytes}B"),
     }
 }

@@ -50,6 +50,6 @@ End-to-end tests that run the built binary live in `tests/cli.rs` (spawned via `
 
 CLI benchmarks live in `benches/commands.rs` and run with `cargo bench -p mcap-cli --bench commands`. They are for performance work only: run them when explicitly improving performance or when a change could significantly affect CLI throughput. Do not run them for routine CLI edits.
 
-The full default matrix uses a 256 MiB generated workload per case and took about 20 minutes on a Cursor Cloud VM. In most cases, run the narrowest relevant Criterion filter instead of the full suite, for example `cargo bench -p mcap-cli --bench commands -- merge/indexed/100KiB` or `cargo bench -p mcap-cli --bench commands -- filter/linear`.
+The full default matrix uses a 256 MB generated workload per case and took about 20 minutes on a Cursor Cloud VM. In most cases, run the narrowest relevant Criterion filter instead of the full suite, for example `cargo bench -p mcap-cli --bench commands -- merge/indexed/100KB` or `cargo bench -p mcap-cli --bench commands -- filter/linear`.
 
-Benchmarks are named `cli/<command>/<mode>/<payload>`. The modes are `indexed` (summary, chunk indexes, and message indexes present) and `linear` (summary omitted to force scan fallback). Payload sizes are `100B`, `1KiB`, `10KiB`, `100KiB`, and `1MiB`.
+Benchmarks are named `cli/<command>/<mode>/<payload>`. The modes are `indexed` (summary, chunk indexes, and message indexes present) and `linear` (summary omitted to force scan fallback). Payload sizes are `100B`, `1KB`, `10KB`, `100KB`, and `1MB`.

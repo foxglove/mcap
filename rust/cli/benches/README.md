@@ -20,7 +20,7 @@ filter to run a single command, input mode, or specific case:
 cargo bench -p mcap-cli --bench commands -- merge
 cargo bench -p mcap-cli --bench commands -- indexed
 cargo bench -p mcap-cli --bench commands -- filter/linear
-cargo bench -p mcap-cli --bench commands -- merge/indexed/100KiB
+cargo bench -p mcap-cli --bench commands -- merge/indexed/100KB
 ```
 
 ## Workload controls
@@ -30,9 +30,9 @@ variables for faster local iteration or larger comparison runs:
 
 | Variable                          |                 Default | Description                                              |
 | --------------------------------- | ----------------------: | -------------------------------------------------------- |
-| `MCAP_CLI_BENCH_TOTAL_MIB`        |                   `256` | Total generated payload bytes per payload-size case.     |
+| `MCAP_CLI_BENCH_TOTAL_MB`         |                   `256` | Total generated payload bytes per payload-size case.     |
 | `MCAP_CLI_BENCH_INPUTS`           |                     `4` | Number of inputs for `merge` benchmarks.                 |
-| `MCAP_CLI_BENCH_CHUNK_SIZE`       |               `4194304` | Generated output chunk size in bytes.                    |
+| `MCAP_CLI_BENCH_CHUNK_BYTES`      |               `4000000` | Generated output chunk size in bytes.                    |
 | `MCAP_CLI_BENCH_DIR`              | `target/mcap-cli-bench` | Directory for generated inputs and per-run outputs.      |
 | `MCAP_CLI_BENCH_BIN`              |      Cargo bench binary | CLI binary to execute.                                   |
 | `MCAP_CLI_BENCH_SAMPLE_SIZE`      |                    `10` | Criterion sample size; values below 10 are raised to 10. |
@@ -42,7 +42,7 @@ variables for faster local iteration or larger comparison runs:
 Example larger run:
 
 ```sh
-MCAP_CLI_BENCH_TOTAL_MIB=1024 \
+MCAP_CLI_BENCH_TOTAL_MB=1000 \
 MCAP_CLI_BENCH_INPUTS=8 \
 cargo bench -p mcap-cli --bench commands -- merge
 ```
@@ -51,9 +51,12 @@ cargo bench -p mcap-cli --bench commands -- merge
 
 Each suite runs both `indexed` inputs (summary, chunk indexes, and message indexes present) and
 `linear` inputs (summary omitted, forcing a scan fallback). It uses deterministic pseudo-random
-message payloads at `100B`, `1KiB`, `10KiB`, `100KiB`, and `1MiB` sizes. The benchmark validates
+message payloads at `100B`, `1KB`, `10KB`, `100KB`, and `1MB` sizes. The benchmark validates
 each command output for basic MCAP correctness, expected message count, summary presence, and
 log-time ordering where applicable.
+
+Workload and payload sizes use SI units (`1KB = 1,000 bytes`, `1MB = 1,000,000 bytes`). Criterion
+reports byte throughput using its native IEC units such as `MiB/s` and `GiB/s`.
 
 Generated inputs are cached under `MCAP_CLI_BENCH_DIR` and reused when the benchmark parameters
 match the filename. Delete that directory if a previous run was interrupted or after large runs to
