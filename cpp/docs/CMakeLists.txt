@@ -8,5 +8,10 @@ list(APPEND CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR}/generators)
 
 find_package(mcap REQUIRED)
 
+# hdoc skips symbols from system headers. CMakeDeps exposes mcap as an IMPORTED
+# target, whose include dirs CMake would otherwise pass as -isystem, hiding
+# every mcap symbol from hdoc. Force normal -I includes instead.
+set(CMAKE_NO_SYSTEM_FROM_IMPORTED ON)
+
 add_library(docs-entrypoint docs-entrypoint.cpp)
 target_link_libraries(docs-entrypoint mcap::mcap)
