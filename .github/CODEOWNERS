@@ -12,7 +12,7 @@
 # https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
 
 # Any file(s) or path(s) not assigned to someone specific falls back to these owners
-* @jtbandes @james-rms
+* @james-rms
 
 # Sanity check changes to the owners file for syntax and ordering
 /.github/CODEOWNERS @defunctzombie @jtbandes @james-rms
@@ -21,7 +21,7 @@
 
 /go @gasmith @james-rms
 
-/python @gasmith @jtbandes @james-rms @mguida22
+/python @gasmith @james-rms @mguida22
 
 /rust @gasmith @james-rms @bennetthardwick
 
