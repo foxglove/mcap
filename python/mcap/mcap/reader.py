@@ -80,7 +80,7 @@ def _chunks_matching_topics(
     start_time: Optional[float],
     end_time: Optional[float],
 ) -> List[ChunkIndex]:
-    """returns a list of ChunkIndex records that include one or more messages of the given topics.
+    """returns candidate ChunkIndex records that may include messages of the given topics.
 
     :param summary: the summary of this MCAP.
     :param topics: topics to match. If None, all chunk indices in the summary are returned.
