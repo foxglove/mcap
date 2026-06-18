@@ -18,7 +18,7 @@ jobs:
       run:
         working-directory: cpp
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: false
       - uses: actions/cache@v5
@@ -37,7 +37,7 @@ jobs:
       run:
         working-directory: cpp
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: false
       - uses: actions/cache@v5
@@ -57,7 +57,7 @@ jobs:
       run:
         working-directory: go
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: actions/setup-go@v6
@@ -91,7 +91,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: astral-sh/setup-uv@v8.2.0
@@ -162,7 +162,7 @@ jobs:
   rust:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - uses: dtolnay/rust-toolchain@stable
@@ -197,7 +197,7 @@ jobs:
   swift:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: false
       - name: Check Swift version matches tag
@@ -226,7 +226,7 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: false
       - run: corepack enable
@@ -282,7 +282,7 @@ jobs:
   typescript-examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: false
       - run: corepack enable
@@ -364,7 +364,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: "0"
       - name: Check version matches tag
@@ -419,7 +419,7 @@ jobs:
   conformance-lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: false
       - run: corepack enable
@@ -434,7 +434,7 @@ jobs:
   conformance-cpp:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - run: corepack enable
@@ -454,7 +454,7 @@ jobs:
   conformance-go:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - run: corepack enable
@@ -478,7 +478,7 @@ jobs:
   conformance-python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - run: corepack enable
@@ -495,7 +495,7 @@ jobs:
   conformance-typescript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - run: corepack enable
@@ -510,7 +510,7 @@ jobs:
   conformance-kaitai-struct:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - run: corepack enable
@@ -525,7 +525,7 @@ jobs:
   conformance-swift:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - run: corepack enable
@@ -544,7 +544,7 @@ jobs:
   conformance-rust:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: true
       - run: corepack enable
@@ -561,7 +561,7 @@ jobs:
   spellcheck:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           lfs: false
       - run: corepack enable
