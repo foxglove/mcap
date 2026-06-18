@@ -132,6 +132,34 @@ def test_only_diagnostics_str(reader_cls: AnyReaderSubclass):
         assert count == 1
 
 
+def test_seeking_reader_reads_chunk_index_without_message_index(tmpdir: Path):
+    filepath = tmpdir / "chunk_index_only.mcap"
+    with open(filepath, "wb") as f:
+        writer = Writer(f, index_types=IndexType.CHUNK)
+        writer.start()
+        channel_id = writer.register_channel("sample_topic", "json", 0)
+        writer.add_message(
+            channel_id,
+            log_time=42,
+            data=json.dumps({"sample": "test"}).encode("utf8"),
+            publish_time=43,
+        )
+        writer.finish()
+
+    def messages(**kwargs: Any) -> list[Tuple[Optional[Schema], Channel, Message]]:
+        with open(filepath, "rb") as f:
+            return list(SeekingReader(f).iter_messages(**kwargs))
+
+    all_messages = messages()
+    assert len(all_messages) == 1
+    assert all_messages[0][1].topic == "sample_topic"
+    assert all_messages[0][2].data == b'{"sample": "test"}'
+    assert len(messages(topics=["sample_topic"])) == 1
+    assert len(messages(topics=["other_topic"])) == 0
+    assert len(messages(start_time=43)) == 0
+    assert len(messages(end_time=42)) == 0
+
+
 def write_json_mcap(filepath: Path):
     with open(filepath, "wb") as f:
         writer = Writer(f)

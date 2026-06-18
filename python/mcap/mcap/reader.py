@@ -80,7 +80,7 @@ def _chunks_matching_topics(
     start_time: Optional[float],
     end_time: Optional[float],
 ) -> List[ChunkIndex]:
-    """returns a list of ChunkIndex records that include one or more messages of the given topics.
+    """returns candidate ChunkIndex records that may include messages of the given topics.
 
     :param summary: the summary of this MCAP.
     :param topics: topics to match. If None, all chunk indices in the summary are returned.
@@ -93,8 +93,15 @@ def _chunks_matching_topics(
             continue
         if end_time is not None and chunk_index.message_start_time >= end_time:
             continue
+        if topics is None:
+            out.append(chunk_index)
+            continue
+        if len(chunk_index.message_index_offsets) == 0:
+            # Without message indexes, topic membership is unknown until the chunk is scanned.
+            out.append(chunk_index)
+            continue
         for channel_id in chunk_index.message_index_offsets.keys():
-            if topics is None or summary.channels[channel_id].topic in topics:
+            if summary.channels[channel_id].topic in topics:
                 out.append(chunk_index)
                 break
     return out
