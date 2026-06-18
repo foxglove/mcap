@@ -93,7 +93,11 @@ def _chunks_matching_topics(
             continue
         if end_time is not None and chunk_index.message_start_time >= end_time:
             continue
-        if topics is None or len(chunk_index.message_index_offsets) == 0:
+        if topics is None:
+            out.append(chunk_index)
+            continue
+        if len(chunk_index.message_index_offsets) == 0:
+            # Without message indexes, topic membership is unknown until the chunk is scanned.
             out.append(chunk_index)
             continue
         for channel_id in chunk_index.message_index_offsets.keys():
