@@ -111,22 +111,18 @@ inline ResidencyProfile computeResidencyProfile(
 
 // Policy for what to do when the user's cap is below the order's intrinsic floor.
 enum class MemoryCapPolicy {
-  Adapt,                 // raise the effective budget up to the floor (never deadlocks;
-                         // may exceed the user cap — flagged in BudgetDecision)
-  Strict,                // do not exceed the user cap; report infeasible (caller decides)
-  EvictAndReDecompress,  // honor a sub-floor cap by evicting + re-decompressing chunks
-                         // (bounded redundant CPU; never below one chunk)
-  FallBackToSerial,      // if the cap is below the floor, signal the caller to read serially
+  Adapt,             // raise the effective budget up to the floor (never deadlocks;
+                     // may exceed the user cap — flagged in BudgetDecision)
+  Strict,            // do not exceed the user cap; report infeasible (caller decides)
+  FallBackToSerial,  // if the cap is below the floor, signal the caller to read serially
 };
 
 struct BudgetDecision {
-  uint64_t effectiveBudgetBytes = 0;      // pass this to ByteSemaphore
-  uint64_t floorBytes = 0;                // minimum to progress without eviction, this order
-  bool feasibleWithoutEviction = true;    // false only under Strict when cap < floor
-  bool exceedsUserCap = false;            // true under Adapt when raised above the cap
-  bool requiresEviction = false;          // true under EvictAndReDecompress when cap < floor
-  bool fallBackToSerial = false;          // true under FallBackToSerial when cap < floor
-  double estReDecompressionFactor = 1.0;  // >1 when eviction is in play (rough)
+  uint64_t effectiveBudgetBytes = 0;    // pass this to ByteSemaphore
+  uint64_t floorBytes = 0;              // minimum to progress without eviction, this order
+  bool feasibleWithoutEviction = true;  // false only under Strict when cap < floor
+  bool exceedsUserCap = false;          // true under Adapt when raised above the cap
+  bool fallBackToSerial = false;        // true under FallBackToSerial when cap < floor
   std::string note;
 };
 
@@ -178,16 +174,6 @@ inline BudgetDecision resolveBudget(const ResidencyProfile& profile,
       d.feasibleWithoutEviction = false;
       d.note = "user cap is below the floor (" + std::to_string(floor) +
                " B); not feasible without eviction in this order";
-      return d;
-
-    case MemoryCapPolicy::EvictAndReDecompress:
-      // Must still hold at least one (largest) chunk, or even a single chunk can't fit.
-      d.effectiveBudgetBytes = std::max(userCapBytes, oneChunk);
-      d.requiresEviction = (d.effectiveBudgetBytes < floor);
-      d.estReDecompressionFactor =
-        d.requiresEviction ? double(floor) / double(d.effectiveBudgetBytes) : 1.0;
-      d.note = "honoring sub-floor cap via eviction; expect ~" +
-               std::to_string(d.estReDecompressionFactor) + "x redundant decompression";
       return d;
 
     case MemoryCapPolicy::FallBackToSerial:

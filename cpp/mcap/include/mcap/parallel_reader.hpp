@@ -514,10 +514,6 @@ private:
       // sorted runs (O(N log C)) instead of a full O(N log N) std::sort.
       std::vector<std::pair<size_t, size_t>> runs;
       for (auto rec = rr.next(); rec.has_value(); rec = rr.next()) {
-        if (!rr.status().ok()) {
-          rc->status = rr.status();
-          break;
-        }
         if (rec->opcode == OpCode::Chunk) {
           Chunk chunk;
           rc->status = McapReader::ParseChunk(*rec, &chunk);
@@ -540,6 +536,13 @@ private:
             runs.emplace_back(runStart, rc->entries.size());
           }
         }
+      }
+      // The for-loop exits when rr.next() returns nullopt, which can mean either
+      // a clean end-of-range OR a record-read failure (truncated/corrupt input).
+      // Surface that failure here so a successfully-decompressed chunk does not
+      // mask a subsequent read error.
+      if (rc->status.ok() && !rr.status().ok()) {
+        rc->status = rr.status();
       }
       if (rc->status.ok() && !gotChunk) {
         rc->status = Status{StatusCode::InvalidChunkOffset, "no chunk record at planned offset"};

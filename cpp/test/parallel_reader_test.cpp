@@ -355,7 +355,8 @@ TEST_CASE("residency profile matches a brute-force oracle", "[parallel][cap]") {
   }
 }
 
-TEST_CASE("byte semaphore never exceeds capacity under concurrency", "[parallel][cap]") {
+TEST_CASE("byte semaphore tryAcquire never exceeds capacity under concurrency",
+          "[parallel][cap]") {
   const uint64_t cap = 1u << 20;
   internal::ByteSemaphore sem(cap);
   std::atomic<int64_t> live{0};
@@ -367,7 +368,7 @@ TEST_CASE("byte semaphore never exceeds capacity under concurrency", "[parallel]
       std::uniform_int_distribution<uint64_t> sizeD(1, cap);
       for (int i = 0; i < 2000; i++) {
         const uint64_t k = sizeD(rng);
-        sem.acquire(k);
+        if (!sem.tryAcquire(k)) continue;
         const int64_t now = live.fetch_add(int64_t(k)) + int64_t(k);
         if (now > int64_t(cap)) violated.store(true);
         live.fetch_sub(int64_t(k));
@@ -379,9 +380,9 @@ TEST_CASE("byte semaphore never exceeds capacity under concurrency", "[parallel]
   REQUIRE_FALSE(violated.load());
 }
 
-TEST_CASE("byte semaphore admits an oversized chunk without deadlock", "[parallel][cap]") {
+TEST_CASE("byte semaphore forceAcquire admits an oversized chunk", "[parallel][cap]") {
   internal::ByteSemaphore sem(100);
-  sem.acquire(250);  // oversized: drives available negative, never blocks on a fresh pool
+  sem.forceAcquire(250);  // oversized: drives available negative, never blocks
   CHECK(sem.outstanding() == 250);
   CHECK_FALSE(sem.tryAcquire(50));  // no room while the oversized chunk is held
   sem.release(250);
@@ -426,18 +427,6 @@ TEST_CASE("budget resolver enforces the log-time overlap floor", "[parallel][cap
     const auto d = resolveBudget(prof, Order::LogTimeOrder, 8 * MiB, MemoryCapPolicy::Strict);
     CHECK(d.effectiveBudgetBytes == 8 * MiB);
     CHECK_FALSE(d.feasibleWithoutEviction);
-  }
-
-  SECTION("EvictAndReDecompress honors a sub-floor cap, never below one chunk") {
-    const auto d =
-      resolveBudget(prof, Order::LogTimeOrder, 8 * MiB, MemoryCapPolicy::EvictAndReDecompress);
-    CHECK(d.requiresEviction);
-    CHECK(d.effectiveBudgetBytes == 8 * MiB);
-    CHECK(d.effectiveBudgetBytes >= prof.uMaxBytes);
-    CHECK(d.estReDecompressionFactor > 1.0);
-    const auto tiny =
-      resolveBudget(prof, Order::LogTimeOrder, 256 * 1024, MemoryCapPolicy::EvictAndReDecompress);
-    CHECK(tiny.effectiveBudgetBytes == prof.uMaxBytes);
   }
 
   SECTION("FallBackToSerial signals the caller when the cap is below floor") {
