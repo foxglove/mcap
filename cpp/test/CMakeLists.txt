@@ -49,12 +49,12 @@ target_compile_definitions(unit-tests-nocompress PRIVATE MCAP_COMPRESSION_NO_LZ4
 
 # Proves the serial API still builds with the parallel reader compiled out.
 add_executable(unit-tests-noparallel unit_tests.cpp)
-target_link_libraries(unit-tests-noparallel ${CONAN_LIBS})
+target_link_libraries(unit-tests-noparallel ${MCAP_TEST_LIBS})
 target_compile_definitions(unit-tests-noparallel PRIVATE MCAP_NO_PARALLEL)
 
 add_executable(parallel-reader-test parallel_reader_test.cpp)
-target_link_libraries(parallel-reader-test ${CONAN_LIBS} Threads::Threads)
+target_link_libraries(parallel-reader-test ${MCAP_TEST_LIBS} Threads::Threads)
 
 add_executable(parallel-reader-test-nocompress parallel_reader_test.cpp)
-target_link_libraries(parallel-reader-test-nocompress ${CONAN_LIBS} Threads::Threads)
+target_link_libraries(parallel-reader-test-nocompress ${MCAP_TEST_LIBS} Threads::Threads)
 target_compile_definitions(parallel-reader-test-nocompress PRIVATE MCAP_COMPRESSION_NO_LZ4 MCAP_COMPRESSION_NO_ZSTD)

@@ -355,8 +355,7 @@ TEST_CASE("residency profile matches a brute-force oracle", "[parallel][cap]") {
   }
 }
 
-TEST_CASE("byte semaphore tryAcquire never exceeds capacity under concurrency",
-          "[parallel][cap]") {
+TEST_CASE("byte semaphore tryAcquire never exceeds capacity under concurrency", "[parallel][cap]") {
   const uint64_t cap = 1u << 20;
   internal::ByteSemaphore sem(cap);
   std::atomic<int64_t> live{0};
