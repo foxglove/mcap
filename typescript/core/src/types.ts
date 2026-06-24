@@ -139,4 +139,9 @@ export type DecompressHandlers = {
 export interface IReadable {
   size(): Promise<bigint>;
   read(offset: bigint, size: bigint): Promise<Uint8Array>;
+  /**
+   * When true, multiple `read()` calls may be issued concurrently. `IReadable`s that do not
+   * declare this flag should be treated as if `supportsConcurrentReads === false`.
+   */
+  supportsConcurrentReads?: boolean;
 }
