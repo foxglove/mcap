@@ -2,11 +2,16 @@ import struct
 import zlib
 from collections import defaultdict
 from enum import Enum, Flag, auto
+from importlib.metadata import PackageNotFoundError, version
 from io import BufferedWriter, RawIOBase
 from typing import IO, Any, Dict, List, OrderedDict, Union
 
-from . import __version__
 from .exceptions import UnsupportedCompressionError
+
+try:
+    __version__ = version("mcap")
+except PackageNotFoundError:
+    __version__ = "0.0.0"
 
 try:
     import lz4.frame  # type: ignore
