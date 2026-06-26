@@ -31,6 +31,8 @@ pub(crate) static LIBRARY_IDENTIFIER: LazyLock<String> = LazyLock::new(|| {
     )
 });
 
+pub(crate) const DEFAULT_COMPRESS_CHUNK_SIZE: u64 = 768 * 1024;
+
 #[derive(Parser, Debug, PartialEq, Eq)]
 #[command(
     name = "mcap",
@@ -120,7 +122,7 @@ pub struct CompressCommand {
     pub output: Option<PathBuf>,
 
     /// Target uncompressed chunk size for output
-    #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
+    #[arg(long = "chunk-size", default_value_t = DEFAULT_COMPRESS_CHUNK_SIZE)]
     pub chunk_size: u64,
 
     /// Compression algorithm for output file: zstd, lz4, or none

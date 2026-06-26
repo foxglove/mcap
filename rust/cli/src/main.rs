@@ -471,7 +471,7 @@ mod tests {
             Command::Compress(CompressCommand {
                 file: Some("in.mcap".into()),
                 output: None,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                chunk_size: 768 * 1024,
                 compression: "zstd".to_string(),
             })
         );
