@@ -50,6 +50,12 @@ XCDR1 and XCDR2 are described in Section 7.4 "Data Representation" of [DDS-XType
 
 - `message_encoding`: [`json`](https://www.json.org/json-en.html)
 
+### arrow
+
+- `message_encoding`: [`arrow`](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc)
+
+Each message is a single [Arrow IPC encapsulated message](https://arrow.apache.org/docs/format/Columnar.html#encapsulated-message-format) containing one `RecordBatch` that conforms to the channel's schema. The schema is provided by the Schema record and is not repeated in the message. Columns must not be dictionary-encoded, so that each `RecordBatch` can be decoded independently.
+
 ## Schema encodings
 
 The Schema `encoding` field describes the encoding of a Channel's schema. Typically, this is related to the Channel's `message_encoding`, but they are separate concepts (e.g. there are multiple schema languages for `json`).
@@ -199,6 +205,12 @@ For this example, `schema.name` should be set to `top_level_module::my_module::M
 - `name`: May contain any value
 - `encoding`: `jsonschema`
 - `data`: [JSON Schema](https://json-schema.org)
+
+### arrow
+
+- `name`: May contain any value
+- `encoding`: `arrow`
+- `data`: A serialized [Arrow IPC Schema message](https://arrow.apache.org/docs/format/Columnar.html#schema-message) describing the fields of each message's `RecordBatch`.
 
 ## Profiles
 
