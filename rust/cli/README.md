@@ -20,7 +20,7 @@ For more installation options and full usage documentation, see https://mcap.dev
 
 ## Development
 
-The CLI is written in Rust using the [mcap crate](../mcap).
+The CLI is built on the [mcap crate](../mcap).
 
 To build from source:
 
