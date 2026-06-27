@@ -127,13 +127,13 @@ fn exit_code_2_on_unknown_global_flag() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(&dir, "in.mcap", &build_mcap(1));
     // Unknown global flags are rejected before command dispatch.
-    let output = mcap(&["--config", "x.yaml", "info", path_str(&path)]);
+    let output = mcap(&["--not-a-real-flag", "info", path_str(&path)]);
     assert_eq!(output.status.code(), Some(2));
 }
 
 #[test]
 fn exit_code_2_on_version_subcommand() {
-    // Version is exposed as a global flag, so `version` is an unrecognized argument (exit 2).
+    // `version` is not a subcommand; use the global `--version` flag instead.
     assert_eq!(mcap(&["version"]).status.code(), Some(2));
     assert!(mcap(&["--version"]).status.success());
 }
