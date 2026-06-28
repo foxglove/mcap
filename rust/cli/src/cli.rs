@@ -78,7 +78,7 @@ pub enum Command {
     Compress(CompressCommand),
     /// Convert supported input files to MCAP
     #[command(
-        long_about = "Convert supported input files to MCAP.\n\nSupported inputs:\n  .bag  ROS 1 bag\n  .db3  ROS 2 SQLite db3"
+        long_about = "Convert supported input files to MCAP.\n\nSupported inputs:\n  .bag                   ROS 1 bag\n  .db3                   ROS 2 SQLite db3\n  .arrow/.feather/.ipc   Apache Arrow IPC (file or stream)"
     )]
     Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file
@@ -310,6 +310,35 @@ pub enum CompressionFormat {
     None,
 }
 
+/// Unit for interpreting integer-typed time fields when converting Arrow inputs.
+///
+/// Arrow `Timestamp`/`Date` fields carry their own unit and ignore this flag; it
+/// only applies when the selected time field is a plain integer column.
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimestampUnit {
+    /// Seconds since the Unix epoch
+    S,
+    /// Milliseconds since the Unix epoch
+    Ms,
+    /// Microseconds since the Unix epoch
+    Us,
+    /// Nanoseconds since the Unix epoch
+    Ns,
+}
+
+impl TimestampUnit {
+    /// Number of nanoseconds represented by one unit, used to scale
+    /// integer-typed time fields to MCAP nanosecond timestamps.
+    pub fn nanos_per_unit(self) -> i128 {
+        match self {
+            Self::S => 1_000_000_000,
+            Self::Ms => 1_000_000,
+            Self::Us => 1_000,
+            Self::Ns => 1,
+        }
+    }
+}
+
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct ConvertCommand {
     /// Local path to the input file
@@ -333,6 +362,32 @@ pub struct ConvertCommand {
     /// Write records outside of chunks
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
+
+    /// [Arrow inputs] Topic name for the converted channel. Defaults to the input file stem.
+    #[arg(long)]
+    pub topic: Option<String>,
+
+    /// [Arrow inputs] Schema name recorded in the MCAP Schema record. Defaults to the topic.
+    #[arg(long)]
+    pub schema_name: Option<String>,
+
+    /// [Arrow inputs] Field used for each message's log_time. Defaults to a field named
+    /// `log_time`, otherwise the first timestamp/date field in schema order.
+    #[arg(long)]
+    pub log_time_field: Option<String>,
+
+    /// [Arrow inputs] Field used for each message's publish_time. Defaults to a field named
+    /// `publish_time`, otherwise the resolved log_time.
+    #[arg(long)]
+    pub publish_time_field: Option<String>,
+
+    /// [Arrow inputs] Unit for integer-typed time fields (timestamp/date fields ignore this).
+    #[arg(long, value_enum, default_value = "ns")]
+    pub timestamp_unit: TimestampUnit,
+
+    /// [Arrow inputs] Number of input rows packed into each MCAP message.
+    #[arg(long, default_value_t = 1)]
+    pub rows_per_message: u64,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]

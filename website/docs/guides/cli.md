@@ -91,6 +91,26 @@ The `mcap` CLI dispatches on the input file extension (`.bag` for ROS 1, `.db3` 
 
 Bags recorded before ROS 2 Iron do not contain embedded message definitions and cannot be converted directly. Use the [`ros2 bag convert`](https://github.com/ros2/rosbag2#converting-bags-merge-split-etc-) utility instead (with the original ROS 2 workspace sourced) to convert between `.db3` and MCAP.
 
+### Apache Arrow to MCAP conversion
+
+<!-- cspell: disable -->
+
+Convert an [Apache Arrow](https://arrow.apache.org/docs/format/Columnar.html) IPC file or stream (`.arrow`, `.feather`, `.ipc`) to MCAP:
+
+    $ mcap convert data.arrow data.mcap
+
+<!-- cspell: enable -->
+
+Each input row becomes one MCAP message (an [Arrow IPC](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc) encapsulated `RecordBatch`) on a single channel using the [`arrow`](https://mcap.dev/spec/registry#arrow) message and schema encodings. Dictionary-encoded columns are hydrated to their value type, as required by the encoding.
+
+Each message's `log_time` is taken from a timestamp/date column:
+
+- Pass `--log-time-field <NAME>` to choose the column explicitly.
+- Otherwise a column named `log_time` is used, falling back to the first timestamp/date column in schema order.
+- `publish_time` uses `--publish-time-field <NAME>`, then a column named `publish_time`, and otherwise defaults to `log_time`.
+
+Arrow `Timestamp`/`Date` columns carry their own unit. For integer-typed time columns, pass `--timestamp-unit {s,ms,us,ns}` (default `ns`) to declare the unit. Other useful flags: `--topic` (defaults to the input file stem), `--schema-name`, and `--rows-per-message` (default `1`) to pack multiple rows into each message.
+
 ### File summarization
 
 Report summary statistics on an MCAP file:
