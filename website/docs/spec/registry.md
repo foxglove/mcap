@@ -42,7 +42,7 @@ XCDR1 and XCDR2 are described in Section 7.4 "Data Representation" of [DDS-XType
 
 - `message_encoding`: [`arrow`](https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc)
 
-Each message is a single [Arrow IPC encapsulated message](https://arrow.apache.org/docs/format/Columnar.html#encapsulated-message-format) containing one `RecordBatch` that conforms to the channel's schema. The schema is provided by the Schema record and is not repeated in the message. Columns must not be dictionary-encoded, so that each `RecordBatch` can be decoded independently.
+Each message is a single [encapsulated `RecordBatch` message](https://arrow.apache.org/docs/format/Columnar.html#encapsulated-message-format) (the `0xFFFFFFFF` continuation marker, metadata length prefix, and `RecordBatch` `Message` flatbuffer, followed by the body), as produced by `pyarrow.RecordBatch.serialize()` or `arrow::ipc::SerializeRecordBatch`. It is not wrapped in the IPC stream or file framing, and carries no schema or end-of-stream marker. Its fields must match the channel's schema, which is provided by the Schema record and not repeated in the message. No field may be dictionary-encoded (including nested fields within structs, lists, maps, or unions), so that each `RecordBatch` decodes independently. Buffers must not use Arrow body compression (the `BodyCompression` field); use Chunk compression instead. A `RecordBatch` may contain one or more rows, all of which share the message's `log_time`.
 
 ### cbor
 
@@ -60,7 +60,7 @@ Each message is a single [Arrow IPC encapsulated message](https://arrow.apache.o
 
 The Schema `encoding` field describes the encoding of a Channel's schema. Typically, this is related to the Channel's `message_encoding`, but they are separate concepts (e.g. there are multiple schema languages for `json`).
 
-This field is required for some message encodings (e.g. `protobuf`) and optional for others (e.g. `json`).
+This field is required for some message encodings (e.g. `protobuf`, `arrow`) and optional for others (e.g. `json`).
 
 ### (empty string)
 
@@ -86,7 +86,7 @@ Schema `encoding` may only be omitted for self-describing message encodings such
 
 - `name`: May contain any value
 - `encoding`: `arrow`
-- `data`: A serialized [Arrow IPC Schema message](https://arrow.apache.org/docs/format/Columnar.html#schema-message) describing the fields of each message's `RecordBatch`.
+- `data`: A serialized [Arrow IPC Schema message](https://arrow.apache.org/docs/format/Columnar.html#schema-message) describing the fields of each message's `RecordBatch`. This is the encapsulated `Schema` message (continuation marker and length prefix included), as produced by `pyarrow.Schema.serialize()` or `arrow::ipc::SerializeSchema`, not the bare schema flatbuffer.
 
 ### ros1msg
 
