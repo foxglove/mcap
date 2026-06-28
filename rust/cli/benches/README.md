@@ -12,8 +12,8 @@ Run the full benchmark target:
 cargo bench -p mcap-cli --bench commands
 ```
 
-Cargo provides the bench-built `mcap` binary by default. Set `MCAP_CLI_BENCH_BIN` to compare a
-different binary. Criterion writes reports under `target/criterion/`. Use Criterion's benchmark
+Cargo provides the bench-built `mcap` binary by default. Set `MCAP_CLI_BENCH_BIN` to use a
+different `mcap` binary path. Criterion writes reports under `target/criterion/`. Use Criterion's benchmark
 filter to run a single command, input mode, or specific case:
 
 ```sh
