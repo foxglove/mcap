@@ -44,7 +44,7 @@ XCDR1 and XCDR2 are described in Section 7.4 "Data Representation" of [DDS-XType
 
 Each message is a single [encapsulated `RecordBatch` message](https://arrow.apache.org/docs/format/Columnar.html#encapsulated-message-format) (the `0xFFFFFFFF` continuation marker, metadata length prefix, and `RecordBatch` `Message` flatbuffer, followed by the body), as produced by `pyarrow.RecordBatch.serialize()` or `arrow::ipc::SerializeRecordBatch`. It is not wrapped in the IPC stream or file framing, and carries no schema or end-of-stream marker. Its fields must match the channel's schema, which is provided by the Schema record and not repeated in the message. No field may be dictionary-encoded (including nested fields within structs, lists, maps, or unions), so that each `RecordBatch` decodes independently. Buffers must not use Arrow body compression (the `BodyCompression` field); use Chunk compression instead. A `RecordBatch` may contain one or more rows, all of which share the message's `log_time`.
 
-Note: Arrow is a columnar format, but MCAP is message-oriented and expects each message to represent a single timestamp, so converting columnar data to MCAP idiomatically maps one row per message.
+Note: Arrow is a columnar format, but MCAP is message-oriented: each message is an independently timestamped, indexable record. Tabular data is therefore idiomatically mapped one row per message, letting each row keep its own `log_time` and stay individually addressable rather than collapsing distinct row times onto a single `log_time`.
 
 ### cbor
 
