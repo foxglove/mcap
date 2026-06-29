@@ -55,10 +55,10 @@ enums:
     0x0d: metadata_index
     0x0e: summary_offset
     0x0f: data_end
-    0x10: timestamp_name
-    0x11: message_auxiliary_timestamps
-    0x12: auxiliary_message_index
-    0x13: auxiliary_chunk_index
+    0x10: field
+    0x11: message_fields
+    0x12: field_index
+    0x13: field_chunk_index
 
 types:
   magic:
@@ -129,10 +129,10 @@ types:
             opcode::metadata_index: metadata_index
             opcode::summary_offset: summary_offset
             opcode::data_end: data_end
-            opcode::timestamp_name: timestamp_name
-            opcode::message_auxiliary_timestamps: message_auxiliary_timestamps
-            opcode::auxiliary_message_index: auxiliary_message_index
-            opcode::auxiliary_chunk_index: auxiliary_chunk_index
+            opcode::field: field
+            opcode::message_fields: message_fields
+            opcode::field_index: field_index
+            opcode::field_chunk_index: field_chunk_index
 
   header:
     seq:
@@ -450,69 +450,70 @@ types:
           CRC-32 of all bytes in the data section. A value of 0 indicates the CRC-32 is not
           available.
 
-  timestamp_name:
+  field:
     seq:
       - id: id
         type: u2
       - id: name
         type: prefixed_str
+      - id: encoding
+        type: prefixed_str
+      - id: length
+        type: u1
+        doc: |
+          High bit (0x80) set indicates a variable-length value (uint32 length prefix in
+          each Message Fields entry). Otherwise the low 7 bits are the fixed byte length.
+      - id: flags
+        type: u1
+        doc: Bit 0 (0x01) set indicates the field is indexed.
 
-  message_auxiliary_timestamps:
+  message_fields:
     seq:
       - id: channel_id
         type: u2
-      - id: len_timestamps
+      - id: len_fields
         type: u4
-      - id: timestamps
-        size: len_timestamps
-        type: auxiliary_timestamp_entries
-    types:
-      auxiliary_timestamp_entry:
-        seq:
-          - id: timestamp_id
-            type: u2
-          - id: time
-            type: u8
-      auxiliary_timestamp_entries:
-        seq:
-          - id: entries
-            type: auxiliary_timestamp_entry
-            repeat: eos
+      - id: fields
+        size: len_fields
+        doc: |
+          Concatenated entries of the form <uint16 field_id><value>. The width of each
+          value is determined by the corresponding Field record's `length` and cannot be
+          resolved without it, so the entries are not expanded here.
 
-  auxiliary_message_index:
+  field_index:
     seq:
       - id: channel_id
         type: u2
-      - id: timestamp_id
+      - id: field_id
         type: u2
       - id: len_records
         type: u4
       - id: records
         size: len_records
-        type: auxiliary_message_index_entries
+        type: field_index_entries
     types:
-      auxiliary_message_index_entry:
+      field_index_entry:
         seq:
-          - id: time
+          - id: value
             type: u8
           - id: offset
             type: u8
-      auxiliary_message_index_entries:
+      field_index_entries:
         seq:
           - id: entries
-            type: auxiliary_message_index_entry
+            type: field_index_entry
             repeat: eos
 
-  auxiliary_chunk_index:
+  field_chunk_index:
     seq:
-      - id: timestamp_id
+      - id: field_id
         type: u2
       - id: ofs_chunk
         -orig-id: chunk_start_offset
         type: u8
-      - id: min_time
+      - id: min_value
         type: u8
-      - id: max_time
+      - id: max_value
         type: u8
       - id: len_message_index_offsets
         type: u4

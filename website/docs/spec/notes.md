@@ -81,35 +81,43 @@ The only difference between the chunked and unchunked versions of this output wi
 
 The above is not meant to prescribe a summary formatting, but to demonstrate that parity with the rosbag summary is supported by MCAP. There are other details we may consider including, like references to per-channel encryption or compression if these features get uptake. We could also enable more interaction with the channel records, such as quickly obtaining schemas from the file for particular topics.
 
-## Auxiliary timestamps
+## Message fields
 
-Every [Message](./index.md#message-op0x05) record carries exactly two timestamps: `log_time` and `publish_time`. _Auxiliary timestamps_ allow a message to carry an arbitrary number of additional named timestamps without modifying the (frozen) Message record. The feature is designed to be fully backward compatible: it is built entirely from records with new opcodes, which existing readers skip, so existing readers and writers are unaffected and only readers that wish to access the additional timestamps need updating.
+Every [Message](./index.md#message-op0x05) record carries exactly two timestamps (`log_time` and `publish_time`) and no other per-message attributes. _Message fields_ allow a message to carry an arbitrary number of additional named, typed values without modifying the (frozen) Message record. This covers two use cases with one mechanism:
+
+- **Additional timestamps** — e.g. an indexable, seekable `publish_time`, or a `sensor_time`.
+- **Per-message metadata** — arbitrary values that vary per message and are carried out of band from the message payload (for example, attributes from a pub/sub middleware), without inflating the channel count or re-wrapping an already-encoded payload.
+
+The feature is fully backward compatible: it is built entirely from records with new opcodes, which existing readers skip, so existing readers and writers are unaffected and only readers that wish to access the values need updating. Messages that carry no fields incur no overhead.
 
 The feature is composed of four records:
 
-- [Timestamp Name](./index.md#timestamp-name-op0x10) registers a `uint16` ID for each named timestamp, file-globally. It is written like a Schema or Channel record (before first use, and optionally duplicated in the summary).
-- [Message Auxiliary Timestamps](./index.md#message-auxiliary-timestamps-op0x11) carries the `(timestamp_id, value)` pairs for one message and is written **immediately after** that message.
-- [Auxiliary Message Index](./index.md#auxiliary-message-index-op0x12) and [Auxiliary Chunk Index](./index.md#auxiliary-chunk-index-op0x13) mirror the standard Message Index and Chunk Index, but key on an auxiliary timestamp instead of `log_time`, so a reader can seek and prune by it.
+- [Field](./index.md#field-op0x10) declares, file-globally, a `uint16` ID, a `name`, an `encoding` (logical type), a `length` (physical wire width), and flags (including `indexed`). It is written like a Schema or Channel record (before first use, and optionally duplicated in the summary).
+- [Message Fields](./index.md#message-fields-op0x11) carries the `(field_id, value)` pairs for one message and is written **immediately after** that message.
+- [Field Index](./index.md#field-index-op0x12) and [Field Chunk Index](./index.md#field-chunk-index-op0x13) mirror the standard Message Index and Chunk Index, but key on an indexed field's value instead of `log_time`, so a reader can seek and prune by it.
 
-### Reading auxiliary timestamps during a linear scan
+The `encoding`/`length` split means a value is parsed using only its `length` (so unknown encodings remain skippable) and interpreted using its `encoding`. See [field encodings](./registry.md#field-encodings).
 
-While iterating records (in the data section or within a decompressed chunk), a reader pairs each Message with the Message Auxiliary Timestamps record that immediately follows it:
+### Reading fields during a linear scan
+
+While iterating records (in the data section or within a decompressed chunk), a reader pairs each Message with the Message Fields record that immediately follows it:
 
 1. Read a Message record.
-2. Peek at the next record. If it is a Message Auxiliary Timestamps record whose `channel_id` matches, attach its timestamps to the message just read; otherwise the message has no auxiliary timestamps.
-3. Resolve each `timestamp_id` to a name using the Timestamp Name records seen so far.
+2. Peek at the next record. If it is a Message Fields record whose `channel_id` matches, attach its values to the message just read; otherwise the message has no fields.
+3. Resolve each `field_id` to its name/encoding/length using the Field records seen so far, and parse each value by its `length`.
 
 Readers that do not understand opcode `0x11` skip it and observe only `log_time` and `publish_time`.
 
-### Seeking by an auxiliary timestamp
+### Seeking by a field value
 
-To seek to messages by an auxiliary timestamp `T` (rather than `log_time`):
+To seek to messages by an indexed field `F` (rather than `log_time`):
 
-1. Read the summary section and collect the Timestamp Name records to map the desired name to its ID, plus the Auxiliary Chunk Index records for that ID.
-2. Use the `min_time`/`max_time` of each Auxiliary Chunk Index record to select candidate chunks. Note that, unlike `log_time`, an auxiliary timestamp is not guaranteed to be monotonic, so candidate chunk ranges may overlap and a query interval may match more chunks than the equivalent `log_time` query would.
-3. For each candidate chunk, either full-scan the chunk, or consult its Auxiliary Message Index records (located via `message_index_offsets`) to obtain message offsets directly, seek to each Message, and read the trailing Message Auxiliary Timestamps record.
+1. Read the summary section and collect the Field records to map the desired name to its ID, plus the Field Chunk Index records for that ID.
+2. Use the `min_value`/`max_value` of each Field Chunk Index record to select candidate chunks. Note that, unlike `log_time`, a field is not guaranteed to be monotonic, so candidate chunk ranges may overlap and a query interval may match more chunks than the equivalent `log_time` query would.
+3. For each candidate chunk, either full-scan the chunk, or consult its Field Index records (located via `message_index_offsets`) to obtain message offsets directly, seek to each Message, and read the trailing Message Fields record.
 
 ### Writing considerations
 
-- Because association is positional, a Message Auxiliary Timestamps record MUST be written immediately after its Message, with no records in between, in the same record stream. Tools that copy records through verbatim preserve this pairing; tools that re-emit messages via a message-level API must be updated to carry the auxiliary records along.
-- Declaring timestamp IDs per file (and listing them where convenient, e.g. in channel metadata) keeps `merge` operations cheap: messages from channels without a given auxiliary timestamp simply omit it rather than padding with zero values.
+- Because association is positional, a Message Fields record MUST be written immediately after its Message, with no records in between, in the same record stream. Tools that copy records through verbatim preserve this pairing; tools that re-emit messages via a message-level API must be updated to carry the fields records along.
+- Declaring fields per file keeps `merge` operations cheap: messages from channels that do not use a given field simply omit it rather than padding with default values.
+- Attributes that are constant for all messages on a channel should be stored in the channel's `metadata` map rather than repeated per message.
