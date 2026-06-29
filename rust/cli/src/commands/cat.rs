@@ -2204,28 +2204,14 @@ mod tests {
         );
     }
 
-    #[test]
-    fn arrow_json_encodes_record_batch_rows() {
-        use arrow::array::{ArrayRef, Int64Array, StringArray};
+    // Produce the encapsulated schema + record batch messages exactly as
+    // `mcap convert` writes them (a bare encapsulated `RecordBatch`, with the
+    // schema stored separately).
+    fn arrow_message_bytes(batch: &arrow::record_batch::RecordBatch) -> (Vec<u8>, Vec<u8>) {
         use arrow::ipc::writer::{
             write_message, CompressionContext, DictionaryTracker, IpcDataGenerator, IpcWriteOptions,
         };
-        use arrow::record_batch::RecordBatch;
 
-        let batch = RecordBatch::try_from_iter(vec![
-            (
-                "value",
-                Arc::new(Int64Array::from(vec![10, 20])) as ArrayRef,
-            ),
-            (
-                "label",
-                Arc::new(StringArray::from(vec!["a", "b"])) as ArrayRef,
-            ),
-        ])
-        .expect("record batch");
-
-        // Produce the encapsulated schema + record batch messages exactly as
-        // `mcap convert` writes them.
         let generator = IpcDataGenerator {};
         let options = IpcWriteOptions::default();
         let mut tracker = DictionaryTracker::new(false);
@@ -2239,24 +2225,47 @@ mod tests {
         write_message(&mut schema_bytes, enc_schema, &options).expect("schema message");
         let mut compression = CompressionContext::default();
         let (_dictionaries, enc_batch) = generator
-            .encode(&batch, &mut tracker, &options, &mut compression)
+            .encode(batch, &mut tracker, &options, &mut compression)
             .expect("encode batch");
         let mut batch_bytes = Vec::new();
         write_message(&mut batch_bytes, enc_batch, &options).expect("batch message");
+        (schema_bytes, batch_bytes)
+    }
 
+    fn arrow_channel(schema_bytes: Vec<u8>) -> Arc<mcap::Channel<'static>> {
         let schema = Arc::new(mcap::Schema {
             id: 1,
             name: "events".to_string(),
             encoding: "arrow".to_string(),
             data: Cow::Owned(schema_bytes),
         });
-        let channel = Arc::new(mcap::Channel {
+        Arc::new(mcap::Channel {
             id: 1,
             topic: "/arrow".to_string(),
             schema: Some(schema),
             message_encoding: "arrow".to_string(),
             metadata: BTreeMap::new(),
-        });
+        })
+    }
+
+    #[test]
+    fn arrow_json_encodes_record_batch_rows() {
+        use arrow::array::{ArrayRef, Int64Array, StringArray};
+        use arrow::record_batch::RecordBatch;
+
+        let batch = RecordBatch::try_from_iter(vec![
+            (
+                "value",
+                Arc::new(Int64Array::from(vec![10, 20])) as ArrayRef,
+            ),
+            (
+                "label",
+                Arc::new(StringArray::from(vec!["a", "b"])) as ArrayRef,
+            ),
+        ])
+        .expect("record batch");
+        let (schema_bytes, batch_bytes) = arrow_message_bytes(&batch);
+        let channel = arrow_channel(schema_bytes);
 
         let mut transcoders = JsonTranscoders::default();
         let encoded = transcoders
@@ -2265,6 +2274,44 @@ mod tests {
         assert_eq!(
             String::from_utf8(encoded.into_owned()).expect("valid utf8"),
             r#"[{"value":10,"label":"a"},{"value":20,"label":"b"}]"#
+        );
+    }
+
+    #[test]
+    fn arrow_json_reuses_cached_decoder_across_messages() {
+        use arrow::array::{ArrayRef, Int64Array, StringArray};
+        use arrow::record_batch::RecordBatch;
+
+        let make_batch = |values: Vec<i64>, labels: Vec<&'static str>| {
+            RecordBatch::try_from_iter(vec![
+                ("value", Arc::new(Int64Array::from(values)) as ArrayRef),
+                ("label", Arc::new(StringArray::from(labels)) as ArrayRef),
+            ])
+            .expect("record batch")
+        };
+
+        // Both messages share one schema record / channel (same schema id), so
+        // the second decode must reuse the decoder primed by the first.
+        let batch1 = make_batch(vec![10, 20], vec!["a", "b"]);
+        let batch2 = make_batch(vec![30], vec!["c"]);
+        let (schema_bytes, batch1_bytes) = arrow_message_bytes(&batch1);
+        let (_schema_bytes2, batch2_bytes) = arrow_message_bytes(&batch2);
+        let channel = arrow_channel(schema_bytes);
+
+        let mut transcoders = JsonTranscoders::default();
+        let first = transcoders
+            .encode(&channel, &batch1_bytes)
+            .expect("first arrow message should encode");
+        assert_eq!(
+            String::from_utf8(first.into_owned()).expect("valid utf8"),
+            r#"[{"value":10,"label":"a"},{"value":20,"label":"b"}]"#
+        );
+        let second = transcoders
+            .encode(&channel, &batch2_bytes)
+            .expect("second arrow message should encode via cached decoder");
+        assert_eq!(
+            String::from_utf8(second.into_owned()).expect("valid utf8"),
+            r#"[{"value":30,"label":"c"}]"#
         );
     }
 
