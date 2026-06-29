@@ -111,6 +111,15 @@ Each message's `log_time` is taken from a timestamp/date column:
 
 Arrow `Timestamp`/`Date` columns carry their own unit. For integer-typed time columns, pass `--timestamp-unit {s,ms,us,ns}` (default `ns`) to declare the unit. Other useful flags: `--topic` (defaults to the input file stem), `--schema-name`, and `--rows-per-message` (default `1`) to pack multiple rows into each message.
 
+`mcap cat --json` decodes `arrow` messages by reading each `RecordBatch` against the channel's Schema record. Because a message may hold multiple rows, the `data` field is a JSON array of row objects (one element per row):
+
+<!-- cspell: disable -->
+
+    $ mcap cat --json data.mcap
+    {"topic":"events","sequence":0,"log_time":1704067200.000000000,"publish_time":1704067200.000000000,"data":[{"timestamp":"2024-01-01T00:00:00Z","category":"imu","temperature":20.5}]}
+
+<!-- cspell: enable -->
+
 ### File summarization
 
 Report summary statistics on an MCAP file:
