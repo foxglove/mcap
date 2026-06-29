@@ -1,3 +1,9 @@
+#if !defined(_WIN32) && !defined(__CYGWIN__)
+#  define fsync mcap_test_fsync
+#else
+#  define _commit mcap_test_commit
+#endif
+
 #define MCAP_IMPLEMENTATION
 #include <mcap/mcap.hpp>
 
@@ -5,14 +11,75 @@
 #include <catch2/catch.hpp>
 
 #include <array>
+#include <cerrno>
 #include <cstdio>
 #include <numeric>
+#include <string>
 
 #if defined _WIN32 || defined __CYGWIN__
 #  include <io.h>
 #  include <ioapiset.h>
+#  include <windows.h>
 #  include <winioctl.h>
+#else
+#  include <unistd.h>
 #endif
+
+namespace {
+
+int g_syncCallCount = 0;
+int g_syncReturnValue = 0;
+int g_syncErrno = 0;
+
+void resetSyncTracking() {
+  g_syncCallCount = 0;
+  g_syncReturnValue = 0;
+  g_syncErrno = 0;
+}
+
+#if !defined(_WIN32) && !defined(__CYGWIN__)
+extern "C" int mcap_test_fsync(int fd) {
+  (void)fd;
+  ++g_syncCallCount;
+  errno = g_syncErrno;
+  return g_syncReturnValue;
+}
+#else
+extern "C" int mcap_test_commit(int fd) {
+  (void)fd;
+  ++g_syncCallCount;
+  errno = g_syncErrno;
+  return g_syncReturnValue;
+}
+#endif
+
+struct TempFilePath {
+  std::string path;
+
+  TempFilePath() {
+#if defined(_WIN32) || defined(__CYGWIN__)
+    char tempPath[MAX_PATH];
+    REQUIRE(GetTempPathA(MAX_PATH, tempPath) != 0);
+    char tempFile[MAX_PATH];
+    REQUIRE(GetTempFileNameA(tempPath, "mcp", 0, tempFile) != 0);
+    path = tempFile;
+#else
+    char tempFile[] = "/tmp/mcap-writer-test-XXXXXX";
+    const int fd = mkstemp(tempFile);
+    REQUIRE(fd != -1);
+    REQUIRE(close(fd) == 0);
+    path = tempFile;
+#endif
+  }
+
+  ~TempFilePath() {
+    if (!path.empty()) {
+      std::remove(path.c_str());
+    }
+  }
+};
+
+}  // namespace
 
 std::string_view StringView(const std::byte* data, size_t size) {
   return std::string_view{reinterpret_cast<const char*>(data), size};
@@ -235,6 +302,63 @@ TEST_CASE("McapWriter::write()", "[writer]") {
     // "value2"
     REQUIRE(StringView(output.data() + 32, 6) == "value2");
   }
+}
+
+TEST_CASE("FileWriter explicit sync threshold", "[writer]") {
+  TempFilePath outputFile;
+  mcap::FileWriter writer;
+  const std::array<std::byte, 3> threeBytes = {std::byte{0x01}, std::byte{0x02}, std::byte{0x03}};
+  const std::array<std::byte, 2> twoBytes = {std::byte{0x04}, std::byte{0x05}};
+  const std::array<std::byte, 1> oneByte = {std::byte{0x06}};
+
+  SECTION("disabled when threshold is zero") {
+    resetSyncTracking();
+    requireOk(writer.open(outputFile.path, 0));
+
+    writer.write(threeBytes.data(), threeBytes.size());
+    writer.write(twoBytes.data(), twoBytes.size());
+    writer.end();
+
+    REQUIRE(g_syncCallCount == 0);
+  }
+
+  SECTION("syncs when accumulated bytes reach threshold") {
+    resetSyncTracking();
+    requireOk(writer.open(outputFile.path, 5));
+
+    writer.write(threeBytes.data(), threeBytes.size());
+    REQUIRE(g_syncCallCount == 0);
+
+    writer.write(twoBytes.data(), twoBytes.size());
+    REQUIRE(g_syncCallCount == 1);
+
+    writer.write(threeBytes.data(), threeBytes.size());
+    REQUIRE(g_syncCallCount == 1);
+
+    writer.write(twoBytes.data(), twoBytes.size());
+    REQUIRE(g_syncCallCount == 2);
+
+    writer.write(oneByte.data(), oneByte.size());
+    REQUIRE(g_syncCallCount == 2);
+
+    writer.end();
+  }
+}
+
+TEST_CASE("McapWriter forwards sizeForFsynch to file output", "[writer]") {
+  TempFilePath outputFile;
+  resetSyncTracking();
+
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("test");
+  opts.sizeForFsynch = 1;
+  opts.noChunking = true;
+  opts.noSummary = true;
+
+  requireOk(writer.open(outputFile.path, opts));
+  writer.close();
+
+  REQUIRE(g_syncCallCount > 0);
 }
 
 TEST_CASE("McapReader::readSummary()", "[reader]") {
