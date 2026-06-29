@@ -269,6 +269,7 @@ A field's `encoding` (logical type) is paired with its `length` (physical wire w
 | `bool`             | `1`             | `0` = false, `1` = true.                                                                                                                    |
 | `int8` … `int64`   | `1`/`2`/`4`/`8` | Signed two's-complement integer (`int8`, `int16`, `int32`, `int64`).                                                                        |
 | `uint8` … `uint64` | `1`/`2`/`4`/`8` | Unsigned integer (`uint8`, `uint16`, `uint32`, `uint64`).                                                                                   |
+| `float16`          | `2`             | IEEE 754 half-precision (binary16).                                                                                                         |
 | `float32`          | `4`             | IEEE 754 single-precision.                                                                                                                  |
 | `float64`          | `8`             | IEEE 754 double-precision.                                                                                                                  |
 | `timestamp`        | `8`             | `uint64` nanoseconds since a user-understood epoch, matching `log_time`.                                                                    |
