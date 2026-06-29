@@ -120,15 +120,17 @@ jobs:
           mkdir -p public/docs
           mv -v __docs__/* public/docs
 
+      - run: corepack enable
       - uses: actions/setup-node@v6
         with:
+          # wrangler 4.x requires Node.js >= 22.
           node-version: 22.x
+          cache: yarn
 
-      # Install a pinned wrangler so the deploy doesn't silently ride
-      # whatever wrangler@latest happens to be. foxglove/cloudflare-action
-      # picks up this binary from PATH instead of installing wrangler@latest.
-      # wrangler 4.x requires Node.js >= 22.
-      - run: npm install --global wrangler@4.105.0
+      # Install deps so foxglove/cloudflare-action uses the wrangler pinned in
+      # package.json (node_modules/.bin/wrangler) instead of installing
+      # wrangler@latest.
+      - run: yarn install --immutable
 
       - name: Deploy
         uses: foxglove/cloudflare-action@v1
