@@ -23,6 +23,15 @@ PrimitiveValue = Union[bool, int, float, str]
 DefaultValue = Union[PrimitiveValue, List[PrimitiveValue]]
 
 
+def _is_array_like(obj: Any) -> bool:
+    """Check if obj is array-like (has __len__ and __getitem__) but not str/bytes/dict."""
+    return (
+        hasattr(obj, "__len__")
+        and hasattr(obj, "__getitem__")
+        and not isinstance(obj, (str, bytes, dict))
+    )
+
+
 def _parseWstring(reader: CdrReader) -> str:
     raise NotImplementedError("wstring parsing is not implemented")
 
@@ -368,10 +377,13 @@ def _write_complex_type(
                 if array is None:
                     array = []
                 if not isinstance(array, list):
-                    raise ValueError(
-                        f'Field "{field.name}" is not an array but has array type '
-                        f'"{ftype.type}[]"'
-                    )
+                    if _is_array_like(array):
+                        array = list(array)
+                    else:
+                        raise ValueError(
+                            f'Field "{field.name}" is not an array but has array type '
+                            f'"{ftype.type}[]"'
+                        )
 
                 if ftype.is_fixed_size_array() and ftype.array_size is not None:
                     # Fixed length array, ensure the input array is the correct length
@@ -424,16 +436,15 @@ def _write_complex_type(
                 )
                 if array is None:
                     array = []
-                if (
-                    not isinstance(array, list)
-                    and not isinstance(array, tuple)
-                    and not isinstance(array, bytes)
-                    and not isinstance(array, py_array.array)
-                ):
-                    raise ValueError(
-                        f'Field "{field.name}" is not an array ({type(array)}) but has array type '
-                        f'"{ftype.type}[]"'
-                    )
+                if not isinstance(array, (list, tuple, bytes, py_array.array)):
+                    if _is_array_like(array):
+                        array = list(array)
+                    else:
+                        raise ValueError(
+                            f'Field "{field.name}" is not an array '
+                            f"({type(array)}) but has array type "
+                            f'"{ftype.type}[]"'
+                        )
 
                 # Special handling for bytes
                 if isinstance(array, bytes) or (
@@ -476,11 +487,9 @@ def _write_complex_type(
                         )
 
                     if ftype.is_fixed_size_array() and ftype.array_size is not None:
-                        # Convert tuples to lists
+                        # Convert non-list sequences to lists
                         list_array = (
-                            list(array)
-                            if isinstance(array, (tuple, py_array.array))
-                            else array
+                            list(array) if not isinstance(array, list) else array
                         )
                         # Fixed length array, ensure the input array is the correct length
                         while len(list_array) < ftype.array_size:
@@ -501,9 +510,7 @@ def _write_complex_type(
                         ):
                             array = array[: ftype.array_size]
 
-                        array = (
-                            list(array) if isinstance(array, py_array.array) else array
-                        )
+                        array = list(array) if not isinstance(array, list) else array
                         array = _coerce_values(array, ftype.type, field.default_value)
 
                         # Dynamic length array, write a uint32 prefix

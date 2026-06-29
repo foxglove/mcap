@@ -1,6 +1,8 @@
 from array import array
+from collections.abc import Sequence
 from io import BytesIO
 
+import pytest
 from mcap_ros2.decoder import DecoderFactory
 from mcap_ros2.writer import Writer as Ros2Writer
 
@@ -155,3 +157,100 @@ def test_write_array_field_named_items():
     output.seek(0)
     for msg in read_ros2_messages(output):
         assert list(msg.decoded_message.items) == [10, 20, 30]
+
+
+class FloatList(Sequence):
+    """A minimal Sequence implementation for testing array-like support."""
+
+    def __init__(self, data):
+        self._data = list(data)
+
+    def __getitem__(self, index):
+        return self._data[index]
+
+    def __len__(self):
+        return len(self._data)
+
+
+def _write_and_read_float64_array(data, msgdef="float64[] data"):
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    schema = ros_writer.register_msgdef("test_msgs/Floats", msgdef)
+    ros_writer.write_message(
+        topic="/test",
+        schema=schema,
+        message={"data": data},
+        log_time=0,
+        publish_time=0,
+        sequence=0,
+    )
+    ros_writer.finish()
+    output.seek(0)
+    for msg in read_ros2_messages(output):
+        return msg.decoded_message.data
+
+
+def test_write_float64_array_with_sequence():
+    values = FloatList([1.0, 2.0, 3.0])
+    result = _write_and_read_float64_array(values)
+    assert list(result) == [1.0, 2.0, 3.0]
+
+
+def test_write_float64_array_with_list():
+    result = _write_and_read_float64_array([1.0, 2.0, 3.0])
+    assert list(result) == [1.0, 2.0, 3.0]
+
+
+def test_write_float64_array_with_tuple():
+    result = _write_and_read_float64_array((1.0, 2.0, 3.0))
+    assert list(result) == [1.0, 2.0, 3.0]
+
+
+def test_write_float64_array_sequence_matches_list():
+    list_result = _write_and_read_float64_array([1.0, 2.0, 3.0])
+    seq_result = _write_and_read_float64_array(FloatList([1.0, 2.0, 3.0]))
+    assert list(list_result) == list(seq_result)
+
+
+def test_write_float64_array_rejects_string():
+    with pytest.raises(ValueError, match="is not an array"):
+        _write_and_read_float64_array("not an array")
+
+
+def test_write_float64_array_rejects_int():
+    with pytest.raises(ValueError, match="is not an array"):
+        _write_and_read_float64_array(42)
+
+
+def test_write_float64_array_rejects_dict():
+    with pytest.raises(ValueError, match="is not an array"):
+        _write_and_read_float64_array({"a": 1.0})
+
+
+def test_write_fixed_size_float64_array_with_sequence():
+    values = FloatList([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0])
+    result = _write_and_read_float64_array(values, msgdef="float64[9] data")
+    assert list(result) == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+
+
+def test_write_numpy_float64_array():
+    np = pytest.importorskip("numpy")
+    values = np.array([1.0, 2.0, 3.0], dtype=np.float64)
+    result = _write_and_read_float64_array(values)
+    assert list(result) == [1.0, 2.0, 3.0]
+
+
+def test_write_numpy_fixed_size_float64_array():
+    np = pytest.importorskip("numpy")
+    values = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0], dtype=np.float64)
+    result = _write_and_read_float64_array(values, msgdef="float64[9] data")
+    assert list(result) == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]
+
+
+def test_write_numpy_float64_array_matches_list():
+    np = pytest.importorskip("numpy")
+    list_result = _write_and_read_float64_array([1.0, 2.0, 3.0])
+    np_result = _write_and_read_float64_array(
+        np.array([1.0, 2.0, 3.0], dtype=np.float64)
+    )
+    assert list(list_result) == list(np_result)
