@@ -69,7 +69,7 @@ Generate a shell completion script with `mcap completion <shell>` (supports `bas
 
     $ source <(mcap completion bash)
 
-### ROS Bag to MCAP conversion
+### Converting other formats to MCAP
 
 Convert a ROS 1 bag file to mcap:
 
@@ -87,9 +87,19 @@ Convert a ROS 2 db3 file to mcap:
 
 <!-- cspell: enable -->
 
-The `mcap` CLI dispatches on the input file extension (`.bag` for ROS 1, `.db3` for ROS 2) and reads ROS 2 `.db3` files using the message definitions embedded in the file. ROS 2 Iron and later embed message definitions when recording, so these files convert without a sourced workspace.
+Convert a PX4 ULog file to mcap:
 
-Bags recorded before ROS 2 Iron do not contain embedded message definitions and cannot be converted directly. Use the [`ros2 bag convert`](https://github.com/ros2/rosbag2#converting-bags-merge-split-etc-) utility instead (with the original ROS 2 workspace sourced) to convert between `.db3` and MCAP.
+<!-- cspell: disable -->
+
+    $ mcap convert flight.ulg flight.mcap
+
+<!-- cspell: enable -->
+
+The `mcap` CLI dispatches on the input file extension (`.bag` for ROS 1, `.db3` for ROS 2, `.ulg`/`.ulog` for PX4 ULog) and reads each format using the message definitions embedded in the file.
+
+ROS 2 Iron and later embed message definitions when recording, so these files convert without a sourced workspace. Bags recorded before ROS 2 Iron do not contain embedded message definitions and cannot be converted directly. Use the [`ros2 bag convert`](https://github.com/ros2/rosbag2#converting-bags-merge-split-etc-) utility instead (with the original ROS 2 workspace sourced) to convert between `.db3` and MCAP.
+
+ULog files use the `px4` profile. Each uORB topic is converted to a protobuf message with a schema named `px4.<message_name>` on a `<message_name>/<multi_id>` topic. Logged strings (`PX4_INFO`/`PX4_WARN`/`PX4_ERR` output) are written to a `log_message` topic using the `px4.log_message` schema, parameters to a `parameters` topic using `px4.parameter`, and ULog info fields to an MCAP `info` metadata record. ULog timestamps are recorded relative to system boot.
 
 ### File summarization
 
