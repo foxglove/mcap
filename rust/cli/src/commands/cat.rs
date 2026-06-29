@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::io::{self, IsTerminal as _, Write as _};
 use std::sync::Arc;
 
-use anyhow::{bail, Context as _, Result};
+use anyhow::{bail, ensure, Context as _, Result};
 use mcap::sans_io::indexed_reader::ReadOrder;
 use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor};
 
@@ -723,6 +723,9 @@ fn flush_or_ignore_broken_pipe(writer: &mut impl std::io::Write) -> Result<()> {
 struct JsonTranscoders {
     protobuf_descriptors: HashMap<u16, MessageDescriptor>,
     ros1_transcoders: HashMap<u16, Ros1MessageDef>,
+    // One Arrow stream decoder per schema id, primed with the Schema record so
+    // the schema flatbuffer is parsed once rather than per message.
+    arrow_decoders: HashMap<u16, arrow::ipc::reader::StreamDecoder>,
 }
 
 impl JsonTranscoders {
@@ -775,7 +778,7 @@ impl JsonTranscoders {
                 Ok(Cow::Owned(json))
             }
             "arrow" => {
-                let json = encode_arrow_json(schema.data.as_ref(), data).with_context(|| {
+                let json = self.encode_arrow_json(schema, data).with_context(|| {
                     format!("failed to encode Arrow message on {} as JSON", channel.topic)
                 })?;
                 Ok(Cow::Owned(json))
@@ -785,42 +788,70 @@ impl JsonTranscoders {
             ),
         }
     }
+
+    /// Decode an `arrow`-encoded message (a bare encapsulated `RecordBatch`)
+    /// against its Schema record and render the rows as a JSON array.
+    ///
+    /// The MCAP Schema record holds an encapsulated Arrow IPC `Schema` message
+    /// and each message holds an encapsulated `RecordBatch`. A
+    /// [`StreamDecoder`](arrow::ipc::reader::StreamDecoder) primed with the
+    /// schema (cached per schema id) decodes each message without re-parsing the
+    /// schema flatbuffer.
+    fn encode_arrow_json(&mut self, schema: &mcap::Schema<'_>, data: &[u8]) -> Result<Vec<u8>> {
+        use std::collections::hash_map::Entry;
+
+        use arrow::buffer::Buffer;
+        use arrow::ipc::reader::StreamDecoder;
+
+        let decoder = match self.arrow_decoders.entry(schema.id) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
+                // Prime a decoder with the Schema record. An Arrow schema
+                // message has a zero-length body, so the decoder only finalizes
+                // it once the first message's bytes arrive — hence we don't (and
+                // can't) assert `schema()` is populated here.
+                let mut decoder = StreamDecoder::new();
+                let mut schema_buf = Buffer::from(schema.data.as_ref());
+                while !schema_buf.is_empty() {
+                    let produced = decoder
+                        .decode(&mut schema_buf)
+                        .context("failed to read Arrow schema record")?;
+                    ensure!(
+                        produced.is_none(),
+                        "Arrow schema record unexpectedly produced a record batch"
+                    );
+                }
+                entry.insert(decoder)
+            }
+        };
+
+        let mut batch_buf = Buffer::from(data);
+        let mut batch = None;
+        while !batch_buf.is_empty() {
+            if let Some(decoded) = decoder
+                .decode(&mut batch_buf)
+                .context("failed to decode Arrow record batch")?
+            {
+                batch = Some(decoded);
+            }
+        }
+        let batch = batch.context("Arrow message did not contain a record batch")?;
+        arrow_batch_to_json(&batch)
+    }
 }
 
-/// Arrow IPC stream end-of-stream marker (continuation + zero metadata length).
-const ARROW_EOS: [u8; 8] = [0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0];
-
-/// Decode an `arrow`-encoded message (a bare encapsulated `RecordBatch`) against
-/// its Schema record and render the rows as a JSON array.
-///
-/// The MCAP Schema record holds an encapsulated Arrow IPC `Schema` message and
-/// each message holds an encapsulated `RecordBatch`; concatenating them with a
-/// stream terminator reconstructs a minimal Arrow IPC stream we can decode.
-fn encode_arrow_json(schema_data: &[u8], data: &[u8]) -> Result<Vec<u8>> {
-    use std::io::Cursor;
-
-    use arrow::ipc::reader::StreamReader;
+/// Render an Arrow `RecordBatch` as a JSON array of row objects.
+fn arrow_batch_to_json(batch: &arrow::record_batch::RecordBatch) -> Result<Vec<u8>> {
     use arrow::json::writer::{JsonArray, WriterBuilder};
-
-    let mut stream = Vec::with_capacity(schema_data.len() + data.len() + ARROW_EOS.len());
-    stream.extend_from_slice(schema_data);
-    stream.extend_from_slice(data);
-    stream.extend_from_slice(&ARROW_EOS);
-
-    let reader = StreamReader::try_new(Cursor::new(stream), None)
-        .context("failed to read Arrow schema and message")?;
 
     let mut buf = Vec::new();
     {
         let mut json_writer = WriterBuilder::new()
             .with_explicit_nulls(true)
             .build::<_, JsonArray>(&mut buf);
-        for batch in reader {
-            let batch = batch.context("failed to decode Arrow record batch")?;
-            json_writer
-                .write(&batch)
-                .context("failed to encode Arrow record batch as JSON")?;
-        }
+        json_writer
+            .write(batch)
+            .context("failed to encode Arrow record batch as JSON")?;
         json_writer
             .finish()
             .context("failed to finalize Arrow JSON")?;
