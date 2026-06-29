@@ -1,5 +1,6 @@
 mod ros1_bag;
 mod ros2_db3;
+mod ulog;
 
 use std::fs::File;
 use std::io::Read;
@@ -41,6 +42,7 @@ pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
 enum ConvertInput {
     Ros1Bag,
     Ros2Db3,
+    Ulog,
 }
 
 impl ConvertInput {
@@ -53,9 +55,12 @@ impl ConvertInput {
         if extension.eq_ignore_ascii_case("db3") {
             return Ok(Self::Ros2Db3);
         }
+        if extension.eq_ignore_ascii_case("ulg") || extension.eq_ignore_ascii_case("ulog") {
+            return Ok(Self::Ulog);
+        }
 
         bail!(
-            "unsupported input file extension for '{}' (expected .bag for ROS 1 bag or .db3 for ROS 2 SQLite db3 input)",
+            "unsupported input file extension for '{}' (expected .bag for ROS 1 bag, .db3 for ROS 2 SQLite db3, or .ulg for PX4 ULog input)",
             path.display()
         );
     }
@@ -64,6 +69,7 @@ impl ConvertInput {
         match self {
             Self::Ros1Bag => "ros1",
             Self::Ros2Db3 => "ros2",
+            Self::Ulog => "px4",
         }
     }
 
@@ -71,6 +77,7 @@ impl ConvertInput {
         match self {
             Self::Ros1Bag => ros1_bag::convert_ros1_bag_file(input_path, output_path, opts),
             Self::Ros2Db3 => ros2_db3::convert_ros2_db3_file(input_path, output_path, opts),
+            Self::Ulog => ulog::convert_ulog_file(input_path, output_path, opts),
         }
     }
 }
@@ -237,6 +244,16 @@ mod tests {
         let input = ConvertInput::detect(&path).expect("detect");
         std::fs::remove_file(path).expect("remove temp input");
         assert!(matches!(input, ConvertInput::Ros2Db3));
+    }
+
+    #[test]
+    fn detects_ulog_extension() {
+        for name in ["px4.ulg", "px4.ulog", "PX4.ULG"] {
+            let path = temp_input(name, b"not validated until conversion");
+            let input = ConvertInput::detect(&path).expect("detect");
+            std::fs::remove_file(path).expect("remove temp input");
+            assert!(matches!(input, ConvertInput::Ulog), "{name}");
+        }
     }
 
     #[test]
