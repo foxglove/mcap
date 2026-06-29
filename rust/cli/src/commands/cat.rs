@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::io::{self, IsTerminal as _, Write as _};
 use std::sync::Arc;
 
-use anyhow::{bail, Context as _, Result};
+use anyhow::{bail, ensure, Context as _, Result};
 use mcap::sans_io::indexed_reader::ReadOrder;
 use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor};
 
@@ -723,6 +723,9 @@ fn flush_or_ignore_broken_pipe(writer: &mut impl std::io::Write) -> Result<()> {
 struct JsonTranscoders {
     protobuf_descriptors: HashMap<u16, MessageDescriptor>,
     ros1_transcoders: HashMap<u16, Ros1MessageDef>,
+    // One Arrow stream decoder per schema id, primed with the Schema record so
+    // the schema flatbuffer is parsed once rather than per message.
+    arrow_decoders: HashMap<u16, arrow::ipc::reader::StreamDecoder>,
 }
 
 impl JsonTranscoders {
@@ -774,11 +777,86 @@ impl JsonTranscoders {
                     .with_context(|| format!("failed to transcode {} record on {}", schema.name, channel.topic))?;
                 Ok(Cow::Owned(json))
             }
+            "arrow" => {
+                let json = self.encode_arrow_json(schema, data).with_context(|| {
+                    format!("failed to encode Arrow message on {} as JSON", channel.topic)
+                })?;
+                Ok(Cow::Owned(json))
+            }
             encoding => bail!(
-                "JSON output only supported for ros1msg, protobuf, and jsonschema schemas. Found: {encoding}"
+                "JSON output only supported for ros1msg, protobuf, jsonschema, and arrow schemas. Found: {encoding}"
             ),
         }
     }
+
+    /// Decode an `arrow`-encoded message (a bare encapsulated `RecordBatch`)
+    /// against its Schema record and render the rows as a JSON array.
+    ///
+    /// The MCAP Schema record holds an encapsulated Arrow IPC `Schema` message
+    /// and each message holds an encapsulated `RecordBatch`. A
+    /// [`StreamDecoder`](arrow::ipc::reader::StreamDecoder) primed with the
+    /// schema (cached per schema id) decodes each message without re-parsing the
+    /// schema flatbuffer.
+    fn encode_arrow_json(&mut self, schema: &mcap::Schema<'_>, data: &[u8]) -> Result<Vec<u8>> {
+        use std::collections::hash_map::Entry;
+
+        use arrow::buffer::Buffer;
+        use arrow::ipc::reader::StreamDecoder;
+
+        let decoder = match self.arrow_decoders.entry(schema.id) {
+            Entry::Occupied(entry) => entry.into_mut(),
+            Entry::Vacant(entry) => {
+                // Prime a decoder with the Schema record. An Arrow schema
+                // message has a zero-length body, so the decoder only finalizes
+                // it once the first message's bytes arrive — hence we don't (and
+                // can't) assert `schema()` is populated here.
+                let mut decoder = StreamDecoder::new();
+                let mut schema_buf = Buffer::from(schema.data.as_ref());
+                while !schema_buf.is_empty() {
+                    let produced = decoder
+                        .decode(&mut schema_buf)
+                        .context("failed to read Arrow schema record")?;
+                    ensure!(
+                        produced.is_none(),
+                        "Arrow schema record unexpectedly produced a record batch"
+                    );
+                }
+                entry.insert(decoder)
+            }
+        };
+
+        let mut batch_buf = Buffer::from(data);
+        let mut batch = None;
+        while !batch_buf.is_empty() {
+            if let Some(decoded) = decoder
+                .decode(&mut batch_buf)
+                .context("failed to decode Arrow record batch")?
+            {
+                batch = Some(decoded);
+            }
+        }
+        let batch = batch.context("Arrow message did not contain a record batch")?;
+        arrow_batch_to_json(&batch)
+    }
+}
+
+/// Render an Arrow `RecordBatch` as a JSON array of row objects.
+fn arrow_batch_to_json(batch: &arrow::record_batch::RecordBatch) -> Result<Vec<u8>> {
+    use arrow::json::writer::{JsonArray, WriterBuilder};
+
+    let mut buf = Vec::new();
+    {
+        let mut json_writer = WriterBuilder::new()
+            .with_explicit_nulls(true)
+            .build::<_, JsonArray>(&mut buf);
+        json_writer
+            .write(batch)
+            .context("failed to encode Arrow record batch as JSON")?;
+        json_writer
+            .finish()
+            .context("failed to finalize Arrow JSON")?;
+    }
+    Ok(buf)
 }
 
 fn encode_schemaless_json<'a>(message_encoding: &str, data: &'a [u8]) -> Result<Cow<'a, [u8]>> {
@@ -2123,6 +2201,117 @@ mod tests {
             r#"{"topic":"/demo","sequence":1,"log_time":0.000000042,"publish_time":0.000000043,"data":{"value":1}}"#
                 .to_string()
                 + "\n"
+        );
+    }
+
+    // Produce the encapsulated schema + record batch messages exactly as
+    // `mcap convert` writes them (a bare encapsulated `RecordBatch`, with the
+    // schema stored separately).
+    fn arrow_message_bytes(batch: &arrow::record_batch::RecordBatch) -> (Vec<u8>, Vec<u8>) {
+        use arrow::ipc::writer::{
+            write_message, CompressionContext, DictionaryTracker, IpcDataGenerator, IpcWriteOptions,
+        };
+
+        let generator = IpcDataGenerator {};
+        let options = IpcWriteOptions::default();
+        let mut tracker = DictionaryTracker::new(false);
+        let arrow_schema = batch.schema();
+        let enc_schema = generator.schema_to_bytes_with_dictionary_tracker(
+            arrow_schema.as_ref(),
+            &mut tracker,
+            &options,
+        );
+        let mut schema_bytes = Vec::new();
+        write_message(&mut schema_bytes, enc_schema, &options).expect("schema message");
+        let mut compression = CompressionContext::default();
+        let (_dictionaries, enc_batch) = generator
+            .encode(batch, &mut tracker, &options, &mut compression)
+            .expect("encode batch");
+        let mut batch_bytes = Vec::new();
+        write_message(&mut batch_bytes, enc_batch, &options).expect("batch message");
+        (schema_bytes, batch_bytes)
+    }
+
+    fn arrow_channel(schema_bytes: Vec<u8>) -> Arc<mcap::Channel<'static>> {
+        let schema = Arc::new(mcap::Schema {
+            id: 1,
+            name: "events".to_string(),
+            encoding: "arrow".to_string(),
+            data: Cow::Owned(schema_bytes),
+        });
+        Arc::new(mcap::Channel {
+            id: 1,
+            topic: "/arrow".to_string(),
+            schema: Some(schema),
+            message_encoding: "arrow".to_string(),
+            metadata: BTreeMap::new(),
+        })
+    }
+
+    #[test]
+    fn arrow_json_encodes_record_batch_rows() {
+        use arrow::array::{ArrayRef, Int64Array, StringArray};
+        use arrow::record_batch::RecordBatch;
+
+        let batch = RecordBatch::try_from_iter(vec![
+            (
+                "value",
+                Arc::new(Int64Array::from(vec![10, 20])) as ArrayRef,
+            ),
+            (
+                "label",
+                Arc::new(StringArray::from(vec!["a", "b"])) as ArrayRef,
+            ),
+        ])
+        .expect("record batch");
+        let (schema_bytes, batch_bytes) = arrow_message_bytes(&batch);
+        let channel = arrow_channel(schema_bytes);
+
+        let mut transcoders = JsonTranscoders::default();
+        let encoded = transcoders
+            .encode(&channel, &batch_bytes)
+            .expect("arrow should encode");
+        assert_eq!(
+            String::from_utf8(encoded.into_owned()).expect("valid utf8"),
+            r#"[{"value":10,"label":"a"},{"value":20,"label":"b"}]"#
+        );
+    }
+
+    #[test]
+    fn arrow_json_reuses_cached_decoder_across_messages() {
+        use arrow::array::{ArrayRef, Int64Array, StringArray};
+        use arrow::record_batch::RecordBatch;
+
+        let make_batch = |values: Vec<i64>, labels: Vec<&'static str>| {
+            RecordBatch::try_from_iter(vec![
+                ("value", Arc::new(Int64Array::from(values)) as ArrayRef),
+                ("label", Arc::new(StringArray::from(labels)) as ArrayRef),
+            ])
+            .expect("record batch")
+        };
+
+        // Both messages share one schema record / channel (same schema id), so
+        // the second decode must reuse the decoder primed by the first.
+        let batch1 = make_batch(vec![10, 20], vec!["a", "b"]);
+        let batch2 = make_batch(vec![30], vec!["c"]);
+        let (schema_bytes, batch1_bytes) = arrow_message_bytes(&batch1);
+        let (_schema_bytes2, batch2_bytes) = arrow_message_bytes(&batch2);
+        let channel = arrow_channel(schema_bytes);
+
+        let mut transcoders = JsonTranscoders::default();
+        let first = transcoders
+            .encode(&channel, &batch1_bytes)
+            .expect("first arrow message should encode");
+        assert_eq!(
+            String::from_utf8(first.into_owned()).expect("valid utf8"),
+            r#"[{"value":10,"label":"a"},{"value":20,"label":"b"}]"#
+        );
+        let second = transcoders
+            .encode(&channel, &batch2_bytes)
+            .expect("second arrow message should encode via cached decoder");
+        assert_eq!(
+            String::from_utf8(second.into_owned()).expect("valid utf8"),
+            r#"[{"value":30,"label":"c"}]"#
         );
     }
 

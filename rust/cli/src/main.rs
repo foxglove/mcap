@@ -404,6 +404,12 @@ mod tests {
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 no_crc: false,
                 no_chunks: false,
+                topic: None,
+                schema_name: None,
+                log_time_field: None,
+                publish_time_field: None,
+                timestamp_unit: crate::cli::TimestampUnit::Ns,
+                rows_per_message: 1,
             })
         );
     }
@@ -432,6 +438,12 @@ mod tests {
                 chunk_size: 1024,
                 no_crc: true,
                 no_chunks: true,
+                topic: None,
+                schema_name: None,
+                log_time_field: None,
+                publish_time_field: None,
+                timestamp_unit: crate::cli::TimestampUnit::Ns,
+                rows_per_message: 1,
             })
         );
     }
