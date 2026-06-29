@@ -35,7 +35,6 @@ const ULOG_MAGIC: [u8; 7] = [0x55, 0x4c, 0x6f, 0x67, 0x01, 0x12, 0x35];
 const HEADER_LEN: usize = 16;
 
 const PACKAGE: &str = "px4";
-const PROTO_FILE_NAME: &str = "px4_ulog.proto";
 
 const LOG_TOPIC: &str = "log_message";
 const LOG_MESSAGE_NAME: &str = "log_message";
@@ -173,15 +172,16 @@ struct Converter<W: Write + Seek> {
     last_timestamp_us: u64,
     in_definitions: bool,
     formats: BTreeMap<String, FormatDef>,
-    /// Built once when the definitions section ends.
-    pool: Option<DescriptorPool>,
-    /// Serialized `FileDescriptorSet` reused as schema `data` for every schema.
-    descriptor_set: Vec<u8>,
     subscriptions: BTreeMap<u16, Subscription>,
-    schema_ids: BTreeMap<String, u16>,
+    /// Schema id and message descriptor per registered schema full name. Each
+    /// schema carries its own minimal descriptor set (the message plus its
+    /// transitive nested dependencies) rather than one shared set.
+    schemas: BTreeMap<String, (u16, MessageDescriptor)>,
     log_channel: Option<(u16, MessageDescriptor)>,
     param_channel: Option<(u16, MessageDescriptor)>,
-    initial_params: Vec<(String, f64)>,
+    /// Buffered initial parameters: name, value, and whether it is a default
+    /// (`Q`) rather than an actual value (`P`).
+    initial_params: Vec<(String, f64, bool)>,
     sequences: BTreeMap<u16, u32>,
     info: BTreeMap<String, String>,
 }
@@ -207,10 +207,8 @@ fn convert_validated_ulog<W: Write + Seek, R: Read>(
         last_timestamp_us: start_timestamp_us,
         in_definitions: true,
         formats: BTreeMap::new(),
-        pool: None,
-        descriptor_set: Vec::new(),
         subscriptions: BTreeMap::new(),
-        schema_ids: BTreeMap::new(),
+        schemas: BTreeMap::new(),
         log_channel: None,
         param_channel: None,
         initial_params: Vec::new(),
@@ -257,12 +255,13 @@ impl<W: Write + Seek> Converter<W> {
                 }
             }
             b'P' | b'Q' => {
+                let is_default = msg_type == b'Q';
                 let (name, value) = parse_param(msg_type, body)?;
                 if self.in_definitions {
-                    self.initial_params.push((name, value));
+                    self.initial_params.push((name, value, is_default));
                 } else {
                     let ts = self.last_timestamp_us;
-                    self.write_param(name, value, ts)?;
+                    self.write_param(name, value, is_default, ts)?;
                 }
             }
             b'A' => {
@@ -288,39 +287,21 @@ impl<W: Write + Seek> Converter<W> {
         Ok(())
     }
 
-    /// Build the descriptor pool from the collected formats and flush initial
-    /// parameters. Idempotent: only the first call does work.
+    /// Mark the end of the definitions section and flush buffered initial
+    /// parameters. Idempotent: only the first call does work. Descriptors are
+    /// built lazily per schema (see [`Self::add_subscription`]).
     fn finalize_definitions(&mut self) -> Result<()> {
         if !self.in_definitions {
             return Ok(());
         }
         self.in_definitions = false;
 
-        let file = build_file_descriptor(&self.formats)?;
-        self.descriptor_set = FileDescriptorSet {
-            file: vec![file.clone()],
-        }
-        .encode_to_vec();
-        let pool = DescriptorPool::from_file_descriptor_set(FileDescriptorSet { file: vec![file] })
-            .context("failed to build protobuf descriptors from ULog formats")?;
-        self.pool = Some(pool);
-
         let initial = std::mem::take(&mut self.initial_params);
         let start = self.start_timestamp_us;
-        for (name, value) in initial {
-            self.write_param(name, value, start)?;
+        for (name, value, is_default) in initial {
+            self.write_param(name, value, is_default, start)?;
         }
         Ok(())
-    }
-
-    fn pool(&self) -> &DescriptorPool {
-        self.pool.as_ref().expect("pool built before data section")
-    }
-
-    fn message_descriptor(&self, full_name: &str) -> Result<MessageDescriptor> {
-        self.pool()
-            .get_message_by_name(full_name)
-            .with_context(|| format!("missing protobuf descriptor for '{full_name}'"))
     }
 
     fn add_subscription(&mut self, body: &[u8]) -> Result<()> {
@@ -336,15 +317,19 @@ impl<W: Write + Seek> Converter<W> {
         );
 
         let full_name = schema_full_name(&message_name);
-        let schema_id = if let Some(id) = self.schema_ids.get(&full_name) {
-            *id
-        } else {
-            let id = self
-                .writer
-                .add_schema(&full_name, PROTOBUF_ENCODING, &self.descriptor_set)
-                .with_context(|| format!("failed to write schema for '{message_name}'"))?;
-            self.schema_ids.insert(full_name.clone(), id);
-            id
+        let (schema_id, descriptor) = match self.schemas.get(&full_name) {
+            Some((id, descriptor)) => (*id, descriptor.clone()),
+            None => {
+                let file = data_file_descriptor(&self.formats, &message_name)?;
+                let (descriptor_set, descriptor) = build_descriptor_set(file, &full_name)?;
+                let id = self
+                    .writer
+                    .add_schema(&full_name, PROTOBUF_ENCODING, &descriptor_set)
+                    .with_context(|| format!("failed to write schema for '{message_name}'"))?;
+                self.schemas
+                    .insert(full_name.clone(), (id, descriptor.clone()));
+                (id, descriptor)
+            }
         };
 
         let topic = format!("{message_name}/{multi_id}");
@@ -354,7 +339,6 @@ impl<W: Write + Seek> Converter<W> {
             .add_channel(schema_id, &topic, PROTOBUF_ENCODING, &metadata)
             .with_context(|| format!("failed to write channel for topic '{topic}'"))?;
 
-        let descriptor = self.message_descriptor(&full_name)?;
         self.subscriptions.insert(
             msg_id,
             Subscription {
@@ -371,30 +355,42 @@ impl<W: Write + Seek> Converter<W> {
         let msg_id = u16::from_le_bytes([body[0], body[1]]);
         let payload = &body[2..];
 
-        let subscription = self
-            .subscriptions
-            .get(&msg_id)
-            .with_context(|| format!("ULog data references unknown subscription id {msg_id}"))?;
-        let channel_id = subscription.channel_id;
-        let descriptor = subscription.descriptor.clone();
-        let format_name = subscription.format_name.clone();
-        let format = self
-            .formats
-            .get(&format_name)
-            .expect("subscription format validated at subscription time")
-            .clone();
+        // Decode while only borrowing `self` immutably (no per-message clone of
+        // the format), then release the borrow before writing.
+        let (channel_id, encoded, timestamp_us) = {
+            let subscription = self.subscriptions.get(&msg_id).with_context(|| {
+                format!("ULog data references unknown subscription id {msg_id}")
+            })?;
+            let format = self
+                .formats
+                .get(&subscription.format_name)
+                .expect("subscription format validated at subscription time");
+            let mut reader = ByteReader::new(payload);
+            let message = decode_message(
+                &self.formats,
+                &subscription.descriptor,
+                format,
+                &mut reader,
+                true,
+            )
+            .with_context(|| {
+                format!(
+                    "failed to decode ULog message '{}'",
+                    subscription.format_name
+                )
+            })?;
+            let timestamp_us = message
+                .get_field_by_name("timestamp")
+                .and_then(|value| value.as_u64())
+                .unwrap_or(self.last_timestamp_us);
+            (
+                subscription.channel_id,
+                message.encode_to_vec(),
+                timestamp_us,
+            )
+        };
 
-        let mut reader = ByteReader::new(payload);
-        let message = decode_message(&self.formats, &descriptor, &format, &mut reader, true)
-            .with_context(|| format!("failed to decode ULog message '{format_name}'"))?;
-
-        let timestamp_us = message
-            .get_field_by_name("timestamp")
-            .and_then(|value| value.as_u64())
-            .unwrap_or(self.last_timestamp_us);
         self.last_timestamp_us = self.last_timestamp_us.max(timestamp_us);
-
-        let encoded = message.encode_to_vec();
         self.write_message(channel_id, timestamp_us, &encoded)
     }
 
@@ -433,11 +429,18 @@ impl<W: Write + Seek> Converter<W> {
         self.write_message(channel_id, timestamp_us, &encoded)
     }
 
-    fn write_param(&mut self, name: String, value: f64, timestamp_us: u64) -> Result<()> {
+    fn write_param(
+        &mut self,
+        name: String,
+        value: f64,
+        is_default: bool,
+        timestamp_us: u64,
+    ) -> Result<()> {
         let (channel_id, descriptor) = self.ensure_param_channel()?;
         let mut message = DynamicMessage::new(descriptor);
         set_field(&mut message, "name", Value::String(name))?;
         set_field(&mut message, "value", Value::F64(value))?;
+        set_field(&mut message, "default", Value::Bool(is_default))?;
         let encoded = message.encode_to_vec();
         self.write_message(channel_id, timestamp_us, &encoded)
     }
@@ -447,15 +450,16 @@ impl<W: Write + Seek> Converter<W> {
             return Ok((*channel_id, descriptor.clone()));
         }
         let full_name = schema_full_name(LOG_MESSAGE_NAME);
+        let file = singleton_file_descriptor(build_log_descriptor());
+        let (descriptor_set, descriptor) = build_descriptor_set(file, &full_name)?;
         let schema_id = self
             .writer
-            .add_schema(&full_name, PROTOBUF_ENCODING, &self.descriptor_set)
+            .add_schema(&full_name, PROTOBUF_ENCODING, &descriptor_set)
             .context("failed to write px4.log_message schema")?;
         let channel_id = self
             .writer
             .add_channel(schema_id, LOG_TOPIC, PROTOBUF_ENCODING, &BTreeMap::new())
             .context("failed to write log_message channel")?;
-        let descriptor = self.message_descriptor(&full_name)?;
         self.log_channel = Some((channel_id, descriptor.clone()));
         Ok((channel_id, descriptor))
     }
@@ -465,15 +469,16 @@ impl<W: Write + Seek> Converter<W> {
             return Ok((*channel_id, descriptor.clone()));
         }
         let full_name = schema_full_name(PARAM_MESSAGE_NAME);
+        let file = singleton_file_descriptor(build_param_descriptor());
+        let (descriptor_set, descriptor) = build_descriptor_set(file, &full_name)?;
         let schema_id = self
             .writer
-            .add_schema(&full_name, PROTOBUF_ENCODING, &self.descriptor_set)
+            .add_schema(&full_name, PROTOBUF_ENCODING, &descriptor_set)
             .context("failed to write px4.parameter schema")?;
         let channel_id = self
             .writer
             .add_channel(schema_id, PARAM_TOPIC, PROTOBUF_ENCODING, &BTreeMap::new())
             .context("failed to write parameters channel")?;
-        let descriptor = self.message_descriptor(&full_name)?;
         self.param_channel = Some((channel_id, descriptor.clone()));
         Ok((channel_id, descriptor))
     }
@@ -510,23 +515,84 @@ impl<W: Write + Seek> Converter<W> {
     }
 }
 
-/// Build a single proto3 file containing a message per ULog format plus the
-/// synthetic `log_message` and `parameter` messages.
-fn build_file_descriptor(formats: &BTreeMap<String, FormatDef>) -> Result<FileDescriptorProto> {
-    let mut message_types = Vec::new();
-    for format in formats.values() {
-        message_types.push(build_descriptor_proto(format)?);
+/// Build a proto3 file for a single data topic: the named format plus its
+/// transitive nested message dependencies. Keeping each schema's descriptor set
+/// minimal avoids embedding every format's definition in every schema record.
+fn data_file_descriptor(
+    formats: &BTreeMap<String, FormatDef>,
+    root: &str,
+) -> Result<FileDescriptorProto> {
+    let mut closure = std::collections::BTreeSet::new();
+    collect_format_closure(formats, root, &mut closure)?;
+
+    let mut message_type = Vec::with_capacity(closure.len());
+    for name in &closure {
+        let format = formats.get(name).expect("closure contains known formats");
+        message_type.push(build_descriptor_proto(format)?);
     }
-    message_types.push(build_log_descriptor());
-    message_types.push(build_param_descriptor());
 
     Ok(FileDescriptorProto {
-        name: Some(PROTO_FILE_NAME.to_string()),
+        name: Some(format!("px4_{}.proto", sanitize_identifier(root))),
         package: Some(PACKAGE.to_string()),
-        message_type: message_types,
+        message_type,
         syntax: Some("proto3".to_string()),
         ..Default::default()
     })
+}
+
+/// Build a proto3 file containing a single synthetic message (`log_message` or
+/// `parameter`), which have no nested dependencies.
+fn singleton_file_descriptor(descriptor: DescriptorProto) -> FileDescriptorProto {
+    let name = descriptor.name.clone().unwrap_or_default();
+    FileDescriptorProto {
+        name: Some(format!("px4_{name}.proto")),
+        package: Some(PACKAGE.to_string()),
+        message_type: vec![descriptor],
+        syntax: Some("proto3".to_string()),
+        ..Default::default()
+    }
+}
+
+/// Collect the set of format names reachable from `root` (inclusive) through
+/// nested message-typed fields. Errors if a referenced nested type is missing.
+fn collect_format_closure(
+    formats: &BTreeMap<String, FormatDef>,
+    name: &str,
+    acc: &mut std::collections::BTreeSet<String>,
+) -> Result<()> {
+    if !acc.insert(name.to_string()) {
+        return Ok(());
+    }
+    let format = formats
+        .get(name)
+        .with_context(|| format!("ULog references undefined message format '{name}'"))?;
+    for field in &format.fields {
+        if field.is_padding() {
+            continue;
+        }
+        if Primitive::parse(&field.ulog_type).is_none() {
+            collect_format_closure(formats, &field.ulog_type, acc)?;
+        }
+    }
+    Ok(())
+}
+
+/// Serialize a file descriptor into a `FileDescriptorSet` (the schema `data`)
+/// and resolve the message descriptor for `full_name` from it.
+fn build_descriptor_set(
+    file: FileDescriptorProto,
+    full_name: &str,
+) -> Result<(Vec<u8>, MessageDescriptor)> {
+    let descriptor_set = FileDescriptorSet {
+        file: vec![file.clone()],
+    }
+    .encode_to_vec();
+    let pool = DescriptorPool::from_file_descriptor_set(FileDescriptorSet { file: vec![file] })
+        .with_context(|| format!("failed to build protobuf descriptors for '{full_name}'"))?;
+    let descriptor = pool
+        .get_message_by_name(full_name)
+        .with_context(|| format!("missing protobuf descriptor for '{full_name}'"))?;
+    Ok((descriptor_set, descriptor))
 }
 
 fn build_descriptor_proto(format: &FormatDef) -> Result<DescriptorProto> {
@@ -590,6 +656,9 @@ fn build_param_descriptor() -> DescriptorProto {
         field: vec![
             scalar_field("name", 1, Type::String),
             scalar_field("value", 2, Type::Double),
+            // True for `Q` (default parameter) records, false for `P` (actual
+            // value), so consumers can distinguish defaults from live values.
+            scalar_field("default", 3, Type::Bool),
         ],
         ..Default::default()
     }
@@ -901,8 +970,8 @@ fn scalar_to_string(value: Value) -> String {
 
 fn parse_param(msg_type: u8, body: &[u8]) -> Result<(String, f64)> {
     // 'P' shares the info layout; 'Q' (default parameter) has an extra leading
-    // default_types byte.
-    let (key_len_offset, value_offset_extra) = if msg_type == b'Q' { (1, 1) } else { (0, 0) };
+    // default_types byte before the key length.
+    let key_len_offset = if msg_type == b'Q' { 1 } else { 0 };
     ensure!(
         body.len() > key_len_offset,
         "ULog parameter message too short"
@@ -916,7 +985,6 @@ fn parse_param(msg_type: u8, body: &[u8]) -> Result<(String, f64)> {
     let key = std::str::from_utf8(&body[key_start..key_start + key_len])
         .context("ULog parameter key is not valid utf8")?;
     let value_bytes = &body[key_start + key_len..];
-    let _ = value_offset_extra;
 
     let field = parse_field(key)?;
     let value = match field.ulog_type.as_str() {
@@ -1082,6 +1150,46 @@ mod tests {
         body.extend_from_slice(key.as_bytes());
         body.extend_from_slice(value);
         message(b'P', &body)
+    }
+
+    fn default_parameter_message(key: &str, value: &[u8]) -> Vec<u8> {
+        // 'Q': default_types(1) key_len(1) key value
+        let mut body = vec![1u8, key.len() as u8];
+        body.extend_from_slice(key.as_bytes());
+        body.extend_from_slice(value);
+        message(b'Q', &body)
+    }
+
+    fn info_message(key: &str, value: &[u8]) -> Vec<u8> {
+        let mut body = vec![key.len() as u8];
+        body.extend_from_slice(key.as_bytes());
+        body.extend_from_slice(value);
+        message(b'I', &body)
+    }
+
+    fn flag_bits_message(incompat_flags: [u8; 8]) -> Vec<u8> {
+        let mut body = vec![0u8; 8]; // compat_flags
+        body.extend_from_slice(&incompat_flags);
+        body.extend_from_slice(&[0u8; 24]); // appended_offsets[3]
+        message(b'B', &body)
+    }
+
+    fn read_info_metadata(bytes: &[u8]) -> BTreeMap<String, String> {
+        for record in mcap::read::LinearReader::new(bytes).expect("reader") {
+            if let mcap::records::Record::Metadata(metadata) = record.expect("record") {
+                if metadata.name == "info" {
+                    return metadata.metadata.into_iter().collect();
+                }
+            }
+        }
+        BTreeMap::new()
+    }
+
+    fn try_convert(ulog: Vec<u8>) -> Result<()> {
+        let mut input = Cursor::new(ulog);
+        let start = read_and_validate_header(&mut input)?;
+        let mut output = Cursor::new(Vec::new());
+        convert_validated_ulog(&mut output, &mut input, start, write_options())
     }
 
     fn convert(ulog: Vec<u8>) -> Vec<u8> {
@@ -1342,6 +1450,79 @@ mod tests {
     }
 
     #[test]
+    fn distinguishes_default_parameters_from_actual_values() {
+        let mut ulog = ulog_header(1_000);
+        ulog.extend(parameter_message(
+            "int32_t SYS_AUTOSTART",
+            &4001i32.to_le_bytes(),
+        ));
+        ulog.extend(default_parameter_message(
+            "int32_t SYS_AUTOSTART",
+            &4000i32.to_le_bytes(),
+        ));
+
+        let bytes = convert(ulog);
+        let messages = decode_messages(&bytes);
+        assert_eq!(messages.len(), 2);
+
+        let by_default: BTreeMap<bool, f64> = messages
+            .iter()
+            .map(|m| {
+                (
+                    m.message
+                        .get_field_by_name("default")
+                        .unwrap()
+                        .as_bool()
+                        .unwrap(),
+                    m.message
+                        .get_field_by_name("value")
+                        .unwrap()
+                        .as_f64()
+                        .unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(by_default.get(&false), Some(&4001.0)); // P: actual value
+        assert_eq!(by_default.get(&true), Some(&4000.0)); // Q: default value
+    }
+
+    #[test]
+    fn writes_string_info_to_metadata_and_skips_binary_blobs() {
+        let mut ulog = ulog_header(0);
+        ulog.extend(info_message("char[3] sys_name", b"PX4"));
+        ulog.extend(info_message(
+            "int32_t time_ref_utc",
+            &(-3600i32).to_le_bytes(),
+        ));
+        // A numeric array (binary blob) has no useful textual form and is skipped.
+        ulog.extend(info_message("uint8[4] metadata_events", &[1, 2, 3, 4]));
+
+        let bytes = convert(ulog);
+        let info = read_info_metadata(&bytes);
+        assert_eq!(info.get("sys_name"), Some(&"PX4".to_string()));
+        assert_eq!(info.get("time_ref_utc"), Some(&"-3600".to_string()));
+        assert!(!info.contains_key("metadata_events"));
+    }
+
+    #[test]
+    fn rejects_unsupported_incompatible_flag_bits() {
+        let mut ulog = ulog_header(0);
+        // Bit 0 is DATA_APPENDED (tolerated); bit 1 is an unknown breaking change.
+        ulog.extend(flag_bits_message([0b10, 0, 0, 0, 0, 0, 0, 0]));
+        let err = try_convert(ulog).expect_err("unknown incompat flag should fail");
+        assert!(err.to_string().contains("incompatible flag"));
+    }
+
+    #[test]
+    fn accepts_tolerated_data_appended_flag_bit() {
+        let mut ulog = ulog_header(0);
+        // DATA_APPENDED (bit 0) is tolerated; conversion should still succeed.
+        ulog.extend(flag_bits_message([0b1, 0, 0, 0, 0, 0, 0, 0]));
+        ulog.extend(logged_string_message(b'6', 1_000, "info"));
+        try_convert(ulog).expect("data-appended flag should be tolerated");
+    }
+
+    #[test]
     fn changed_parameter_uses_last_data_timestamp() {
         let mut ulog = ulog_header(0);
         ulog.extend(format_message("simple:uint64_t timestamp;float x;"));
@@ -1379,6 +1560,10 @@ mod tests {
         }
 
         let summary = mcap::Summary::read(&bytes)?.expect("summary");
+        // One channel per ULog subscription (every `A` record, including topics
+        // with zero data messages and each multi-instance variant), plus the
+        // synthetic `parameters` and `log_message` channels. Update this if the
+        // committed fixture changes.
         assert_eq!(summary.channels.len(), 116);
         assert!(summary
             .channels

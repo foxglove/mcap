@@ -99,7 +99,7 @@ The `mcap` CLI dispatches on the input file extension (`.bag` for ROS 1, `.db3` 
 
 ROS 2 Iron and later embed message definitions when recording, so these files convert without a sourced workspace. Bags recorded before ROS 2 Iron do not contain embedded message definitions and cannot be converted directly. Use the [`ros2 bag convert`](https://github.com/ros2/rosbag2#converting-bags-merge-split-etc-) utility instead (with the original ROS 2 workspace sourced) to convert between `.db3` and MCAP.
 
-ULog files use the `px4` profile. Each uORB topic is converted to a protobuf message with a schema named `px4.<message_name>` on a `<message_name>/<multi_id>` topic. Logged strings (`PX4_INFO`/`PX4_WARN`/`PX4_ERR` output) are written to a `log_message` topic using the `px4.log_message` schema, parameters to a `parameters` topic using `px4.parameter`, and ULog info fields to an MCAP `info` metadata record. ULog timestamps are recorded relative to system boot.
+ULog files use the `px4` profile. Each uORB topic is converted to a protobuf message with a schema named `px4.<message_name>` on a `<message_name>/<multi_id>` topic. Logged strings (`PX4_INFO`/`PX4_WARN`/`PX4_ERR` output) are written to a `log_message` topic using the `px4.log_message` schema. Parameters are written to a `parameters` topic using `px4.parameter`, where the `default` field distinguishes default values (ULog `Q` records) from actual values (`P` records). ULog info fields are written to an MCAP `info` metadata record. ULog timestamps are recorded relative to system boot.
 
 ### File summarization
 
