@@ -9,13 +9,14 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use mcap::{Compression, WriteOptions};
 
-use crate::cli::{CompressionFormat, ConvertCommand};
+use crate::cli::{CompressionFormat, ConvertCommand, TimestampUnit};
 use crate::context::CommandContext;
 
 const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
 pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     let input = ConvertInput::detect(&args.input)?;
+    warn_unused_arrow_flags(&input, &args);
     let is_remote = crate::source::is_remote_url(&args.input);
     if !is_remote {
         reject_lfs_pointer(&args.input)?;
@@ -38,6 +39,39 @@ pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     input.convert(materialized_input.path(), &args.output, opts, &args)
 }
 
+/// Warn when Arrow-only flags are set for a non-Arrow input, since clap accepts
+/// them on the shared `convert` command but the ROS converters ignore them.
+fn warn_unused_arrow_flags(input: &ConvertInput, args: &ConvertCommand) {
+    if matches!(input, ConvertInput::ArrowIpc) {
+        return;
+    }
+    let mut ignored = Vec::new();
+    if args.topic.is_some() {
+        ignored.push("--topic");
+    }
+    if args.schema_name.is_some() {
+        ignored.push("--schema-name");
+    }
+    if args.log_time_field.is_some() {
+        ignored.push("--log-time-field");
+    }
+    if args.publish_time_field.is_some() {
+        ignored.push("--publish-time-field");
+    }
+    if args.rows_per_message != 1 {
+        ignored.push("--rows-per-message");
+    }
+    if !matches!(args.timestamp_unit, TimestampUnit::Ns) {
+        ignored.push("--timestamp-unit");
+    }
+    if !ignored.is_empty() {
+        eprintln!(
+            "Warning: Arrow-only flag(s) {} are ignored for non-Arrow inputs",
+            ignored.join(", ")
+        );
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ConvertInput {
     Ros1Bag,
@@ -58,7 +92,6 @@ impl ConvertInput {
         if extension.eq_ignore_ascii_case("arrow")
             || extension.eq_ignore_ascii_case("feather")
             || extension.eq_ignore_ascii_case("ipc")
-            || extension.eq_ignore_ascii_case("arrows")
         {
             return Ok(Self::ArrowIpc);
         }

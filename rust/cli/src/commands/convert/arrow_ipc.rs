@@ -36,6 +36,9 @@ pub struct ArrowConvertOptions {
     pub publish_time_field: Option<String>,
     pub timestamp_unit: TimestampUnit,
     pub rows_per_message: u64,
+    /// Default topic when `topic` is unset, derived from the original input
+    /// name (not the materialized temp file used for remote inputs).
+    default_topic: String,
 }
 
 impl ArrowConvertOptions {
@@ -47,6 +50,7 @@ impl ArrowConvertOptions {
             publish_time_field: args.publish_time_field.clone(),
             timestamp_unit: args.timestamp_unit,
             rows_per_message: args.rows_per_message,
+            default_topic: default_topic(&args.input),
         }
     }
 }
@@ -70,25 +74,130 @@ pub fn convert_arrow_file(
         .seek(SeekFrom::Start(0))
         .context("failed to rewind Arrow input")?;
 
+    // Open the reader (which validates the Arrow framing and parses the schema)
+    // before touching the output path, so malformed input never clobbers an
+    // existing output file.
+    if is_file_format {
+        let reader = FileReader::try_new(BufReader::new(input), None)
+            .context("failed to open Arrow IPC file")?;
+        let schema = reader.schema();
+        run_conversion(schema, reader, output_path, write_options, opts)
+    } else {
+        let reader = StreamReader::try_new(BufReader::new(input), None)
+            .context("failed to open Arrow IPC stream")?;
+        let schema = reader.schema();
+        run_conversion(schema, reader, output_path, write_options, opts)
+    }
+}
+
+fn run_conversion<I>(
+    source_schema: SchemaRef,
+    batches: I,
+    output_path: &Path,
+    write_options: mcap::WriteOptions,
+    opts: &ArrowConvertOptions,
+) -> Result<()>
+where
+    I: Iterator<Item = std::result::Result<RecordBatch, ArrowError>>,
+{
+    // Resolve everything that can fail from the schema alone before creating the
+    // output file.
+    let hydrated_schema = Arc::new(hydrate_schema(&source_schema)?);
+    let plan = TimePlan::resolve(&hydrated_schema, opts)?;
+    let schema_bytes = encode_schema(&hydrated_schema)?;
+    let topic = opts
+        .topic
+        .clone()
+        .unwrap_or_else(|| opts.default_topic.clone());
+    let schema_name = opts.schema_name.clone().unwrap_or_else(|| topic.clone());
+
     let output = File::create(output_path)
         .with_context(|| format!("failed to open output '{}'", output_path.display()))?;
     let mut writer = write_options
         .create(BufWriter::new(output))
         .context("failed to create MCAP writer")?;
 
-    if is_file_format {
-        let reader = FileReader::try_new(BufReader::new(input), None)
-            .context("failed to open Arrow IPC file")?;
-        let schema = reader.schema();
-        convert_batches(&mut writer, schema, reader, opts, input_path)?;
-    } else {
-        let reader = StreamReader::try_new(BufReader::new(input), None)
-            .context("failed to open Arrow IPC stream")?;
-        let schema = reader.schema();
-        convert_batches(&mut writer, schema, reader, opts, input_path)?;
+    let outcome = write_messages(
+        &mut writer,
+        &hydrated_schema,
+        &schema_bytes,
+        &topic,
+        &schema_name,
+        &plan,
+        batches,
+    )
+    .and_then(|()| writer.finish().context("failed to finalize MCAP writer"));
+    drop(writer);
+
+    if let Err(err) = outcome {
+        // A failure (e.g. a bad timestamp deep in the file) leaves a partial,
+        // never-finalized MCAP; remove it rather than leaving a truncated file.
+        let _ = std::fs::remove_file(output_path);
+        return Err(err);
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn write_messages<W, I>(
+    writer: &mut mcap::Writer<W>,
+    hydrated_schema: &SchemaRef,
+    schema_bytes: &[u8],
+    topic: &str,
+    schema_name: &str,
+    plan: &TimePlan,
+    batches: I,
+) -> Result<()>
+where
+    W: Write + Seek,
+    I: Iterator<Item = std::result::Result<RecordBatch, ArrowError>>,
+{
+    let schema_id = writer
+        .add_schema(schema_name, SCHEMA_ENCODING, schema_bytes)
+        .context("failed to write Arrow schema")?;
+    let channel_id = writer
+        .add_channel(schema_id, topic, MESSAGE_ENCODING, &BTreeMap::new())
+        .context("failed to write Arrow channel")?;
+
+    let rows_per_message = plan.rows_per_message;
+    let mut sequence: u32 = 0;
+
+    for batch in batches {
+        let batch = batch.context("failed to read Arrow record batch")?;
+        let batch = hydrate_batch(&batch, hydrated_schema)?;
+
+        let num_rows = batch.num_rows();
+        let mut start = 0;
+        while start < num_rows {
+            let len = rows_per_message.min(num_rows - start);
+            // All rows in a batch share the message's log_time, so only the
+            // group's first row contributes the message timestamps.
+            let log_time = plan.log_time_at(&batch, start)?;
+            let publish_time = plan.publish_time_at(&batch, start, log_time)?;
+            let slice = batch.slice(start, len);
+            let data = encode_record_batch(&slice)?;
+
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id,
+                        sequence,
+                        log_time,
+                        publish_time,
+                    },
+                    &data,
+                )
+                .context("failed to write converted Arrow message")?;
+
+            ensure!(
+                sequence < u32::MAX,
+                "too many messages to assign monotonic u32 sequence numbers"
+            );
+            sequence += 1;
+            start += len;
+        }
     }
 
-    writer.finish().context("failed to finalize MCAP writer")?;
     Ok(())
 }
 
@@ -107,83 +216,12 @@ fn detect_arrow_file_format(input: &mut File) -> Result<bool> {
     Ok(&magic[..filled] == ARROW_FILE_MAGIC)
 }
 
-fn convert_batches<W, I>(
-    writer: &mut mcap::Writer<W>,
-    source_schema: SchemaRef,
-    batches: I,
-    opts: &ArrowConvertOptions,
-    input_path: &Path,
-) -> Result<()>
-where
-    W: Write + Seek,
-    I: Iterator<Item = std::result::Result<RecordBatch, ArrowError>>,
-{
-    // The spec forbids dictionary-encoded columns so each RecordBatch decodes
-    // independently. Hydrate them away up front and use the hydrated schema for
-    // both the Schema record and every emitted RecordBatch.
-    let hydrated_schema = Arc::new(hydrate_schema(&source_schema)?);
-    let plan = TimePlan::resolve(&hydrated_schema, opts)?;
-
-    let schema_bytes = encode_schema(&hydrated_schema)?;
-    let topic = opts
-        .topic
-        .clone()
-        .unwrap_or_else(|| default_topic(input_path));
-    let schema_name = opts.schema_name.clone().unwrap_or_else(|| topic.clone());
-
-    let schema_id = writer
-        .add_schema(&schema_name, SCHEMA_ENCODING, &schema_bytes)
-        .context("failed to write Arrow schema")?;
-    let channel_id = writer
-        .add_channel(schema_id, &topic, MESSAGE_ENCODING, &BTreeMap::new())
-        .context("failed to write Arrow channel")?;
-
-    let rows_per_message = opts.rows_per_message as usize;
-    let mut sequence: u32 = 0;
-
-    for batch in batches {
-        let batch = batch.context("failed to read Arrow record batch")?;
-        let batch = hydrate_batch(&batch, &hydrated_schema)?;
-
-        let log_times = plan.log_times(&batch)?;
-        let publish_times = plan.publish_times(&batch, &log_times)?;
-
-        let num_rows = batch.num_rows();
-        let mut start = 0;
-        while start < num_rows {
-            let len = rows_per_message.min(num_rows - start);
-            let slice = batch.slice(start, len);
-            let data = encode_record_batch(&slice)?;
-
-            writer
-                .write_to_known_channel(
-                    &mcap::records::MessageHeader {
-                        channel_id,
-                        sequence,
-                        log_time: log_times[start],
-                        publish_time: publish_times[start],
-                    },
-                    &data,
-                )
-                .context("failed to write converted Arrow message")?;
-
-            ensure!(
-                sequence < u32::MAX,
-                "too many messages to assign monotonic u32 sequence numbers"
-            );
-            sequence += 1;
-            start += len;
-        }
-    }
-
-    Ok(())
-}
-
 /// Where each message's log_time / publish_time comes from.
 struct TimePlan {
     log_index: usize,
     publish: PublishSource,
     unit: TimestampUnit,
+    rows_per_message: usize,
 }
 
 enum PublishSource {
@@ -213,20 +251,21 @@ impl TimePlan {
             log_index,
             publish,
             unit: opts.timestamp_unit,
+            rows_per_message: opts.rows_per_message.max(1) as usize,
         })
     }
 
-    fn log_times(&self, batch: &RecordBatch) -> Result<Vec<u64>> {
+    fn log_time_at(&self, batch: &RecordBatch, row: usize) -> Result<u64> {
         let field = batch.schema_ref().field(self.log_index);
-        field_to_nanos(batch.column(self.log_index), self.unit, field.name())
+        value_to_nanos(batch.column(self.log_index), row, self.unit, field.name())
     }
 
-    fn publish_times(&self, batch: &RecordBatch, log_times: &[u64]) -> Result<Vec<u64>> {
+    fn publish_time_at(&self, batch: &RecordBatch, row: usize, log_time: u64) -> Result<u64> {
         match self.publish {
-            PublishSource::SameAsLog => Ok(log_times.to_vec()),
+            PublishSource::SameAsLog => Ok(log_time),
             PublishSource::Column(index) => {
                 let field = batch.schema_ref().field(index);
-                field_to_nanos(batch.column(index), self.unit, field.name())
+                value_to_nanos(batch.column(index), row, self.unit, field.name())
             }
         }
     }
@@ -298,8 +337,13 @@ fn default_topic(input_path: &Path) -> String {
         .to_string()
 }
 
-/// Convert an Arrow time column to MCAP nanosecond timestamps, one per row.
-fn field_to_nanos(array: &dyn Array, unit: TimestampUnit, field_name: &str) -> Result<Vec<u64>> {
+/// Convert a single row of an Arrow time column to an MCAP nanosecond timestamp.
+fn value_to_nanos(
+    array: &dyn Array,
+    row: usize,
+    unit: TimestampUnit,
+    field_name: &str,
+) -> Result<u64> {
     let integer_scale = unit.nanos_per_unit();
 
     macro_rules! scaled {
@@ -308,25 +352,16 @@ fn field_to_nanos(array: &dyn Array, unit: TimestampUnit, field_name: &str) -> R
                 .as_any()
                 .downcast_ref::<$ty>()
                 .expect("array data type checked before downcast");
-            let mut out = Vec::with_capacity(typed.len());
-            for row in 0..typed.len() {
-                ensure!(
-                    !typed.is_null(row),
-                    "field '{field_name}' has a null value at row {row}; cannot determine a \
-                     message time"
-                );
-                out.push(checked_nanos(
-                    typed.value(row) as i128,
-                    $scale,
-                    field_name,
-                    row,
-                )?);
-            }
-            out
+            ensure!(
+                !typed.is_null(row),
+                "field '{field_name}' has a null value at row {row}; cannot determine a \
+                 message time"
+            );
+            checked_nanos(typed.value(row) as i128, $scale, field_name, row)?
         }};
     }
 
-    let values = match array.data_type() {
+    let value = match array.data_type() {
         DataType::Timestamp(TimeUnit::Second, _) => scaled!(TimestampSecondArray, 1_000_000_000),
         DataType::Timestamp(TimeUnit::Millisecond, _) => {
             scaled!(TimestampMillisecondArray, 1_000_000)
@@ -347,7 +382,7 @@ fn field_to_nanos(array: &dyn Array, unit: TimestampUnit, field_name: &str) -> R
             "field '{field_name}' has type {other:?}, which cannot be interpreted as a timestamp"
         ),
     };
-    Ok(values)
+    Ok(value)
 }
 
 fn checked_nanos(value: i128, scale: i128, field_name: &str, row: usize) -> Result<u64> {
@@ -500,6 +535,7 @@ mod tests {
             publish_time_field: None,
             timestamp_unit: TimestampUnit::Ns,
             rows_per_message: 1,
+            default_topic: "fixture".to_string(),
         }
     }
 
@@ -760,6 +796,53 @@ mod tests {
         assert_eq!(messages[0].log_time, 1_000_000_000);
         assert_eq!(messages[1].log_time, 3_000_000_000);
         assert_eq!(decode_batch(&schema_msg, &messages[0].data).num_rows(), 2);
+    }
+
+    #[test]
+    fn rows_per_message_ignores_non_leader_row_times() {
+        // Only the first row of each group sets the message time, so null
+        // values in non-leader rows must not fail the conversion.
+        let batch = batch(vec![(
+            "ts",
+            Arc::new(TimestampSecondArray::from(vec![
+                Some(1),
+                None,
+                Some(3),
+                None,
+            ])) as ArrayRef,
+        )]);
+        let mut opts = default_opts();
+        opts.rows_per_message = 2;
+        let mcap_bytes = convert_bytes(&ipc_file_bytes(&[batch]), "arrow", &opts)
+            .expect("non-leader nulls should not fail conversion");
+        let messages = read_messages(&mcap_bytes);
+        assert_eq!(messages.len(), 2);
+        assert_eq!(messages[0].log_time, 1_000_000_000);
+        assert_eq!(messages[1].log_time, 3_000_000_000);
+    }
+
+    #[test]
+    fn default_topic_uses_original_input_not_materialized_path() {
+        use std::path::PathBuf;
+
+        use crate::cli::{CompressionFormat, ConvertCommand};
+
+        let args = ConvertCommand {
+            input: PathBuf::from("s3://bucket/path/imu.arrow"),
+            output: PathBuf::from("out.mcap"),
+            compression: CompressionFormat::None,
+            chunk_size: 1024,
+            no_crc: true,
+            no_chunks: false,
+            topic: None,
+            schema_name: None,
+            log_time_field: None,
+            publish_time_field: None,
+            timestamp_unit: TimestampUnit::Ns,
+            rows_per_message: 1,
+        };
+        let opts = ArrowConvertOptions::from_command(&args);
+        assert_eq!(opts.default_topic, "imu");
     }
 
     #[test]
