@@ -64,6 +64,7 @@ The following records are allowed to appear in the data section:
 - [Field](#field-op0x10)
 - [Message Fields](#message-fields-op0x11)
 - [Attachment](#attachment-op0x09)
+- [Attachment Fields](#attachment-fields-op0x14)
 - [Chunk](#chunk-op0x06)
 - [Message Index](#message-index-op0x07)
 - [Field Index](#field-index-op0x12)
@@ -179,15 +180,17 @@ A message record encodes a single timestamped message on a channel.
 
 The message encoding and schema must match that of the Channel record corresponding to the message's channel ID.
 
-| Bytes | Name         | Type      | Description                                                                                                                                                                                                                               |
-| ----- | ------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2     | channel_id   | uint16    | Channel ID                                                                                                                                                                                                                                |
-| 4     | sequence     | uint32    | Optional message counter to detect message gaps. If your middleware publisher provides a sequence number you can use that, or you can assign a sequence number in the recorder, or set to zero if this is not relevant for your workflow. |
-| 8     | log_time     | Timestamp | Time at which the message was recorded.                                                                                                                                                                                                   |
-| 8     | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time.                                                                                                                                                   |
-| N     | data         | Bytes     | Message data, to be decoded according to the schema of the channel.                                                                                                                                                                       |
+| Bytes | Name         | Type      | Description                                                                                                                                                                                                                                       |
+| ----- | ------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2     | channel_id   | uint16    | Channel ID                                                                                                                                                                                                                                        |
+| 4     | sequence     | uint32    | Optional message counter to detect message gaps. If your middleware publisher provides a sequence number you can use that, or you can assign a sequence number in the recorder, or set to zero if this is not relevant for your workflow.         |
+| 8     | log_time     | Timestamp | Time at which the message was recorded.                                                                                                                                                                                                           |
+| 8     | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time. The reserved value `0xFFFFFFFFFFFFFFFF` is a [field sentinel](#field-sentinel) indicating that a [Message Fields](#message-fields-op0x11) record follows. |
+| N     | data         | Bytes     | Message data, to be decoded according to the schema of the channel.                                                                                                                                                                               |
 
 A message may carry additional named, typed values (such as extra timestamps or per-message metadata) by following it with a [Message Fields](#message-fields-op0x11) record. The Message record itself is never extended, so readers that predate the Message Fields record continue to read `log_time` and `publish_time` unchanged.
+
+When a Message Fields record is present, the writer MUST set the message's `publish_time` to the [field sentinel](#field-sentinel) `0xFFFFFFFFFFFFFFFF`. The message's true publish time, if any, is then carried as a `publish_time` field within the Message Fields record; if no such field is present, the publish time is unavailable and readers should fall back to `log_time`.
 
 ### Chunk (op=0x06)
 
@@ -245,14 +248,16 @@ Attachment records contain auxiliary artifacts such as text, core dumps, calibra
 
 Attachment records must not appear within a chunk.
 
-| Bytes | Name        | Type                         | Description                                                                                                              |
-| ----- | ----------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 8     | log_time    | Timestamp                    | Time at which the attachment was recorded.                                                                               |
-| 8     | create_time | Timestamp                    | Time at which the attachment was created. If not available, must be set to zero.                                         |
-| 4 + N | name        | String                       | Name of the attachment, e.g "scene1.jpg".                                                                                |
-| 4 + N | media_type  | String                       | [Media type](https://en.wikipedia.org/wiki/Media_type) (e.g "text/plain").                                               |
-| 8 + N | data        | uint64 length-prefixed Bytes | Attachment data.                                                                                                         |
-| 4     | crc         | uint32                       | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed. |
+| Bytes | Name        | Type                         | Description                                                                                                                                                                                                                                       |
+| ----- | ----------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8     | log_time    | Timestamp                    | Time at which the attachment was recorded.                                                                                                                                                                                                        |
+| 8     | create_time | Timestamp                    | Time at which the attachment was created. If not available, must be set to zero. The reserved value `0xFFFFFFFFFFFFFFFF` is a [field sentinel](#field-sentinel) indicating that an [Attachment Fields](#attachment-fields-op0x14) record follows. |
+| 4 + N | name        | String                       | Name of the attachment, e.g "scene1.jpg".                                                                                                                                                                                                         |
+| 4 + N | media_type  | String                       | [Media type](https://en.wikipedia.org/wiki/Media_type) (e.g "text/plain").                                                                                                                                                                        |
+| 8 + N | data        | uint64 length-prefixed Bytes | Attachment data.                                                                                                                                                                                                                                  |
+| 4     | crc         | uint32                       | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed.                                                                                                                          |
+
+An attachment may carry additional named, typed values by following it with an [Attachment Fields](#attachment-fields-op0x14) record. When one is present, the writer MUST set the attachment's `create_time` to the [field sentinel](#field-sentinel) `0xFFFFFFFFFFFFFFFF`; the true create time, if any, is then carried as a `create_time` field within the Attachment Fields record.
 
 ### Metadata (op=0x0C)
 
@@ -354,7 +359,7 @@ Field records may be duplicated in the summary section. A Field record with an i
 
 A Message Fields record provides additional named, typed values for a single [Message](#message-op0x05) record.
 
-It MUST appear immediately after the Message record it annotates, with no intervening records, in the same record stream (the data section or within the same chunk). At most one Message Fields record may be associated with a given Message.
+It MUST appear immediately after the Message record it annotates, with no intervening records, in the same record stream (the data section or within the same chunk), and that Message's `publish_time` MUST be set to the [field sentinel](#field-sentinel). At most one Message Fields record may be associated with a given Message.
 
 > Because this record uses a new opcode, readers that predate it skip it and continue reading the `log_time` and `publish_time` of the preceding Message unchanged. This makes message fields a backward-compatible addition: existing readers and writers are unaffected, and only readers that wish to access the additional values need to be updated. Messages that carry no fields incur no overhead.
 
@@ -372,7 +377,7 @@ Each entry in `fields` is serialized as:
 - **Fixed-width** (`length` high bit clear): exactly `length & 0x7F` bytes, little-endian for numeric encodings.
 - **Variable-length** (`length` high bit set): a `uint32` byte length followed by that many bytes.
 
-A Message Fields record that is not immediately preceded by a Message record, or whose `channel_id` does not match the preceding Message, is invalid and should be ignored by readers.
+A Message Fields record that is not immediately preceded by a Message record (with the [field sentinel](#field-sentinel) set), or whose `channel_id` does not match the preceding Message, is invalid and should be ignored by readers.
 
 ### Field Index (op=0x12)
 
@@ -406,6 +411,27 @@ One Field Chunk Index record exists for every (chunk, indexed field ID) combinat
 | 8     | message_index_length  | uint64                | Total length in bytes of the Field Index records for this field ID after the chunk.                                                                                                              |
 
 > Fields such as `publish_time` are not necessarily monotonic across a recording. When they are not, the `[min_value, max_value]` ranges of adjacent chunks may overlap, reducing the effectiveness of chunk pruning compared to `log_time`.
+
+### Attachment Fields (op=0x14)
+
+An Attachment Fields record provides additional named, typed values for a single [Attachment](#attachment-op0x09) record, using the same [Field](#field-op0x10) declarations as messages.
+
+It MUST appear immediately after the Attachment record it annotates, with no intervening records, and that Attachment's `create_time` MUST be set to the [field sentinel](#field-sentinel). At most one Attachment Fields record may be associated with a given Attachment. Attachment fields are not indexed.
+
+| Bytes | Name   | Type                                                                  | Description                                  |
+| ----- | ------ | --------------------------------------------------------------------- | -------------------------------------------- |
+| 4 + N | fields | Array of field entries (see [Message Fields](#message-fields-op0x11)) | The field values carried by this attachment. |
+
+### Field sentinel
+
+The reserved [Timestamp](#timestamp) value `0xFFFFFFFFFFFFFFFF` (2<sup>64</sup> − 1) is used as a _field sentinel_ in exactly two places: the [Message](#message-op0x05) `publish_time` field and the [Attachment](#attachment-op0x09) `create_time` field. It is never a valid time value in those fields.
+
+A writer MUST set the sentinel whenever (and only when) it writes a [Message Fields](#message-fields-op0x11) or [Attachment Fields](#attachment-fields-op0x14) record for the preceding record. This serves two purposes:
+
+1. **In-band signal.** A reader only needs to look for a following fields record when the sentinel is set, rather than inspecting every record.
+2. **Integrity check.** Existing writers preserve `publish_time`/`create_time` but may drop records with unknown opcodes when round-tripping a file. Therefore, if a reader encounters the sentinel **without** a following fields record, the fields were most likely lost in a round-trip through a writer that predates this feature. Readers SHOULD emit a warning in this case. Conversely, a fields record whose preceding record does not have the sentinel set is invalid.
+
+Readers that predate this feature will interpret the sentinel as a literal timestamp (approximately the year 2554).
 
 ## Serialization
 

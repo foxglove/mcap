@@ -59,6 +59,7 @@ enums:
     0x11: message_fields
     0x12: field_index
     0x13: field_chunk_index
+    0x14: attachment_fields
 
 types:
   magic:
@@ -133,6 +134,7 @@ types:
             opcode::message_fields: message_fields
             opcode::field_index: field_index
             opcode::field_chunk_index: field_chunk_index
+            opcode::attachment_fields: attachment_fields
 
   header:
     seq:
@@ -479,6 +481,15 @@ types:
           Concatenated entries of the form <uint16 field_id><value>. The width of each
           value is determined by the corresponding Field record's `length` and cannot be
           resolved without it, so the entries are not expanded here.
+
+  attachment_fields:
+    seq:
+      - id: len_fields
+        type: u4
+      - id: fields
+        size: len_fields
+        doc: |
+          Concatenated entries of the form <uint16 field_id><value>, as in message_fields.
 
   field_index:
     seq:

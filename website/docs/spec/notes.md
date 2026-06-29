@@ -98,15 +98,19 @@ The feature is composed of four records:
 
 The `encoding`/`length` split means a value is parsed using only its `length` (so unknown encodings remain skippable) and interpreted using its `encoding`. See [field encodings](./registry.md#field-encodings).
 
+### The field sentinel
+
+A Message that has a Message Fields record always has its `publish_time` set to the sentinel `0xFFFFFFFFFFFFFFFF` (and likewise an Attachment with an Attachment Fields record has its `create_time` set to the sentinel). This gives readers an in-band signal — they only look for a following fields record when the sentinel is set — and an integrity check: because existing writers preserve `publish_time`/`create_time` but may drop unknown records, a sentinel with no following fields record indicates the fields were lost in a round-trip and the reader SHOULD warn. See [Field sentinel](./index.md#field-sentinel).
+
 ### Reading fields during a linear scan
 
 While iterating records (in the data section or within a decompressed chunk), a reader pairs each Message with the Message Fields record that immediately follows it:
 
 1. Read a Message record.
-2. Peek at the next record. If it is a Message Fields record whose `channel_id` matches, attach its values to the message just read; otherwise the message has no fields.
-3. Resolve each `field_id` to its name/encoding/length using the Field records seen so far, and parse each value by its `length`.
+2. If its `publish_time` is the sentinel, the next record should be a Message Fields record whose `channel_id` matches; attach its values to the message. If the next record is _not_ a Message Fields record, emit a warning — the fields were likely dropped in a round-trip through an older writer — and treat the publish time as unavailable.
+3. Resolve each `field_id` to its name/encoding/length using the Field records seen so far, parse each value by its `length`, and recover the true publish time from a `publish_time` field if present.
 
-Readers that do not understand opcode `0x11` skip it and observe only `log_time` and `publish_time`.
+Readers that do not understand opcode `0x11` skip it and read the sentinel as a literal `publish_time`.
 
 ### Seeking by a field value
 
@@ -118,6 +122,6 @@ To seek to messages by an indexed field `F` (rather than `log_time`):
 
 ### Writing considerations
 
-- Because association is positional, a Message Fields record MUST be written immediately after its Message, with no records in between, in the same record stream. Tools that copy records through verbatim preserve this pairing; tools that re-emit messages via a message-level API must be updated to carry the fields records along.
+- Because association is positional, a Message Fields record MUST be written immediately after its Message, with no records in between, in the same record stream, and that Message's `publish_time` MUST be set to the sentinel. Tools that copy records through verbatim preserve this pairing; tools that re-emit messages via a message-level API must be updated to carry the fields records along — otherwise the surviving sentinel lets readers detect the loss.
 - Declaring fields per file keeps `merge` operations cheap: messages from channels that do not use a given field simply omit it rather than padding with default values.
 - Attributes that are constant for all messages on a channel should be stored in the channel's `metadata` map rather than repeated per message.
