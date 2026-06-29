@@ -257,3 +257,15 @@ The `ros2` profile describes how to create MCAP files for [ROS 2](https://docs.r
 #### Schema
 
 - `encoding`: MUST be either `ros2msg` or `ros2idl`
+
+## Timestamp names
+
+The [Timestamp Name](./index.md#timestamp-name-op0x10) record assigns a human-readable name to an _auxiliary timestamp_ ID. Auxiliary timestamps let messages carry additional named timestamps (via [Message Auxiliary Timestamps](./index.md#message-auxiliary-timestamps-op0x11) records) beyond the `log_time` and `publish_time` fields built into every [Message](./index.md#message-op0x05) record.
+
+Names are free-form, but the following conventions are recommended for interoperability:
+
+- `publish_time`: Time at which the message was published by the originating node. Prefer this auxiliary timestamp when an indexed, seekable publish time is required, since the built-in `publish_time` field of the Message record is not indexable.
+- `sensor_time`: Time at which the underlying sensor measurement was captured.
+- `receive_time`: Time at which the message was received by the recording node, when distinct from `log_time`.
+
+Like all timestamps in MCAP, auxiliary timestamp values are `uint64` nanoseconds since a user-understood epoch. Unlike `log_time`, auxiliary timestamps are not required to be monotonic; readers seeking by a non-monotonic auxiliary timestamp may need to scan overlapping chunks (see the [Auxiliary Chunk Index](./index.md#auxiliary-chunk-index-op0x13) record).

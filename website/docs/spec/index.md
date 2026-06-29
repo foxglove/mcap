@@ -9,6 +9,7 @@ sidebar_position: 1
 [message_encodings]: ./registry.md#well-known-message-encodings
 [schema_encodings]: ./registry.md#well-known-schema-encodings
 [profiles]: ./registry.md#well-known-profiles
+[timestamp_names]: ./registry.md#timestamp-names
 [feature_explanations]: ./notes.md#feature-explanations
 
 ## Overview
@@ -60,9 +61,12 @@ The following records are allowed to appear in the data section:
 - [Schema](#schema-op0x03)
 - [Channel](#channel-op0x04)
 - [Message](#message-op0x05)
+- [Timestamp Name](#timestamp-name-op0x10)
+- [Message Auxiliary Timestamps](#message-auxiliary-timestamps-op0x11)
 - [Attachment](#attachment-op0x09)
 - [Chunk](#chunk-op0x06)
 - [Message Index](#message-index-op0x07)
+- [Auxiliary Message Index](#auxiliary-message-index-op0x12)
 - [Metadata](#metadata-op0x0c)
 - [Data End](#data-end-op0x0f)
 
@@ -82,7 +86,9 @@ The following records are allowed to appear in the summary section:
 
 - [Schema](#schema-op0x03)
 - [Channel](#channel-op0x04)
+- [Timestamp Name](#timestamp-name-op0x10)
 - [Chunk Index](#chunk-index-op0x08)
+- [Auxiliary Chunk Index](#auxiliary-chunk-index-op0x13)
 - [Attachment Index](#attachment-index-op0x0a)
 - [Metadata Index](#metadata-index-op0x0d)
 - [Statistics](#statistics-op0x0b)
@@ -181,9 +187,11 @@ The message encoding and schema must match that of the Channel record correspond
 | 8     | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time.                                                                                                                                                   |
 | N     | data         | Bytes     | Message data, to be decoded according to the schema of the channel.                                                                                                                                                                       |
 
+A message may carry additional named timestamps beyond `log_time` and `publish_time` by following it with a [Message Auxiliary Timestamps](#message-auxiliary-timestamps-op0x11) record. The Message record itself is never extended, so readers that predate auxiliary timestamp support continue to read `log_time` and `publish_time` unchanged.
+
 ### Chunk (op=0x06)
 
-A Chunk contains a batch of records. Readers should expect Schema, Channel, and Message records to be present in chunks, but future spec changes may include others. Private records may also be included. The batch of records contained in a chunk may be compressed or uncompressed.
+A Chunk contains a batch of records. Readers should expect Schema, Channel, and Message records to be present in chunks, but future spec changes may include others. Chunks may also contain [Timestamp Name](#timestamp-name-op0x10) and [Message Auxiliary Timestamps](#message-auxiliary-timestamps-op0x11) records. Private records may also be included. The batch of records contained in a chunk may be compressed or uncompressed.
 
 All messages in the chunk must reference channels recorded earlier in the file (in a previous chunk, earlier in the current chunk, or earlier in the data section).
 
@@ -293,17 +301,20 @@ A metadata index record contains the location of a metadata record within the fi
 
 A Statistics record contains summary information about the recorded data. The statistics record is optional, but the file should contain at most one.
 
-| Bytes | Name                   | Type                  | Description                                                                                                             |
-| ----- | ---------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| 8     | message_count          | uint64                | Number of Message records in the file.                                                                                  |
-| 2     | schema_count           | uint16                | Number of unique schema IDs in the file, not including zero.                                                            |
-| 4     | channel_count          | uint32                | Number of unique channel IDs in the file.                                                                               |
-| 4     | attachment_count       | uint32                | Number of Attachment records in the file.                                                                               |
-| 4     | metadata_count         | uint32                | Number of Metadata records in the file.                                                                                 |
-| 4     | chunk_count            | uint32                | Number of Chunk records in the file.                                                                                    |
-| 8     | message_start_time     | Timestamp             | Earliest message log_time in the file. Zero if the file has no messages.                                                |
-| 8     | message_end_time       | Timestamp             | Latest message log_time in the file. Zero if the file has no messages.                                                  |
-| 4 + N | channel_message_counts | `Map<uint16, uint64>` | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available. |
+| Bytes | Name                          | Type                                       | Description                                                                                                                                                                              |
+| ----- | ----------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8     | message_count                 | uint64                                     | Number of Message records in the file.                                                                                                                                                   |
+| 2     | schema_count                  | uint16                                     | Number of unique schema IDs in the file, not including zero.                                                                                                                             |
+| 4     | channel_count                 | uint32                                     | Number of unique channel IDs in the file.                                                                                                                                                |
+| 4     | attachment_count              | uint32                                     | Number of Attachment records in the file.                                                                                                                                                |
+| 4     | metadata_count                | uint32                                     | Number of Metadata records in the file.                                                                                                                                                  |
+| 4     | chunk_count                   | uint32                                     | Number of Chunk records in the file.                                                                                                                                                     |
+| 8     | message_start_time            | Timestamp                                  | Earliest message log_time in the file. Zero if the file has no messages.                                                                                                                 |
+| 8     | message_end_time              | Timestamp                                  | Latest message log_time in the file. Zero if the file has no messages.                                                                                                                   |
+| 4 + N | channel_message_counts        | `Map<uint16, uint64>`                      | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available.                                                                  |
+| 4 + N | auxiliary_message_time_bounds | `Map<uint16, Tuple<Timestamp, Timestamp>>` | Optional. Mapping from auxiliary timestamp ID to the (earliest, latest) value of that timestamp across all messages in the file. An empty map indicates this statistic is not available. |
+
+The `auxiliary_message_time_bounds` field is an optional backward-compatible extension appended after `channel_message_counts`. Readers that predate auxiliary timestamp support read the preceding fields and ignore the trailing bytes. Writers that do not record auxiliary timestamps may omit the field entirely.
 
 When using a Statistics record with a non-empty channel_message_counts, the Summary Data section MUST contain a copy of all Channel records. The Channel records MUST occur prior to the statistics record.
 
@@ -318,6 +329,67 @@ A Summary Offset record contains the location of records within the summary sect
 | 1     | group_opcode | uint8  | The opcode of all records in the group.                                  |
 | 8     | group_start  | uint64 | Byte offset from the start of the file of the first record in the group. |
 | 8     | group_length | uint64 | Total byte length of all records in the group.                           |
+
+### Timestamp Name (op=0x10)
+
+A Timestamp Name record registers a human-readable name for an _auxiliary timestamp_. Auxiliary timestamps let messages carry additional named timestamps beyond the `log_time` and `publish_time` fields of the [Message](#message-op0x05) record.
+
+Timestamp Name records are uniquely identified within a file by their timestamp ID. A Timestamp Name record must occur at least once in the file prior to any [Message Auxiliary Timestamps](#message-auxiliary-timestamps-op0x11), [Auxiliary Message Index](#auxiliary-message-index-op0x12), or [Auxiliary Chunk Index](#auxiliary-chunk-index-op0x13) record referring to its ID. Any two Timestamp Name records sharing a common ID must be identical.
+
+| Bytes | Name | Type   | Description                                                                                                                     |
+| ----- | ---- | ------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| 2     | id   | uint16 | A unique identifier for this auxiliary timestamp within the file. Must not be zero.                                             |
+| 4 + N | name | String | A human-readable name for the timestamp, e.g. `publish_time`, `sensor_time`. See [well-known timestamp names][timestamp_names]. |
+
+Timestamp Name records may be duplicated in the summary section. A Timestamp Name record with an id of zero is invalid and should be ignored by readers. Readers that do not support auxiliary timestamps will skip this record.
+
+### Message Auxiliary Timestamps (op=0x11)
+
+A Message Auxiliary Timestamps record provides additional named timestamps for a single [Message](#message-op0x05) record.
+
+It MUST appear immediately after the Message record it annotates, with no intervening records, in the same record stream (the data section or within the same chunk). At most one Message Auxiliary Timestamps record may be associated with a given Message.
+
+> Because this record uses a new opcode, readers that predate auxiliary timestamp support skip it and continue reading the `log_time` and `publish_time` of the preceding Message unchanged. This makes auxiliary timestamps a backward-compatible addition: existing readers and writers are unaffected, and only readers that wish to access the additional timestamps need to be updated.
+
+| Bytes | Name       | Type                              | Description                                                                                                                                                 |
+| ----- | ---------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2     | channel_id | uint16                            | Channel ID. Must match the `channel_id` of the immediately preceding Message record.                                                                        |
+| 4 + N | timestamps | `Array<Tuple<uint16, Timestamp>>` | Array of (timestamp ID, value) pairs. Each timestamp ID must be registered by a Timestamp Name record and must not appear more than once within the record. |
+
+A Message Auxiliary Timestamps record that is not immediately preceded by a Message record, or whose `channel_id` does not match the preceding Message, is invalid and should be ignored by readers.
+
+### Auxiliary Message Index (op=0x12)
+
+An Auxiliary Message Index record allows readers to locate individual Message records within a chunk by an auxiliary timestamp, analogous to the [Message Index](#message-index-op0x07) record for `log_time`.
+
+A sequence of Auxiliary Message Index records may occur immediately after a chunk, interleaved with that chunk's Message Index records. At most one Auxiliary Message Index record exists per (channel, timestamp ID) combination for which messages in the chunk carry that auxiliary timestamp.
+
+| Bytes | Name         | Type                              | Description                                                                                                                                            |
+| ----- | ------------ | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2     | channel_id   | uint16                            | Channel ID.                                                                                                                                            |
+| 2     | timestamp_id | uint16                            | The auxiliary timestamp ID being indexed. Must be registered by a Timestamp Name record.                                                               |
+| 4 + N | records      | `Array<Tuple<Timestamp, uint64>>` | Array of (auxiliary timestamp value, offset) pairs. Offset is the position of the Message record relative to the start of the uncompressed chunk data. |
+
+After seeking to a Message via its offset, the message's auxiliary timestamps can be read from the Message Auxiliary Timestamps record that immediately follows it.
+
+Messages outside of chunks cannot be indexed.
+
+### Auxiliary Chunk Index (op=0x13)
+
+An Auxiliary Chunk Index record describes the range of an auxiliary timestamp within a chunk and locates that chunk's Auxiliary Message Index records, analogous to the [Chunk Index](#chunk-index-op0x08) record for `log_time`. Readers use it to prune chunks when seeking by an auxiliary timestamp.
+
+One Auxiliary Chunk Index record exists for every (chunk, auxiliary timestamp ID) combination that is indexed.
+
+| Bytes | Name                  | Type                  | Description                                                                                                                                                                                                   |
+| ----- | --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2     | timestamp_id          | uint16                | The auxiliary timestamp ID. Must be registered by a Timestamp Name record.                                                                                                                                    |
+| 8     | chunk_start_offset    | uint64                | Offset to the Chunk record from the start of the file. Matches the `chunk_start_offset` of the corresponding [Chunk Index](#chunk-index-op0x08) record.                                                       |
+| 8     | min_time              | Timestamp             | Earliest value of this auxiliary timestamp among messages in the chunk. Zero if no messages in the chunk carry it.                                                                                            |
+| 8     | max_time              | Timestamp             | Latest value of this auxiliary timestamp among messages in the chunk. Zero if no messages in the chunk carry it.                                                                                              |
+| 4 + N | message_index_offsets | `Map<uint16, uint64>` | Mapping from channel ID to the offset of the Auxiliary Message Index record for this timestamp ID and channel, from the start of the file. An empty map indicates no auxiliary message indexing is available. |
+| 8     | message_index_length  | uint64                | Total length in bytes of the Auxiliary Message Index records for this timestamp ID after the chunk.                                                                                                           |
+
+> Auxiliary timestamps such as `publish_time` are not necessarily monotonic across a recording. When they are not, the `[min_time, max_time]` ranges of adjacent chunks may overlap, reducing the effectiveness of chunk pruning compared to `log_time`.
 
 ## Serialization
 

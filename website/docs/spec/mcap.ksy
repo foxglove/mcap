@@ -55,6 +55,10 @@ enums:
     0x0d: metadata_index
     0x0e: summary_offset
     0x0f: data_end
+    0x10: timestamp_name
+    0x11: message_auxiliary_timestamps
+    0x12: auxiliary_message_index
+    0x13: auxiliary_chunk_index
 
 types:
   magic:
@@ -125,6 +129,10 @@ types:
             opcode::metadata_index: metadata_index
             opcode::summary_offset: summary_offset
             opcode::data_end: data_end
+            opcode::timestamp_name: timestamp_name
+            opcode::message_auxiliary_timestamps: message_auxiliary_timestamps
+            opcode::auxiliary_message_index: auxiliary_message_index
+            opcode::auxiliary_chunk_index: auxiliary_chunk_index
 
   header:
     seq:
@@ -441,3 +449,92 @@ types:
         doc: |
           CRC-32 of all bytes in the data section. A value of 0 indicates the CRC-32 is not
           available.
+
+  timestamp_name:
+    seq:
+      - id: id
+        type: u2
+      - id: name
+        type: prefixed_str
+
+  message_auxiliary_timestamps:
+    seq:
+      - id: channel_id
+        type: u2
+      - id: len_timestamps
+        type: u4
+      - id: timestamps
+        size: len_timestamps
+        type: auxiliary_timestamp_entries
+    types:
+      auxiliary_timestamp_entry:
+        seq:
+          - id: timestamp_id
+            type: u2
+          - id: time
+            type: u8
+      auxiliary_timestamp_entries:
+        seq:
+          - id: entries
+            type: auxiliary_timestamp_entry
+            repeat: eos
+
+  auxiliary_message_index:
+    seq:
+      - id: channel_id
+        type: u2
+      - id: timestamp_id
+        type: u2
+      - id: len_records
+        type: u4
+      - id: records
+        size: len_records
+        type: auxiliary_message_index_entries
+    types:
+      auxiliary_message_index_entry:
+        seq:
+          - id: time
+            type: u8
+          - id: offset
+            type: u8
+      auxiliary_message_index_entries:
+        seq:
+          - id: entries
+            type: auxiliary_message_index_entry
+            repeat: eos
+
+  auxiliary_chunk_index:
+    seq:
+      - id: timestamp_id
+        type: u2
+      - id: ofs_chunk
+        -orig-id: chunk_start_offset
+        type: u8
+      - id: min_time
+        type: u8
+      - id: max_time
+        type: u8
+      - id: len_message_index_offsets
+        type: u4
+      - id: message_index_offsets
+        size: len_message_index_offsets
+        type: message_index_offsets
+      - id: message_index_length
+        type: u8
+    instances:
+      chunk:
+        io: _root._io
+        pos: ofs_chunk
+        type: record
+    types:
+      message_index_offset:
+        seq:
+          - id: channel_id
+            type: u2
+          - id: offset
+            type: u8
+      message_index_offsets:
+        seq:
+          - id: entries
+            type: message_index_offset
+            repeat: eos
