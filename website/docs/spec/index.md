@@ -319,7 +319,7 @@ A Statistics record contains summary information about the recorded data. The st
 | 4 + N | channel_message_counts | `Map<uint16, uint64>`                | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available.                                                                                                                                               |
 | 4 + N | field_value_bounds     | `Map<uint16, Tuple<uint64, uint64>>` | Optional. Mapping from indexed field ID to the (minimum, maximum) value of that field across all messages in the file. Each bound is the field's 8-byte value, interpreted according to the field's encoding. An empty map indicates this statistic is not available. |
 
-The `field_value_bounds` field is an optional backward-compatible extension appended after `channel_message_counts`. Readers that predate the Field record read the preceding fields and ignore the trailing bytes. Writers that do not record indexed fields may omit the field entirely. Only fields with a fixed-width 64-bit encoding may appear here (see [Field](#field-op0x10)).
+The `field_value_bounds` field is an optional backward-compatible extension appended after `channel_message_counts`. Readers that predate the Field record read the preceding fields and ignore the trailing bytes. Writers that do not index any fields may omit the field entirely. Only fields with a fixed-width 64-bit orderable encoding may appear here (see [Field](#field-op0x10)).
 
 When using a Statistics record with a non-empty channel_message_counts, the Summary Data section MUST contain a copy of all Channel records. The Channel records MUST occur prior to the statistics record.
 
@@ -347,11 +347,10 @@ Fields are uniquely identified within a file by their field ID. A Field record m
 | 4 + N | name     | String | A human-readable name for the field, e.g. `publish_time`, `sensor_time`, `attachment`.                                                                             |
 | 4 + N | encoding | String | The value encoding. One of the [well-known field encodings][field_encodings] (e.g. `timestamp`, `uint32`, `float64`, `string`, `bytes`).                           |
 | 1     | length   | uint8  | The wire length of the value. If the high bit (`0x80`) is set, the value is variable-length (see below); otherwise the low 7 bits are a fixed byte length (0–127). |
-| 1     | flags    | uint8  | Bit flags. Bit 0 (`0x01`) set indicates the field is _indexed_ (see [Field Index](#field-index-op0x12)). All other bits are reserved and must be zero.             |
 
 The `length` byte is the physical descriptor used to parse a value; the `encoding` is the logical descriptor used to interpret it. A reader can therefore skip a field whose `encoding` it does not recognize, as long as it has the Field record (which gives the length). For well-known encodings, `length` must be consistent with the encoding (e.g. `timestamp` and `uint64` must use `length = 8`).
 
-The `indexed` flag may only be set for fixed-width 64-bit orderable encodings (`timestamp`, `uint64`, `int64`, `float64`); i.e. `length` must equal 8.
+A field may be _indexed_ for fast seeking by writing [Field Index](#field-index-op0x12) and [Field Chunk Index](#field-chunk-index-op0x13) records for it, exactly as `log_time` is indexed by [Message Index](#message-index-op0x07) and [Chunk Index](#chunk-index-op0x08) records. There is no flag in the Field record itself: as with `log_time`, a field is indexed if and only if those index records are present. Indexing is therefore an optional, per-field choice made by the writer. Only fields with a fixed-width 64-bit orderable encoding (`timestamp`, `uint64`, `int64`, `float64`; i.e. `length == 8`) may be indexed.
 
 Field records may be duplicated in the summary section. A Field record with an id of zero is invalid and should be ignored by readers. Readers that do not support fields will skip this record.
 
@@ -383,12 +382,12 @@ A Message Fields record that is not immediately preceded by a Message record (wi
 
 A Field Index record allows readers to locate individual Message records within a chunk by the value of an indexed field, analogous to the [Message Index](#message-index-op0x07) record for `log_time`.
 
-A sequence of Field Index records may occur immediately after a chunk, interleaved with that chunk's Message Index records. At most one Field Index record exists per (channel, field ID) combination for which messages in the chunk carry that field. Only fields whose Field record has the `indexed` flag set are indexed.
+A sequence of Field Index records may occur immediately after a chunk, interleaved with that chunk's Message Index records. At most one Field Index record exists per (channel, field ID) combination for which messages in the chunk carry that field. A field is indexed if and only if these records are present; only fields with a fixed-width 64-bit orderable encoding may be indexed.
 
 | Bytes | Name       | Type                           | Description                                                                                                                                                                                                   |
 | ----- | ---------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 2     | channel_id | uint16                         | Channel ID.                                                                                                                                                                                                   |
-| 2     | field_id   | uint16                         | The field ID being indexed. Must be registered by a Field record with the `indexed` flag set.                                                                                                                 |
+| 2     | field_id   | uint16                         | The field ID being indexed. Must be registered by a Field record with a fixed-width 64-bit orderable encoding.                                                                                                |
 | 4 + N | records    | `Array<Tuple<uint64, uint64>>` | Array of (field value, offset) pairs. The value is the field's 8-byte value, interpreted per its encoding. Offset is the position of the Message record relative to the start of the uncompressed chunk data. |
 
 After seeking to a Message via its offset, the message's fields can be read from the Message Fields record that immediately follows it.
@@ -403,7 +402,7 @@ One Field Chunk Index record exists for every (chunk, indexed field ID) combinat
 
 | Bytes | Name                  | Type                  | Description                                                                                                                                                                                      |
 | ----- | --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 2     | field_id              | uint16                | The indexed field ID. Must be registered by a Field record with the `indexed` flag set.                                                                                                          |
+| 2     | field_id              | uint16                | The indexed field ID. Must be registered by a Field record with a fixed-width 64-bit orderable encoding.                                                                                         |
 | 8     | chunk_start_offset    | uint64                | Offset to the Chunk record from the start of the file. Matches the `chunk_start_offset` of the corresponding [Chunk Index](#chunk-index-op0x08) record.                                          |
 | 8     | min_value             | uint64                | Minimum value of this field among messages in the chunk, interpreted per its encoding. Zero if no messages in the chunk carry it.                                                                |
 | 8     | max_value             | uint64                | Maximum value of this field among messages in the chunk, interpreted per its encoding. Zero if no messages in the chunk carry it.                                                                |

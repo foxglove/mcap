@@ -92,7 +92,7 @@ The feature is fully backward compatible: it is built entirely from records with
 
 The feature is composed of four records:
 
-- [Field](./index.md#field-op0x10) declares, file-globally, a `uint16` ID, a `name`, an `encoding` (logical type), a `length` (physical wire width), and flags (including `indexed`). It is written like a Schema or Channel record (before first use, and optionally duplicated in the summary).
+- [Field](./index.md#field-op0x10) declares, file-globally, a `uint16` ID, a `name`, an `encoding` (logical type), and a `length` (physical wire width). It is written like a Schema or Channel record (before first use, and optionally duplicated in the summary).
 - [Message Fields](./index.md#message-fields-op0x11) carries the `(field_id, value)` pairs for one message and is written **immediately after** that message.
 - [Field Index](./index.md#field-index-op0x12) and [Field Chunk Index](./index.md#field-chunk-index-op0x13) mirror the standard Message Index and Chunk Index, but key on an indexed field's value instead of `log_time`, so a reader can seek and prune by it.
 

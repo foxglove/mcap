@@ -278,13 +278,13 @@ A field's `encoding` (logical type) is paired with its `length` (physical wire w
 
 This list is intentionally limited to scalars; composite/structured data belongs in the message payload (described by the channel's schema), not in fields. Additional encodings may be registered here in the future. Because the `length` byte fully describes the wire width, readers can always skip a field whose `encoding` they do not recognize.
 
-Only fixed-width 64-bit orderable encodings (`timestamp`, `uint64`, `int64`, `float64`) may set the `indexed` flag and be used with [Field Index](./index.md#field-index-op0x12) and [Field Chunk Index](./index.md#field-chunk-index-op0x13) records.
+Only fixed-width 64-bit orderable encodings (`timestamp`, `uint64`, `int64`, `float64`) may be indexed (i.e. used with [Field Index](./index.md#field-index-op0x12) and [Field Chunk Index](./index.md#field-chunk-index-op0x13) records). As with `log_time`, a field is indexed if and only if those records are present; indexing is an optional, per-field choice made by the writer.
 
 ### Recommended field names
 
 Names are free-form, but the following conventions are recommended for interoperability:
 
-- `publish_time` (`timestamp`, indexed): Time at which the message was published by the originating node. Prefer this field when an indexed, seekable publish time is required, since the built-in `publish_time` field of the Message record is not indexable.
+- `publish_time` (`timestamp`): Time at which the message was published by the originating node. Prefer this field, with index records written, when a seekable publish time is required, since the built-in `publish_time` field of the Message record is not indexable.
 - `sensor_time` (`timestamp`): Time at which the underlying sensor measurement was captured.
 
 Unlike `log_time`, field timestamps are not required to be monotonic; readers seeking by a non-monotonic field may need to scan overlapping chunks (see the [Field Chunk Index](./index.md#field-chunk-index-op0x13) record).

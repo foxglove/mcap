@@ -465,9 +465,8 @@ types:
         doc: |
           High bit (0x80) set indicates a variable-length value (uint32 length prefix in
           each Message Fields entry). Otherwise the low 7 bits are the fixed byte length.
-      - id: flags
-        type: u1
-        doc: Bit 0 (0x01) set indicates the field is indexed.
+          A field is indexed (via Field Index / Field Chunk Index records) if and only if
+          those records are present; there is no flag in this record.
 
   message_fields:
     seq:
