@@ -1357,4 +1357,89 @@ describe("McapIndexedReader", () => {
     const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
     await expect(collect(reader.readMessages())).resolves.toEqual([message1, message2]);
   });
+
+  describe("readMessageTimestamps", () => {
+    async function writeTwoTopicFile(): Promise<TempBuffer> {
+      const tempBuffer = new TempBuffer();
+      const writer = new McapWriter({ writable: tempBuffer });
+      await writer.start({ library: "", profile: "" });
+      const channelA = await writer.registerChannel({
+        topic: "a",
+        schemaId: 0,
+        messageEncoding: "json",
+        metadata: new Map(),
+      });
+      const channelB = await writer.registerChannel({
+        topic: "b",
+        schemaId: 0,
+        messageEncoding: "json",
+        metadata: new Map(),
+      });
+      for (const logTime of [10n, 20n, 30n, 40n]) {
+        await writer.addMessage({
+          channelId: channelA,
+          sequence: 0,
+          logTime,
+          publishTime: logTime,
+          data: new Uint8Array(),
+        });
+      }
+      for (const logTime of [15n, 25n]) {
+        await writer.addMessage({
+          channelId: channelB,
+          sequence: 0,
+          logTime,
+          publishTime: logTime,
+          data: new Uint8Array(),
+        });
+      }
+      await writer.end();
+      return tempBuffer;
+    }
+
+    it("yields all message log times in merged time order", async () => {
+      const reader = await McapIndexedReader.Initialize({ readable: await writeTwoTopicFile() });
+      await expect(collect(reader.readMessageTimestamps())).resolves.toEqual([
+        10n,
+        15n,
+        20n,
+        25n,
+        30n,
+        40n,
+      ]);
+    });
+
+    it("filters by topic", async () => {
+      const reader = await McapIndexedReader.Initialize({ readable: await writeTwoTopicFile() });
+      await expect(collect(reader.readMessageTimestamps({ topics: ["a"] }))).resolves.toEqual([
+        10n,
+        20n,
+        30n,
+        40n,
+      ]);
+      await expect(collect(reader.readMessageTimestamps({ topics: ["b"] }))).resolves.toEqual([
+        15n,
+        25n,
+      ]);
+    });
+
+    it("filters by time range", async () => {
+      const reader = await McapIndexedReader.Initialize({ readable: await writeTwoTopicFile() });
+      await expect(
+        collect(reader.readMessageTimestamps({ startTime: 15n, endTime: 30n })),
+      ).resolves.toEqual([15n, 20n, 25n, 30n]);
+    });
+
+    it("yields log times in reverse time order", async () => {
+      const reader = await McapIndexedReader.Initialize({ readable: await writeTwoTopicFile() });
+      await expect(collect(reader.readMessageTimestamps({ reverse: true }))).resolves.toEqual([
+        40n,
+        30n,
+        25n,
+        20n,
+        15n,
+        10n,
+      ]);
+    });
+  });
 });

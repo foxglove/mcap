@@ -480,6 +480,90 @@ export class McapIndexedReader {
     }
   }
 
+  /**
+   * Like {@link readMessages}, but only reads message indexes (never chunk payloads) and yields the
+   * log time of each message in merged time order. This makes it cheap to build a per-topic
+   * timestamp index without decoding message bodies.
+   */
+  async *readMessageTimestamps(
+    args: {
+      topics?: readonly string[];
+      startTime?: bigint;
+      endTime?: bigint;
+      reverse?: boolean;
+    } = {},
+  ): AsyncGenerator<bigint, void, void> {
+    const {
+      topics,
+      startTime = this.#messageStartTime,
+      endTime = this.#messageEndTime,
+      reverse = false,
+    } = args;
+
+    if (startTime == undefined || endTime == undefined) {
+      return;
+    }
+
+    let relevantChannels: Set<number> | undefined;
+    if (topics) {
+      relevantChannels = new Set();
+      for (const channel of this.channelsById.values()) {
+        if (topics.includes(channel.topic)) {
+          relevantChannels.add(channel.id);
+        }
+      }
+    }
+
+    const chunkCursors = new Heap<ChunkCursor>((a, b) => a.compare(b));
+    let chunksOrdered = true;
+    let prevChunkEndTime: bigint | undefined;
+    const readFullMessageIndexRange = this.#messageIndexReadable !== this.#readable;
+    for (const chunkIndex of this.chunkIndexes) {
+      if (chunkIndex.messageStartTime <= endTime && chunkIndex.messageEndTime >= startTime) {
+        chunkCursors.push(
+          new ChunkCursor({
+            chunkIndex,
+            relevantChannels,
+            startTime,
+            endTime,
+            reverse,
+            readFullMessageIndexRange,
+          }),
+        );
+        if (chunksOrdered && prevChunkEndTime != undefined) {
+          chunksOrdered = chunkIndex.messageStartTime >= prevChunkEndTime;
+        }
+        prevChunkEndTime = chunkIndex.messageEndTime;
+      }
+    }
+
+    for (let cursor; (cursor = chunkCursors.peek()); ) {
+      if (!cursor.hasMessageIndexes()) {
+        // Load message indexes on demand and re-sort the heap, just like readMessages — but we
+        // never load or decode the chunk data itself.
+        await cursor.loadMessageIndexes(this.#messageIndexReadable);
+        if (cursor.hasMoreMessages()) {
+          chunkCursors.replace(cursor);
+        } else {
+          chunkCursors.pop();
+        }
+        continue;
+      }
+
+      const [logTime] = cursor.popMessage();
+      yield logTime;
+
+      if (cursor.hasMoreMessages()) {
+        // No need to reorganize the heap when chunks are ordered and non-overlapping.
+        if (!chunksOrdered) {
+          chunkCursors.replace(cursor);
+        }
+      } else {
+        chunkCursors.pop();
+      }
+    }
+  }
+
   async *readMetadata(
     args: {
       name?: string;
