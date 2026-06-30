@@ -1441,5 +1441,60 @@ describe("McapIndexedReader", () => {
         10n,
       ]);
     });
+
+    it("merges across out-of-order and overlapping chunks", async () => {
+      const channel: TypedMcapRecord = {
+        type: "Channel",
+        id: 1,
+        schemaId: 0,
+        topic: "a",
+        messageEncoding: "utf12",
+        metadata: new Map(),
+      };
+      const makeMessage = (logTime: bigint): TypedMcapRecords["Message"] => ({
+        type: "Message",
+        channelId: channel.id,
+        sequence: 0,
+        logTime,
+        publishTime: 0n,
+        data: new Uint8Array(),
+      });
+
+      // Two chunks with overlapping time ranges (1-4 and 2-3), written out of order, so the heap
+      // must interleave them rather than drain one chunk at a time.
+      const chunk1 = new ChunkBuilder({ useMessageIndex: true });
+      chunk1.addChannel(channel);
+      chunk1.addMessage(makeMessage(4n));
+      chunk1.addMessage(makeMessage(1n));
+
+      const chunk2 = new ChunkBuilder({ useMessageIndex: true });
+      chunk2.addChannel(channel);
+      chunk2.addMessage(makeMessage(3n));
+      chunk2.addMessage(makeMessage(2n));
+
+      const builder = new McapRecordBuilder();
+      builder.writeMagic();
+      builder.writeHeader({ profile: "", library: "" });
+      const chunkIndexes = [
+        writeChunkWithMessageIndexes(builder, chunk1),
+        writeChunkWithMessageIndexes(builder, chunk2),
+      ];
+      builder.writeDataEnd({ dataSectionCrc: 0 });
+      const summaryStart = BigInt(builder.length);
+      for (const index of chunkIndexes) {
+        builder.writeChunkIndex(index);
+      }
+      builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+      builder.writeMagic();
+
+      const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
+      await expect(collect(reader.readMessageTimestamps())).resolves.toEqual([1n, 2n, 3n, 4n]);
+      await expect(collect(reader.readMessageTimestamps({ reverse: true }))).resolves.toEqual([
+        4n,
+        3n,
+        2n,
+        1n,
+      ]);
+    });
   });
 });
