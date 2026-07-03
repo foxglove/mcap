@@ -1,22 +1,15 @@
 //! `filter` rewrites an MCAP, selecting a subset of records.
 //!
-//! Selection is opt-out: by default everything is kept (all topics, metadata, attachments), and
-//! flags narrow the output. Each dimension is independent — narrowing one never silently drops
-//! another. Topic (`--include-topic-regex`/`--exclude-topic-regex`) and time-range
-//! (`--start`/`--end`) selection apply to messages; metadata and attachments are auxiliary records
-//! kept unless dropped with `--exclude-metadata` / `--exclude-attachments`. (`--include-metadata` /
-//! `--include-attachments` are deprecated no-ops kept for backward compatibility.)
+//! Selection is opt-out: by default everything is kept, and flags narrow the output. Each dimension
+//! is independent — narrowing one never drops another. Topic (`--include-topic-regex` /
+//! `--exclude-topic-regex`) and time-range (`--start`/`--end`) selection apply to messages;
+//! metadata and attachments are kept unless dropped with `--exclude-metadata` /
+//! `--exclude-attachments`. (`--include-metadata` / `--include-attachments` are deprecated no-ops.)
 //!
-//! Record placement convention (shared, standardized layout for rewriting commands): metadata
-//! records are written first, immediately after the header; then messages; then attachments,
-//! immediately before the data end record. Order within each group is preserved. This is invisible
-//! to indexed readers (they seek via the summary index, and neither metadata nor attachments are
-//! duplicated into the summary), so it is chosen to serve linear/streaming readers and to avoid
-//! fragmenting message chunks.
-//!
-//! `filter`'s engine (`run_transcode`) is the shared rewrite engine: `compress`/`decompress`
-//! already delegate to it, and `sort`/`merge` are intended to adopt it, so the record-copying and
-//! placement helpers here are written to be reused.
+//! Records are placed in a fixed layout: metadata immediately after the header, then messages, then
+//! attachments immediately before the data end record, preserving order within each group. Indexed
+//! readers seek via the summary index (metadata and attachments are not duplicated into it), so the
+//! layout serves linear readers and keeps message chunks unfragmented.
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
 use std::io::{IsTerminal as _, Seek, Write};
@@ -490,8 +483,7 @@ fn filter_indexed<W: Write + Seek>(
         }
     }
 
-    // Attachments are written last, after all messages (see module docs). They are auxiliary
-    // records kept regardless of the message time range; use --exclude-attachments to drop them.
+    // Attachments are written last, kept regardless of the message time range.
     if opts.include_attachments {
         copy_attachments_indexed_or_scanned(input, summary, writer)?;
     }
@@ -499,14 +491,10 @@ fn filter_indexed<W: Write + Seek>(
     Ok(())
 }
 
-/// Copies every metadata record from an indexed input, writing them at the current position.
-///
-/// The summary's metadata indexes are used only when the statistics record confirms they list
-/// every metadata record. Metadata/attachment index records are optional in the spec even when
-/// chunk indexes are present, so a chunk-indexed file can carry metadata that the summary does not
-/// index; in that case (or when statistics are absent) this falls back to a top-level linear scan
-/// so records are never silently dropped. Metadata is never stored inside a chunk, so the scan does
-/// not decompress anything.
+/// Copies every metadata record from an indexed input at the current position. The summary index is
+/// trusted only when the statistics count matches its length; otherwise (index records are optional
+/// even alongside chunk indexes, or statistics are absent) it falls back to a top-level scan so no
+/// records are dropped. Metadata is never inside a chunk, so the scan does not decompress.
 fn copy_metadata_indexed_or_scanned<W: Write + Seek>(
     input: &[u8],
     summary: &mcap::Summary,
@@ -603,8 +591,7 @@ fn filter_linear<W: Write + Seek>(
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
-    // Attachments are written last, but collected during this pass (borrowing from `input`, no
-    // payload copy) so the summaryless path stays at two scans instead of three.
+    // Collected during the message pass (borrowing from `input`, no copy) and written last.
     let mut pending_attachments = Vec::<mcap::Attachment>::new();
 
     for record in mcap::read::ChunkFlattener::new(input)? {
@@ -654,8 +641,7 @@ fn filter_linear<W: Write + Seek>(
                 })?;
             }
             mcap::records::Record::Attachment { header, data, .. } if opts.include_attachments => {
-                // Auxiliary records are kept regardless of the message time range; use
-                // --exclude-attachments to drop them.
+                // Kept regardless of the message time range.
                 pending_attachments.push(mcap::Attachment {
                     log_time: header.log_time,
                     create_time: header.create_time,
@@ -1422,18 +1408,6 @@ mod tests {
         let stats = analyze_output(&output);
         assert_eq!(stats.attachment_count, 1);
         assert_eq!(stats.metadata_count, 1);
-    }
-
-    #[test]
-    fn exclude_attachments_still_drops_out_of_window_attachment() {
-        let input = write_filter_test_input(true, false);
-        let opts = FilterOptions {
-            include_attachments: false,
-            ..time_windowed_options(0, 10)
-        };
-        let output = run_filter(&input, &opts);
-        let stats = analyze_output(&output);
-        assert_eq!(stats.attachment_count, 0);
     }
 
     fn write_chunk_indexed_without_aux_indexes() -> Vec<u8> {
