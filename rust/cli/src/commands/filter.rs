@@ -992,6 +992,9 @@ mod tests {
         assert_eq!(stats.topic_counts["camera_a"], 10);
         assert_eq!(stats.topic_counts["camera_b"], 10);
         assert!(!stats.topic_counts.contains_key("radar_a"));
+        // --exclude-metadata / --exclude-attachments drop those records from the output.
+        assert_eq!(stats.metadata_count, 0);
+        assert_eq!(stats.attachment_count, 0);
     }
 
     #[test]
