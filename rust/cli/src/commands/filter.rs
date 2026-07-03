@@ -879,6 +879,115 @@ mod tests {
         stats
     }
 
+    fn include_all_options() -> FilterOptions {
+        FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: true,
+            include_attachments: true,
+            compression: Some(mcap::Compression::Zstd),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        }
+    }
+
+    fn time_windowed_options(start: u64, end: u64) -> FilterOptions {
+        FilterOptions {
+            start,
+            end,
+            ..include_all_options()
+        }
+    }
+
+    /// Builds a chunk-indexed file whose summary omits metadata/attachment index records — a
+    /// spec-legal shape our own writer avoids but other writers may produce.
+    fn write_chunk_indexed_without_aux_indexes() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_metadata_indexes(false)
+                .emit_attachment_indexes(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id: channel,
+                        sequence: 0,
+                        log_time: 0,
+                        publish_time: 0,
+                    },
+                    b"a",
+                )
+                .expect("write message");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 5,
+                    create_time: 5,
+                    name: "a.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: std::borrow::Cow::Borrowed(&[1, 2, 3]),
+                })
+                .expect("attachment");
+            writer
+                .write_metadata(&mcap::records::Metadata {
+                    name: "m".to_string(),
+                    metadata: BTreeMap::new(),
+                })
+                .expect("metadata");
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    /// Collects the opcodes of the top-level records in `bytes`, in file order.
+    fn top_level_opcodes(bytes: &[u8]) -> Vec<u8> {
+        mcap::read::LinearReader::new(bytes)
+            .expect("linear reader")
+            .map(|record| record.expect("record").opcode())
+            .collect()
+    }
+
+    /// Asserts the standardized data-section layout: a metadata record precedes the first message
+    /// chunk, and an attachment record follows the chunks but stays within the data section.
+    fn assert_standard_placement(output: &[u8]) {
+        use mcap::records::op;
+        let opcodes = top_level_opcodes(output);
+        let position = |target: u8| {
+            opcodes
+                .iter()
+                .position(|&opcode| opcode == target)
+                .unwrap_or_else(|| panic!("expected a record with opcode {target:#04x}"))
+        };
+        let metadata = position(op::METADATA);
+        let first_chunk = position(op::CHUNK);
+        let attachment = position(op::ATTACHMENT);
+        let data_end = position(op::DATA_END);
+        assert!(
+            metadata < first_chunk,
+            "metadata should be written before the first message chunk"
+        );
+        assert!(
+            first_chunk < attachment,
+            "attachments should be written after the message chunks"
+        );
+        assert!(
+            attachment < data_end,
+            "attachments should be written inside the data section"
+        );
+    }
+
     #[test]
     fn build_filter_options_rejects_include_exclude_conflict() {
         let mut args = default_filter_command();
@@ -1332,67 +1441,6 @@ mod tests {
         assert!(!opts.include_attachments);
     }
 
-    /// Collects the opcodes of the top-level records in `bytes`, in file order.
-    fn top_level_opcodes(bytes: &[u8]) -> Vec<u8> {
-        mcap::read::LinearReader::new(bytes)
-            .expect("linear reader")
-            .map(|record| record.expect("record").opcode())
-            .collect()
-    }
-
-    /// Asserts the standardized data-section layout: a metadata record precedes the first message
-    /// chunk, and an attachment record follows the chunks but stays within the data section.
-    fn assert_standard_placement(output: &[u8]) {
-        use mcap::records::op;
-        let opcodes = top_level_opcodes(output);
-        let position = |target: u8| {
-            opcodes
-                .iter()
-                .position(|&opcode| opcode == target)
-                .unwrap_or_else(|| panic!("expected a record with opcode {target:#04x}"))
-        };
-        let metadata = position(op::METADATA);
-        let first_chunk = position(op::CHUNK);
-        let attachment = position(op::ATTACHMENT);
-        let data_end = position(op::DATA_END);
-        assert!(
-            metadata < first_chunk,
-            "metadata should be written before the first message chunk"
-        );
-        assert!(
-            first_chunk < attachment,
-            "attachments should be written after the message chunks"
-        );
-        assert!(
-            attachment < data_end,
-            "attachments should be written inside the data section"
-        );
-    }
-
-    fn include_all_options() -> FilterOptions {
-        FilterOptions {
-            output: None,
-            include_topics: Vec::new(),
-            exclude_topics: Vec::new(),
-            last_per_channel_topics: Vec::new(),
-            start: 0,
-            end: u64::MAX,
-            include_metadata: true,
-            include_attachments: true,
-            compression: Some(mcap::Compression::Zstd),
-            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-            use_chunks: true,
-        }
-    }
-
-    fn time_windowed_options(start: u64, end: u64) -> FilterOptions {
-        FilterOptions {
-            start,
-            end,
-            ..include_all_options()
-        }
-    }
-
     #[test]
     fn indexed_attachments_are_not_time_filtered() {
         // The fixture's attachment has log_time 50; a [0, 10) window excludes it from the message
@@ -1411,54 +1459,6 @@ mod tests {
         let stats = analyze_output(&output);
         assert_eq!(stats.attachment_count, 1);
         assert_eq!(stats.metadata_count, 1);
-    }
-
-    fn write_chunk_indexed_without_aux_indexes() -> Vec<u8> {
-        let mut output = Cursor::new(Vec::new());
-        {
-            // Chunk indexes are emitted, but metadata/attachment index records are not — a
-            // spec-legal shape our own writer avoids but other writers may produce.
-            let mut writer = mcap::WriteOptions::new()
-                .emit_metadata_indexes(false)
-                .emit_attachment_indexes(false)
-                .library("test-recorder/0.0")
-                .create(&mut output)
-                .expect("writer");
-            let schema_id = writer
-                .add_schema("schema", "jsonschema", br#"{}"#)
-                .expect("schema");
-            let channel = writer
-                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
-                .expect("channel");
-            writer
-                .write_to_known_channel(
-                    &mcap::records::MessageHeader {
-                        channel_id: channel,
-                        sequence: 0,
-                        log_time: 0,
-                        publish_time: 0,
-                    },
-                    b"a",
-                )
-                .expect("write message");
-            writer
-                .attach(&mcap::Attachment {
-                    log_time: 5,
-                    create_time: 5,
-                    name: "a.bin".to_string(),
-                    media_type: "application/octet-stream".to_string(),
-                    data: std::borrow::Cow::Borrowed(&[1, 2, 3]),
-                })
-                .expect("attachment");
-            writer
-                .write_metadata(&mcap::records::Metadata {
-                    name: "m".to_string(),
-                    metadata: BTreeMap::new(),
-                })
-                .expect("metadata");
-            writer.finish().expect("finish");
-        }
-        output.into_inner()
     }
 
     #[test]
