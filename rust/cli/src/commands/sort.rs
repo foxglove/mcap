@@ -1,3 +1,18 @@
+//! `sort` rewrites an MCAP with its messages in log-time order.
+//!
+//! Record placement convention (shared, standardized layout for rewriting commands):
+//! metadata records are written first, immediately after the header; then messages; then
+//! attachments, immediately before the data end record. Order within each group is preserved
+//! (indexed inputs are copied in source-offset order; linear inputs in encounter order).
+//!
+//! This placement is invisible to indexed readers (they seek via the summary index, and neither
+//! metadata nor attachments are duplicated into the summary), so it is chosen to serve
+//! linear/streaming readers: small, file-level metadata is reachable up front, while potentially
+//! large attachments stay out of the message read path. It also avoids fragmenting message chunks.
+//!
+//! The message-reading, record-copying, and placement helpers here are intended to be lifted into
+//! a shared rewrite engine that `filter`/`merge`/`compress`/`decompress` will also use; this
+//! command is the first to adopt the convention.
 use std::borrow::Cow;
 use std::io::{Seek, Write};
 
@@ -76,15 +91,18 @@ fn sort_to_writer<W: Write + Seek>(
         .create(sink)
         .context("failed to create mcap writer")?;
 
+    // Standardized layout: metadata first (right after the header), then messages, then
+    // attachments (just before the data end record). See the module docs for the rationale.
     match &sort_input {
         SortInput::Indexed(summary) => {
-            copy_attachments_from_summary(input, summary, &mut writer)?;
             copy_metadata_from_summary(input, summary, &mut writer)?;
             copy_messages_in_log_time_order(input, summary, &mut writer)?;
+            copy_attachments_from_summary(input, summary, &mut writer)?;
         }
         SortInput::Linear => {
-            copy_linear_non_message_records(input, &mut writer)?;
+            copy_linear_metadata(input, &mut writer)?;
             copy_linear_messages_in_log_time_order(input, &mut writer)?;
+            copy_linear_attachments(input, &mut writer)?;
         }
     }
 
@@ -206,25 +224,30 @@ fn copy_linear_messages_in_log_time_order<W: Write + Seek>(
     Ok(())
 }
 
-fn copy_linear_non_message_records<W: Write + Seek>(
+fn copy_linear_metadata<W: Write + Seek>(input: &[u8], writer: &mut mcap::Writer<W>) -> Result<()> {
+    for record in mcap::read::LinearReader::new(input)? {
+        if let mcap::records::Record::Metadata(metadata) = record? {
+            writer.write_metadata(&metadata)?;
+        }
+    }
+    Ok(())
+}
+
+fn copy_linear_attachments<W: Write + Seek>(
     input: &[u8],
     writer: &mut mcap::Writer<W>,
 ) -> Result<()> {
+    // Attachments are never stored inside chunks (spec op=0x09), so a top-level linear scan
+    // surfaces them without decompressing any chunk data.
     for record in mcap::read::LinearReader::new(input)? {
-        match record? {
-            mcap::records::Record::Attachment { header, data, .. } => {
-                writer.attach(&mcap::Attachment {
-                    log_time: header.log_time,
-                    create_time: header.create_time,
-                    name: header.name,
-                    media_type: header.media_type,
-                    data: Cow::Borrowed(data.as_ref()),
-                })?;
-            }
-            mcap::records::Record::Metadata(metadata) => {
-                writer.write_metadata(&metadata)?;
-            }
-            _ => {}
+        if let mcap::records::Record::Attachment { header, data, .. } = record? {
+            writer.attach(&mcap::Attachment {
+                log_time: header.log_time,
+                create_time: header.create_time,
+                name: header.name,
+                media_type: header.media_type,
+                data: Cow::Borrowed(data.as_ref()),
+            })?;
         }
     }
     Ok(())
@@ -430,6 +453,105 @@ mod tests {
         output.into_inner()
     }
 
+    fn build_summaryless_input_with_records() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .use_chunks(false)
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("Example", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            // Interleave metadata and an attachment with out-of-order messages so the sorted
+            // output has to relocate them to the standardized positions.
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 30,
+                        publish_time: 30,
+                    },
+                    &[1],
+                )
+                .expect("write message");
+            writer
+                .write_metadata(&mcap::records::Metadata {
+                    name: "demo".to_string(),
+                    metadata: BTreeMap::from([("k".to_string(), "v".to_string())]),
+                })
+                .expect("metadata");
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id,
+                        sequence: 2,
+                        log_time: 10,
+                        publish_time: 10,
+                    },
+                    &[2],
+                )
+                .expect("write message");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 100,
+                    create_time: 100,
+                    name: "demo.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: std::borrow::Cow::Borrowed(&[9, 8, 7]),
+                })
+                .expect("attachment");
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    /// Collects the opcodes of the top-level records in `bytes`, in file order.
+    fn top_level_opcodes(bytes: &[u8]) -> Vec<u8> {
+        mcap::read::LinearReader::new(bytes)
+            .expect("linear reader")
+            .map(|record| record.expect("record").opcode())
+            .collect()
+    }
+
+    /// Asserts the standardized data-section layout: a metadata record precedes the first message
+    /// chunk, and an attachment record follows the chunks but stays within the data section.
+    fn assert_standard_placement(output: &[u8]) {
+        use mcap::records::op;
+        let opcodes = top_level_opcodes(output);
+        let position = |target: u8| {
+            opcodes
+                .iter()
+                .position(|&opcode| opcode == target)
+                .unwrap_or_else(|| panic!("expected a record with opcode {target:#04x}"))
+        };
+        // Summary-section records use distinct opcodes (metadata/attachment *index*), so the first
+        // hits for METADATA/ATTACHMENT/CHUNK are the data-section records.
+        let metadata = position(op::METADATA);
+        let first_chunk = position(op::CHUNK);
+        let attachment = position(op::ATTACHMENT);
+        let data_end = position(op::DATA_END);
+        assert!(
+            metadata < first_chunk,
+            "metadata should be written before the first message chunk"
+        );
+        assert!(
+            first_chunk < attachment,
+            "attachments should be written after the message chunks"
+        );
+        assert!(
+            attachment < data_end,
+            "attachments should be written inside the data section"
+        );
+    }
+
     fn build_summaryless_metadata_only_input() -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
@@ -528,6 +650,51 @@ mod tests {
             .expect("metadata should parse");
         assert_eq!(metadata.name, "demo");
         assert_eq!(metadata.metadata.get("k"), Some(&"v".to_string()));
+    }
+
+    #[test]
+    fn indexed_sort_places_metadata_first_and_attachments_last() {
+        let input = build_out_of_order_chunked_input(true);
+        let mut output = Cursor::new(Vec::new());
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary should exist");
+        sort_to_writer(
+            &input,
+            &mut output,
+            SortInput::Indexed(Box::new(summary)),
+            &default_sort_options(),
+        )
+        .expect("sort should succeed");
+        assert_standard_placement(&output.into_inner());
+    }
+
+    #[test]
+    fn linear_sort_places_metadata_first_and_attachments_last() {
+        let input = build_summaryless_input_with_records();
+        // Confirm this fixture takes the linear path so the test exercises the linear helpers.
+        assert!(matches!(
+            validate_sort_input(&input).expect("sort input should be valid"),
+            SortInput::Linear
+        ));
+
+        let mut output = Cursor::new(Vec::new());
+        sort_to_writer(
+            &input,
+            &mut output,
+            SortInput::Linear,
+            &default_sort_options(),
+        )
+        .expect("sort should succeed");
+        let output = output.into_inner();
+
+        assert_standard_placement(&output);
+        // Messages are still emitted in log-time order.
+        let log_times: Vec<u64> = mcap::MessageStream::new(&output)
+            .expect("message stream")
+            .map(|message| message.expect("message").log_time)
+            .collect();
+        assert_eq!(log_times, vec![10, 30]);
     }
 
     #[test]
