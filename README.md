@@ -43,7 +43,7 @@ Join our [Discord community](https://foxglove.dev/chat) to ask questions, share 
 If you use MCAP in your research, please cite it in your work. Our suggested
 citation format is:
 
-```
+```bibtex
 @software{MCAP,
   title = {MCAP: serialization-agnostic log container file format},
   author = {{Foxglove Developers}},
@@ -57,8 +57,26 @@ citation format is:
 ```
 
 Please replace the version and date fields with the version of the software you
-used, and the date you obtained it. Citing MCAP will help spread awareness of
-the project and strengthen the ecosystem.
+used, and the date you obtained it.
+
+To reference the design rationale behind MCAP, you can additionally cite the
+[whitepaper](https://mcap.dev/files/evaluation.pdf) evaluating robotics data
+recording file formats:
+
+```bibtex
+@techreport{Hurliman2021Evaluation,
+  title = {Evaluation of robotics data recording file formats},
+  author = {Hurliman, John},
+  institution = {{Foxglove Technologies}},
+  year = {2021},
+  month = oct,
+  url = {https://mcap.dev/files/evaluation.pdf},
+  note = {Whitepaper motivating the design of MCAP}
+}
+```
+
+Citing MCAP will help spread awareness of the project and strengthen the
+ecosystem.
 
 ## License
 
