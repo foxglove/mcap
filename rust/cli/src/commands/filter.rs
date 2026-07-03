@@ -376,13 +376,7 @@ fn filter_indexed<W: Write + Seek>(
 
     // Metadata is written first, before any messages (see module docs).
     if opts.include_metadata {
-        let mut metadata_indexes = summary.metadata_indexes.clone();
-        metadata_indexes.sort_by_key(|index| index.offset);
-        for index in &metadata_indexes {
-            let metadata = mcap::read::metadata(input, index)
-                .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
-            writer.write_metadata(&metadata)?;
-        }
+        copy_metadata_indexed_or_scanned(input, summary, writer)?;
     }
 
     if !opts.last_per_channel_topics.is_empty() && opts.start > 0 {
@@ -499,9 +493,58 @@ fn filter_indexed<W: Write + Seek>(
     // Attachments are written last, after all messages (see module docs). They are auxiliary
     // records kept regardless of the message time range; use --exclude-attachments to drop them.
     if opts.include_attachments {
-        let mut attachment_indexes = summary.attachment_indexes.clone();
-        attachment_indexes.sort_by_key(|index| index.offset);
-        for index in &attachment_indexes {
+        copy_attachments_indexed_or_scanned(input, summary, writer)?;
+    }
+
+    Ok(())
+}
+
+/// Copies every metadata record from an indexed input, writing them at the current position.
+///
+/// The summary's metadata indexes are used only when the statistics record confirms they list
+/// every metadata record. Metadata/attachment index records are optional in the spec even when
+/// chunk indexes are present, so a chunk-indexed file can carry metadata that the summary does not
+/// index; in that case (or when statistics are absent) this falls back to a top-level linear scan
+/// so records are never silently dropped. Metadata is never stored inside a chunk, so the scan does
+/// not decompress anything.
+fn copy_metadata_indexed_or_scanned<W: Write + Seek>(
+    input: &[u8],
+    summary: &mcap::Summary,
+    writer: &mut mcap::Writer<W>,
+) -> Result<()> {
+    let indexed_count = summary.stats.as_ref().map(|stats| stats.metadata_count);
+    if indexed_count == Some(summary.metadata_indexes.len() as u32) {
+        let mut indexes = summary.metadata_indexes.clone();
+        indexes.sort_by_key(|index| index.offset);
+        for index in &indexes {
+            let metadata = mcap::read::metadata(input, index)
+                .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
+            writer.write_metadata(&metadata)?;
+        }
+        return Ok(());
+    }
+
+    for record in mcap::read::LinearReader::new(input)? {
+        if let mcap::records::Record::Metadata(metadata) = record? {
+            writer.write_metadata(&metadata)?;
+        }
+    }
+    Ok(())
+}
+
+/// Copies every attachment from an indexed input, writing them at the current position. Uses the
+/// same statistics cross-check as [`copy_metadata_indexed_or_scanned`], falling back to a top-level
+/// linear scan when the summary does not index every attachment so none are silently dropped.
+fn copy_attachments_indexed_or_scanned<W: Write + Seek>(
+    input: &[u8],
+    summary: &mcap::Summary,
+    writer: &mut mcap::Writer<W>,
+) -> Result<()> {
+    let indexed_count = summary.stats.as_ref().map(|stats| stats.attachment_count);
+    if indexed_count == Some(summary.attachment_indexes.len() as u32) {
+        let mut indexes = summary.attachment_indexes.clone();
+        indexes.sort_by_key(|index| index.offset);
+        for index in &indexes {
             let attachment = mcap::read::attachment(input, index).with_context(|| {
                 format!(
                     "failed to read attachment {} at offset {}",
@@ -510,8 +553,20 @@ fn filter_indexed<W: Write + Seek>(
             })?;
             writer.attach(&attachment)?;
         }
+        return Ok(());
     }
 
+    for record in mcap::read::LinearReader::new(input)? {
+        if let mcap::records::Record::Attachment { header, data, .. } = record? {
+            writer.attach(&mcap::Attachment {
+                log_time: header.log_time,
+                create_time: header.create_time,
+                name: header.name,
+                media_type: header.media_type,
+                data: Cow::Borrowed(data.as_ref()),
+            })?;
+        }
+    }
     Ok(())
 }
 
@@ -1379,6 +1434,73 @@ mod tests {
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
         assert_eq!(stats.attachment_count, 0);
+    }
+
+    fn write_chunk_indexed_without_aux_indexes() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            // Chunk indexes are emitted, but metadata/attachment index records are not — a
+            // spec-legal shape our own writer avoids but other writers may produce.
+            let mut writer = mcap::WriteOptions::new()
+                .emit_metadata_indexes(false)
+                .emit_attachment_indexes(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id: channel,
+                        sequence: 0,
+                        log_time: 0,
+                        publish_time: 0,
+                    },
+                    b"a",
+                )
+                .expect("write message");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 5,
+                    create_time: 5,
+                    name: "a.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: std::borrow::Cow::Borrowed(&[1, 2, 3]),
+                })
+                .expect("attachment");
+            writer
+                .write_metadata(&mcap::records::Metadata {
+                    name: "m".to_string(),
+                    metadata: BTreeMap::new(),
+                })
+                .expect("metadata");
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    #[test]
+    fn indexed_path_keeps_metadata_and_attachments_missing_from_summary() {
+        let input = write_chunk_indexed_without_aux_indexes();
+        // Sanity: this takes the indexed path (chunk indexes present) but the summary does not
+        // index the metadata/attachment records.
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary present");
+        assert!(!summary.chunk_indexes.is_empty());
+        assert!(summary.metadata_indexes.is_empty());
+        assert!(summary.attachment_indexes.is_empty());
+
+        let output = run_filter(&input, &include_all_options());
+        let stats = analyze_output(&output);
+        // Lossless: the records are recovered via the scan fallback rather than dropped.
+        assert_eq!(stats.metadata_count, 1);
+        assert_eq!(stats.attachment_count, 1);
     }
 
     #[test]
