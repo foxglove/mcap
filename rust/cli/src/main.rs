@@ -576,12 +576,36 @@ mod tests {
                 end: Some("200".to_string()),
                 end_secs: 0,
                 end_nsecs: 0,
+                exclude_metadata: false,
+                exclude_attachments: false,
                 include_metadata: true,
                 include_attachments: true,
                 output_compression: "lz4".to_string(),
                 chunk_size: 2048,
             })
         );
+    }
+
+    #[test]
+    fn parses_filter_exclude_metadata_and_attachments() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "filter",
+            "in.mcap",
+            "--exclude-metadata",
+            "--exclude-attachments",
+        ])
+        .expect("filter should parse");
+        match args.command {
+            Command::Filter(filter) => {
+                assert!(filter.exclude_metadata);
+                assert!(filter.exclude_attachments);
+                // Deprecated include flags default off and are no-ops.
+                assert!(!filter.include_metadata);
+                assert!(!filter.include_attachments);
+            }
+            other => panic!("expected filter command, got {other:?}"),
+        }
     }
 
     #[test]
