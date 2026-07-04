@@ -195,6 +195,8 @@ overrides:
       - mmap
       - memmap
       - seekable
+      - tmpfs
+      - TMPDIR
 
   - filename: "python/**/*.rst"
     words:

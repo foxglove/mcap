@@ -11,7 +11,7 @@ This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) log fil
 **Bounded memory when reading.** This applies to both the language libraries and the CLI. MCAP files can be many GB, so reader memory must scale with the record/chunk being processed, not with the file length — never read (or force a consumer to read) a whole file into memory. Holding one record, chunk, or attachment at a time is fine; buffering the whole file, or all of a file's messages, is an out-of-memory foot-gun.
 
 - Memory-map (`mmap`) seekable local files where the language supports it (e.g. the Rust CLI's `map_file` in `rust/cli/src/source.rs`); use seek + bounded range reads for indexed access and streaming for sequential scans.
-- For non-seekable inputs such as a stdin pipe, spool to a temporary file and mmap it rather than reading into a `Vec`/`Buffer`/`bytes`/`Data` — see `load_input` in `rust/cli/src/source.rs`.
+- For non-seekable inputs such as a stdin pipe, spool to a temporary file and mmap it rather than reading into a `Vec`/`Buffer`/`bytes`/`Data` — see `load_input` in `rust/cli/src/source.rs`. This assumes a disk-backed temp dir; a tmpfs `$TMPDIR` keeps the spool in RAM.
 - A library may leave byte access to the caller (e.g. the `mcap` Rust crate parses a `&[u8]`), but only when mmap is the clear, documented path, so a consumer can't accidentally load the whole file into a heap buffer.
 - Materializing every message at once is allowed only as an explicit, documented opt-in (e.g. Python's `NonSeekingReader` with `log_time_order=True`).
 
