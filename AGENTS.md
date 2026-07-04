@@ -8,12 +8,10 @@ This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) log fil
 
 ## Design principles
 
-**Bounded memory when reading.** This applies to both the language libraries and the CLI. MCAP files can be many GB, so reader memory must scale with the record/chunk being processed, not with the file length — never read (or force a consumer to read) a whole file into memory. Holding one record, chunk, or attachment at a time is fine; buffering the whole file, or all of a file's messages, is an out-of-memory foot-gun.
+**Bounded memory when reading.** Neither the language libraries nor the CLI may read (or force a consumer to read) an entire MCAP file into memory — files can be many GB. Reader memory should scale with the record or chunk being processed, not with the file length: holding one record, chunk, or attachment at a time is fine, but buffering the whole file, or all of its messages, is an out-of-memory foot-gun.
 
-- Memory-map (`mmap`) seekable local files where the language supports it (e.g. the Rust CLI's `map_file` in `rust/cli/src/source.rs`); use seek + bounded range reads for indexed access and streaming for sequential scans.
-- For non-seekable inputs such as a stdin pipe, spool to a temporary file and mmap it rather than reading into a `Vec`/`Buffer`/`bytes`/`Data` — see `load_input` in `rust/cli/src/source.rs`. This assumes a disk-backed temp dir; a tmpfs `$TMPDIR` keeps the spool in RAM.
-- A library may leave byte access to the caller (e.g. the `mcap` Rust crate parses a `&[u8]`), but only when mmap is the clear, documented path, so a consumer can't accidentally load the whole file into a heap buffer.
-- Materializing every message at once is allowed only as an explicit, documented opt-in (e.g. Python's `NonSeekingReader` with `log_time_order=True`).
+- Memory-map (`mmap`) seekable local files where the language supports it, or have the API consumer supply the bytes (e.g. via their own mmap); use seek + bounded range reads for random access and streaming for sequential scans.
+- When input isn't seekable (e.g. a stdin pipe) or an operation needs random access over a stream (e.g. sorting), spool to a temporary file and mmap it rather than buffering in memory. A tmpfs temp dir keeps the spool resident, though that is typically swap-backed.
 
 ## General prerequisites
 
