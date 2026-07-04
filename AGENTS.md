@@ -8,18 +8,12 @@ This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) log fil
 
 ## Design principles
 
-### Bounded memory when reading
+**Bounded memory when reading.** This applies to both the language libraries and the CLI. MCAP files can be many GB, so reader memory must scale with the record/chunk being processed, not with the file length — never read (or force a consumer to read) a whole file into memory. Holding one record, chunk, or attachment at a time is fine; buffering the whole file, or all of a file's messages, is an out-of-memory foot-gun.
 
-MCAP files can be arbitrarily large (many GB). **Reader code paths must never require buffering an entire MCAP file into memory at once.** Memory use should stay bounded relative to the file size — it should scale with the current record/chunk being processed and any explicit caches, not with the total file length.
-
-Practically, this means:
-
-- **Prefer memory-mapping (`mmap`) for local files** in languages that support it (e.g. the Rust CLI maps files via `memmap2`). An mmap keeps the resident working set bounded because the OS pages data in on demand.
-- **Prefer seek + bounded range reads** for random-access/indexed reads, and **streaming** (incremental record-by-record parsing) for sequential reads, over reading the whole file into a heap buffer.
-- **For non-seekable inputs (e.g. a stdin pipe), spool the stream to a temporary file and mmap that**, rather than reading it all into a `Vec`/`Buffer`/`bytes`/`Data`. See `rust/cli/src/source.rs` (`load_input`) for the reference implementation.
-- Reading a single record, chunk, or attachment into memory is acceptable (these are bounded by the data being requested), but avoid materializing _all_ messages/records of a file at once unless the caller explicitly opts in (e.g. Python's `NonSeekingReader` with `log_time_order=True`, which documents the whole-file cost).
-
-When adding or changing a reader path, keep it within these bounds; if a full-file or full-collection read is unavoidable, make it explicit and opt-in.
+- Memory-map (`mmap`) seekable local files where the language supports it (e.g. the Rust CLI's `map_file` in `rust/cli/src/source.rs`); use seek + bounded range reads for indexed access and streaming for sequential scans.
+- For non-seekable inputs such as a stdin pipe, spool to a temporary file and mmap it rather than reading into a `Vec`/`Buffer`/`bytes`/`Data` — see `load_input` in `rust/cli/src/source.rs`.
+- A library may leave byte access to the caller (e.g. the `mcap` Rust crate parses a `&[u8]`), but only when mmap is the clear, documented path, so a consumer can't accidentally load the whole file into a heap buffer.
+- Materializing every message at once is allowed only as an explicit, documented opt-in (e.g. Python's `NonSeekingReader` with `log_time_order=True`).
 
 ## General prerequisites
 
