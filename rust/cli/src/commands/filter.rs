@@ -356,12 +356,19 @@ fn filter_with_writer<W: Write + Seek>(
     filter_linear(input, writer, opts)
 }
 
-/// Rebuilds a minimal summary — chunk indexes plus channel/schema definitions — for a chunked file
-/// that lacks a usable summary section, so the memory-bounded indexed path can re-order it instead
-/// of buffering every message. Returns `Ok(None)` when the input has no chunks (the unchunked case,
-/// which the linear path handles) or when the top-level framing can't be walked (caller falls back
-/// to the linear path). Attachments/metadata are intentionally left out — the indexed path recovers
-/// them via a scan when the summary omits them.
+/// Rebuilds a summary — chunk indexes, channel/schema definitions, and metadata/attachment indexes
+/// — for a chunked file that lacks a usable summary section, so the memory-bounded indexed path can
+/// re-order it instead of buffering every message.
+///
+/// A single top-level pass collects everything the indexed path needs: chunk offsets/time-bounds
+/// come straight from the chunk records (decoded once to recover channel/schema definitions), and
+/// metadata/attachment index records are built from the top-level records they point at. Populating
+/// those indexes (with matching statistics counts) lets the indexed path read metadata/attachments
+/// by offset rather than re-scanning the file, keeping the whole operation to two chunk passes: this
+/// one and the indexed read.
+///
+/// Returns `Ok(None)` when the input has no chunks (the unchunked case, which the linear path
+/// handles) or when the top-level framing can't be walked (caller falls back to the linear path).
 fn synthesize_chunk_summary(input: &[u8]) -> Result<Option<mcap::Summary>> {
     let magic = mcap::MAGIC.len();
     let Some(limit) = input.len().checked_sub(magic) else {
@@ -371,6 +378,8 @@ fn synthesize_chunk_summary(input: &[u8]) -> Result<Option<mcap::Summary>> {
     let mut chunk_indexes = Vec::new();
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+    let mut attachment_indexes = Vec::new();
+    let mut metadata_indexes = Vec::new();
 
     let mut offset = magic;
     while offset + 9 <= limit {
@@ -387,6 +396,7 @@ fn synthesize_chunk_summary(input: &[u8]) -> Result<Option<mcap::Summary>> {
         else {
             return Ok(None);
         };
+        let record_length = (9 + length) as u64;
 
         match mcap::parse_record(opcode, &input[body_start..body_end]) {
             Ok(mcap::records::Record::Chunk { header, data }) => {
@@ -397,12 +407,30 @@ fn synthesize_chunk_summary(input: &[u8]) -> Result<Option<mcap::Summary>> {
                     message_start_time: header.message_start_time,
                     message_end_time: header.message_end_time,
                     chunk_start_offset: offset as u64,
-                    chunk_length: (9 + length) as u64,
+                    chunk_length: record_length,
                     message_index_offsets: Default::default(),
                     message_index_length: 0,
                     compression: header.compression,
                     compressed_size: header.compressed_size,
                     uncompressed_size: header.uncompressed_size,
+                });
+            }
+            Ok(mcap::records::Record::Attachment { header, data, .. }) => {
+                attachment_indexes.push(mcap::records::AttachmentIndex {
+                    offset: offset as u64,
+                    length: record_length,
+                    log_time: header.log_time,
+                    create_time: header.create_time,
+                    data_size: data.len() as u64,
+                    name: header.name,
+                    media_type: header.media_type,
+                });
+            }
+            Ok(mcap::records::Record::Metadata(metadata)) => {
+                metadata_indexes.push(mcap::records::MetadataIndex {
+                    offset: offset as u64,
+                    length: record_length,
+                    name: metadata.name,
                 });
             }
             Ok(record) => collect_definition(record, &mut schemas, &mut channels),
@@ -415,11 +443,20 @@ fn synthesize_chunk_summary(input: &[u8]) -> Result<Option<mcap::Summary>> {
     if chunk_indexes.is_empty() {
         return Ok(None);
     }
+    // Statistics counts must match the index lengths so the indexed path trusts these indexes and
+    // reads metadata/attachments by offset instead of scanning.
+    let stats = mcap::records::Statistics {
+        attachment_count: attachment_indexes.len() as u32,
+        metadata_count: metadata_indexes.len() as u32,
+        ..Default::default()
+    };
     Ok(Some(mcap::Summary {
+        stats: Some(stats),
         channels,
         schemas,
         chunk_indexes,
-        ..Default::default()
+        attachment_indexes,
+        metadata_indexes,
     }))
 }
 
@@ -1143,6 +1180,21 @@ mod tests {
                 // Force each message into its own chunk so cross-chunk ordering is exercised.
                 writer.flush().expect("flush");
             }
+            writer
+                .write_metadata(&mcap::records::Metadata {
+                    name: "meta".to_string(),
+                    metadata: BTreeMap::new(),
+                })
+                .expect("metadata");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 5,
+                    create_time: 5,
+                    name: "a.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: std::borrow::Cow::Borrowed(&[1, 2, 3]),
+                })
+                .expect("attachment");
             writer.finish().expect("finish");
         }
         output.into_inner()
@@ -1784,6 +1836,13 @@ mod tests {
             .expect("a chunked input should yield a synthesized summary");
         assert!(!summary.chunk_indexes.is_empty());
         assert!(!summary.channels.is_empty());
+        // Metadata/attachment indexes are synthesized too, with matching statistics counts, so the
+        // indexed path reads them by offset instead of re-scanning.
+        assert_eq!(summary.metadata_indexes.len(), 1);
+        assert_eq!(summary.attachment_indexes.len(), 1);
+        let stats = summary.stats.expect("synthesized stats");
+        assert_eq!(stats.metadata_count, 1);
+        assert_eq!(stats.attachment_count, 1);
     }
 
     #[test]
@@ -1795,7 +1854,11 @@ mod tests {
             ..include_all_options()
         };
         let output = run_filter(&input, &opts);
-        assert_eq!(analyze_output(&output).log_times, vec![10, 20, 30]);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.log_times, vec![10, 20, 30]);
+        // Metadata and attachment survive the reindexed path.
+        assert_eq!(stats.metadata_count, 1);
+        assert_eq!(stats.attachment_count, 1);
     }
 
     #[test]
