@@ -1,0 +1,1323 @@
+//! Shared engine for the file-rewriting commands (`filter`, `sort`, `compress`, `decompress`).
+//!
+//! A command supplies a [`TranscodeCommandOptions`] describing the input/output, record selection,
+//! ordering, and output encoding; [`run`] reads the input and writes a new MCAP.
+//!
+//! Selection is opt-out: by default everything is kept, and flags narrow the output. Each dimension
+//! is independent — narrowing one never drops another. Topic and time-range selection apply to
+//! messages; metadata and attachments are kept unless explicitly excluded.
+//!
+//! Records are placed in a fixed layout: metadata immediately after the header, then messages, then
+//! attachments immediately before the data end record, preserving order within each group. Indexed
+//! readers seek via the summary index (metadata and attachments are not duplicated into it), so the
+//! layout serves linear readers and keeps message chunks unfragmented.
+//!
+//! Messages are produced by a [`message_source::MessageSource`], which hides whether the input is
+//! read through the summary index, a synthesized index (for summaryless chunked files), or a linear
+//! scan. The engine takes a single input today; the plumbing is structured so a future multi-input
+//! merge can compose several sources.
+mod aux_records;
+mod message_source;
+
+use std::io::{IsTerminal as _, Seek, Write};
+use std::path::PathBuf;
+
+use anyhow::{bail, Context, Result};
+use log::warn;
+use regex::Regex;
+
+pub(crate) use message_source::summary_supports_indexed_transcode;
+
+use crate::cli::{parse_output_compression, parse_timestamp_or_nanos, TranscodeArgs};
+use crate::source;
+
+use message_source::MessageSource;
+
+#[derive(Debug, Clone)]
+struct FilterOptions {
+    output: Option<PathBuf>,
+    include_topics: Vec<Regex>,
+    exclude_topics: Vec<Regex>,
+    last_per_channel_topics: Vec<Regex>,
+    start: u64,
+    end: u64,
+    include_metadata: bool,
+    include_attachments: bool,
+    compression: Option<mcap::Compression>,
+    chunk_size: u64,
+    use_chunks: bool,
+    include_crc: bool,
+    order_by_log_time: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct TranscodeCommandOptions {
+    pub(crate) file: Option<PathBuf>,
+    pub(crate) output: Option<PathBuf>,
+    pub(crate) include_topic_regex: Vec<String>,
+    pub(crate) exclude_topic_regex: Vec<String>,
+    pub(crate) last_per_channel_topic_regex: Vec<String>,
+    pub(crate) start: Option<String>,
+    pub(crate) start_secs: u64,
+    pub(crate) start_nsecs: u64,
+    pub(crate) end: Option<String>,
+    pub(crate) end_secs: u64,
+    pub(crate) end_nsecs: u64,
+    pub(crate) include_metadata: bool,
+    pub(crate) include_attachments: bool,
+    pub(crate) output_compression: String,
+    pub(crate) chunk_size: u64,
+    pub(crate) use_chunks: bool,
+    pub(crate) include_crc: bool,
+    pub(crate) order_by_log_time: bool,
+}
+
+impl TranscodeArgs {
+    /// Builds engine options for the given input/output and message ordering. Deprecated flags are
+    /// mapped to their replacements here; call [`TranscodeArgs::warn_deprecations`] to surface them.
+    pub(crate) fn command_options(
+        &self,
+        file: Option<PathBuf>,
+        output: Option<PathBuf>,
+        order_by_log_time: bool,
+    ) -> TranscodeCommandOptions {
+        TranscodeCommandOptions {
+            file,
+            output,
+            include_topic_regex: self.include_topic_regex.clone(),
+            exclude_topic_regex: self.exclude_topic_regex.clone(),
+            last_per_channel_topic_regex: self.last_per_channel_topic_regex.clone(),
+            start: self.start.clone(),
+            start_secs: self.start_secs,
+            start_nsecs: self.start_nsecs,
+            end: self.end.clone(),
+            end_secs: self.end_secs,
+            end_nsecs: self.end_nsecs,
+            include_metadata: !self.exclude_metadata,
+            include_attachments: !self.exclude_attachments,
+            // The deprecated --output-compression overrides --compression when explicitly set.
+            output_compression: self
+                .output_compression
+                .clone()
+                .unwrap_or_else(|| self.compression.as_str().to_string()),
+            chunk_size: self.chunk_size,
+            use_chunks: !self.no_chunks,
+            include_crc: !self.no_crc,
+            order_by_log_time,
+        }
+    }
+
+    pub(crate) fn warn_deprecations(&self) {
+        if self.include_metadata {
+            warn!("--include-metadata is deprecated and has no effect; metadata is included by default (use --exclude-metadata to drop it)");
+        }
+        if self.include_attachments {
+            warn!("--include-attachments is deprecated and has no effect; attachments are included by default (use --exclude-attachments to drop them)");
+        }
+        if self.output_compression.is_some() {
+            warn!("--output-compression is deprecated; use --compression");
+        }
+    }
+}
+
+impl TranscodeCommandOptions {
+    pub(crate) fn new(file: Option<PathBuf>, output: Option<PathBuf>, chunk_size: u64) -> Self {
+        Self {
+            file,
+            output,
+            include_topic_regex: Vec::new(),
+            exclude_topic_regex: Vec::new(),
+            last_per_channel_topic_regex: Vec::new(),
+            start: None,
+            start_secs: 0,
+            start_nsecs: 0,
+            end: None,
+            end_secs: 0,
+            end_nsecs: 0,
+            include_metadata: false,
+            include_attachments: false,
+            output_compression: "zstd".to_string(),
+            chunk_size,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        }
+    }
+
+    pub(crate) fn compression(mut self, value: impl Into<String>) -> Self {
+        self.output_compression = value.into();
+        self
+    }
+
+    pub(crate) fn use_chunks(mut self, value: bool) -> Self {
+        self.use_chunks = value;
+        self
+    }
+
+    pub(crate) fn include_metadata(mut self, value: bool) -> Self {
+        self.include_metadata = value;
+        self
+    }
+
+    pub(crate) fn include_attachments(mut self, value: bool) -> Self {
+        self.include_attachments = value;
+        self
+    }
+}
+
+/// Reads `args.file` (or stdin) and writes a filtered / re-ordered MCAP to `args.output` (or
+/// stdout), applying the standardized record placement.
+pub(crate) fn run(
+    args: TranscodeCommandOptions,
+    source_options: source::SourceOptions,
+) -> Result<()> {
+    let opts = build_filter_options_from_transcode_options(&args)?;
+    if let (Some(input), Some(output)) = (args.file.as_deref(), opts.output.as_deref()) {
+        source::ensure_distinct_local_input_output(input, output)?;
+    }
+    let input = source::load_input(args.file.as_deref(), source_options)?;
+
+    if let Some(output) = &opts.output {
+        let writer = std::fs::File::create(output)
+            .with_context(|| format!("failed to open '{}' for writing", output.display()))?;
+        filter_to_writer(input.as_slice(), writer, &opts, false)
+    } else {
+        if std::io::stdout().is_terminal() {
+            bail!("{}", source::PLEASE_REDIRECT);
+        }
+        let stdout = std::io::stdout();
+        let writer = mcap::write::NoSeek::new(stdout.lock());
+        filter_to_writer(input.as_slice(), writer, &opts, true)
+    }
+}
+
+#[cfg(test)]
+fn build_filter_options(
+    transcode: &TranscodeArgs,
+    order_by_log_time: bool,
+) -> Result<FilterOptions> {
+    build_filter_options_from_transcode_options(&transcode.command_options(
+        None,
+        None,
+        order_by_log_time,
+    ))
+}
+
+fn build_filter_options_from_transcode_options(
+    args: &TranscodeCommandOptions,
+) -> Result<FilterOptions> {
+    let start = parse_timestamp_args(args.start.as_deref(), args.start_nsecs, args.start_secs)
+        .context("invalid start")?;
+    let mut end = parse_timestamp_args(args.end.as_deref(), args.end_nsecs, args.end_secs)
+        .context("invalid end")?;
+    if end == 0 {
+        end = u64::MAX;
+    }
+    if end < start {
+        bail!("invalid time range query, end-time is before start-time");
+    }
+
+    if !args.include_topic_regex.is_empty() && !args.exclude_topic_regex.is_empty() {
+        bail!("can only use one of --include-topic-regex and --exclude-topic-regex");
+    }
+
+    Ok(FilterOptions {
+        output: args.output.clone(),
+        include_topics: compile_matchers(&args.include_topic_regex)
+            .context("invalid included topic regex")?,
+        exclude_topics: compile_matchers(&args.exclude_topic_regex)
+            .context("invalid excluded topic regex")?,
+        last_per_channel_topics: compile_matchers(&args.last_per_channel_topic_regex)
+            .context("invalid last-per-channel topic regex")?,
+        start,
+        end,
+        include_metadata: args.include_metadata,
+        include_attachments: args.include_attachments,
+        compression: parse_output_compression(&args.output_compression)?,
+        chunk_size: args.chunk_size,
+        use_chunks: args.use_chunks,
+        include_crc: args.include_crc,
+        order_by_log_time: args.order_by_log_time,
+    })
+}
+
+fn parse_timestamp_args(
+    date_or_nanos: Option<&str>,
+    nanoseconds: u64,
+    seconds: u64,
+) -> Result<u64> {
+    // Preserve timestamp precedence:
+    // --start/--end (string RFC3339 or nanos) > --*-nsecs > --*-secs.
+    // --*-secs and --*-nsecs are mutually exclusive via clap's conflicts_with.
+    // If both somehow arrive, this precedence order still applies as a fallback.
+    if let Some(value) = date_or_nanos {
+        return parse_timestamp_or_nanos(value);
+    }
+    if nanoseconds != 0 {
+        return Ok(nanoseconds);
+    }
+    seconds
+        .checked_mul(1_000_000_000)
+        .context("seconds timestamp overflows nanoseconds")
+}
+
+fn compile_matchers(regex_strings: &[String]) -> Result<Vec<Regex>> {
+    regex_strings
+        .iter()
+        .map(|pattern| {
+            // Always wrap in a non-capturing group so alternation behaves as users expect.
+            // This also fixes partially-anchored patterns like "^foo|bar$":
+            // "^(?:^foo|bar$)$" preserves full-string matching for each branch.
+            let anchored = format!("^(?:{pattern})$");
+            Regex::new(&anchored).with_context(|| format!("{anchored} is not a valid regex"))
+        })
+        .collect()
+}
+
+fn include_topic(topic: &str, opts: &FilterOptions) -> bool {
+    if !opts.include_topics.is_empty() {
+        return opts
+            .include_topics
+            .iter()
+            .any(|regex| regex.is_match(topic));
+    }
+    if !opts.exclude_topics.is_empty() {
+        return !opts
+            .exclude_topics
+            .iter()
+            .any(|regex| regex.is_match(topic));
+    }
+    true
+}
+
+fn filter_to_writer<W: Write + Seek>(
+    input: &[u8],
+    sink: W,
+    opts: &FilterOptions,
+    disable_seeking: bool,
+) -> Result<()> {
+    let mut write_options = mcap::WriteOptions::new()
+        .use_chunks(opts.use_chunks)
+        .chunk_size(Some(opts.chunk_size))
+        .compression(opts.compression)
+        .calculate_chunk_crcs(opts.include_crc)
+        .calculate_data_section_crc(opts.include_crc)
+        .calculate_summary_section_crc(opts.include_crc)
+        .calculate_attachment_crcs(opts.include_crc)
+        .disable_seeking(disable_seeking);
+
+    write_options = write_options.library(crate::cli::LIBRARY_IDENTIFIER.clone());
+    if let Some(header) = read_header(input)? {
+        write_options = write_options.profile(header.profile);
+    }
+
+    let mut writer = write_options
+        .create(sink)
+        .context("failed to create mcap writer")?;
+    run_pipeline(input, &mut writer, opts)?;
+    writer.finish().context("failed to finish mcap writer")?;
+    Ok(())
+}
+
+fn read_header(input: &[u8]) -> Result<Option<mcap::records::Header>> {
+    let mut reader = mcap::read::LinearReader::new(input)?;
+    match reader.next() {
+        Some(Ok(mcap::records::Record::Header(header))) => Ok(Some(header)),
+        Some(Ok(_)) | None => Ok(None),
+        Some(Err(err)) => Err(err.into()),
+    }
+}
+
+/// The standardized layout: metadata first, then messages (from the chosen source), then
+/// attachments last. Metadata/attachments are read from the summary index when available, else
+/// scanned; the message source hides indexed vs. linear reading.
+fn run_pipeline<W: Write + Seek>(
+    input: &[u8],
+    writer: &mut mcap::Writer<W>,
+    opts: &FilterOptions,
+) -> Result<()> {
+    let source = MessageSource::plan(input, opts)?;
+    if opts.include_metadata {
+        aux_records::copy_metadata(input, source.summary(), writer)?;
+    }
+    source.write_messages(input, writer, opts)?;
+    if opts.include_attachments {
+        aux_records::copy_attachments(input, source.summary(), writer)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{BTreeMap, HashMap};
+    use std::io::Cursor;
+
+    use regex::Regex;
+
+    use super::{build_filter_options, filter_to_writer, include_topic, FilterOptions};
+    use super::{run, TranscodeCommandOptions};
+    use crate::cli::{CompressionFormat, TranscodeArgs};
+    use crate::source::SourceOptions;
+
+    fn default_transcode_args() -> TranscodeArgs {
+        TranscodeArgs {
+            include_topic_regex: Vec::new(),
+            exclude_topic_regex: Vec::new(),
+            last_per_channel_topic_regex: Vec::new(),
+            start: None,
+            start_secs: 0,
+            start_nsecs: 0,
+            end: None,
+            end_secs: 0,
+            end_nsecs: 0,
+            exclude_metadata: false,
+            exclude_attachments: false,
+            include_metadata: false,
+            include_attachments: false,
+            compression: CompressionFormat::Zstd,
+            output_compression: None,
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            no_crc: false,
+            no_chunks: false,
+        }
+    }
+
+    fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
+        write_filter_test_input_with_options(chunked, summaryless, true, true, true, true)
+    }
+
+    fn write_filter_test_input_with_summary_repeats(
+        chunked: bool,
+        summaryless: bool,
+        repeat_channels: bool,
+        repeat_schemas: bool,
+    ) -> Vec<u8> {
+        write_filter_test_input_with_options(
+            chunked,
+            summaryless,
+            repeat_channels,
+            repeat_schemas,
+            true,
+            true,
+        )
+    }
+
+    fn write_filter_test_input_with_options(
+        chunked: bool,
+        summaryless: bool,
+        repeat_channels: bool,
+        repeat_schemas: bool,
+        emit_message_indexes: bool,
+        emit_chunk_indexes: bool,
+    ) -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut options = mcap::WriteOptions::new()
+                .use_chunks(chunked)
+                .emit_message_indexes(emit_message_indexes)
+                .emit_chunk_indexes(emit_chunk_indexes)
+                .library("test-recorder/0.0");
+            if chunked {
+                options = options.chunk_size(Some(10));
+            }
+            if summaryless {
+                options = options
+                    .emit_summary_records(false)
+                    .emit_summary_offsets(false);
+            } else {
+                options = options
+                    .repeat_channels(repeat_channels)
+                    .repeat_schemas(repeat_schemas);
+            }
+            let mut writer = options.create(&mut output).expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let camera_a = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            let camera_b = writer
+                .add_channel(schema_id, "camera_b", "json", &BTreeMap::new())
+                .expect("channel");
+            let radar = writer
+                .add_channel(0, "radar_a", "json", &BTreeMap::new())
+                .expect("channel");
+            for i in 0..100 {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: camera_a,
+                            sequence: i,
+                            log_time: i as u64,
+                            publish_time: i as u64,
+                        },
+                        b"a",
+                    )
+                    .expect("write");
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: camera_b,
+                            sequence: i,
+                            log_time: i as u64,
+                            publish_time: i as u64,
+                        },
+                        b"b",
+                    )
+                    .expect("write");
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: radar,
+                            sequence: i,
+                            log_time: i as u64,
+                            publish_time: i as u64,
+                        },
+                        b"c",
+                    )
+                    .expect("write");
+            }
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 50,
+                    create_time: 50,
+                    name: "attachment".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: std::borrow::Cow::Borrowed(&[]),
+                })
+                .expect("attachment");
+            writer
+                .write_metadata(&mcap::records::Metadata {
+                    name: "metadata".to_string(),
+                    metadata: BTreeMap::new(),
+                })
+                .expect("metadata");
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    fn run_filter(input: &[u8], opts: &FilterOptions) -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        filter_to_writer(input, &mut output, opts, false).expect("filter should succeed");
+        output.into_inner()
+    }
+
+    #[derive(Default)]
+    struct OutputStats {
+        topic_counts: BTreeMap<String, usize>,
+        metadata_count: usize,
+        attachment_count: usize,
+        log_times: Vec<u64>,
+    }
+
+    fn analyze_output(output: &[u8]) -> OutputStats {
+        let mut stats = OutputStats::default();
+        let mut channels_by_id = HashMap::<u16, String>::new();
+
+        for record in mcap::read::ChunkFlattener::new(output)
+            .expect("reader")
+            .map(|record| record.expect("record"))
+        {
+            match record {
+                mcap::records::Record::Channel(channel) => {
+                    channels_by_id.insert(channel.id, channel.topic);
+                }
+                mcap::records::Record::Message { header, .. } => {
+                    let topic = channels_by_id
+                        .get(&header.channel_id)
+                        .cloned()
+                        .unwrap_or_else(|| format!("unknown-{}", header.channel_id));
+                    *stats.topic_counts.entry(topic).or_default() += 1;
+                    stats.log_times.push(header.log_time);
+                }
+                mcap::records::Record::Metadata(_) => stats.metadata_count += 1,
+                mcap::records::Record::Attachment { .. } => stats.attachment_count += 1,
+                _ => {}
+            }
+        }
+        stats
+    }
+
+    fn include_all_options() -> FilterOptions {
+        FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: true,
+            include_attachments: true,
+            compression: Some(mcap::Compression::Zstd),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        }
+    }
+
+    fn time_windowed_options(start: u64, end: u64) -> FilterOptions {
+        FilterOptions {
+            start,
+            end,
+            ..include_all_options()
+        }
+    }
+
+    /// Builds an unchunked, summaryless file with messages in descending log-time order, so the
+    /// linear path must sort them when ordering is requested.
+    fn write_unsorted_summaryless_input() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .use_chunks(false)
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            for log_time in [3u64, 2, 1] {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: channel,
+                            sequence: log_time as u32,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        b"x",
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    /// Builds a chunked, summaryless file with out-of-order messages spread across multiple chunks,
+    /// so ordering must go through the synthesized-index path rather than buffering.
+    fn write_unsorted_chunked_summaryless_input() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(20))
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            for log_time in [30u64, 10, 20] {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: channel,
+                            sequence: log_time as u32,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        b"x",
+                    )
+                    .expect("write message");
+                // Force each message into its own chunk so cross-chunk ordering is exercised.
+                writer.flush().expect("flush");
+            }
+            writer
+                .write_metadata(&mcap::records::Metadata {
+                    name: "meta".to_string(),
+                    metadata: BTreeMap::new(),
+                })
+                .expect("metadata");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 5,
+                    create_time: 5,
+                    name: "a.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: std::borrow::Cow::Borrowed(&[1, 2, 3]),
+                })
+                .expect("attachment");
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    /// Builds a chunk-indexed file whose summary omits metadata/attachment index records — a
+    /// spec-legal shape our own writer avoids but other writers may produce.
+    fn write_chunk_indexed_without_aux_indexes() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_metadata_indexes(false)
+                .emit_attachment_indexes(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id: channel,
+                        sequence: 0,
+                        log_time: 0,
+                        publish_time: 0,
+                    },
+                    b"a",
+                )
+                .expect("write message");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 5,
+                    create_time: 5,
+                    name: "a.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: std::borrow::Cow::Borrowed(&[1, 2, 3]),
+                })
+                .expect("attachment");
+            writer
+                .write_metadata(&mcap::records::Metadata {
+                    name: "m".to_string(),
+                    metadata: BTreeMap::new(),
+                })
+                .expect("metadata");
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    /// Collects the opcodes of the top-level records in `bytes`, in file order.
+    fn top_level_opcodes(bytes: &[u8]) -> Vec<u8> {
+        mcap::read::LinearReader::new(bytes)
+            .expect("linear reader")
+            .map(|record| record.expect("record").opcode())
+            .collect()
+    }
+
+    /// Asserts the standardized data-section layout: a metadata record precedes the first message
+    /// chunk, and an attachment record follows the chunks but stays within the data section.
+    fn assert_standard_placement(output: &[u8]) {
+        use mcap::records::op;
+        let opcodes = top_level_opcodes(output);
+        let position = |target: u8| {
+            opcodes
+                .iter()
+                .position(|&opcode| opcode == target)
+                .unwrap_or_else(|| panic!("expected a record with opcode {target:#04x}"))
+        };
+        let metadata = position(op::METADATA);
+        let first_chunk = position(op::CHUNK);
+        let attachment = position(op::ATTACHMENT);
+        let data_end = position(op::DATA_END);
+        assert!(
+            metadata < first_chunk,
+            "metadata should be written before the first message chunk"
+        );
+        assert!(
+            first_chunk < attachment,
+            "attachments should be written after the message chunks"
+        );
+        assert!(
+            attachment < data_end,
+            "attachments should be written inside the data section"
+        );
+    }
+
+    #[test]
+    fn build_filter_options_rejects_include_exclude_conflict() {
+        let mut args = default_transcode_args();
+        args.include_topic_regex.push("camera.*".to_string());
+        args.exclude_topic_regex.push("radar.*".to_string());
+        let err = build_filter_options(&args, false).expect_err("should fail");
+        assert!(err
+            .to_string()
+            .contains("can only use one of --include-topic-regex and --exclude-topic-regex"));
+    }
+
+    #[test]
+    fn build_filter_options_parses_timestamps_with_precedence() {
+        let mut args = default_transcode_args();
+        args.start = Some("10".to_string());
+        args.start_nsecs = 50;
+        args.start_secs = 2;
+        args.end_nsecs = 200;
+        args.end_secs = 1;
+        let opts = build_filter_options(&args, false).expect("options");
+        assert_eq!(opts.start, 10);
+        assert_eq!(opts.end, 200);
+    }
+
+    #[test]
+    fn include_topic_honors_include_then_exclude() {
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: vec![Regex::new("^camera_a$").expect("regex")],
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Zstd),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        assert!(include_topic("camera_a", &opts));
+        assert!(!include_topic("radar_a", &opts));
+    }
+
+    #[test]
+    fn compile_matchers_wraps_alternation_with_grouping() {
+        let matcher = super::compile_matchers(&["camera_a|camera_b".to_string()])
+            .expect("regex")
+            .pop()
+            .expect("matcher");
+        assert!(matcher.is_match("camera_a"));
+        assert!(matcher.is_match("camera_b"));
+        assert!(!matcher.is_match("camera_a_extra"));
+        assert!(!matcher.is_match("extra_camera_b"));
+    }
+
+    #[test]
+    fn compile_matchers_rewraps_partially_anchored_alternation() {
+        let matcher = super::compile_matchers(&["^camera_a|camera_b$".to_string()])
+            .expect("regex")
+            .pop()
+            .expect("matcher");
+        assert!(matcher.is_match("camera_a"));
+        assert!(matcher.is_match("camera_b"));
+        assert!(!matcher.is_match("camera_a_extra"));
+        assert!(!matcher.is_match("extra_camera_b"));
+    }
+
+    #[test]
+    fn indexed_passthrough_includes_messages_metadata_and_attachments() {
+        let input = write_filter_test_input(true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: true,
+            include_attachments: true,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 100);
+        assert_eq!(stats.topic_counts["camera_b"], 100);
+        assert_eq!(stats.topic_counts["radar_a"], 100);
+        assert_eq!(stats.metadata_count, 1);
+        assert_eq!(stats.attachment_count, 1);
+    }
+
+    #[test]
+    fn indexed_filtering_respects_exclude_topic_and_time() {
+        let input = write_filter_test_input(true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: vec![Regex::new("^radar_a$").expect("regex")],
+            last_per_channel_topics: Vec::new(),
+            start: 10,
+            end: 20,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 10);
+        assert_eq!(stats.topic_counts["camera_b"], 10);
+        assert!(!stats.topic_counts.contains_key("radar_a"));
+        // --exclude-metadata / --exclude-attachments drop those records from the output.
+        assert_eq!(stats.metadata_count, 0);
+        assert_eq!(stats.attachment_count, 0);
+    }
+
+    #[test]
+    fn linear_filtering_respects_topic_and_time() {
+        let input = write_filter_test_input(false, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: 49,
+            include_metadata: false,
+            include_attachments: true,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 49);
+        assert_eq!(stats.topic_counts["camera_b"], 49);
+        assert!(!stats.topic_counts.contains_key("radar_a"));
+        // The attachment (log_time 50) is kept even though it is outside the [0, 49) message
+        // window: the time range applies to messages, not auxiliary records.
+        assert_eq!(stats.attachment_count, 1);
+        // Metadata is excluded here (include_metadata = false), so none is written.
+        assert_eq!(stats.metadata_count, 0);
+    }
+
+    #[test]
+    fn indexed_last_per_channel_adds_one_pre_start_message_per_matching_topic() {
+        let input = write_filter_test_input(true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            start: 50,
+            end: u64::MAX,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Zstd),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 51);
+        assert_eq!(stats.topic_counts["camera_b"], 51);
+        assert_eq!(stats.topic_counts["radar_a"], 50);
+        for pair in stats.log_times.windows(2) {
+            assert!(pair[0] <= pair[1], "messages must be log-time ordered");
+        }
+    }
+
+    #[test]
+    fn last_per_channel_errors_for_non_indexed_inputs() {
+        let input = write_filter_test_input(false, true);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            start: 50,
+            end: u64::MAX,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Zstd),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(&input, &mut output, &opts, false)
+            .expect_err("last-per should be rejected");
+        assert!(err
+            .to_string()
+            .contains("including last-per-channel topics is not supported for non-indexed input"));
+    }
+
+    #[test]
+    fn chunked_summaryless_input_falls_back_to_linear_filtering() {
+        let input = write_filter_test_input(true, true);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 20,
+            end: 25,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 5);
+        assert_eq!(stats.topic_counts["camera_b"], 5);
+        assert!(!stats.topic_counts.contains_key("radar_a"));
+    }
+
+    #[test]
+    fn chunked_input_without_chunk_index_falls_back_to_linear_filtering_on_unknown_schema() {
+        let input = write_filter_test_input_with_options(true, false, true, false, true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 20,
+            end: 25,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 5);
+        assert_eq!(stats.topic_counts["camera_b"], 5);
+        assert!(!stats.topic_counts.contains_key("radar_a"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_repeated_channels_errors() {
+        let input = write_filter_test_input_with_summary_repeats(true, false, false, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 20,
+            end: 25,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(&input, &mut output, &opts, false)
+            .expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_channels_or_message_indexes_errors() {
+        let input = write_filter_test_input_with_options(true, false, false, false, false, true);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 20,
+            end: 25,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(&input, &mut output, &opts, false)
+            .expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
+    }
+
+    #[test]
+    fn chunk_indexed_input_without_repeated_schemas_errors() {
+        let input = write_filter_test_input_with_summary_repeats(true, false, true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Lz4),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(&input, &mut output, &opts, false)
+            .expect_err("invalid indexed summary should fail");
+        assert!(err.to_string().contains("mcap recover"));
+    }
+
+    #[test]
+    fn filter_stamps_cli_writer_library() {
+        let input = write_filter_test_input(true, false);
+        let opts = FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: false,
+            include_attachments: false,
+            compression: Some(mcap::Compression::Zstd),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+            include_crc: true,
+            order_by_log_time: false,
+        };
+        // The CLI is the writer of the output, so it stamps its own identity, not the source's.
+        let output = run_filter(&input, &opts);
+        let library = crate::parse::read_header(&output)
+            .expect("read header")
+            .expect("header present")
+            .library;
+        assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
+    }
+
+    #[test]
+    fn transcode_options_support_unchunked_output() {
+        let input = write_filter_test_input(true, false);
+        let mut input_path = std::env::temp_dir();
+        input_path.push(format!(
+            "mcap-cli-filter-unchunked-input-{pid}-{nonce}.mcap",
+            pid = std::process::id(),
+            nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+        std::fs::write(&input_path, &input).expect("write input");
+
+        let mut output_path = std::env::temp_dir();
+        output_path.push(format!(
+            "mcap-cli-filter-unchunked-output-{pid}-{nonce}.mcap",
+            pid = std::process::id(),
+            nonce = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system time should be after epoch")
+                .as_nanos()
+        ));
+
+        let mut options =
+            TranscodeCommandOptions::new(Some(input_path.clone()), Some(output_path.clone()), 1024);
+        options.include_metadata = true;
+        options.include_attachments = true;
+        options.use_chunks = false;
+        options.output_compression = "none".to_string();
+
+        run(options, SourceOptions::default()).expect("transcode should succeed");
+        let output = std::fs::read(&output_path).expect("read output");
+        let summary = mcap::Summary::read(&output)
+            .expect("summary read should succeed")
+            .expect("summary should exist");
+        assert!(
+            summary.chunk_indexes.is_empty(),
+            "unchunked output should not contain chunk indexes"
+        );
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 100);
+        assert_eq!(stats.topic_counts["camera_b"], 100);
+        assert_eq!(stats.topic_counts["radar_a"], 100);
+        assert_eq!(stats.metadata_count, 1);
+        assert_eq!(stats.attachment_count, 1);
+
+        let _ = std::fs::remove_file(input_path);
+        let _ = std::fs::remove_file(output_path);
+    }
+
+    #[test]
+    fn run_rejects_same_input_and_output_without_truncating() {
+        let input = write_filter_test_input(true, false);
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let path = dir.path().join("same-path.mcap");
+        std::fs::write(&path, &input).expect("write input");
+
+        let err = run(
+            default_transcode_args().command_options(Some(path.clone()), Some(path.clone()), false),
+            SourceOptions::default(),
+        )
+        .expect_err("same input/output should fail");
+
+        assert!(err.to_string().contains("input and output paths"));
+        assert_eq!(std::fs::read(&path).expect("read input"), input);
+    }
+
+    #[test]
+    fn includes_metadata_and_attachments_by_default() {
+        let opts = build_filter_options(&default_transcode_args(), false).expect("options");
+        assert!(opts.include_metadata);
+        assert!(opts.include_attachments);
+    }
+
+    #[test]
+    fn exclude_flags_drop_metadata_and_attachments() {
+        let mut args = default_transcode_args();
+        args.exclude_metadata = true;
+        args.exclude_attachments = true;
+        let opts = build_filter_options(&args, false).expect("options");
+        assert!(!opts.include_metadata);
+        assert!(!opts.include_attachments);
+    }
+
+    #[test]
+    fn deprecated_include_flags_do_not_re_enable_excluded_records() {
+        // The deprecated --include-* flags are no-ops; --exclude-* still wins.
+        let mut args = default_transcode_args();
+        args.include_metadata = true;
+        args.include_attachments = true;
+        args.exclude_metadata = true;
+        args.exclude_attachments = true;
+        let opts = build_filter_options(&args, false).expect("options");
+        assert!(!opts.include_metadata);
+        assert!(!opts.include_attachments);
+    }
+
+    #[test]
+    fn indexed_attachments_are_not_time_filtered() {
+        // The fixture's attachment has log_time 50; a [0, 10) window excludes it from the message
+        // range but the attachment is still kept.
+        let input = write_filter_test_input(true, false);
+        let output = run_filter(&input, &time_windowed_options(0, 10));
+        let stats = analyze_output(&output);
+        assert_eq!(stats.attachment_count, 1);
+        assert_eq!(stats.metadata_count, 1);
+    }
+
+    #[test]
+    fn linear_attachments_are_not_time_filtered() {
+        let input = write_filter_test_input(false, true);
+        let output = run_filter(&input, &time_windowed_options(0, 10));
+        let stats = analyze_output(&output);
+        assert_eq!(stats.attachment_count, 1);
+        assert_eq!(stats.metadata_count, 1);
+    }
+
+    #[test]
+    fn indexed_path_keeps_metadata_and_attachments_missing_from_summary() {
+        let input = write_chunk_indexed_without_aux_indexes();
+        // Sanity: this takes the indexed path (chunk indexes present) but the summary does not
+        // index the metadata/attachment records.
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary present");
+        assert!(!summary.chunk_indexes.is_empty());
+        assert!(summary.metadata_indexes.is_empty());
+        assert!(summary.attachment_indexes.is_empty());
+
+        let output = run_filter(&input, &include_all_options());
+        let stats = analyze_output(&output);
+        // Lossless: the records are recovered via the scan fallback rather than dropped.
+        assert_eq!(stats.metadata_count, 1);
+        assert_eq!(stats.attachment_count, 1);
+    }
+
+    #[test]
+    fn indexed_filter_places_metadata_first_and_attachments_last() {
+        let input = write_filter_test_input(true, false);
+        let output = run_filter(&input, &include_all_options());
+        assert_standard_placement(&output);
+    }
+
+    #[test]
+    fn linear_filter_places_metadata_first_and_attachments_last() {
+        let input = write_filter_test_input(false, true);
+        let output = run_filter(&input, &include_all_options());
+        assert_standard_placement(&output);
+    }
+
+    #[test]
+    fn order_by_log_time_sorts_unindexed_input() {
+        let input = write_unsorted_summaryless_input();
+        let opts = FilterOptions {
+            order_by_log_time: true,
+            ..include_all_options()
+        };
+        let output = run_filter(&input, &opts);
+        assert_eq!(analyze_output(&output).log_times, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn order_none_preserves_unindexed_input_order() {
+        let input = write_unsorted_summaryless_input();
+        let output = run_filter(&input, &include_all_options());
+        assert_eq!(analyze_output(&output).log_times, vec![3, 2, 1]);
+    }
+
+    #[test]
+    fn synthesize_chunk_summary_rebuilds_index_for_summaryless_chunked() {
+        let input = write_unsorted_chunked_summaryless_input();
+        assert!(
+            mcap::Summary::read(&input).expect("read").is_none(),
+            "fixture should be summaryless"
+        );
+        let summary = super::message_source::synthesize_chunk_summary(&input)
+            .expect("synthesis should succeed")
+            .expect("a chunked input should yield a synthesized summary");
+        assert!(!summary.chunk_indexes.is_empty());
+        assert!(!summary.channels.is_empty());
+        // Metadata/attachment indexes are synthesized too, with matching statistics counts, so the
+        // indexed path reads them by offset instead of re-scanning.
+        assert_eq!(summary.metadata_indexes.len(), 1);
+        assert_eq!(summary.attachment_indexes.len(), 1);
+        let stats = summary.stats.expect("synthesized stats");
+        assert_eq!(stats.metadata_count, 1);
+        assert_eq!(stats.attachment_count, 1);
+    }
+
+    #[test]
+    fn order_by_log_time_sorts_summaryless_chunked_input() {
+        // Exercises the synthesized-index path (chunked + summaryless + ordered).
+        let input = write_unsorted_chunked_summaryless_input();
+        let opts = FilterOptions {
+            order_by_log_time: true,
+            ..include_all_options()
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        assert_eq!(stats.log_times, vec![10, 20, 30]);
+        // Metadata and attachment survive the reindexed path.
+        assert_eq!(stats.metadata_count, 1);
+        assert_eq!(stats.attachment_count, 1);
+    }
+
+    #[test]
+    fn order_none_preserves_summaryless_chunked_input_order() {
+        let input = write_unsorted_chunked_summaryless_input();
+        let output = run_filter(&input, &include_all_options());
+        assert_eq!(analyze_output(&output).log_times, vec![30, 10, 20]);
+    }
+
+    #[test]
+    fn include_crc_false_zeroes_output_crcs() {
+        let input = write_filter_test_input(true, false);
+        let opts = FilterOptions {
+            include_crc: false,
+            ..include_all_options()
+        };
+        let output = run_filter(&input, &opts);
+        let footer = mcap::read::footer(&output).expect("footer");
+        assert_eq!(footer.summary_crc, 0);
+    }
+}

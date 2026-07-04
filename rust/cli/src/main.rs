@@ -4,6 +4,7 @@ mod context;
 mod logsetup;
 mod parse;
 mod render;
+mod rewrite;
 mod source;
 
 use std::process::ExitCode;

@@ -7,13 +7,12 @@
 use anyhow::Result;
 
 use crate::cli::SortCommand;
-use crate::commands::filter;
 use crate::context::CommandContext;
-use crate::source;
+use crate::{rewrite, source};
 
 pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
     args.transcode.warn_deprecations();
-    filter::run_transcode(
+    rewrite::run(
         args.transcode
             .command_options(Some(args.file), Some(args.output_file), true),
         source::SourceOptions::new(ctx.allow_remote_scan()),
