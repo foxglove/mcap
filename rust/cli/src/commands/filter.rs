@@ -1,3 +1,15 @@
+//! `filter` rewrites an MCAP, selecting a subset of records.
+//!
+//! Selection is opt-out: by default everything is kept, and flags narrow the output. Each dimension
+//! is independent — narrowing one never drops another. Topic (`--include-topic-regex` /
+//! `--exclude-topic-regex`) and time-range (`--start`/`--end`) selection apply to messages;
+//! metadata and attachments are kept unless dropped with `--exclude-metadata` /
+//! `--exclude-attachments`. (`--include-metadata` / `--include-attachments` are deprecated no-ops.)
+//!
+//! Records are placed in a fixed layout: metadata immediately after the header, then messages, then
+//! attachments immediately before the data end record, preserving order within each group. Indexed
+//! readers seek via the summary index (metadata and attachments are not duplicated into it), so the
+//! layout serves linear readers and keeps message chunks unfragmented.
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
 use std::io::{IsTerminal as _, Seek, Write};
@@ -5,6 +17,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
+use log::warn;
 use regex::Regex;
 
 use crate::cli::{parse_output_compression, parse_timestamp_or_nanos, FilterCommand};
@@ -60,8 +73,8 @@ impl From<&FilterCommand> for TranscodeCommandOptions {
             end: args.end.clone(),
             end_secs: args.end_secs,
             end_nsecs: args.end_nsecs,
-            include_metadata: args.include_metadata,
-            include_attachments: args.include_attachments,
+            include_metadata: !args.exclude_metadata,
+            include_attachments: !args.exclude_attachments,
             output_compression: args.output_compression.clone(),
             chunk_size: args.chunk_size,
             use_chunks: true,
@@ -122,6 +135,12 @@ struct PreStartMessage {
 }
 
 pub fn run(ctx: &CommandContext, args: FilterCommand) -> Result<()> {
+    if args.include_metadata {
+        warn!("--include-metadata is deprecated and has no effect; metadata is included by default (use --exclude-metadata to drop it)");
+    }
+    if args.include_attachments {
+        warn!("--include-attachments is deprecated and has no effect; attachments are included by default (use --exclude-attachments to drop them)");
+    }
     run_transcode(
         TranscodeCommandOptions::from(&args),
         source::SourceOptions::new(ctx.allow_remote_scan()),
@@ -348,6 +367,11 @@ fn filter_indexed<W: Write + Seek>(
         .map(|channel| channel.topic.clone())
         .collect();
 
+    // Metadata is written first, before any messages (see module docs).
+    if opts.include_metadata {
+        copy_metadata_indexed_or_scanned(input, summary, writer)?;
+    }
+
     if !opts.last_per_channel_topics.is_empty() && opts.start > 0 {
         let target_topics: BTreeSet<String> = summary
             .channels
@@ -459,23 +483,56 @@ fn filter_indexed<W: Write + Seek>(
         }
     }
 
-    if opts.include_metadata {
-        let mut metadata_indexes = summary.metadata_indexes.clone();
-        metadata_indexes.sort_by_key(|index| index.offset);
-        for index in &metadata_indexes {
+    // Attachments are written last, kept regardless of the message time range.
+    if opts.include_attachments {
+        copy_attachments_indexed_or_scanned(input, summary, writer)?;
+    }
+
+    Ok(())
+}
+
+/// Copies every metadata record from an indexed input at the current position. The summary index is
+/// trusted only when the statistics count matches its length; otherwise (index records are optional
+/// even alongside chunk indexes, or statistics are absent) it falls back to a top-level scan so no
+/// records are dropped. Metadata is never inside a chunk, so the scan does not decompress.
+fn copy_metadata_indexed_or_scanned<W: Write + Seek>(
+    input: &[u8],
+    summary: &mcap::Summary,
+    writer: &mut mcap::Writer<W>,
+) -> Result<()> {
+    let indexed_count = summary.stats.as_ref().map(|stats| stats.metadata_count);
+    if indexed_count == Some(summary.metadata_indexes.len() as u32) {
+        let mut indexes = summary.metadata_indexes.clone();
+        indexes.sort_by_key(|index| index.offset);
+        for index in &indexes {
             let metadata = mcap::read::metadata(input, index)
                 .with_context(|| format!("failed to read metadata at offset {}", index.offset))?;
             writer.write_metadata(&metadata)?;
         }
+        return Ok(());
     }
 
-    if opts.include_attachments {
-        let mut attachment_indexes = summary.attachment_indexes.clone();
-        attachment_indexes.sort_by_key(|index| index.offset);
-        for index in &attachment_indexes {
-            if index.log_time < opts.start || index.log_time >= opts.end {
-                continue;
-            }
+    for record in mcap::read::LinearReader::new(input)? {
+        if let mcap::records::Record::Metadata(metadata) = record? {
+            writer.write_metadata(&metadata)?;
+        }
+    }
+    Ok(())
+}
+
+/// Copies every attachment from an indexed input, writing them at the current position. Uses the
+/// same statistics cross-check as [`copy_metadata_indexed_or_scanned`], falling back to a top-level
+/// linear scan when the summary does not index every attachment so none are silently dropped.
+fn copy_attachments_indexed_or_scanned<W: Write + Seek>(
+    input: &[u8],
+    summary: &mcap::Summary,
+    writer: &mut mcap::Writer<W>,
+) -> Result<()> {
+    let indexed_count = summary.stats.as_ref().map(|stats| stats.attachment_count);
+    if indexed_count == Some(summary.attachment_indexes.len() as u32) {
+        let mut indexes = summary.attachment_indexes.clone();
+        indexes.sort_by_key(|index| index.offset);
+        for index in &indexes {
             let attachment = mcap::read::attachment(input, index).with_context(|| {
                 format!(
                     "failed to read attachment {} at offset {}",
@@ -484,8 +541,20 @@ fn filter_indexed<W: Write + Seek>(
             })?;
             writer.attach(&attachment)?;
         }
+        return Ok(());
     }
 
+    for record in mcap::read::LinearReader::new(input)? {
+        if let mcap::records::Record::Attachment { header, data, .. } = record? {
+            writer.attach(&mcap::Attachment {
+                log_time: header.log_time,
+                create_time: header.create_time,
+                name: header.name,
+                media_type: header.media_type,
+                data: Cow::Borrowed(data.as_ref()),
+            })?;
+        }
+    }
     Ok(())
 }
 
@@ -509,9 +578,21 @@ fn filter_linear<W: Write + Seek>(
         bail!("including last-per-channel topics is not supported for non-indexed input");
     }
 
+    // Metadata is written first, before any messages (see module docs). Metadata records are never
+    // stored inside chunks, so a top-level linear scan surfaces them without decompressing chunks.
+    if opts.include_metadata {
+        for record in mcap::read::LinearReader::new(input)? {
+            if let mcap::records::Record::Metadata(metadata) = record? {
+                writer.write_metadata(&metadata)?;
+            }
+        }
+    }
+
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+    // Collected during the message pass (borrowing from `input`, no copy) and written last.
+    let mut pending_attachments = Vec::<mcap::Attachment>::new();
 
     for record in mcap::read::ChunkFlattener::new(input)? {
         match record? {
@@ -559,26 +640,25 @@ fn filter_linear<W: Write + Seek>(
                     data: Cow::Borrowed(data.as_ref()),
                 })?;
             }
-            mcap::records::Record::Metadata(metadata) if opts.include_metadata => {
-                writer.write_metadata(&metadata)?;
-            }
-            mcap::records::Record::Attachment { header, data, .. } => {
-                if !opts.include_attachments {
-                    continue;
-                }
-                if header.log_time < opts.start || header.log_time >= opts.end {
-                    continue;
-                }
-                writer.attach(&mcap::Attachment {
+            mcap::records::Record::Attachment { header, data, .. } if opts.include_attachments => {
+                // Kept regardless of the message time range.
+                pending_attachments.push(mcap::Attachment {
                     log_time: header.log_time,
                     create_time: header.create_time,
                     name: header.name,
                     media_type: header.media_type,
-                    data: Cow::Borrowed(data.as_ref()),
-                })?;
+                    data,
+                });
             }
+            // Metadata is handled up front; everything else (indexes, statistics, etc.) is
+            // regenerated by the writer.
             _ => {}
         }
+    }
+
+    // Attachments are written last, after all messages (see module docs).
+    for attachment in &pending_attachments {
+        writer.attach(attachment)?;
     }
 
     Ok(())
@@ -633,6 +713,8 @@ mod tests {
             end: None,
             end_secs: 0,
             end_nsecs: 0,
+            exclude_metadata: false,
+            exclude_attachments: false,
             include_metadata: false,
             include_attachments: false,
             output_compression: "zstd".to_string(),
@@ -797,6 +879,115 @@ mod tests {
         stats
     }
 
+    fn include_all_options() -> FilterOptions {
+        FilterOptions {
+            output: None,
+            include_topics: Vec::new(),
+            exclude_topics: Vec::new(),
+            last_per_channel_topics: Vec::new(),
+            start: 0,
+            end: u64::MAX,
+            include_metadata: true,
+            include_attachments: true,
+            compression: Some(mcap::Compression::Zstd),
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            use_chunks: true,
+        }
+    }
+
+    fn time_windowed_options(start: u64, end: u64) -> FilterOptions {
+        FilterOptions {
+            start,
+            end,
+            ..include_all_options()
+        }
+    }
+
+    /// Builds a chunk-indexed file whose summary omits metadata/attachment index records — a
+    /// spec-legal shape our own writer avoids but other writers may produce.
+    fn write_chunk_indexed_without_aux_indexes() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_metadata_indexes(false)
+                .emit_attachment_indexes(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id: channel,
+                        sequence: 0,
+                        log_time: 0,
+                        publish_time: 0,
+                    },
+                    b"a",
+                )
+                .expect("write message");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 5,
+                    create_time: 5,
+                    name: "a.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: std::borrow::Cow::Borrowed(&[1, 2, 3]),
+                })
+                .expect("attachment");
+            writer
+                .write_metadata(&mcap::records::Metadata {
+                    name: "m".to_string(),
+                    metadata: BTreeMap::new(),
+                })
+                .expect("metadata");
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    /// Collects the opcodes of the top-level records in `bytes`, in file order.
+    fn top_level_opcodes(bytes: &[u8]) -> Vec<u8> {
+        mcap::read::LinearReader::new(bytes)
+            .expect("linear reader")
+            .map(|record| record.expect("record").opcode())
+            .collect()
+    }
+
+    /// Asserts the standardized data-section layout: a metadata record precedes the first message
+    /// chunk, and an attachment record follows the chunks but stays within the data section.
+    fn assert_standard_placement(output: &[u8]) {
+        use mcap::records::op;
+        let opcodes = top_level_opcodes(output);
+        let position = |target: u8| {
+            opcodes
+                .iter()
+                .position(|&opcode| opcode == target)
+                .unwrap_or_else(|| panic!("expected a record with opcode {target:#04x}"))
+        };
+        let metadata = position(op::METADATA);
+        let first_chunk = position(op::CHUNK);
+        let attachment = position(op::ATTACHMENT);
+        let data_end = position(op::DATA_END);
+        assert!(
+            metadata < first_chunk,
+            "metadata should be written before the first message chunk"
+        );
+        assert!(
+            first_chunk < attachment,
+            "attachments should be written after the message chunks"
+        );
+        assert!(
+            attachment < data_end,
+            "attachments should be written inside the data section"
+        );
+    }
+
     #[test]
     fn build_filter_options_rejects_include_exclude_conflict() {
         let mut args = default_filter_command();
@@ -910,6 +1101,9 @@ mod tests {
         assert_eq!(stats.topic_counts["camera_a"], 10);
         assert_eq!(stats.topic_counts["camera_b"], 10);
         assert!(!stats.topic_counts.contains_key("radar_a"));
+        // --exclude-metadata / --exclude-attachments drop those records from the output.
+        assert_eq!(stats.metadata_count, 0);
+        assert_eq!(stats.attachment_count, 0);
     }
 
     #[test]
@@ -933,7 +1127,10 @@ mod tests {
         assert_eq!(stats.topic_counts["camera_a"], 49);
         assert_eq!(stats.topic_counts["camera_b"], 49);
         assert!(!stats.topic_counts.contains_key("radar_a"));
-        assert_eq!(stats.attachment_count, 0);
+        // The attachment (log_time 50) is kept even though it is outside the [0, 49) message
+        // window: the time range applies to messages, not auxiliary records.
+        assert_eq!(stats.attachment_count, 1);
+        // Metadata is excluded here (include_metadata = false), so none is written.
         assert_eq!(stats.metadata_count, 0);
     }
 
@@ -1200,6 +1397,8 @@ mod tests {
                 end: None,
                 end_secs: 0,
                 end_nsecs: 0,
+                exclude_metadata: false,
+                exclude_attachments: false,
                 include_metadata: false,
                 include_attachments: false,
                 output_compression: "zstd".to_string(),
@@ -1210,5 +1409,88 @@ mod tests {
 
         assert!(err.to_string().contains("input and output paths"));
         assert_eq!(std::fs::read(&path).expect("read input"), input);
+    }
+
+    #[test]
+    fn includes_metadata_and_attachments_by_default() {
+        let opts = build_filter_options(&default_filter_command()).expect("options");
+        assert!(opts.include_metadata);
+        assert!(opts.include_attachments);
+    }
+
+    #[test]
+    fn exclude_flags_drop_metadata_and_attachments() {
+        let mut args = default_filter_command();
+        args.exclude_metadata = true;
+        args.exclude_attachments = true;
+        let opts = build_filter_options(&args).expect("options");
+        assert!(!opts.include_metadata);
+        assert!(!opts.include_attachments);
+    }
+
+    #[test]
+    fn deprecated_include_flags_do_not_re_enable_excluded_records() {
+        // The deprecated --include-* flags are no-ops; --exclude-* still wins.
+        let mut args = default_filter_command();
+        args.include_metadata = true;
+        args.include_attachments = true;
+        args.exclude_metadata = true;
+        args.exclude_attachments = true;
+        let opts = build_filter_options(&args).expect("options");
+        assert!(!opts.include_metadata);
+        assert!(!opts.include_attachments);
+    }
+
+    #[test]
+    fn indexed_attachments_are_not_time_filtered() {
+        // The fixture's attachment has log_time 50; a [0, 10) window excludes it from the message
+        // range but the attachment is still kept.
+        let input = write_filter_test_input(true, false);
+        let output = run_filter(&input, &time_windowed_options(0, 10));
+        let stats = analyze_output(&output);
+        assert_eq!(stats.attachment_count, 1);
+        assert_eq!(stats.metadata_count, 1);
+    }
+
+    #[test]
+    fn linear_attachments_are_not_time_filtered() {
+        let input = write_filter_test_input(false, true);
+        let output = run_filter(&input, &time_windowed_options(0, 10));
+        let stats = analyze_output(&output);
+        assert_eq!(stats.attachment_count, 1);
+        assert_eq!(stats.metadata_count, 1);
+    }
+
+    #[test]
+    fn indexed_path_keeps_metadata_and_attachments_missing_from_summary() {
+        let input = write_chunk_indexed_without_aux_indexes();
+        // Sanity: this takes the indexed path (chunk indexes present) but the summary does not
+        // index the metadata/attachment records.
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary present");
+        assert!(!summary.chunk_indexes.is_empty());
+        assert!(summary.metadata_indexes.is_empty());
+        assert!(summary.attachment_indexes.is_empty());
+
+        let output = run_filter(&input, &include_all_options());
+        let stats = analyze_output(&output);
+        // Lossless: the records are recovered via the scan fallback rather than dropped.
+        assert_eq!(stats.metadata_count, 1);
+        assert_eq!(stats.attachment_count, 1);
+    }
+
+    #[test]
+    fn indexed_filter_places_metadata_first_and_attachments_last() {
+        let input = write_filter_test_input(true, false);
+        let output = run_filter(&input, &include_all_options());
+        assert_standard_placement(&output);
+    }
+
+    #[test]
+    fn linear_filter_places_metadata_first_and_attachments_last() {
+        let input = write_filter_test_input(false, true);
+        let output = run_filter(&input, &include_all_options());
+        assert_standard_placement(&output);
     }
 }

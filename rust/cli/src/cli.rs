@@ -458,12 +458,20 @@ pub struct FilterCommand {
     #[arg(long = "end-nsecs", default_value_t = 0)]
     pub end_nsecs: u64,
 
-    /// Include metadata records in output
-    #[arg(long = "include-metadata", default_value_t = false)]
+    /// Exclude metadata records from the output (metadata is included by default)
+    #[arg(long = "exclude-metadata", default_value_t = false)]
+    pub exclude_metadata: bool,
+
+    /// Exclude attachments from the output (attachments are included by default)
+    #[arg(long = "exclude-attachments", default_value_t = false)]
+    pub exclude_attachments: bool,
+
+    /// Deprecated no-op: metadata is included by default. Use --exclude-metadata to drop it.
+    #[arg(long = "include-metadata", default_value_t = false, hide = true)]
     pub include_metadata: bool,
 
-    /// Include attachments in output
-    #[arg(long = "include-attachments", default_value_t = false)]
+    /// Deprecated no-op: attachments are included by default. Use --exclude-attachments to drop them.
+    #[arg(long = "include-attachments", default_value_t = false, hide = true)]
     pub include_attachments: bool,
 
     /// Compression algorithm for output file: zstd, lz4, or none
