@@ -1,6 +1,6 @@
 //! `sort` rewrites an MCAP with its messages in log-time order.
 //!
-//! It is a thin preset over the shared `filter` engine: `sort` is `filter --order-by log-time`
+//! It is a thin preset over the shared `filter` engine: `sort` is `filter --order-by log_time`
 //! keeping all records. The engine handles reading (indexed or summaryless), log-time ordering, and
 //! the standardized record placement (metadata first, attachments last).
 use anyhow::Result;

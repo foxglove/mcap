@@ -589,7 +589,7 @@ mod tests {
 
     #[test]
     fn parses_filter_order_by_log_time() {
-        let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order-by", "log-time"])
+        let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order-by", "log_time"])
             .expect("filter should parse");
         match args.command {
             Command::Filter(filter) => {

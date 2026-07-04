@@ -316,6 +316,7 @@ pub enum MessageOrder {
     #[default]
     None,
     /// Sort messages by log time. This additionally sorts unindexed inputs.
+    #[value(name = "log_time", alias = "log-time")]
     LogTime,
 }
 
@@ -491,7 +492,7 @@ pub struct FilterCommand {
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Message ordering in the output: none (preserve input order) or log-time
+    /// Message ordering in the output: none (preserve input order) or log_time
     #[arg(long = "order-by", value_enum, default_value_t = MessageOrder::None)]
     pub order_by: MessageOrder,
 }
