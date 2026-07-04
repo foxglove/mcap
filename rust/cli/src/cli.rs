@@ -310,6 +310,15 @@ pub enum CompressionFormat {
     None,
 }
 
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MessageOrder {
+    /// Preserve the input's message order (indexed inputs are always read in log-time order).
+    #[default]
+    None,
+    /// Sort messages by log time. This additionally sorts unindexed inputs.
+    LogTime,
+}
+
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct ConvertCommand {
     /// Local path to the input file
@@ -481,6 +490,10 @@ pub struct FilterCommand {
     /// Target uncompressed chunk size for output
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
+
+    /// Message ordering in the output: none (preserve input order) or log-time
+    #[arg(long = "order-by", value_enum, default_value_t = MessageOrder::None)]
+    pub order_by: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

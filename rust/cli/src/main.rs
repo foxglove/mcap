@@ -582,8 +582,21 @@ mod tests {
                 include_attachments: true,
                 output_compression: "lz4".to_string(),
                 chunk_size: 2048,
+                order_by: crate::cli::MessageOrder::None,
             })
         );
+    }
+
+    #[test]
+    fn parses_filter_order_by_log_time() {
+        let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order-by", "log-time"])
+            .expect("filter should parse");
+        match args.command {
+            Command::Filter(filter) => {
+                assert_eq!(filter.order_by, crate::cli::MessageOrder::LogTime);
+            }
+            other => panic!("expected filter command, got {other:?}"),
+        }
     }
 
     #[test]
