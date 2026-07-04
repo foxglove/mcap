@@ -346,7 +346,108 @@ fn filter_with_writer<W: Write + Seek>(
             return filter_indexed(input, &summary, writer, opts);
         }
     }
+    // Summaryless input. When ordering by log time, rebuild a chunk index up front so the
+    // memory-bounded indexed reader can re-order messages, instead of buffering the whole file.
+    if opts.order_by_log_time {
+        if let Ok(Some(summary)) = synthesize_chunk_summary(input) {
+            return filter_indexed(input, &summary, writer, opts);
+        }
+    }
     filter_linear(input, writer, opts)
+}
+
+/// Rebuilds a minimal summary — chunk indexes plus channel/schema definitions — for a chunked file
+/// that lacks a usable summary section, so the memory-bounded indexed path can re-order it instead
+/// of buffering every message. Returns `Ok(None)` when the input has no chunks (the unchunked case,
+/// which the linear path handles) or when the top-level framing can't be walked (caller falls back
+/// to the linear path). Attachments/metadata are intentionally left out — the indexed path recovers
+/// them via a scan when the summary omits them.
+fn synthesize_chunk_summary(input: &[u8]) -> Result<Option<mcap::Summary>> {
+    let magic = mcap::MAGIC.len();
+    let Some(limit) = input.len().checked_sub(magic) else {
+        return Ok(None);
+    };
+
+    let mut chunk_indexes = Vec::new();
+    let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
+    let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+
+    let mut offset = magic;
+    while offset + 9 <= limit {
+        let opcode = input[offset];
+        let length = u64::from_le_bytes(
+            input[offset + 1..offset + 9]
+                .try_into()
+                .expect("9-byte length slice"),
+        ) as usize;
+        let body_start = offset + 9;
+        let Some(body_end) = body_start
+            .checked_add(length)
+            .filter(|end| *end <= input.len())
+        else {
+            return Ok(None);
+        };
+
+        match mcap::parse_record(opcode, &input[body_start..body_end]) {
+            Ok(mcap::records::Record::Chunk { header, data }) => {
+                for record in mcap::read::ChunkReader::new(header.clone(), data.as_ref())? {
+                    collect_definition(record?, &mut schemas, &mut channels);
+                }
+                chunk_indexes.push(mcap::records::ChunkIndex {
+                    message_start_time: header.message_start_time,
+                    message_end_time: header.message_end_time,
+                    chunk_start_offset: offset as u64,
+                    chunk_length: (9 + length) as u64,
+                    message_index_offsets: Default::default(),
+                    message_index_length: 0,
+                    compression: header.compression,
+                    compressed_size: header.compressed_size,
+                    uncompressed_size: header.uncompressed_size,
+                });
+            }
+            Ok(record) => collect_definition(record, &mut schemas, &mut channels),
+            Err(_) => return Ok(None),
+        }
+
+        offset = body_end;
+    }
+
+    if chunk_indexes.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(mcap::Summary {
+        channels,
+        schemas,
+        chunk_indexes,
+        ..Default::default()
+    }))
+}
+
+/// Collects a schema or channel definition into the maps used to build a synthesized summary.
+fn collect_definition(
+    record: mcap::records::Record,
+    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
+    channels: &mut HashMap<u16, Arc<mcap::Channel<'static>>>,
+) {
+    match record {
+        mcap::records::Record::Schema { header, data } => {
+            schemas.insert(
+                header.id,
+                Arc::new(mcap::Schema {
+                    id: header.id,
+                    name: header.name,
+                    encoding: header.encoding,
+                    data: Cow::Owned(data.into_owned()),
+                }),
+            );
+        }
+        mcap::records::Record::Channel(channel) => {
+            if let Ok(resolved) = build_channel(&channel, schemas) {
+                channels.insert(channel.id, resolved);
+            }
+        }
+        _ => {}
+    }
 }
 
 pub(crate) fn read_summary_for_indexed_transcode(input: &[u8]) -> Result<Option<mcap::Summary>> {
@@ -1009,6 +1110,44 @@ mod tests {
         output.into_inner()
     }
 
+    /// Builds a chunked, summaryless file with out-of-order messages spread across multiple chunks,
+    /// so ordering must go through the synthesized-index path rather than buffering.
+    fn write_unsorted_chunked_summaryless_input() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(20))
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            for log_time in [30u64, 10, 20] {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: channel,
+                            sequence: log_time as u32,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        b"x",
+                    )
+                    .expect("write message");
+                // Force each message into its own chunk so cross-chunk ordering is exercised.
+                writer.flush().expect("flush");
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
     /// Builds a chunk-indexed file whose summary omits metadata/attachment index records — a
     /// spec-legal shape our own writer avoids but other writers may produce.
     fn write_chunk_indexed_without_aux_indexes() -> Vec<u8> {
@@ -1631,6 +1770,39 @@ mod tests {
         let input = write_unsorted_summaryless_input();
         let output = run_filter(&input, &include_all_options());
         assert_eq!(analyze_output(&output).log_times, vec![3, 2, 1]);
+    }
+
+    #[test]
+    fn synthesize_chunk_summary_rebuilds_index_for_summaryless_chunked() {
+        let input = write_unsorted_chunked_summaryless_input();
+        assert!(
+            mcap::Summary::read(&input).expect("read").is_none(),
+            "fixture should be summaryless"
+        );
+        let summary = super::synthesize_chunk_summary(&input)
+            .expect("synthesis should succeed")
+            .expect("a chunked input should yield a synthesized summary");
+        assert!(!summary.chunk_indexes.is_empty());
+        assert!(!summary.channels.is_empty());
+    }
+
+    #[test]
+    fn order_by_log_time_sorts_summaryless_chunked_input() {
+        // Exercises the synthesized-index path (chunked + summaryless + ordered).
+        let input = write_unsorted_chunked_summaryless_input();
+        let opts = FilterOptions {
+            order_by_log_time: true,
+            ..include_all_options()
+        };
+        let output = run_filter(&input, &opts);
+        assert_eq!(analyze_output(&output).log_times, vec![10, 20, 30]);
+    }
+
+    #[test]
+    fn order_none_preserves_summaryless_chunked_input_order() {
+        let input = write_unsorted_chunked_summaryless_input();
+        let output = run_filter(&input, &include_all_options());
+        assert_eq!(analyze_output(&output).log_times, vec![30, 10, 20]);
     }
 
     #[test]
