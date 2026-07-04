@@ -307,15 +307,13 @@ pub fn load_input(file: Option<&Path>, options: SourceOptions) -> Result<InputDa
     read_stdin_to_mapped_input(&mut stdin.lock())
 }
 
-/// Spool a non-seekable stdin stream to a temporary file and memory-map it, rather
-/// than buffering the whole input in a `Vec`. When the temp dir is disk-backed the OS
-/// pages the mapping on demand, so piping an arbitrarily large MCAP into the CLI does
-/// not require holding the entire file in RAM.
+/// Spool a non-seekable stdin stream to a temporary file and memory-map it instead of
+/// buffering the whole input in a `Vec`, so piping an arbitrarily large MCAP keeps
+/// process memory bounded (the OS pages a disk-backed mapping on demand).
 ///
-/// The temp file is created in `$TMPDIR` (else `/tmp`). If that is a tmpfs — as `/tmp`
-/// is on many modern Linux setups — the spooled bytes stay resident in RAM/swap and the
-/// paging benefit is lost, so point `$TMPDIR` at real storage for very large piped
-/// inputs. This mirrors the remote `materialize_input` path, which spools the same way.
+/// The temp file lives in `$TMPDIR` (else `/tmp`); if that is a tmpfs — common on modern
+/// Linux — the spool stays in RAM and the paging benefit is lost, so point `$TMPDIR` at
+/// real storage for very large inputs. Mirrors the remote `materialize_input` path.
 fn read_stdin_to_mapped_input(reader: &mut impl std::io::Read) -> Result<InputData> {
     let mut temp_file = tempfile::Builder::new()
         .prefix("mcap-cli-stdin-input-")

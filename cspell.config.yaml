@@ -193,7 +193,6 @@ overrides:
       - xfail
       - pyyaml
       - mmap
-      - memmap
       - seekable
       - tmpfs
       - TMPDIR
