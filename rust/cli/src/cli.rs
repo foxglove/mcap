@@ -310,6 +310,16 @@ pub enum CompressionFormat {
     None,
 }
 
+impl CompressionFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CompressionFormat::Zstd => "zstd",
+            CompressionFormat::Lz4 => "lz4",
+            CompressionFormat::None => "none",
+        }
+    }
+}
+
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MessageOrder {
     /// Preserve the input's message order (indexed inputs are always read in log-time order).
@@ -413,15 +423,10 @@ pub struct DuCommand {
     pub file: PathBuf,
 }
 
+/// Flags shared by the file-rewriting commands (`filter`, `sort`) that select and re-encode
+/// records. Defined once and flattened into each command so the surfaces stay in sync.
 #[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct FilterCommand {
-    /// Input MCAP file path. If omitted, reads from stdin.
-    pub file: Option<PathBuf>,
-
-    /// Output file path. If omitted, writes to stdout.
-    #[arg(short = 'o', long = "output")]
-    pub output: Option<PathBuf>,
-
+pub struct TranscodeArgs {
     /// Include topics matching this regex (repeatable)
     #[arg(short = 'y', long = "include-topic-regex")]
     pub include_topic_regex: Vec<String>,
@@ -484,13 +489,38 @@ pub struct FilterCommand {
     #[arg(long = "include-attachments", default_value_t = false, hide = true)]
     pub include_attachments: bool,
 
-    /// Compression algorithm for output file: zstd, lz4, or none
-    #[arg(long = "output-compression", default_value = "zstd")]
-    pub output_compression: String,
+    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
+    #[arg(long = "compression", value_enum, default_value = "zstd")]
+    pub compression: CompressionFormat,
+
+    /// Deprecated: use --compression. Overrides --compression when set.
+    #[arg(long = "output-compression", hide = true)]
+    pub output_compression: Option<String>,
 
     /// Target uncompressed chunk size for output
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
+
+    /// Disable all output CRC fields
+    #[arg(long = "no-crc", default_value_t = false)]
+    pub no_crc: bool,
+
+    /// Write records outside of chunks
+    #[arg(long = "no-chunks", default_value_t = false)]
+    pub no_chunks: bool,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct FilterCommand {
+    /// Input MCAP file path. If omitted, reads from stdin.
+    pub file: Option<PathBuf>,
+
+    /// Output file path. If omitted, writes to stdout.
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+
+    #[command(flatten)]
+    pub transcode: TranscodeArgs,
 
     /// Message ordering in the output: none (preserve input order) or log_time
     #[arg(long = "order-by", value_enum, default_value_t = MessageOrder::None)]
@@ -537,21 +567,8 @@ pub struct SortCommand {
     #[arg(short = 'o', long = "output-file")]
     pub output_file: PathBuf,
 
-    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
-    #[arg(long, value_enum, default_value = "zstd")]
-    pub compression: CompressionFormat,
-
-    /// Target uncompressed chunk size in bytes
-    #[arg(long, default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
-    pub chunk_size: u64,
-
-    /// Disable all output CRC fields
-    #[arg(long = "no-crc", default_value_t = false)]
-    pub no_crc: bool,
-
-    /// Write records outside of chunks
-    #[arg(long = "no-chunks", default_value_t = false)]
-    pub no_chunks: bool,
+    #[command(flatten)]
+    pub transcode: TranscodeArgs,
 }
 
 pub type InfoCommand = FileCommand;

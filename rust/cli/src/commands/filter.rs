@@ -20,7 +20,9 @@ use anyhow::{bail, Context, Result};
 use log::warn;
 use regex::Regex;
 
-use crate::cli::{parse_output_compression, parse_timestamp_or_nanos, FilterCommand, MessageOrder};
+use crate::cli::{
+    parse_output_compression, parse_timestamp_or_nanos, FilterCommand, MessageOrder, TranscodeArgs,
+};
 use crate::context::CommandContext;
 use crate::{parse, source};
 
@@ -63,27 +65,50 @@ pub(crate) struct TranscodeCommandOptions {
     pub(crate) order_by_log_time: bool,
 }
 
-impl From<&FilterCommand> for TranscodeCommandOptions {
-    fn from(args: &FilterCommand) -> Self {
-        Self {
-            file: args.file.clone(),
-            output: args.output.clone(),
-            include_topic_regex: args.include_topic_regex.clone(),
-            exclude_topic_regex: args.exclude_topic_regex.clone(),
-            last_per_channel_topic_regex: args.last_per_channel_topic_regex.clone(),
-            start: args.start.clone(),
-            start_secs: args.start_secs,
-            start_nsecs: args.start_nsecs,
-            end: args.end.clone(),
-            end_secs: args.end_secs,
-            end_nsecs: args.end_nsecs,
-            include_metadata: !args.exclude_metadata,
-            include_attachments: !args.exclude_attachments,
-            output_compression: args.output_compression.clone(),
-            chunk_size: args.chunk_size,
-            use_chunks: true,
-            include_crc: true,
-            order_by_log_time: matches!(args.order_by, MessageOrder::LogTime),
+impl TranscodeArgs {
+    /// Builds engine options for the given input/output and message ordering. Deprecated flags are
+    /// mapped to their replacements here; call [`TranscodeArgs::warn_deprecations`] to surface them.
+    pub(crate) fn command_options(
+        &self,
+        file: Option<PathBuf>,
+        output: Option<PathBuf>,
+        order_by_log_time: bool,
+    ) -> TranscodeCommandOptions {
+        TranscodeCommandOptions {
+            file,
+            output,
+            include_topic_regex: self.include_topic_regex.clone(),
+            exclude_topic_regex: self.exclude_topic_regex.clone(),
+            last_per_channel_topic_regex: self.last_per_channel_topic_regex.clone(),
+            start: self.start.clone(),
+            start_secs: self.start_secs,
+            start_nsecs: self.start_nsecs,
+            end: self.end.clone(),
+            end_secs: self.end_secs,
+            end_nsecs: self.end_nsecs,
+            include_metadata: !self.exclude_metadata,
+            include_attachments: !self.exclude_attachments,
+            // The deprecated --output-compression overrides --compression when explicitly set.
+            output_compression: self
+                .output_compression
+                .clone()
+                .unwrap_or_else(|| self.compression.as_str().to_string()),
+            chunk_size: self.chunk_size,
+            use_chunks: !self.no_chunks,
+            include_crc: !self.no_crc,
+            order_by_log_time,
+        }
+    }
+
+    pub(crate) fn warn_deprecations(&self) {
+        if self.include_metadata {
+            warn!("--include-metadata is deprecated and has no effect; metadata is included by default (use --exclude-metadata to drop it)");
+        }
+        if self.include_attachments {
+            warn!("--include-attachments is deprecated and has no effect; attachments are included by default (use --exclude-attachments to drop them)");
+        }
+        if self.output_compression.is_some() {
+            warn!("--output-compression is deprecated; use --compression");
         }
     }
 }
@@ -131,16 +156,6 @@ impl TranscodeCommandOptions {
         self.include_attachments = value;
         self
     }
-
-    pub(crate) fn include_crc(mut self, value: bool) -> Self {
-        self.include_crc = value;
-        self
-    }
-
-    pub(crate) fn order_by_log_time(mut self, value: bool) -> Self {
-        self.order_by_log_time = value;
-        self
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -153,14 +168,11 @@ struct PreStartMessage {
 }
 
 pub fn run(ctx: &CommandContext, args: FilterCommand) -> Result<()> {
-    if args.include_metadata {
-        warn!("--include-metadata is deprecated and has no effect; metadata is included by default (use --exclude-metadata to drop it)");
-    }
-    if args.include_attachments {
-        warn!("--include-attachments is deprecated and has no effect; attachments are included by default (use --exclude-attachments to drop them)");
-    }
+    args.transcode.warn_deprecations();
+    let order_by_log_time = matches!(args.order_by, MessageOrder::LogTime);
     run_transcode(
-        TranscodeCommandOptions::from(&args),
+        args.transcode
+            .command_options(args.file, args.output, order_by_log_time),
         source::SourceOptions::new(ctx.allow_remote_scan()),
     )
 }
@@ -191,7 +203,12 @@ pub(crate) fn run_transcode(
 
 #[cfg(test)]
 fn build_filter_options(args: &FilterCommand) -> Result<FilterOptions> {
-    build_filter_options_from_transcode_options(&TranscodeCommandOptions::from(args))
+    let order_by_log_time = matches!(args.order_by, MessageOrder::LogTime);
+    build_filter_options_from_transcode_options(&args.transcode.command_options(
+        args.file.clone(),
+        args.output.clone(),
+        order_by_log_time,
+    ))
 }
 
 fn build_filter_options_from_transcode_options(
@@ -738,13 +755,11 @@ mod tests {
     use regex::Regex;
 
     use super::{build_filter_options, filter_to_writer, include_topic, FilterOptions};
-    use crate::cli::FilterCommand;
+    use crate::cli::{CompressionFormat, FilterCommand, MessageOrder, TranscodeArgs};
     use crate::context::CommandContext;
 
-    fn default_filter_command() -> FilterCommand {
-        FilterCommand {
-            file: None,
-            output: None,
+    fn default_transcode_args() -> TranscodeArgs {
+        TranscodeArgs {
             include_topic_regex: Vec::new(),
             exclude_topic_regex: Vec::new(),
             last_per_channel_topic_regex: Vec::new(),
@@ -758,9 +773,20 @@ mod tests {
             exclude_attachments: false,
             include_metadata: false,
             include_attachments: false,
-            output_compression: "zstd".to_string(),
+            compression: CompressionFormat::Zstd,
+            output_compression: None,
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-            order_by: crate::cli::MessageOrder::None,
+            no_crc: false,
+            no_chunks: false,
+        }
+    }
+
+    fn default_filter_command() -> FilterCommand {
+        FilterCommand {
+            file: None,
+            output: None,
+            transcode: default_transcode_args(),
+            order_by: MessageOrder::None,
         }
     }
 
@@ -1071,8 +1097,12 @@ mod tests {
     #[test]
     fn build_filter_options_rejects_include_exclude_conflict() {
         let mut args = default_filter_command();
-        args.include_topic_regex.push("camera.*".to_string());
-        args.exclude_topic_regex.push("radar.*".to_string());
+        args.transcode
+            .include_topic_regex
+            .push("camera.*".to_string());
+        args.transcode
+            .exclude_topic_regex
+            .push("radar.*".to_string());
         let err = build_filter_options(&args).expect_err("should fail");
         assert!(err
             .to_string()
@@ -1082,11 +1112,11 @@ mod tests {
     #[test]
     fn build_filter_options_parses_timestamps_with_precedence() {
         let mut args = default_filter_command();
-        args.start = Some("10".to_string());
-        args.start_nsecs = 50;
-        args.start_secs = 2;
-        args.end_nsecs = 200;
-        args.end_secs = 1;
+        args.transcode.start = Some("10".to_string());
+        args.transcode.start_nsecs = 50;
+        args.transcode.start_secs = 2;
+        args.transcode.end_nsecs = 200;
+        args.transcode.end_secs = 1;
         let opts = build_filter_options(&args).expect("options");
         assert_eq!(opts.start, 10);
         assert_eq!(opts.end, 200);
@@ -1492,22 +1522,8 @@ mod tests {
             FilterCommand {
                 file: Some(path.clone()),
                 output: Some(path.clone()),
-                include_topic_regex: Vec::new(),
-                exclude_topic_regex: Vec::new(),
-                last_per_channel_topic_regex: Vec::new(),
-                start: None,
-                start_secs: 0,
-                start_nsecs: 0,
-                end: None,
-                end_secs: 0,
-                end_nsecs: 0,
-                exclude_metadata: false,
-                exclude_attachments: false,
-                include_metadata: false,
-                include_attachments: false,
-                output_compression: "zstd".to_string(),
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                order_by: crate::cli::MessageOrder::None,
+                transcode: default_transcode_args(),
+                order_by: MessageOrder::None,
             },
         )
         .expect_err("same input/output should fail");
@@ -1526,8 +1542,8 @@ mod tests {
     #[test]
     fn exclude_flags_drop_metadata_and_attachments() {
         let mut args = default_filter_command();
-        args.exclude_metadata = true;
-        args.exclude_attachments = true;
+        args.transcode.exclude_metadata = true;
+        args.transcode.exclude_attachments = true;
         let opts = build_filter_options(&args).expect("options");
         assert!(!opts.include_metadata);
         assert!(!opts.include_attachments);
@@ -1537,10 +1553,10 @@ mod tests {
     fn deprecated_include_flags_do_not_re_enable_excluded_records() {
         // The deprecated --include-* flags are no-ops; --exclude-* still wins.
         let mut args = default_filter_command();
-        args.include_metadata = true;
-        args.include_attachments = true;
-        args.exclude_metadata = true;
-        args.exclude_attachments = true;
+        args.transcode.include_metadata = true;
+        args.transcode.include_attachments = true;
+        args.transcode.exclude_metadata = true;
+        args.transcode.exclude_attachments = true;
         let opts = build_filter_options(&args).expect("options");
         assert!(!opts.include_metadata);
         assert!(!opts.include_attachments);

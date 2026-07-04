@@ -1,38 +1,23 @@
 //! `sort` rewrites an MCAP with its messages in log-time order.
 //!
-//! It is a thin preset over the shared `filter` engine: `sort` is `filter --order-by log_time`
-//! keeping all records. The engine handles reading (indexed or summaryless), log-time ordering, and
-//! the standardized record placement (metadata first, attachments last).
+//! It is a thin preset over the shared `filter` engine: `sort` is `filter --order-by log_time`. It
+//! shares `filter`'s flag surface (topic/time selection, `--exclude-*`, compression, chunking, CRC)
+//! via [`crate::cli::TranscodeArgs`], and only fixes the message ordering. The engine handles
+//! reading (indexed or summaryless), ordering, and the standardized record placement.
 use anyhow::Result;
 
-use crate::cli::{CompressionFormat, SortCommand};
-use crate::commands::filter::{self, TranscodeCommandOptions};
+use crate::cli::SortCommand;
+use crate::commands::filter;
 use crate::context::CommandContext;
 use crate::source;
 
 pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
+    args.transcode.warn_deprecations();
     filter::run_transcode(
-        build_transcode_options(args),
+        args.transcode
+            .command_options(Some(args.file), Some(args.output_file), true),
         source::SourceOptions::new(ctx.allow_remote_scan()),
     )
-}
-
-fn build_transcode_options(args: SortCommand) -> TranscodeCommandOptions {
-    TranscodeCommandOptions::new(Some(args.file), Some(args.output_file), args.chunk_size)
-        .compression(compression_name(args.compression))
-        .use_chunks(!args.no_chunks)
-        .include_crc(!args.no_crc)
-        .include_metadata(true)
-        .include_attachments(true)
-        .order_by_log_time(true)
-}
-
-fn compression_name(value: CompressionFormat) -> &'static str {
-    match value {
-        CompressionFormat::Zstd => "zstd",
-        CompressionFormat::Lz4 => "lz4",
-        CompressionFormat::None => "none",
-    }
 }
 
 #[cfg(test)]
@@ -45,9 +30,39 @@ mod tests {
 
     use mcap::records::MessageHeader;
 
-    use super::build_transcode_options;
-    use crate::cli::{CompressionFormat, SortCommand};
+    use crate::cli::{CompressionFormat, SortCommand, TranscodeArgs};
     use crate::context::CommandContext;
+
+    fn transcode_args() -> TranscodeArgs {
+        TranscodeArgs {
+            include_topic_regex: Vec::new(),
+            exclude_topic_regex: Vec::new(),
+            last_per_channel_topic_regex: Vec::new(),
+            start: None,
+            start_secs: 0,
+            start_nsecs: 0,
+            end: None,
+            end_secs: 0,
+            end_nsecs: 0,
+            exclude_metadata: false,
+            exclude_attachments: false,
+            include_metadata: false,
+            include_attachments: false,
+            compression: CompressionFormat::Zstd,
+            output_compression: None,
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            no_crc: false,
+            no_chunks: false,
+        }
+    }
+
+    fn sort_command(file: PathBuf, output_file: PathBuf) -> SortCommand {
+        SortCommand {
+            file,
+            output_file,
+            transcode: transcode_args(),
+        }
+    }
 
     fn unique_temp_path(stem: &str) -> PathBuf {
         let mut path = std::env::temp_dir();
@@ -156,28 +171,11 @@ mod tests {
         output.into_inner()
     }
 
-    fn sort_command(file: PathBuf, output_file: PathBuf) -> SortCommand {
-        SortCommand {
-            file,
-            output_file,
-            compression: CompressionFormat::Zstd,
-            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-            no_crc: false,
-            no_chunks: false,
-        }
-    }
-
-    fn run_sort_on(input: &[u8]) -> Vec<u8> {
-        let input_path = unique_temp_path("input");
-        let output_path = unique_temp_path("output");
-        std::fs::write(&input_path, input).expect("write input fixture");
-
-        super::run(
-            &CommandContext::default(),
-            sort_command(input_path.clone(), output_path.clone()),
-        )
-        .expect("sort should succeed");
-
+    fn run_sort(command: SortCommand, input: &[u8]) -> Vec<u8> {
+        std::fs::write(&command.file, input).expect("write input fixture");
+        let output_path = command.output_file.clone();
+        let input_path = command.file.clone();
+        super::run(&CommandContext::default(), command).expect("sort should succeed");
         let output = std::fs::read(&output_path).expect("read output");
         let _ = std::fs::remove_file(input_path);
         let _ = std::fs::remove_file(output_path);
@@ -192,23 +190,26 @@ mod tests {
     }
 
     #[test]
-    fn build_transcode_options_maps_sort_flags() {
-        let opts = build_transcode_options(SortCommand {
-            file: "in.mcap".into(),
-            output_file: "out.mcap".into(),
-            compression: CompressionFormat::Lz4,
-            chunk_size: 4096,
-            no_crc: true,
-            no_chunks: true,
-        });
+    fn command_options_force_log_time_ordering_and_keep_records() {
+        let command = SortCommand {
+            transcode: TranscodeArgs {
+                compression: CompressionFormat::Lz4,
+                no_crc: true,
+                no_chunks: true,
+                ..transcode_args()
+            },
+            ..sort_command("in.mcap".into(), "out.mcap".into())
+        };
+        let opts = command.transcode.command_options(
+            Some(command.file.clone()),
+            Some(command.output_file.clone()),
+            true,
+        );
 
-        assert_eq!(opts.file, Some(PathBuf::from("in.mcap")));
-        assert_eq!(opts.output, Some(PathBuf::from("out.mcap")));
         assert_eq!(opts.output_compression, "lz4");
-        assert_eq!(opts.chunk_size, 4096);
         assert!(!opts.use_chunks, "--no-chunks disables chunking");
         assert!(!opts.include_crc, "--no-crc disables CRCs");
-        // sort keeps everything and always orders by log time.
+        // sort keeps everything by default and always orders by log time.
         assert!(opts.include_metadata);
         assert!(opts.include_attachments);
         assert!(opts.order_by_log_time);
@@ -216,7 +217,8 @@ mod tests {
 
     #[test]
     fn run_sorts_indexed_input_and_keeps_records() {
-        let output = run_sort_on(&build_out_of_order_indexed_input());
+        let command = sort_command(unique_temp_path("input"), unique_temp_path("output"));
+        let output = run_sort(command, &build_out_of_order_indexed_input());
         assert_eq!(log_times(&output), vec![10, 30]);
 
         let summary = mcap::Summary::read(&output)
@@ -228,8 +230,21 @@ mod tests {
 
     #[test]
     fn run_sorts_summaryless_input() {
-        let output = run_sort_on(&build_out_of_order_summaryless_input());
+        let command = sort_command(unique_temp_path("input"), unique_temp_path("output"));
+        let output = run_sort(command, &build_out_of_order_summaryless_input());
         assert_eq!(log_times(&output), vec![10, 30]);
+    }
+
+    #[test]
+    fn run_honors_shared_topic_filter() {
+        // sort now shares filter's selection flags: an exclude-topic filter is respected.
+        let mut command = sort_command(unique_temp_path("input"), unique_temp_path("output"));
+        command.transcode.exclude_topic_regex = vec!["/demo".to_string()];
+        let output = run_sort(command, &build_out_of_order_indexed_input());
+        assert!(
+            log_times(&output).is_empty(),
+            "excluded topic should be dropped"
+        );
     }
 
     #[test]

@@ -35,17 +35,18 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use clap::Parser;
     use clap_complete::Shell;
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
         CoalesceChannels, Command, CompletionCommand, CompressCommand, CompressionFormat,
-        ConvertCommand, DecompressCommand, DoctorCommand, DuCommand, FilterCommand,
-        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
-        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand,
-        SortCommand,
+        ConvertCommand, DecompressCommand, DoctorCommand, DuCommand, GetAttachmentCommand,
+        GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand, ListAttachmentsCommand,
+        ListChannelsCommand, ListChunksCommand, ListCommand, ListMetadataCommand,
+        ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand,
     };
 
     #[test]
@@ -562,29 +563,27 @@ mod tests {
             "2048",
         ])
         .expect("filter should parse");
+        let Command::Filter(filter) = args.command else {
+            panic!("expected filter command");
+        };
+        assert_eq!(filter.file, Some("in.mcap".into()));
+        assert_eq!(filter.output, Some("out.mcap".into()));
         assert_eq!(
-            args.command,
-            Command::Filter(FilterCommand {
-                file: Some("in.mcap".into()),
-                output: Some("out.mcap".into()),
-                include_topic_regex: vec!["camera.*".to_string()],
-                exclude_topic_regex: vec![],
-                last_per_channel_topic_regex: vec!["camera_.*".to_string()],
-                start: Some("100".to_string()),
-                start_secs: 0,
-                start_nsecs: 0,
-                end: Some("200".to_string()),
-                end_secs: 0,
-                end_nsecs: 0,
-                exclude_metadata: false,
-                exclude_attachments: false,
-                include_metadata: true,
-                include_attachments: true,
-                output_compression: "lz4".to_string(),
-                chunk_size: 2048,
-                order_by: crate::cli::MessageOrder::None,
-            })
+            filter.transcode.include_topic_regex,
+            vec!["camera.*".to_string()]
         );
+        assert_eq!(
+            filter.transcode.last_per_channel_topic_regex,
+            vec!["camera_.*".to_string()]
+        );
+        assert_eq!(filter.transcode.start, Some("100".to_string()));
+        assert_eq!(filter.transcode.end, Some("200".to_string()));
+        // Deprecated flags still parse for back-compat.
+        assert!(filter.transcode.include_metadata);
+        assert!(filter.transcode.include_attachments);
+        assert_eq!(filter.transcode.output_compression, Some("lz4".to_string()));
+        assert_eq!(filter.transcode.chunk_size, 2048);
+        assert_eq!(filter.order_by, crate::cli::MessageOrder::None);
     }
 
     #[test]
@@ -611,11 +610,11 @@ mod tests {
         .expect("filter should parse");
         match args.command {
             Command::Filter(filter) => {
-                assert!(filter.exclude_metadata);
-                assert!(filter.exclude_attachments);
+                assert!(filter.transcode.exclude_metadata);
+                assert!(filter.transcode.exclude_attachments);
                 // Deprecated include flags default off and are no-ops.
-                assert!(!filter.include_metadata);
-                assert!(!filter.include_attachments);
+                assert!(!filter.transcode.include_metadata);
+                assert!(!filter.transcode.include_attachments);
             }
             other => panic!("expected filter command, got {other:?}"),
         }
@@ -640,17 +639,18 @@ mod tests {
     fn parses_sort_with_defaults() {
         let args = Args::try_parse_from(["mcap", "sort", "in.mcap", "-o", "out.mcap"])
             .expect("sort should parse");
+        let Command::Sort(sort) = args.command else {
+            panic!("expected sort command");
+        };
+        assert_eq!(sort.file, PathBuf::from("in.mcap"));
+        assert_eq!(sort.output_file, PathBuf::from("out.mcap"));
+        assert_eq!(sort.transcode.compression, CompressionFormat::Zstd);
         assert_eq!(
-            args.command,
-            Command::Sort(SortCommand {
-                file: "in.mcap".into(),
-                output_file: "out.mcap".into(),
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                compression: CompressionFormat::Zstd,
-                no_crc: false,
-                no_chunks: false,
-            })
+            sort.transcode.chunk_size,
+            mcap::WriteOptions::DEFAULT_CHUNK_SIZE
         );
+        assert!(!sort.transcode.no_crc);
+        assert!(!sort.transcode.no_chunks);
     }
 
     #[test]
@@ -694,17 +694,15 @@ mod tests {
             "--no-chunks",
         ])
         .expect("sort with flags should parse");
-        assert_eq!(
-            args.command,
-            Command::Sort(SortCommand {
-                file: "in.mcap".into(),
-                output_file: "out.mcap".into(),
-                chunk_size: 1024,
-                compression: CompressionFormat::None,
-                no_crc: true,
-                no_chunks: true,
-            })
-        );
+        let Command::Sort(sort) = args.command else {
+            panic!("expected sort command");
+        };
+        assert_eq!(sort.file, PathBuf::from("in.mcap"));
+        assert_eq!(sort.output_file, PathBuf::from("out.mcap"));
+        assert_eq!(sort.transcode.compression, CompressionFormat::None);
+        assert_eq!(sort.transcode.chunk_size, 1024);
+        assert!(sort.transcode.no_crc);
+        assert!(sort.transcode.no_chunks);
     }
 
     #[test]

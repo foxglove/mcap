@@ -81,12 +81,14 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<CommandOutcome
 mod tests {
     use std::path::PathBuf;
 
+    use clap::Parser;
+
     use super::dispatch;
     use crate::cli::{
-        AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
+        AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, Command,
         CompressCommand, DoctorCommand, DuCommand, GetAttachmentCommand, GetMetadataCommand,
         InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, RecoverCommand, SortCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, RecoverCommand,
     };
     use crate::context::CommandContext;
 
@@ -264,18 +266,11 @@ mod tests {
 
     #[test]
     fn sort_requires_existing_file() {
-        let err = dispatch(
-            &CommandContext::default(),
-            Command::Sort(SortCommand {
-                file: PathBuf::from("does-not-exist.mcap"),
-                output_file: PathBuf::from("sorted.mcap"),
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                compression: crate::cli::CompressionFormat::Zstd,
-                no_crc: false,
-                no_chunks: false,
-            }),
-        )
-        .expect_err("sort should fail on missing input file");
+        let args =
+            Args::try_parse_from(["mcap", "sort", "does-not-exist.mcap", "-o", "sorted.mcap"])
+                .expect("sort args should parse");
+        let err = dispatch(&CommandContext::default(), args.command)
+            .expect_err("sort should fail on missing input file");
         assert!(
             err.to_string().contains("couldn't open")
                 || err.to_string().contains("failed to canonicalize input")
