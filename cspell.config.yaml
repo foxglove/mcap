@@ -192,6 +192,9 @@ overrides:
       - addopts
       - xfail
       - pyyaml
+      - mmap
+      - memmap
+      - seekable
 
   - filename: "python/**/*.rst"
     words:

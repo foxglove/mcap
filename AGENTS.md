@@ -6,6 +6,21 @@ This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) log fil
 
 **MCAP** is a modular container file format for recording timestamped pub/sub messages with arbitrary serialization formats. It is designed to work well under various workloads, resource constraints, and durability requirements. The format specification lives in `website/docs/spec/index.md`, with the well-known registry in `website/docs/spec/registry.md`, and feature notes in `website/docs/spec/notes.md`.
 
+## Design principles
+
+### Bounded memory when reading
+
+MCAP files can be arbitrarily large (many GB). **Reader code paths must never require buffering an entire MCAP file into memory at once.** Memory use should stay bounded relative to the file size — it should scale with the current record/chunk being processed and any explicit caches, not with the total file length.
+
+Practically, this means:
+
+- **Prefer memory-mapping (`mmap`) for local files** in languages that support it (e.g. the Rust CLI maps files via `memmap2`). An mmap keeps the resident working set bounded because the OS pages data in on demand.
+- **Prefer seek + bounded range reads** for random-access/indexed reads, and **streaming** (incremental record-by-record parsing) for sequential reads, over reading the whole file into a heap buffer.
+- **For non-seekable inputs (e.g. a stdin pipe), spool the stream to a temporary file and mmap that**, rather than reading it all into a `Vec`/`Buffer`/`bytes`/`Data`. See `rust/cli/src/source.rs` (`load_input`) for the reference implementation.
+- Reading a single record, chunk, or attachment into memory is acceptable (these are bounded by the data being requested), but avoid materializing _all_ messages/records of a file at once unless the caller explicitly opts in (e.g. Python's `NonSeekingReader` with `log_time_order=True`, which documents the whole-file cost).
+
+When adding or changing a reader path, keep it within these bounds; if a full-file or full-collection read is unavoidable, make it explicit and opt-in.
+
 ## General prerequisites
 
 - **Git LFS** — test data under `tests/conformance/data/` and `rust/mcap/tests/data/` is stored in Git LFS. Tests will fail with `InvalidMagic` errors if LFS pointers haven't been pulled. Run `git lfs pull` before running tests.
