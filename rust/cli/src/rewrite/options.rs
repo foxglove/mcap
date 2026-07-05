@@ -209,8 +209,8 @@ fn build_filter_options(args: &FilterCommand) -> Result<ResolvedOptions> {
 mod tests {
     use regex::Regex;
 
-    use super::{build_filter_options, include_topic, ResolvedOptions};
-    use crate::cli::FilterCommand;
+    use super::{build_filter_options, include_topic, ResolvedOptions, RewriteOptions};
+    use crate::cli::{FilterCommand, MessageOrder};
 
     fn default_filter_command() -> FilterCommand {
         FilterCommand {
@@ -231,7 +231,7 @@ mod tests {
             include_attachments: false,
             output_compression: "zstd".to_string(),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-            order: crate::cli::MessageOrder::Preserve,
+            order: MessageOrder::Preserve,
         }
     }
 
@@ -322,9 +322,6 @@ mod tests {
 
     #[test]
     fn order_maps_to_order_by_log_time() {
-        use super::RewriteOptions;
-        use crate::cli::MessageOrder;
-
         let mut args = default_filter_command();
         // preserve (the default) does not sort.
         assert!(!RewriteOptions::from(&args).order_by_log_time);

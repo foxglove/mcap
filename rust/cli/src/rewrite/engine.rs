@@ -354,6 +354,15 @@ fn checked_slice(input: &[u8], offset: u64, length: usize) -> Result<&[u8]> {
     })
 }
 
+/// A message buffered during the linear path so summaryless input can be re-sorted by log time.
+struct BufferedMessage {
+    channel: Arc<mcap::Channel<'static>>,
+    sequence: u32,
+    log_time: u64,
+    publish_time: u64,
+    data: Vec<u8>,
+}
+
 fn filter_linear<W: Write + Seek>(
     input: &[u8],
     writer: &mut mcap::Writer<W>,
@@ -478,15 +487,6 @@ fn filter_linear<W: Write + Seek>(
     }
 
     Ok(())
-}
-
-/// A message buffered during the linear path so summaryless input can be re-sorted by log time.
-struct BufferedMessage {
-    channel: Arc<mcap::Channel<'static>>,
-    sequence: u32,
-    log_time: u64,
-    publish_time: u64,
-    data: Vec<u8>,
 }
 
 fn build_channel(

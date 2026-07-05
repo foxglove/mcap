@@ -310,18 +310,6 @@ pub enum CompressionFormat {
     None,
 }
 
-/// Message ordering applied by the file-rewriting commands.
-#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum MessageOrder {
-    /// Keep the input's stored message order.
-    #[default]
-    #[value(name = "preserve")]
-    Preserve,
-    /// Sort messages by log time.
-    #[value(name = "log_time", alias = "log-time")]
-    LogTime,
-}
-
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct ConvertCommand {
     /// Local path to the input file
@@ -413,6 +401,18 @@ pub struct DuCommand {
 
     /// Local path to the MCAP file
     pub file: PathBuf,
+}
+
+/// Message order applied by `filter` (and the shared rewrite engine) to the output.
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MessageOrder {
+    /// Keep the input's stored message order.
+    #[default]
+    #[value(name = "preserve")]
+    Preserve,
+    /// Sort messages by log time.
+    #[value(name = "log_time", alias = "log-time")]
+    LogTime,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
