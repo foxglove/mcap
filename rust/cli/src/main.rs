@@ -595,9 +595,9 @@ mod tests {
                 .expect("filter should parse");
         match args.command {
             Command::Filter(filter) => {
-                // The deprecated alias is captured verbatim and leaves --compression at its default.
+                // The deprecated alias is captured separately and leaves --compression at its default.
                 assert_eq!(filter.compression, CompressionFormat::Zstd);
-                assert_eq!(filter.output_compression, Some("none".to_string()));
+                assert_eq!(filter.output_compression, Some(CompressionFormat::None));
             }
             other => panic!("expected filter command, got {other:?}"),
         }

@@ -489,8 +489,8 @@ pub struct FilterCommand {
     pub compression: CompressionFormat,
 
     /// Deprecated: use --compression. Overrides --compression when set.
-    #[arg(long = "output-compression", hide = true)]
-    pub output_compression: Option<String>,
+    #[arg(long = "output-compression", value_enum, hide = true)]
+    pub output_compression: Option<CompressionFormat>,
 
     /// Target uncompressed chunk size for output
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
