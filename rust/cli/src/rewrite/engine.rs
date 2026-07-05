@@ -1,128 +1,14 @@
-//! Shared engine for the file-rewriting commands (`filter`, `compress`, `decompress`).
-//!
-//! A command supplies a [`RewriteOptions`] describing the input/output, record selection, and
-//! output encoding; [`run`] reads the input and writes a new MCAP.
-//!
-//! Selection is opt-out: by default everything is kept, and flags narrow the output. Each dimension
-//! is independent — narrowing one never drops another. Topic and time-range selection apply to
-//! messages; metadata and attachments are kept unless explicitly excluded.
-//!
-//! Records are placed in a fixed layout: metadata immediately after the header, then messages, then
-//! attachments immediately before the data end record, preserving order within each group. Indexed
-//! readers seek via the summary index (metadata and attachments are not duplicated into it), so the
-//! layout serves linear readers and keeps message chunks unfragmented.
+//! The read / select / place pipeline: [`run`] reads an input source and writes a new MCAP,
+//! choosing an indexed or linear read path and applying the standardized record placement.
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
 use std::io::{IsTerminal as _, Seek, Write};
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
-use regex::Regex;
 
-use crate::cli::{parse_output_compression, parse_timestamp_or_nanos, FilterCommand};
+use super::options::{include_topic, resolve_options, ResolvedOptions, RewriteOptions};
 use crate::{parse, source};
-
-#[derive(Debug, Clone)]
-struct FilterOptions {
-    output: Option<PathBuf>,
-    include_topics: Vec<Regex>,
-    exclude_topics: Vec<Regex>,
-    last_per_channel_topics: Vec<Regex>,
-    start: u64,
-    end: u64,
-    include_metadata: bool,
-    include_attachments: bool,
-    compression: Option<mcap::Compression>,
-    chunk_size: u64,
-    use_chunks: bool,
-}
-
-#[derive(Debug, Clone)]
-pub(crate) struct RewriteOptions {
-    pub(crate) file: Option<PathBuf>,
-    pub(crate) output: Option<PathBuf>,
-    pub(crate) include_topic_regex: Vec<String>,
-    pub(crate) exclude_topic_regex: Vec<String>,
-    pub(crate) last_per_channel_topic_regex: Vec<String>,
-    pub(crate) start: Option<String>,
-    pub(crate) start_secs: u64,
-    pub(crate) start_nsecs: u64,
-    pub(crate) end: Option<String>,
-    pub(crate) end_secs: u64,
-    pub(crate) end_nsecs: u64,
-    pub(crate) include_metadata: bool,
-    pub(crate) include_attachments: bool,
-    pub(crate) output_compression: String,
-    pub(crate) chunk_size: u64,
-    pub(crate) use_chunks: bool,
-}
-
-impl From<&FilterCommand> for RewriteOptions {
-    fn from(args: &FilterCommand) -> Self {
-        Self {
-            file: args.file.clone(),
-            output: args.output.clone(),
-            include_topic_regex: args.include_topic_regex.clone(),
-            exclude_topic_regex: args.exclude_topic_regex.clone(),
-            last_per_channel_topic_regex: args.last_per_channel_topic_regex.clone(),
-            start: args.start.clone(),
-            start_secs: args.start_secs,
-            start_nsecs: args.start_nsecs,
-            end: args.end.clone(),
-            end_secs: args.end_secs,
-            end_nsecs: args.end_nsecs,
-            include_metadata: !args.exclude_metadata,
-            include_attachments: !args.exclude_attachments,
-            output_compression: args.output_compression.clone(),
-            chunk_size: args.chunk_size,
-            use_chunks: true,
-        }
-    }
-}
-
-impl RewriteOptions {
-    pub(crate) fn new(file: Option<PathBuf>, output: Option<PathBuf>, chunk_size: u64) -> Self {
-        Self {
-            file,
-            output,
-            include_topic_regex: Vec::new(),
-            exclude_topic_regex: Vec::new(),
-            last_per_channel_topic_regex: Vec::new(),
-            start: None,
-            start_secs: 0,
-            start_nsecs: 0,
-            end: None,
-            end_secs: 0,
-            end_nsecs: 0,
-            include_metadata: false,
-            include_attachments: false,
-            output_compression: "zstd".to_string(),
-            chunk_size,
-            use_chunks: true,
-        }
-    }
-
-    pub(crate) fn compression(mut self, value: impl Into<String>) -> Self {
-        self.output_compression = value.into();
-        self
-    }
-
-    pub(crate) fn use_chunks(mut self, value: bool) -> Self {
-        self.use_chunks = value;
-        self
-    }
-
-    pub(crate) fn include_metadata(mut self, value: bool) -> Self {
-        self.include_metadata = value;
-        self
-    }
-
-    pub(crate) fn include_attachments(mut self, value: bool) -> Self {
-        self.include_attachments = value;
-        self
-    }
-}
 
 #[derive(Debug, Clone)]
 struct PreStartMessage {
@@ -154,98 +40,10 @@ pub(crate) fn run(args: RewriteOptions, source_options: source::SourceOptions) -
     }
 }
 
-#[cfg(test)]
-fn build_filter_options(args: &FilterCommand) -> Result<FilterOptions> {
-    resolve_options(&RewriteOptions::from(args))
-}
-
-fn resolve_options(args: &RewriteOptions) -> Result<FilterOptions> {
-    let start = parse_timestamp_args(args.start.as_deref(), args.start_nsecs, args.start_secs)
-        .context("invalid start")?;
-    let mut end = parse_timestamp_args(args.end.as_deref(), args.end_nsecs, args.end_secs)
-        .context("invalid end")?;
-    if end == 0 {
-        end = u64::MAX;
-    }
-    if end < start {
-        bail!("invalid time range query, end-time is before start-time");
-    }
-
-    if !args.include_topic_regex.is_empty() && !args.exclude_topic_regex.is_empty() {
-        bail!("can only use one of --include-topic-regex and --exclude-topic-regex");
-    }
-
-    Ok(FilterOptions {
-        output: args.output.clone(),
-        include_topics: compile_matchers(&args.include_topic_regex)
-            .context("invalid included topic regex")?,
-        exclude_topics: compile_matchers(&args.exclude_topic_regex)
-            .context("invalid excluded topic regex")?,
-        last_per_channel_topics: compile_matchers(&args.last_per_channel_topic_regex)
-            .context("invalid last-per-channel topic regex")?,
-        start,
-        end,
-        include_metadata: args.include_metadata,
-        include_attachments: args.include_attachments,
-        compression: parse_output_compression(&args.output_compression)?,
-        chunk_size: args.chunk_size,
-        use_chunks: args.use_chunks,
-    })
-}
-
-fn parse_timestamp_args(
-    date_or_nanos: Option<&str>,
-    nanoseconds: u64,
-    seconds: u64,
-) -> Result<u64> {
-    // Preserve timestamp precedence:
-    // --start/--end (string RFC3339 or nanos) > --*-nsecs > --*-secs.
-    // --*-secs and --*-nsecs are mutually exclusive via clap's conflicts_with.
-    // If both somehow arrive, this precedence order still applies as a fallback.
-    if let Some(value) = date_or_nanos {
-        return parse_timestamp_or_nanos(value);
-    }
-    if nanoseconds != 0 {
-        return Ok(nanoseconds);
-    }
-    seconds
-        .checked_mul(1_000_000_000)
-        .context("seconds timestamp overflows nanoseconds")
-}
-
-fn compile_matchers(regex_strings: &[String]) -> Result<Vec<Regex>> {
-    regex_strings
-        .iter()
-        .map(|pattern| {
-            // Always wrap in a non-capturing group so alternation behaves as users expect.
-            // This also fixes partially-anchored patterns like "^foo|bar$":
-            // "^(?:^foo|bar$)$" preserves full-string matching for each branch.
-            let anchored = format!("^(?:{pattern})$");
-            Regex::new(&anchored).with_context(|| format!("{anchored} is not a valid regex"))
-        })
-        .collect()
-}
-
-fn include_topic(topic: &str, opts: &FilterOptions) -> bool {
-    if !opts.include_topics.is_empty() {
-        return opts
-            .include_topics
-            .iter()
-            .any(|regex| regex.is_match(topic));
-    }
-    if !opts.exclude_topics.is_empty() {
-        return !opts
-            .exclude_topics
-            .iter()
-            .any(|regex| regex.is_match(topic));
-    }
-    true
-}
-
 fn filter_to_writer<W: Write + Seek>(
     input: &[u8],
     sink: W,
-    opts: &FilterOptions,
+    opts: &ResolvedOptions,
     disable_seeking: bool,
 ) -> Result<()> {
     let mut write_options = mcap::WriteOptions::new()
@@ -279,7 +77,7 @@ fn read_header(input: &[u8]) -> Result<Option<mcap::records::Header>> {
 fn filter_with_writer<W: Write + Seek>(
     input: &[u8],
     writer: &mut mcap::Writer<W>,
-    opts: &FilterOptions,
+    opts: &ResolvedOptions,
 ) -> Result<()> {
     if let Some(summary) = read_indexed_summary(input)? {
         if !summary.chunk_indexes.is_empty() {
@@ -289,7 +87,7 @@ fn filter_with_writer<W: Write + Seek>(
     filter_linear(input, writer, opts)
 }
 
-pub(crate) fn read_indexed_summary(input: &[u8]) -> Result<Option<mcap::Summary>> {
+fn read_indexed_summary(input: &[u8]) -> Result<Option<mcap::Summary>> {
     match mcap::Summary::read(input) {
         Ok(Some(summary)) if summary.chunk_indexes.is_empty() => Ok(None),
         Ok(Some(summary)) if summary_supports_indexed_read(&summary) => Ok(Some(summary)),
@@ -338,7 +136,7 @@ fn filter_indexed<W: Write + Seek>(
     input: &[u8],
     summary: &mcap::Summary,
     writer: &mut mcap::Writer<W>,
-    opts: &FilterOptions,
+    opts: &ResolvedOptions,
 ) -> Result<()> {
     let has_topic_filters = !opts.include_topics.is_empty() || !opts.exclude_topics.is_empty();
     let included_topics: BTreeSet<String> = summary
@@ -553,7 +351,7 @@ fn checked_slice(input: &[u8], offset: u64, length: usize) -> Result<&[u8]> {
 fn filter_linear<W: Write + Seek>(
     input: &[u8],
     writer: &mut mcap::Writer<W>,
-    opts: &FilterOptions,
+    opts: &ResolvedOptions,
 ) -> Result<()> {
     if !opts.last_per_channel_topics.is_empty() {
         bail!("including last-per-channel topics is not supported for non-indexed input");
@@ -677,30 +475,7 @@ mod tests {
 
     use regex::Regex;
 
-    use super::{build_filter_options, filter_to_writer, include_topic, FilterOptions};
-    use crate::cli::FilterCommand;
-
-    fn default_filter_command() -> FilterCommand {
-        FilterCommand {
-            file: None,
-            output: None,
-            include_topic_regex: Vec::new(),
-            exclude_topic_regex: Vec::new(),
-            last_per_channel_topic_regex: Vec::new(),
-            start: None,
-            start_secs: 0,
-            start_nsecs: 0,
-            end: None,
-            end_secs: 0,
-            end_nsecs: 0,
-            exclude_metadata: false,
-            exclude_attachments: false,
-            include_metadata: false,
-            include_attachments: false,
-            output_compression: "zstd".to_string(),
-            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-        }
-    }
+    use super::{filter_to_writer, ResolvedOptions};
 
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
         write_filter_test_input_with_options(chunked, summaryless, true, true, true, true)
@@ -817,7 +592,7 @@ mod tests {
         output.into_inner()
     }
 
-    fn run_filter(input: &[u8], opts: &FilterOptions) -> Vec<u8> {
+    fn run_filter(input: &[u8], opts: &ResolvedOptions) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         filter_to_writer(input, &mut output, opts, false).expect("filter should succeed");
         output.into_inner()
@@ -859,8 +634,8 @@ mod tests {
         stats
     }
 
-    fn include_all_options() -> FilterOptions {
-        FilterOptions {
+    fn include_all_options() -> ResolvedOptions {
+        ResolvedOptions {
             output: None,
             include_topics: Vec::new(),
             exclude_topics: Vec::new(),
@@ -875,8 +650,8 @@ mod tests {
         }
     }
 
-    fn time_windowed_options(start: u64, end: u64) -> FilterOptions {
-        FilterOptions {
+    fn time_windowed_options(start: u64, end: u64) -> ResolvedOptions {
+        ResolvedOptions {
             start,
             end,
             ..include_all_options()
@@ -969,76 +744,9 @@ mod tests {
     }
 
     #[test]
-    fn build_filter_options_rejects_include_exclude_conflict() {
-        let mut args = default_filter_command();
-        args.include_topic_regex.push("camera.*".to_string());
-        args.exclude_topic_regex.push("radar.*".to_string());
-        let err = build_filter_options(&args).expect_err("should fail");
-        assert!(err
-            .to_string()
-            .contains("can only use one of --include-topic-regex and --exclude-topic-regex"));
-    }
-
-    #[test]
-    fn build_filter_options_parses_timestamps_with_precedence() {
-        let mut args = default_filter_command();
-        args.start = Some("10".to_string());
-        args.start_nsecs = 50;
-        args.start_secs = 2;
-        args.end_nsecs = 200;
-        args.end_secs = 1;
-        let opts = build_filter_options(&args).expect("options");
-        assert_eq!(opts.start, 10);
-        assert_eq!(opts.end, 200);
-    }
-
-    #[test]
-    fn include_topic_honors_include_then_exclude() {
-        let opts = FilterOptions {
-            output: None,
-            include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
-            exclude_topics: vec![Regex::new("^camera_a$").expect("regex")],
-            last_per_channel_topics: Vec::new(),
-            start: 0,
-            end: u64::MAX,
-            include_metadata: false,
-            include_attachments: false,
-            compression: Some(mcap::Compression::Zstd),
-            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-            use_chunks: true,
-        };
-        assert!(include_topic("camera_a", &opts));
-        assert!(!include_topic("radar_a", &opts));
-    }
-
-    #[test]
-    fn compile_matchers_wraps_alternation_with_grouping() {
-        let matcher = super::compile_matchers(&["camera_a|camera_b".to_string()])
-            .expect("regex")
-            .pop()
-            .expect("matcher");
-        assert!(matcher.is_match("camera_a"));
-        assert!(matcher.is_match("camera_b"));
-        assert!(!matcher.is_match("camera_a_extra"));
-        assert!(!matcher.is_match("extra_camera_b"));
-    }
-
-    #[test]
-    fn compile_matchers_rewraps_partially_anchored_alternation() {
-        let matcher = super::compile_matchers(&["^camera_a|camera_b$".to_string()])
-            .expect("regex")
-            .pop()
-            .expect("matcher");
-        assert!(matcher.is_match("camera_a"));
-        assert!(matcher.is_match("camera_b"));
-        assert!(!matcher.is_match("camera_a_extra"));
-        assert!(!matcher.is_match("extra_camera_b"));
-    }
-
-    #[test]
     fn indexed_passthrough_includes_messages_metadata_and_attachments() {
         let input = write_filter_test_input(true, false);
-        let opts = FilterOptions {
+        let opts = ResolvedOptions {
             output: None,
             include_topics: Vec::new(),
             exclude_topics: Vec::new(),
@@ -1063,7 +771,7 @@ mod tests {
     #[test]
     fn indexed_filtering_respects_exclude_topic_and_time() {
         let input = write_filter_test_input(true, false);
-        let opts = FilterOptions {
+        let opts = ResolvedOptions {
             output: None,
             include_topics: Vec::new(),
             exclude_topics: vec![Regex::new("^radar_a$").expect("regex")],
@@ -1089,7 +797,7 @@ mod tests {
     #[test]
     fn linear_filtering_respects_topic_and_time() {
         let input = write_filter_test_input(false, false);
-        let opts = FilterOptions {
+        let opts = ResolvedOptions {
             output: None,
             include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
             exclude_topics: Vec::new(),
@@ -1117,7 +825,7 @@ mod tests {
     #[test]
     fn indexed_last_per_channel_adds_one_pre_start_message_per_matching_topic() {
         let input = write_filter_test_input(true, false);
-        let opts = FilterOptions {
+        let opts = ResolvedOptions {
             output: None,
             include_topics: Vec::new(),
             exclude_topics: Vec::new(),
@@ -1143,7 +851,7 @@ mod tests {
     #[test]
     fn last_per_channel_errors_for_non_indexed_inputs() {
         let input = write_filter_test_input(false, true);
-        let opts = FilterOptions {
+        let opts = ResolvedOptions {
             output: None,
             include_topics: Vec::new(),
             exclude_topics: Vec::new(),
@@ -1167,7 +875,7 @@ mod tests {
     #[test]
     fn chunked_summaryless_input_falls_back_to_linear_filtering() {
         let input = write_filter_test_input(true, true);
-        let opts = FilterOptions {
+        let opts = ResolvedOptions {
             output: None,
             include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
             exclude_topics: Vec::new(),
@@ -1190,7 +898,7 @@ mod tests {
     #[test]
     fn chunked_input_without_chunk_index_falls_back_to_linear_filtering_on_unknown_schema() {
         let input = write_filter_test_input_with_options(true, false, true, false, true, false);
-        let opts = FilterOptions {
+        let opts = ResolvedOptions {
             output: None,
             include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
             exclude_topics: Vec::new(),
@@ -1213,7 +921,7 @@ mod tests {
     #[test]
     fn chunk_indexed_input_without_repeated_channels_errors() {
         let input = write_filter_test_input_with_summary_repeats(true, false, false, false);
-        let opts = FilterOptions {
+        let opts = ResolvedOptions {
             output: None,
             include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
             exclude_topics: Vec::new(),
@@ -1235,7 +943,7 @@ mod tests {
     #[test]
     fn chunk_indexed_input_without_channels_or_message_indexes_errors() {
         let input = write_filter_test_input_with_options(true, false, false, false, false, true);
-        let opts = FilterOptions {
+        let opts = ResolvedOptions {
             output: None,
             include_topics: vec![Regex::new("^camera_.*$").expect("regex")],
             exclude_topics: Vec::new(),
@@ -1257,7 +965,7 @@ mod tests {
     #[test]
     fn chunk_indexed_input_without_repeated_schemas_errors() {
         let input = write_filter_test_input_with_summary_repeats(true, false, true, false);
-        let opts = FilterOptions {
+        let opts = ResolvedOptions {
             output: None,
             include_topics: Vec::new(),
             exclude_topics: Vec::new(),
@@ -1279,7 +987,7 @@ mod tests {
     #[test]
     fn filter_stamps_cli_writer_library() {
         let input = write_filter_test_input(true, false);
-        let opts = FilterOptions {
+        let opts = ResolvedOptions {
             output: None,
             include_topics: Vec::new(),
             exclude_topics: Vec::new(),
@@ -1360,47 +1068,16 @@ mod tests {
         let path = dir.path().join("same-path.mcap");
         std::fs::write(&path, &input).expect("write input");
 
-        let mut command = default_filter_command();
-        command.file = Some(path.clone());
-        command.output = Some(path.clone());
-        let err = super::run(
-            super::RewriteOptions::from(&command),
-            crate::source::SourceOptions::default(),
-        )
-        .expect_err("same input/output should fail");
+        let options = super::RewriteOptions::new(
+            Some(path.clone()),
+            Some(path.clone()),
+            mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+        );
+        let err = super::run(options, crate::source::SourceOptions::default())
+            .expect_err("same input/output should fail");
 
         assert!(err.to_string().contains("input and output paths"));
         assert_eq!(std::fs::read(&path).expect("read input"), input);
-    }
-
-    #[test]
-    fn includes_metadata_and_attachments_by_default() {
-        let opts = build_filter_options(&default_filter_command()).expect("options");
-        assert!(opts.include_metadata);
-        assert!(opts.include_attachments);
-    }
-
-    #[test]
-    fn exclude_flags_drop_metadata_and_attachments() {
-        let mut args = default_filter_command();
-        args.exclude_metadata = true;
-        args.exclude_attachments = true;
-        let opts = build_filter_options(&args).expect("options");
-        assert!(!opts.include_metadata);
-        assert!(!opts.include_attachments);
-    }
-
-    #[test]
-    fn deprecated_include_flags_do_not_re_enable_excluded_records() {
-        // The deprecated --include-* flags are no-ops; --exclude-* still wins.
-        let mut args = default_filter_command();
-        args.include_metadata = true;
-        args.include_attachments = true;
-        args.exclude_metadata = true;
-        args.exclude_attachments = true;
-        let opts = build_filter_options(&args).expect("options");
-        assert!(!opts.include_metadata);
-        assert!(!opts.include_attachments);
     }
 
     #[test]
