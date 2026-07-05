@@ -415,7 +415,7 @@ pub enum MessageOrder {
     #[value(name = "preserve")]
     Preserve,
     /// Sort messages by log time.
-    #[value(name = "log_time", alias = "log-time")]
+    #[value(name = "log-time", alias = "log_time")]
     LogTime,
 }
 
@@ -498,7 +498,7 @@ pub struct FilterCommand {
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Message order in the output: preserve (keep the input's stored order) or log_time (sort by
+    /// Message order in the output: preserve (keep the input's stored order) or log-time (sort by
     /// log time). See `mcap sort` for sorting by log time as a standalone operation.
     #[arg(long = "order", value_enum, default_value = "preserve")]
     pub order: MessageOrder,
