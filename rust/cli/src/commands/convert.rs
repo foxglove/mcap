@@ -1,3 +1,4 @@
+mod arrow_ipc;
 mod ros1_bag;
 mod ros2_db3;
 
@@ -8,13 +9,14 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 use mcap::{Compression, WriteOptions};
 
-use crate::cli::{CompressionFormat, ConvertCommand};
+use crate::cli::{CompressionFormat, ConvertCommand, TimestampUnit};
 use crate::context::CommandContext;
 
 const GIT_LFS_POINTER_PREFIX: &[u8] = b"version https://git-lfs.github.com";
 
 pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     let input = ConvertInput::detect(&args.input)?;
+    warn_unused_arrow_flags(&input, &args);
     let is_remote = crate::source::is_remote_url(&args.input);
     if !is_remote {
         reject_lfs_pointer(&args.input)?;
@@ -34,13 +36,47 @@ pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
         input.profile(),
     );
 
-    input.convert(materialized_input.path(), &args.output, opts)
+    input.convert(materialized_input.path(), &args.output, opts, &args)
+}
+
+/// Warn when Arrow-only flags are set for a non-Arrow input, since clap accepts
+/// them on the shared `convert` command but the ROS converters ignore them.
+fn warn_unused_arrow_flags(input: &ConvertInput, args: &ConvertCommand) {
+    if matches!(input, ConvertInput::ArrowIpc) {
+        return;
+    }
+    let mut ignored = Vec::new();
+    if args.topic.is_some() {
+        ignored.push("--topic");
+    }
+    if args.schema_name.is_some() {
+        ignored.push("--schema-name");
+    }
+    if args.log_time_field.is_some() {
+        ignored.push("--log-time-field");
+    }
+    if args.publish_time_field.is_some() {
+        ignored.push("--publish-time-field");
+    }
+    if args.rows_per_message != 1 {
+        ignored.push("--rows-per-message");
+    }
+    if !matches!(args.timestamp_unit, TimestampUnit::Ns) {
+        ignored.push("--timestamp-unit");
+    }
+    if !ignored.is_empty() {
+        eprintln!(
+            "Warning: Arrow-only flag(s) {} are ignored for non-Arrow inputs",
+            ignored.join(", ")
+        );
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ConvertInput {
     Ros1Bag,
     Ros2Db3,
+    ArrowIpc,
 }
 
 impl ConvertInput {
@@ -53,9 +89,15 @@ impl ConvertInput {
         if extension.eq_ignore_ascii_case("db3") {
             return Ok(Self::Ros2Db3);
         }
+        if extension.eq_ignore_ascii_case("arrow")
+            || extension.eq_ignore_ascii_case("feather")
+            || extension.eq_ignore_ascii_case("ipc")
+        {
+            return Ok(Self::ArrowIpc);
+        }
 
         bail!(
-            "unsupported input file extension for '{}' (expected .bag for ROS 1 bag or .db3 for ROS 2 SQLite db3 input)",
+            "unsupported input file extension for '{}' (expected .bag for ROS 1 bag, .db3 for ROS 2 SQLite db3, or .arrow/.feather/.ipc for Apache Arrow IPC input)",
             path.display()
         );
     }
@@ -64,13 +106,27 @@ impl ConvertInput {
         match self {
             Self::Ros1Bag => "ros1",
             Self::Ros2Db3 => "ros2",
+            // Arrow has no MCAP profile; leave it empty.
+            Self::ArrowIpc => "",
         }
     }
 
-    fn convert(self, input_path: &Path, output_path: &Path, opts: WriteOptions) -> Result<()> {
+    fn convert(
+        self,
+        input_path: &Path,
+        output_path: &Path,
+        opts: WriteOptions,
+        args: &ConvertCommand,
+    ) -> Result<()> {
         match self {
             Self::Ros1Bag => ros1_bag::convert_ros1_bag_file(input_path, output_path, opts),
             Self::Ros2Db3 => ros2_db3::convert_ros2_db3_file(input_path, output_path, opts),
+            Self::ArrowIpc => arrow_ipc::convert_arrow_file(
+                input_path,
+                output_path,
+                opts,
+                &arrow_ipc::ArrowConvertOptions::from_command(args),
+            ),
         }
     }
 }
@@ -286,6 +342,12 @@ size 123\n",
                 chunk_size: 8 * 1024 * 1024,
                 no_crc: true,
                 no_chunks: false,
+                topic: None,
+                schema_name: None,
+                log_time_field: None,
+                publish_time_field: None,
+                timestamp_unit: crate::cli::TimestampUnit::Ns,
+                rows_per_message: 1,
             },
         )
         .expect_err("missing input should fail");
@@ -306,6 +368,12 @@ size 123\n",
                 chunk_size: 8 * 1024 * 1024,
                 no_crc: true,
                 no_chunks: false,
+                topic: None,
+                schema_name: None,
+                log_time_field: None,
+                publish_time_field: None,
+                timestamp_unit: crate::cli::TimestampUnit::Ns,
+                rows_per_message: 1,
             },
         )
         .expect_err("same input/output should fail");
@@ -329,6 +397,12 @@ size 123\n",
                 chunk_size: 8 * 1024 * 1024,
                 no_crc: true,
                 no_chunks: false,
+                topic: None,
+                schema_name: None,
+                log_time_field: None,
+                publish_time_field: None,
+                timestamp_unit: crate::cli::TimestampUnit::Ns,
+                rows_per_message: 1,
             },
         )
         .expect_err("remote convert should require opt-in");
@@ -348,6 +422,12 @@ size 123\n",
                 chunk_size: 8 * 1024 * 1024,
                 no_crc: true,
                 no_chunks: false,
+                topic: None,
+                schema_name: None,
+                log_time_field: None,
+                publish_time_field: None,
+                timestamp_unit: crate::cli::TimestampUnit::Ns,
+                rows_per_message: 1,
             },
         )
         .expect_err("cloud convert should require opt-in");
@@ -387,6 +467,12 @@ size 123\n",
                 chunk_size: 8 * 1024 * 1024,
                 no_crc: true,
                 no_chunks: false,
+                topic: None,
+                schema_name: None,
+                log_time_field: None,
+                publish_time_field: None,
+                timestamp_unit: crate::cli::TimestampUnit::Ns,
+                rows_per_message: 1,
             },
         )
         .expect_err("invalid ROS 1 bag should fail");
@@ -422,6 +508,12 @@ size 123\n",
                     chunk_size: 8 * 1024 * 1024,
                     no_crc: true,
                     no_chunks: false,
+                    topic: None,
+                    schema_name: None,
+                    log_time_field: None,
+                    publish_time_field: None,
+                    timestamp_unit: crate::cli::TimestampUnit::Ns,
+                    rows_per_message: 1,
                 },
             )?;
 
