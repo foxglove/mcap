@@ -316,6 +316,19 @@ mod tests {
     }
 
     #[test]
+    fn deprecated_include_flags_do_not_re_enable_excluded_records() {
+        // The deprecated --include-* flags are no-ops; --exclude-* still wins.
+        let mut args = default_filter_command();
+        args.include_metadata = true;
+        args.include_attachments = true;
+        args.exclude_metadata = true;
+        args.exclude_attachments = true;
+        let opts = build_filter_options(&args).expect("options");
+        assert!(!opts.include_metadata);
+        assert!(!opts.include_attachments);
+    }
+
+    #[test]
     fn compression_flag_resolves_to_selected_format() {
         let mut args = default_filter_command();
         args.compression = CompressionFormat::Lz4;
@@ -330,18 +343,5 @@ mod tests {
         args.output_compression = Some("none".to_string());
         let opts = build_filter_options(&args).expect("options");
         assert!(opts.compression.is_none());
-    }
-
-    #[test]
-    fn deprecated_include_flags_do_not_re_enable_excluded_records() {
-        // The deprecated --include-* flags are no-ops; --exclude-* still wins.
-        let mut args = default_filter_command();
-        args.include_metadata = true;
-        args.include_attachments = true;
-        args.exclude_metadata = true;
-        args.exclude_attachments = true;
-        let opts = build_filter_options(&args).expect("options");
-        assert!(!opts.include_metadata);
-        assert!(!opts.include_attachments);
     }
 }

@@ -593,11 +593,14 @@ mod tests {
         let args =
             Args::try_parse_from(["mcap", "filter", "in.mcap", "--output-compression", "none"])
                 .expect("filter should parse");
-        let Command::Filter(filter) = args.command else {
-            panic!("expected filter command");
-        };
-        assert_eq!(filter.compression, CompressionFormat::Zstd);
-        assert_eq!(filter.output_compression, Some("none".to_string()));
+        match args.command {
+            Command::Filter(filter) => {
+                // The deprecated alias is captured verbatim and leaves --compression at its default.
+                assert_eq!(filter.compression, CompressionFormat::Zstd);
+                assert_eq!(filter.output_compression, Some("none".to_string()));
+            }
+            other => panic!("expected filter command, got {other:?}"),
+        }
     }
 
     #[test]
