@@ -329,11 +329,21 @@ mod tests {
     }
 
     #[test]
-    fn compression_flag_resolves_to_selected_format() {
+    fn compression_flag_resolves_each_format() {
+        // Guards the CompressionFormat -> str -> mcap::Compression bridge for every variant.
         let mut args = default_filter_command();
+
+        args.compression = CompressionFormat::Zstd;
+        let opts = build_filter_options(&args).expect("options");
+        assert!(matches!(opts.compression, Some(mcap::Compression::Zstd)));
+
         args.compression = CompressionFormat::Lz4;
         let opts = build_filter_options(&args).expect("options");
         assert!(matches!(opts.compression, Some(mcap::Compression::Lz4)));
+
+        args.compression = CompressionFormat::None;
+        let opts = build_filter_options(&args).expect("options");
+        assert!(opts.compression.is_none());
     }
 
     #[test]
