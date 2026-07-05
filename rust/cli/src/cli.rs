@@ -310,6 +310,16 @@ pub enum CompressionFormat {
     None,
 }
 
+impl CompressionFormat {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CompressionFormat::Zstd => "zstd",
+            CompressionFormat::Lz4 => "lz4",
+            CompressionFormat::None => "none",
+        }
+    }
+}
+
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct ConvertCommand {
     /// Local path to the input file
@@ -474,9 +484,13 @@ pub struct FilterCommand {
     #[arg(long = "include-attachments", default_value_t = false, hide = true)]
     pub include_attachments: bool,
 
-    /// Compression algorithm for output file: zstd, lz4, or none
-    #[arg(long = "output-compression", default_value = "zstd")]
-    pub output_compression: String,
+    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
+    #[arg(long = "compression", value_enum, default_value = "zstd")]
+    pub compression: CompressionFormat,
+
+    /// Deprecated: use --compression. Overrides --compression when set.
+    #[arg(long = "output-compression", hide = true)]
+    pub output_compression: Option<String>,
 
     /// Target uncompressed chunk size for output
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]

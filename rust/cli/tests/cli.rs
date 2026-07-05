@@ -191,13 +191,7 @@ fn stdin_pipe_filter() {
     let dir = TempDir::new().unwrap();
     let out_path = dir.path().join("filtered.mcap");
     let output = mcap_with_stdin(
-        &[
-            "filter",
-            "-o",
-            path_str(&out_path),
-            "--output-compression",
-            "none",
-        ],
+        &["filter", "-o", path_str(&out_path), "--compression", "none"],
         &build_mcap(3),
     );
     assert!(output.status.success());

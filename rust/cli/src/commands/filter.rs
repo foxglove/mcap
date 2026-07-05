@@ -16,6 +16,9 @@ pub fn run(ctx: &CommandContext, args: FilterCommand) -> Result<()> {
     if args.include_attachments {
         warn!("--include-attachments is deprecated and has no effect; attachments are included by default (use --exclude-attachments to drop them)");
     }
+    if args.output_compression.is_some() {
+        warn!("--output-compression is deprecated; use --compression instead");
+    }
     rewrite::run(
         RewriteOptions::from(&args),
         source::SourceOptions::new(ctx.allow_remote_scan()),
