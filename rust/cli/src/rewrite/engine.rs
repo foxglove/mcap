@@ -10,15 +10,6 @@ use anyhow::{bail, Context, Result};
 use super::options::{include_topic, resolve_options, ResolvedOptions, RewriteOptions};
 use crate::{parse, source};
 
-#[derive(Debug, Clone)]
-struct PreStartMessage {
-    channel_id: u16,
-    sequence: u32,
-    log_time: u64,
-    publish_time: u64,
-    data: Vec<u8>,
-}
-
 pub(crate) fn run(args: RewriteOptions, source_options: source::SourceOptions) -> Result<()> {
     let opts = resolve_options(&args)?;
     if let (Some(input), Some(output)) = (args.file.as_deref(), opts.output.as_deref()) {
@@ -130,6 +121,15 @@ pub(crate) fn summary_supports_indexed_read(summary: &mcap::Summary) -> bool {
         .iter()
         .flat_map(|index| index.message_index_offsets.keys())
         .all(|channel_id| summary.channels.contains_key(channel_id))
+}
+
+#[derive(Debug, Clone)]
+struct PreStartMessage {
+    channel_id: u16,
+    sequence: u32,
+    log_time: u64,
+    publish_time: u64,
+    data: Vec<u8>,
 }
 
 fn filter_indexed<W: Write + Seek>(

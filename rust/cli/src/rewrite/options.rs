@@ -7,23 +7,6 @@ use regex::Regex;
 
 use crate::cli::{parse_output_compression, parse_timestamp_or_nanos, FilterCommand};
 
-/// Validated, engine-ready form of [`RewriteOptions`]: regexes compiled, timestamps parsed, and the
-/// output compression resolved. Produced by [`resolve_options`].
-#[derive(Debug, Clone)]
-pub(crate) struct ResolvedOptions {
-    pub(crate) output: Option<PathBuf>,
-    pub(crate) include_topics: Vec<Regex>,
-    pub(crate) exclude_topics: Vec<Regex>,
-    pub(crate) last_per_channel_topics: Vec<Regex>,
-    pub(crate) start: u64,
-    pub(crate) end: u64,
-    pub(crate) include_metadata: bool,
-    pub(crate) include_attachments: bool,
-    pub(crate) compression: Option<mcap::Compression>,
-    pub(crate) chunk_size: u64,
-    pub(crate) use_chunks: bool,
-}
-
 #[derive(Debug, Clone)]
 pub(crate) struct RewriteOptions {
     pub(crate) file: Option<PathBuf>,
@@ -108,6 +91,23 @@ impl RewriteOptions {
         self.include_attachments = value;
         self
     }
+}
+
+/// Validated, engine-ready form of [`RewriteOptions`]: regexes compiled, timestamps parsed, and the
+/// output compression resolved. Produced by [`resolve_options`].
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedOptions {
+    pub(crate) output: Option<PathBuf>,
+    pub(crate) include_topics: Vec<Regex>,
+    pub(crate) exclude_topics: Vec<Regex>,
+    pub(crate) last_per_channel_topics: Vec<Regex>,
+    pub(crate) start: u64,
+    pub(crate) end: u64,
+    pub(crate) include_metadata: bool,
+    pub(crate) include_attachments: bool,
+    pub(crate) compression: Option<mcap::Compression>,
+    pub(crate) chunk_size: u64,
+    pub(crate) use_chunks: bool,
 }
 
 pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> {
