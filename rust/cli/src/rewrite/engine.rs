@@ -1189,6 +1189,39 @@ mod tests {
     }
 
     #[test]
+    fn rewrite_new_default_preserves_message_order() {
+        // `compress`/`decompress` build their options via `RewriteOptions::new`, which defaults to
+        // `preserve`. Lock in that an out-of-order indexed input is copied in its stored order
+        // rather than silently re-sorted to log time.
+        let input = write_unsorted_input(true, false);
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input_path = dir.path().join("in.mcap");
+        let output_path = dir.path().join("out.mcap");
+        std::fs::write(&input_path, &input).expect("write input");
+
+        let options = super::RewriteOptions::new(
+            Some(input_path),
+            Some(output_path.clone()),
+            mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+        )
+        .include_metadata(true)
+        .include_attachments(true);
+        assert!(
+            !options.order_by_log_time,
+            "RewriteOptions::new should default to preserve"
+        );
+        super::run(options, crate::source::SourceOptions::default())
+            .expect("rewrite should succeed");
+
+        let output = std::fs::read(&output_path).expect("read output");
+        assert_eq!(
+            analyze_output(&output).log_times,
+            vec![30, 10, 20, 5, 25],
+            "the shared engine default must preserve the input's stored order"
+        );
+    }
+
+    #[test]
     fn indexed_attachments_are_not_time_filtered() {
         // The fixture's attachment has log_time 50; a [0, 10) window excludes it from the message
         // range but the attachment is still kept.

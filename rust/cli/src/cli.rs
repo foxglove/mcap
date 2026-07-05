@@ -75,6 +75,8 @@ pub enum Command {
     #[command(verbatim_doc_comment)]
     Completion(CompletionCommand),
     /// Create a compressed copy of an MCAP file
+    ///
+    /// Messages are copied in the input's stored order; use `mcap sort` to reorder by log time.
     Compress(CompressCommand),
     /// Convert supported input files to MCAP
     #[command(
@@ -82,6 +84,8 @@ pub enum Command {
     )]
     Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file
+    ///
+    /// Messages are copied in the input's stored order; use `mcap sort` to reorder by log time.
     Decompress(DecompressCommand),
     /// Check an MCAP file structure
     Doctor(DoctorCommand),
@@ -494,7 +498,8 @@ pub struct FilterCommand {
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Message order in the output: preserve (keep the input's stored order) or log_time (sort by log time)
+    /// Message order in the output: preserve (keep the input's stored order) or log_time (sort by
+    /// log time). See `mcap sort` for sorting by log time as a standalone operation.
     #[arg(long = "order", value_enum, default_value = "preserve")]
     pub order: MessageOrder,
 }
