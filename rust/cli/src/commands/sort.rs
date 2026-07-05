@@ -4,9 +4,8 @@ use std::io::{Seek, Write};
 use anyhow::{Context, Result};
 
 use crate::cli::{CompressionFormat, SortCommand};
-use crate::commands::filter;
 use crate::context::CommandContext;
-use crate::{parse, source};
+use crate::{parse, rewrite, source};
 
 #[derive(Debug, Clone)]
 struct SortOptions {
@@ -101,17 +100,17 @@ fn validate_sort_input(input: &[u8]) -> Result<SortInput> {
             return Ok(SortInput::Linear);
         }
         Err(mcap::McapError::UnknownSchema(_, _)) => {
-            return Err(filter::incomplete_indexed_summary_error());
+            return Err(rewrite::incomplete_indexed_summary_error());
         }
         Err(err) => return Err(err).context("failed to read file index"),
     };
     match summary {
         Some(summary) => {
             if !summary.chunk_indexes.is_empty() {
-                if filter::summary_supports_indexed_transcode(&summary) {
+                if rewrite::summary_supports_indexed_read(&summary) {
                     return Ok(SortInput::Indexed(Box::new(summary)));
                 }
-                return Err(filter::incomplete_indexed_summary_error());
+                return Err(rewrite::incomplete_indexed_summary_error());
             }
             Ok(SortInput::Linear)
         }

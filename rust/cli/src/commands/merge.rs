@@ -697,7 +697,7 @@ fn merge_messages<W: Write + Seek>(
     for (input_idx, input) in inputs.iter().enumerate() {
         if let Some(summary) = summaries[input_idx].as_ref() {
             if !summary.chunk_indexes.is_empty()
-                && super::filter::summary_supports_indexed_transcode(summary)
+                && crate::rewrite::summary_supports_indexed_read(summary)
                 && summary_indexes_all_messages(input.data, summary)
             {
                 streams.push(MergeMessageStream::Indexed(IndexedInputMessageReader::new(
