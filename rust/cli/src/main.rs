@@ -45,8 +45,8 @@ mod tests {
         ConvertCommand, DecompressCommand, DoctorCommand, DuCommand, FilterCommand,
         GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
         ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand,
-        SortCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, MessageOrder,
+        RecoverCommand, SortCommand,
     };
 
     #[test]
@@ -583,6 +583,7 @@ mod tests {
                 include_attachments: true,
                 output_compression: "lz4".to_string(),
                 chunk_size: 2048,
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -607,6 +608,30 @@ mod tests {
             }
             other => panic!("expected filter command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn filter_order_defaults_to_preserve_and_parses_log_time() {
+        let default = Args::try_parse_from(["mcap", "filter", "in.mcap"])
+            .expect("filter should parse without --order");
+        match default.command {
+            Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::Preserve),
+            other => panic!("expected filter command, got {other:?}"),
+        }
+
+        for value in ["log_time", "log-time"] {
+            let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order", value])
+                .unwrap_or_else(|_| panic!("filter should parse --order {value}"));
+            match args.command {
+                Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::LogTime),
+                other => panic!("expected filter command, got {other:?}"),
+            }
+        }
+
+        assert!(
+            Args::try_parse_from(["mcap", "filter", "in.mcap", "--order", "bogus"]).is_err(),
+            "an unknown --order value should be rejected"
+        );
     }
 
     #[test]

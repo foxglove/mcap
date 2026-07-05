@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 
-use crate::cli::{parse_output_compression, parse_timestamp_or_nanos, FilterCommand};
+use crate::cli::{parse_output_compression, parse_timestamp_or_nanos, FilterCommand, MessageOrder};
 
 #[derive(Debug, Clone)]
 pub(crate) struct RewriteOptions {
@@ -25,6 +25,8 @@ pub(crate) struct RewriteOptions {
     pub(crate) output_compression: String,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
+    /// Sort output messages by log time; when false the input's stored order is preserved.
+    pub(crate) order_by_log_time: bool,
 }
 
 impl From<&FilterCommand> for RewriteOptions {
@@ -46,6 +48,7 @@ impl From<&FilterCommand> for RewriteOptions {
             output_compression: args.output_compression.clone(),
             chunk_size: args.chunk_size,
             use_chunks: true,
+            order_by_log_time: matches!(args.order, MessageOrder::LogTime),
         }
     }
 }
@@ -69,6 +72,7 @@ impl RewriteOptions {
             output_compression: "zstd".to_string(),
             chunk_size,
             use_chunks: true,
+            order_by_log_time: false,
         }
     }
 
@@ -108,6 +112,8 @@ pub(crate) struct ResolvedOptions {
     pub(crate) compression: Option<mcap::Compression>,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
+    /// Sort output messages by log time; when false the input's stored order is preserved.
+    pub(crate) order_by_log_time: bool,
 }
 
 pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> {
@@ -141,6 +147,7 @@ pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> 
         compression: parse_output_compression(&args.output_compression)?,
         chunk_size: args.chunk_size,
         use_chunks: args.use_chunks,
+        order_by_log_time: args.order_by_log_time,
     })
 }
 
@@ -224,6 +231,7 @@ mod tests {
             include_attachments: false,
             output_compression: "zstd".to_string(),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            order: crate::cli::MessageOrder::Preserve,
         }
     }
 
@@ -265,6 +273,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order_by_log_time: false,
         };
         assert!(include_topic("camera_a", &opts));
         assert!(!include_topic("radar_a", &opts));
@@ -309,6 +318,18 @@ mod tests {
         let opts = build_filter_options(&args).expect("options");
         assert!(!opts.include_metadata);
         assert!(!opts.include_attachments);
+    }
+
+    #[test]
+    fn order_maps_to_order_by_log_time() {
+        use super::RewriteOptions;
+        use crate::cli::MessageOrder;
+
+        let mut args = default_filter_command();
+        // preserve (the default) does not sort.
+        assert!(!RewriteOptions::from(&args).order_by_log_time);
+        args.order = MessageOrder::LogTime;
+        assert!(RewriteOptions::from(&args).order_by_log_time);
     }
 
     #[test]
