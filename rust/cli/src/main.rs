@@ -557,7 +557,7 @@ mod tests {
             "200",
             "--include-metadata",
             "--include-attachments",
-            "--output-compression",
+            "--compression",
             "lz4",
             "--chunk-size",
             "2048",
@@ -581,10 +581,26 @@ mod tests {
                 exclude_attachments: false,
                 include_metadata: true,
                 include_attachments: true,
-                output_compression: "lz4".to_string(),
+                compression: Some(CompressionFormat::Lz4),
+                output_compression: None,
                 chunk_size: 2048,
             })
         );
+    }
+
+    #[test]
+    fn parses_filter_deprecated_output_compression_alias() {
+        let args =
+            Args::try_parse_from(["mcap", "filter", "in.mcap", "--output-compression", "none"])
+                .expect("filter should parse");
+        match args.command {
+            Command::Filter(filter) => {
+                // The deprecated alias is captured separately and leaves --compression unset.
+                assert_eq!(filter.compression, None);
+                assert_eq!(filter.output_compression, Some(CompressionFormat::None));
+            }
+            other => panic!("expected filter command, got {other:?}"),
+        }
     }
 
     #[test]

@@ -8,13 +8,13 @@ DEMO_MCAP_PATH="$SCRIPT_DIR/../../../../testdata/mcap/demo.mcap"
 mcap filter "$DEMO_MCAP_PATH" \
     --include-topic-regex "/diagnostics" \
     --include-topic-regex "/tf" \
-    --output-compression "zstd" \
+    --compression "zstd" \
     --chunk-size 4096 \
     --output "$SCRIPT_DIR/compressed.mcap"
 
 mcap filter "$DEMO_MCAP_PATH" \
     --include-topic-regex "/diagnostics" \
     --include-topic-regex "/tf" \
-    --output-compression "none" \
+    --compression "none" \
     --chunk-size 4096 \
     --output "$SCRIPT_DIR/uncompressed.mcap"

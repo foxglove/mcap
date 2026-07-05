@@ -243,7 +243,7 @@ fn bench_filter(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases:
                             OsString::from("/bench/selected"),
                             OsString::from("--output"),
                             output.as_os_str().to_owned(),
-                            OsString::from("--output-compression"),
+                            OsString::from("--compression"),
                             OsString::from("zstd"),
                             OsString::from("--chunk-size"),
                             OsString::from(config.chunk_bytes.to_string()),
