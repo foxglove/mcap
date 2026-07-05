@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 
-use crate::cli::{parse_output_compression, parse_timestamp_or_nanos, FilterCommand};
+use crate::cli::{
+    parse_output_compression, parse_timestamp_or_nanos, CompressionFormat, FilterCommand,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct RewriteOptions {
@@ -44,8 +46,9 @@ impl From<&FilterCommand> for RewriteOptions {
             include_metadata: !args.exclude_metadata,
             include_attachments: !args.exclude_attachments,
             output_compression: args
-                .output_compression
-                .unwrap_or(args.compression)
+                .compression
+                .or(args.output_compression)
+                .unwrap_or(CompressionFormat::Zstd)
                 .as_str()
                 .to_string(),
             chunk_size: args.chunk_size,
@@ -226,7 +229,7 @@ mod tests {
             exclude_attachments: false,
             include_metadata: false,
             include_attachments: false,
-            compression: CompressionFormat::Zstd,
+            compression: None,
             output_compression: None,
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
         }
@@ -330,29 +333,44 @@ mod tests {
     }
 
     #[test]
+    fn compression_defaults_to_zstd_when_unset() {
+        let opts = build_filter_options(&default_filter_command()).expect("options");
+        assert!(matches!(opts.compression, Some(mcap::Compression::Zstd)));
+    }
+
+    #[test]
     fn compression_flag_resolves_each_format() {
         // Guards the CompressionFormat -> str -> mcap::Compression bridge for every variant.
         let mut args = default_filter_command();
 
-        args.compression = CompressionFormat::Zstd;
+        args.compression = Some(CompressionFormat::Zstd);
         let opts = build_filter_options(&args).expect("options");
         assert!(matches!(opts.compression, Some(mcap::Compression::Zstd)));
 
-        args.compression = CompressionFormat::Lz4;
+        args.compression = Some(CompressionFormat::Lz4);
         let opts = build_filter_options(&args).expect("options");
         assert!(matches!(opts.compression, Some(mcap::Compression::Lz4)));
 
-        args.compression = CompressionFormat::None;
+        args.compression = Some(CompressionFormat::None);
         let opts = build_filter_options(&args).expect("options");
         assert!(opts.compression.is_none());
     }
 
     #[test]
-    fn deprecated_output_compression_overrides_compression() {
+    fn deprecated_output_compression_applies_when_compression_unset() {
         let mut args = default_filter_command();
-        args.compression = CompressionFormat::Zstd;
+        args.compression = None;
         args.output_compression = Some(CompressionFormat::None);
         let opts = build_filter_options(&args).expect("options");
         assert!(opts.compression.is_none());
+    }
+
+    #[test]
+    fn compression_takes_precedence_over_deprecated_output_compression() {
+        let mut args = default_filter_command();
+        args.compression = Some(CompressionFormat::Lz4);
+        args.output_compression = Some(CompressionFormat::None);
+        let opts = build_filter_options(&args).expect("options");
+        assert!(matches!(opts.compression, Some(mcap::Compression::Lz4)));
     }
 }

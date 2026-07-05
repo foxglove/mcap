@@ -484,11 +484,11 @@ pub struct FilterCommand {
     #[arg(long = "include-attachments", default_value_t = false, hide = true)]
     pub include_attachments: bool,
 
-    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
-    #[arg(long = "compression", value_enum, default_value = "zstd")]
-    pub compression: CompressionFormat,
+    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none (default: zstd)
+    #[arg(long = "compression", value_enum)]
+    pub compression: Option<CompressionFormat>,
 
-    /// Deprecated: use --compression. Overrides --compression when set.
+    /// Deprecated: use --compression. Ignored when --compression is set.
     #[arg(long = "output-compression", value_enum, hide = true)]
     pub output_compression: Option<CompressionFormat>,
 

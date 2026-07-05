@@ -581,7 +581,7 @@ mod tests {
                 exclude_attachments: false,
                 include_metadata: true,
                 include_attachments: true,
-                compression: CompressionFormat::Lz4,
+                compression: Some(CompressionFormat::Lz4),
                 output_compression: None,
                 chunk_size: 2048,
             })
@@ -595,8 +595,8 @@ mod tests {
                 .expect("filter should parse");
         match args.command {
             Command::Filter(filter) => {
-                // The deprecated alias is captured separately and leaves --compression at its default.
-                assert_eq!(filter.compression, CompressionFormat::Zstd);
+                // The deprecated alias is captured separately and leaves --compression unset.
+                assert_eq!(filter.compression, None);
                 assert_eq!(filter.output_compression, Some(CompressionFormat::None));
             }
             other => panic!("expected filter command, got {other:?}"),
