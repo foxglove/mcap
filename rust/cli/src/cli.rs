@@ -516,8 +516,7 @@ pub struct FilterCommand {
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Message order in the output: preserve (keep the input's stored order) or log-time (sort by
-    /// log time). See `mcap sort` for sorting by log time as a standalone operation.
+    /// Message order in the output: preserve (keep the input's stored order) or log-time (sort by log time)
     #[arg(long = "order", value_enum, default_value = "preserve")]
     pub order: MessageOrder,
 }
