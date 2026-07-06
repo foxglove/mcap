@@ -3,8 +3,8 @@
 //! It is a thin preset over the shared [`crate::rewrite`] engine: `sort` is `filter` with
 //! `--order` defaulting to `log_time` instead of `preserve`. The engine handles reading (indexed
 //! or summaryless), ordering, and the standardized record placement (metadata first, attachments
-//! last); `sort` only supplies the preset options. `--order` stays a real flag so future modes
-//! (for example `publish_time`) apply to `sort` too.
+//! last); `sort` only supplies the preset options. `--order` is a real flag, so its other modes
+//! (`preserve`, `publish_time`, and `topic`) apply to `sort` too.
 use anyhow::Result;
 
 use crate::cli::SortCommand;
@@ -238,6 +238,105 @@ mod tests {
             vec![30, 10, 20],
             "preserve should keep the input's stored order"
         );
+    }
+
+    /// Indexed input with two channels (`/alpha`, `/beta`) interleaved in log-time order and
+    /// publish_time running opposite to log_time, so `topic`/`publish_time` orderings are
+    /// observably different when driven through the `sort` command preset.
+    fn build_multichannel_indexed_input() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let alpha = writer
+                .add_channel(schema_id, "/alpha", "json", &BTreeMap::new())
+                .expect("alpha");
+            let beta = writer
+                .add_channel(schema_id, "/beta", "json", &BTreeMap::new())
+                .expect("beta");
+            for t in 0..5u64 {
+                for (channel_id, payload) in [(beta, b"b".as_slice()), (alpha, b"a")] {
+                    writer
+                        .write_to_known_channel(
+                            &MessageHeader {
+                                channel_id,
+                                sequence: t as u32,
+                                log_time: t,
+                                publish_time: 100 - t,
+                            },
+                            payload,
+                        )
+                        .expect("message");
+                }
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    fn output_topics(output: &[u8]) -> Vec<String> {
+        mcap::MessageStream::new(output)
+            .expect("message stream")
+            .map(|message| message.expect("message").channel.topic.clone())
+            .collect()
+    }
+
+    fn output_publish_times(output: &[u8]) -> Vec<u64> {
+        mcap::MessageStream::new(output)
+            .expect("message stream")
+            .map(|message| message.expect("message").publish_time)
+            .collect()
+    }
+
+    #[test]
+    fn order_topic_groups_each_channel_into_its_own_chunk() {
+        let output = run_sort(build_multichannel_indexed_input(), |input, out| {
+            let mut command = sort_command(input.clone(), out.clone());
+            command.order = MessageOrder::Topic;
+            command
+        });
+
+        assert_eq!(
+            output_topics(&output),
+            vec![
+                "/alpha", "/alpha", "/alpha", "/alpha", "/alpha", "/beta", "/beta", "/beta",
+                "/beta", "/beta"
+            ],
+            "topic ordering should group each channel's messages together"
+        );
+
+        let summary = mcap::Summary::read(&output)
+            .expect("summary read")
+            .expect("summary present");
+        assert_eq!(
+            summary.chunk_indexes.len(),
+            2,
+            "topic ordering should place each channel in its own chunk"
+        );
+    }
+
+    #[test]
+    fn order_publish_time_sorts_by_publish_time() {
+        let output = run_sort(build_multichannel_indexed_input(), |input, out| {
+            let mut command = sort_command(input.clone(), out.clone());
+            command.order = MessageOrder::PublishTime;
+            command
+        });
+
+        let publish_times = output_publish_times(&output);
+        let mut expected = publish_times.clone();
+        expected.sort_unstable();
+        assert_eq!(
+            publish_times, expected,
+            "publish_time ordering should ascend by publish time"
+        );
+        assert_eq!(publish_times.first(), Some(&96));
+        assert_eq!(publish_times.last(), Some(&100));
     }
 
     #[test]

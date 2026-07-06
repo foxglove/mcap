@@ -161,7 +161,7 @@ pub struct CompressCommand {
     #[arg(long = "compression", default_value = "zstd")]
     pub compression: String,
 
-    /// Message order in the output: preserve (keep the input order) or log_time
+    /// Message order in the output: preserve (keep the input order), log_time, publish_time, or topic
     #[arg(long = "order", value_enum, default_value = "preserve")]
     pub order: MessageOrder,
 }
@@ -171,7 +171,7 @@ pub struct DecompressCommand {
     #[command(flatten)]
     pub common: CommonRewriteArgs,
 
-    /// Message order in the output: preserve (keep the input order) or log_time
+    /// Message order in the output: preserve (keep the input order), log_time, publish_time, or topic
     #[arg(long = "order", value_enum, default_value = "preserve")]
     pub order: MessageOrder,
 }
@@ -354,16 +354,24 @@ impl CompressionFormat {
     }
 }
 
-/// Output message order for the rewrite commands (`filter`, `compress`, `decompress`).
+/// Output message order for the rewrite commands (`filter`, `compress`, `decompress`, `sort`).
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MessageOrder {
     /// Keep the input's stored message order.
     #[default]
     #[value(name = "preserve")]
     Preserve,
-    /// Sort messages by log time.
+    /// Sort messages by ascending log time.
     #[value(name = "log_time", alias = "log-time")]
     LogTime,
+    /// Sort messages by ascending publish time.
+    #[value(name = "publish_time", alias = "publish-time")]
+    PublishTime,
+    /// Group each channel's messages together (channels ordered by topic name, then channel ID),
+    /// placing every channel in its own chunk(s) with its messages in ascending log time. This lets
+    /// a single-topic reader fetch one contiguous byte range instead of scanning the whole file.
+    #[value(name = "topic")]
+    Topic,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -538,7 +546,7 @@ pub struct FilterCommand {
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 
-    /// Message order in the output: preserve (keep the input order) or log_time
+    /// Message order in the output: preserve (keep the input order), log_time, publish_time, or topic
     #[arg(long = "order", value_enum, default_value = "preserve")]
     pub order: MessageOrder,
 }
@@ -587,10 +595,16 @@ pub struct SortCommand {
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 
-    /// Message order in the output: preserve (keep the input order) or log_time.
+    /// Message order in the output:
     ///
-    /// `sort` defaults to log_time; it accepts the same flag as the other rewrite commands so it
-    /// can be overridden (and future modes such as publish_time will apply here too).
+    /// - preserve: keep the input's stored message order
+    /// - log_time: sort all messages by ascending log time (default)
+    /// - publish_time: sort all messages by ascending publish time
+    /// - topic: group each channel's messages together (channels ordered by topic name, then
+    ///   channel ID), placing every channel in its own chunk(s), which speeds up single-topic
+    ///   range reads
+    ///
+    /// `sort` defaults to log_time; it accepts the same flag as the other rewrite commands.
     #[arg(long = "order", value_enum, default_value = "log_time")]
     pub order: MessageOrder,
 }

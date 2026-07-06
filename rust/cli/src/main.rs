@@ -671,11 +671,17 @@ mod tests {
             other => panic!("expected filter command, got {other:?}"),
         }
 
-        for value in ["log_time", "log-time"] {
+        for (value, expected) in [
+            ("log_time", MessageOrder::LogTime),
+            ("log-time", MessageOrder::LogTime),
+            ("publish_time", MessageOrder::PublishTime),
+            ("publish-time", MessageOrder::PublishTime),
+            ("topic", MessageOrder::Topic),
+        ] {
             let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order", value])
                 .unwrap_or_else(|_| panic!("filter should parse --order {value}"));
             match args.command {
-                Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::LogTime),
+                Command::Filter(filter) => assert_eq!(filter.order, expected),
                 other => panic!("expected filter command, got {other:?}"),
             }
         }
@@ -801,11 +807,29 @@ mod tests {
                 },
                 compression: CompressionFormat::None,
                 no_chunks: true,
-                // `--order` stays a real flag on `sort`, so it can be overridden (and future
-                // modes like publish_time can be added) rather than being locked to log_time.
+                // `--order` is a real flag on `sort`, so it can be overridden rather than being
+                // locked to its log_time default.
                 order: MessageOrder::Preserve,
             })
         );
+    }
+
+    #[test]
+    fn sort_order_parses_publish_time_and_topic() {
+        // `sort` shares the rewrite `--order` flag, so its publish_time/topic modes parse here too.
+        for (value, expected) in [
+            ("publish_time", MessageOrder::PublishTime),
+            ("topic", MessageOrder::Topic),
+        ] {
+            let args = Args::try_parse_from([
+                "mcap", "sort", "in.mcap", "-o", "out.mcap", "--order", value,
+            ])
+            .unwrap_or_else(|_| panic!("sort should parse --order {value}"));
+            match args.command {
+                Command::Sort(command) => assert_eq!(command.order, expected),
+                other => panic!("expected sort command, got {other:?}"),
+            }
+        }
     }
 
     #[test]
