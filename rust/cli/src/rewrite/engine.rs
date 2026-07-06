@@ -544,6 +544,23 @@ mod tests {
     use regex::Regex;
 
     use super::{filter_to_writer, MessageOrder, ResolvedOptions};
+    use crate::cli::CommonRewriteArgs;
+
+    /// Builds the shared rewrite options the way `compress`/`decompress` do — from the common CLI
+    /// args, so the engine defaults (CRC on, chunked, metadata/attachments kept) are exercised.
+    fn rewrite_options(
+        file: Option<std::path::PathBuf>,
+        output: Option<std::path::PathBuf>,
+        chunk_size: u64,
+    ) -> super::RewriteOptions {
+        super::RewriteOptions::from(&CommonRewriteArgs {
+            file,
+            output,
+            chunk_size,
+            no_crc: false,
+            order: MessageOrder::Preserve,
+        })
+    }
 
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
         write_filter_test_input_with_options(chunked, summaryless, true, true, true, true)
@@ -1235,9 +1252,7 @@ mod tests {
         ));
 
         let mut options =
-            super::RewriteOptions::new(Some(input_path.clone()), Some(output_path.clone()), 1024);
-        options.include_metadata = true;
-        options.include_attachments = true;
+            rewrite_options(Some(input_path.clone()), Some(output_path.clone()), 1024);
         options.use_chunks = false;
         options.output_compression = "none".to_string();
 
@@ -1269,7 +1284,7 @@ mod tests {
         let path = dir.path().join("same-path.mcap");
         std::fs::write(&path, &input).expect("write input");
 
-        let options = super::RewriteOptions::new(
+        let options = rewrite_options(
             Some(path.clone()),
             Some(path.clone()),
             mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
@@ -1282,8 +1297,8 @@ mod tests {
     }
 
     #[test]
-    fn rewrite_new_default_preserves_message_order() {
-        // `compress`/`decompress` build their options via `RewriteOptions::new`, which defaults to
+    fn rewrite_common_args_default_preserves_message_order() {
+        // `compress`/`decompress` build their options from the shared args, which default to
         // `preserve`. Lock in that an out-of-order indexed input is copied in its stored order
         // rather than silently re-sorted to log time.
         let input = write_unsorted_input(true, false);
@@ -1292,17 +1307,15 @@ mod tests {
         let output_path = dir.path().join("out.mcap");
         std::fs::write(&input_path, &input).expect("write input");
 
-        let options = super::RewriteOptions::new(
+        let options = rewrite_options(
             Some(input_path),
             Some(output_path.clone()),
             mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-        )
-        .include_metadata(true)
-        .include_attachments(true);
+        );
         assert_eq!(
             options.order,
             MessageOrder::Preserve,
-            "RewriteOptions::new should default to preserve"
+            "the shared rewrite defaults should preserve order"
         );
         super::run(options, crate::source::SourceOptions::default())
             .expect("rewrite should succeed");

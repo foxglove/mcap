@@ -6,8 +6,8 @@ use anyhow::{bail, Context, Result};
 use regex::Regex;
 
 use crate::cli::{
-    parse_output_compression, parse_timestamp_or_nanos, CompressionFormat, FilterCommand,
-    MessageOrder,
+    parse_output_compression, parse_timestamp_or_nanos, CommonRewriteArgs, CompressionFormat,
+    FilterCommand, MessageOrder,
 };
 
 #[derive(Debug, Clone)]
@@ -32,11 +32,38 @@ pub(crate) struct RewriteOptions {
     pub(crate) order: MessageOrder,
 }
 
+/// Maps the arguments shared by every rewrite command onto their engine options: paths, chunk
+/// size, `--no-crc`, and message order. Metadata and attachments are included by default (all
+/// rewrite commands keep them; `filter` opts out via `--exclude-*`), and output is chunked with
+/// zstd compression unless a command overrides those.
+impl From<&CommonRewriteArgs> for RewriteOptions {
+    fn from(args: &CommonRewriteArgs) -> Self {
+        Self {
+            file: args.file.clone(),
+            output: args.output.clone(),
+            include_topic_regex: Vec::new(),
+            exclude_topic_regex: Vec::new(),
+            last_per_channel_topic_regex: Vec::new(),
+            start: None,
+            start_secs: 0,
+            start_nsecs: 0,
+            end: None,
+            end_secs: 0,
+            end_nsecs: 0,
+            include_metadata: true,
+            include_attachments: true,
+            output_compression: "zstd".to_string(),
+            chunk_size: args.chunk_size,
+            use_chunks: true,
+            include_crc: !args.no_crc,
+            order: args.order,
+        }
+    }
+}
+
 impl From<&FilterCommand> for RewriteOptions {
     fn from(args: &FilterCommand) -> Self {
         Self {
-            file: args.common.file.clone(),
-            output: args.common.output.clone(),
             include_topic_regex: args.include_topic_regex.clone(),
             exclude_topic_regex: args.exclude_topic_regex.clone(),
             last_per_channel_topic_regex: args.last_per_channel_topic_regex.clone(),
@@ -54,65 +81,15 @@ impl From<&FilterCommand> for RewriteOptions {
                 .unwrap_or(CompressionFormat::Zstd)
                 .as_str()
                 .to_string(),
-            chunk_size: args.common.chunk_size,
             use_chunks: !args.no_chunks,
-            include_crc: !args.common.no_crc,
-            order: args.common.order,
+            ..RewriteOptions::from(&args.common)
         }
     }
 }
 
 impl RewriteOptions {
-    pub(crate) fn new(file: Option<PathBuf>, output: Option<PathBuf>, chunk_size: u64) -> Self {
-        Self {
-            file,
-            output,
-            include_topic_regex: Vec::new(),
-            exclude_topic_regex: Vec::new(),
-            last_per_channel_topic_regex: Vec::new(),
-            start: None,
-            start_secs: 0,
-            start_nsecs: 0,
-            end: None,
-            end_secs: 0,
-            end_nsecs: 0,
-            include_metadata: false,
-            include_attachments: false,
-            output_compression: "zstd".to_string(),
-            chunk_size,
-            use_chunks: true,
-            include_crc: true,
-            order: MessageOrder::Preserve,
-        }
-    }
-
     pub(crate) fn compression(mut self, value: impl Into<String>) -> Self {
         self.output_compression = value.into();
-        self
-    }
-
-    pub(crate) fn use_chunks(mut self, value: bool) -> Self {
-        self.use_chunks = value;
-        self
-    }
-
-    pub(crate) fn include_crc(mut self, value: bool) -> Self {
-        self.include_crc = value;
-        self
-    }
-
-    pub(crate) fn include_metadata(mut self, value: bool) -> Self {
-        self.include_metadata = value;
-        self
-    }
-
-    pub(crate) fn include_attachments(mut self, value: bool) -> Self {
-        self.include_attachments = value;
-        self
-    }
-
-    pub(crate) fn order(mut self, value: MessageOrder) -> Self {
-        self.order = value;
         self
     }
 }
@@ -368,16 +345,27 @@ mod tests {
     }
 
     #[test]
-    fn order_builder_sets_order() {
-        let opts = RewriteOptions::new(None, None, mcap::WriteOptions::DEFAULT_CHUNK_SIZE);
-        assert_eq!(
-            opts.order,
-            MessageOrder::Preserve,
-            "new() defaults to preserve"
-        );
-        assert_eq!(
-            opts.order(MessageOrder::LogTime).order,
-            MessageOrder::LogTime
+    fn common_args_map_paths_order_and_defaults() {
+        // `compress`/`decompress` build their options from the shared args; this locks in that
+        // mapping (order + `--no-crc`) and the engine defaults (chunked, metadata/attachments kept).
+        let common = CommonRewriteArgs {
+            file: Some("in.mcap".into()),
+            output: Some("out.mcap".into()),
+            chunk_size: 4096,
+            no_crc: true,
+            order: MessageOrder::LogTime,
+        };
+        let opts = RewriteOptions::from(&common);
+        assert_eq!(opts.file, Some("in.mcap".into()));
+        assert_eq!(opts.output, Some("out.mcap".into()));
+        assert_eq!(opts.chunk_size, 4096);
+        assert_eq!(opts.order, MessageOrder::LogTime);
+        assert!(!opts.include_crc, "--no-crc should disable CRC fields");
+        assert!(opts.use_chunks, "output should be chunked by default");
+        assert!(opts.include_metadata, "metadata should be kept by default");
+        assert!(
+            opts.include_attachments,
+            "attachments should be kept by default"
         );
     }
 
