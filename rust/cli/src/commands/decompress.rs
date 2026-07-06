@@ -9,7 +9,7 @@ pub fn run(ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
     // `filter`-style rewrite with a preset: rechunk uncompressed, keeping metadata and
     // attachments. Paths, chunk size, and `--no-crc` come from the shared args.
     let options = RewriteOptions::from(&args.common)
-        .compression("none")
+        .compression(None)
         .order(args.order);
     rewrite::run(
         options,

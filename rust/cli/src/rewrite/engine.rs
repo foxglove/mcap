@@ -1254,7 +1254,7 @@ mod tests {
         let mut options =
             rewrite_options(Some(input_path.clone()), Some(output_path.clone()), 1024);
         options.use_chunks = false;
-        options.output_compression = "none".to_string();
+        options.output_compression = None;
 
         super::run(options, crate::source::SourceOptions::default())
             .expect("rewrite should succeed");

@@ -249,23 +249,26 @@ mod tests {
     }
 
     #[test]
-    fn compress_rejects_invalid_compression() {
+    fn compress_requires_existing_file() {
         let err = dispatch(
             &CommandContext::default(),
             Command::Compress(CompressCommand {
                 common: CommonRewriteArgs {
-                    file: None,
-                    output: None,
+                    file: Some(PathBuf::from("does-not-exist.mcap")),
+                    output: Some(PathBuf::from("compressed.mcap")),
                     output_file: None,
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
                 },
-                compression: "invalid".to_string(),
+                compression: crate::cli::CompressionFormat::Zstd,
                 order: MessageOrder::Preserve,
             }),
         )
-        .expect_err("compress should reject invalid compression");
-        assert!(err.to_string().contains("unrecognized compression format"));
+        .expect_err("compress should fail on missing input file");
+        assert!(
+            err.to_string().contains("couldn't open")
+                || err.to_string().contains("failed to canonicalize input")
+        );
     }
 
     #[test]

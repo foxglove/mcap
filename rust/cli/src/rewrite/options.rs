@@ -6,8 +6,8 @@ use anyhow::{bail, Context, Result};
 use regex::Regex;
 
 use crate::cli::{
-    parse_output_compression, parse_timestamp_or_nanos, CommonRewriteArgs, CompressionFormat,
-    FilterCommand, MessageOrder, SortCommand,
+    parse_timestamp_or_nanos, CommonRewriteArgs, CompressionFormat, FilterCommand, MessageOrder,
+    SortCommand,
 };
 
 #[derive(Debug, Clone)]
@@ -25,7 +25,7 @@ pub(crate) struct RewriteOptions {
     pub(crate) end_nsecs: u64,
     pub(crate) include_metadata: bool,
     pub(crate) include_attachments: bool,
-    pub(crate) output_compression: String,
+    pub(crate) output_compression: Option<mcap::Compression>,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
     pub(crate) include_crc: bool,
@@ -56,7 +56,7 @@ impl From<&CommonRewriteArgs> for RewriteOptions {
             end_nsecs: 0,
             include_metadata: true,
             include_attachments: true,
-            output_compression: "zstd".to_string(),
+            output_compression: Some(mcap::Compression::Zstd),
             chunk_size: args.chunk_size,
             use_chunks: true,
             include_crc: !args.no_crc,
@@ -83,8 +83,7 @@ impl From<&FilterCommand> for RewriteOptions {
                 .compression
                 .or(args.output_compression)
                 .unwrap_or(CompressionFormat::Zstd)
-                .as_str()
-                .to_string(),
+                .to_compression(),
             use_chunks: !args.no_chunks,
             order: args.order,
             ..RewriteOptions::from(&args.common)
@@ -98,7 +97,7 @@ impl From<&FilterCommand> for RewriteOptions {
 impl From<&SortCommand> for RewriteOptions {
     fn from(args: &SortCommand) -> Self {
         Self {
-            output_compression: args.compression.as_str().to_string(),
+            output_compression: args.compression.to_compression(),
             use_chunks: !args.no_chunks,
             order: args.order,
             ..RewriteOptions::from(&args.common)
@@ -107,8 +106,8 @@ impl From<&SortCommand> for RewriteOptions {
 }
 
 impl RewriteOptions {
-    pub(crate) fn compression(mut self, value: impl Into<String>) -> Self {
-        self.output_compression = value.into();
+    pub(crate) fn compression(mut self, value: Option<mcap::Compression>) -> Self {
+        self.output_compression = value;
         self
     }
 
@@ -165,7 +164,7 @@ pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> 
         end,
         include_metadata: args.include_metadata,
         include_attachments: args.include_attachments,
-        compression: parse_output_compression(&args.output_compression)?,
+        compression: args.output_compression,
         chunk_size: args.chunk_size,
         use_chunks: args.use_chunks,
         include_crc: args.include_crc,
@@ -419,7 +418,7 @@ mod tests {
 
     #[test]
     fn compression_flag_resolves_each_format() {
-        // Guards the CompressionFormat -> str -> mcap::Compression bridge for every variant.
+        // Guards the CompressionFormat -> mcap::Compression bridge for every variant.
         let mut args = default_filter_command();
 
         args.compression = Some(CompressionFormat::Zstd);
@@ -478,7 +477,10 @@ mod tests {
             MessageOrder::Preserve,
             "sort honors an explicit --order override"
         );
-        assert_eq!(opts.output_compression, "lz4");
+        assert!(matches!(
+            opts.output_compression,
+            Some(mcap::Compression::Lz4)
+        ));
         assert_eq!(opts.chunk_size, 4096);
         assert!(!opts.use_chunks, "--no-chunks should write outside chunks");
         assert!(!opts.include_crc, "--no-crc should disable CRC fields");
