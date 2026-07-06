@@ -4,7 +4,7 @@
 //! `--order` defaulting to `log_time` instead of `preserve`. The engine handles reading (indexed
 //! or summaryless), ordering, and the standardized record placement (metadata first, attachments
 //! last); `sort` only supplies the preset options. `--order` is a real flag, so its other modes
-//! (`preserve`, `publish_time`, and `topic`) apply to `sort` too.
+//! (`preserve` and `topic`) apply to `sort` too.
 use anyhow::Result;
 
 use crate::cli::SortCommand;
@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn order_preserve_keeps_stored_order() {
         // `--order` remains a real flag; `preserve` copies the input's stored order rather than
-        // sorting, so future modes (for example `publish_time`) can slot in the same way.
+        // sorting.
         let output = run_sort(build_out_of_order_indexed_input(), |input, out| {
             let mut command = sort_command(input.clone(), out.clone());
             command.order = MessageOrder::Preserve;
@@ -240,9 +240,8 @@ mod tests {
         );
     }
 
-    /// Indexed input with two channels (`/alpha`, `/beta`) interleaved in log-time order and
-    /// publish_time running opposite to log_time, so `topic`/`publish_time` orderings are
-    /// observably different when driven through the `sort` command preset.
+    /// Indexed input with two channels (`/alpha`, `/beta`) interleaved in log-time order, so the
+    /// `topic` ordering is observably different when driven through the `sort` command preset.
     fn build_multichannel_indexed_input() -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
@@ -267,7 +266,7 @@ mod tests {
                                 channel_id,
                                 sequence: t as u32,
                                 log_time: t,
-                                publish_time: 100 - t,
+                                publish_time: t,
                             },
                             payload,
                         )
@@ -283,13 +282,6 @@ mod tests {
         mcap::MessageStream::new(output)
             .expect("message stream")
             .map(|message| message.expect("message").channel.topic.clone())
-            .collect()
-    }
-
-    fn output_publish_times(output: &[u8]) -> Vec<u64> {
-        mcap::MessageStream::new(output)
-            .expect("message stream")
-            .map(|message| message.expect("message").publish_time)
             .collect()
     }
 
@@ -318,25 +310,6 @@ mod tests {
             2,
             "topic ordering should place each channel in its own chunk"
         );
-    }
-
-    #[test]
-    fn order_publish_time_sorts_by_publish_time() {
-        let output = run_sort(build_multichannel_indexed_input(), |input, out| {
-            let mut command = sort_command(input.clone(), out.clone());
-            command.order = MessageOrder::PublishTime;
-            command
-        });
-
-        let publish_times = output_publish_times(&output);
-        let mut expected = publish_times.clone();
-        expected.sort_unstable();
-        assert_eq!(
-            publish_times, expected,
-            "publish_time ordering should ascend by publish time"
-        );
-        assert_eq!(publish_times.first(), Some(&96));
-        assert_eq!(publish_times.last(), Some(&100));
     }
 
     #[test]

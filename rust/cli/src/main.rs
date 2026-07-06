@@ -674,8 +674,6 @@ mod tests {
         for (value, expected) in [
             ("log_time", MessageOrder::LogTime),
             ("log-time", MessageOrder::LogTime),
-            ("publish_time", MessageOrder::PublishTime),
-            ("publish-time", MessageOrder::PublishTime),
             ("topic", MessageOrder::Topic),
         ] {
             let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order", value])
@@ -815,20 +813,15 @@ mod tests {
     }
 
     #[test]
-    fn sort_order_parses_publish_time_and_topic() {
-        // `sort` shares the rewrite `--order` flag, so its publish_time/topic modes parse here too.
-        for (value, expected) in [
-            ("publish_time", MessageOrder::PublishTime),
-            ("topic", MessageOrder::Topic),
-        ] {
-            let args = Args::try_parse_from([
-                "mcap", "sort", "in.mcap", "-o", "out.mcap", "--order", value,
-            ])
-            .unwrap_or_else(|_| panic!("sort should parse --order {value}"));
-            match args.command {
-                Command::Sort(command) => assert_eq!(command.order, expected),
-                other => panic!("expected sort command, got {other:?}"),
-            }
+    fn sort_order_parses_topic() {
+        // `sort` shares the rewrite `--order` flag, so its topic mode parses here too.
+        let args = Args::try_parse_from([
+            "mcap", "sort", "in.mcap", "-o", "out.mcap", "--order", "topic",
+        ])
+        .expect("sort should parse --order topic");
+        match args.command {
+            Command::Sort(command) => assert_eq!(command.order, MessageOrder::Topic),
+            other => panic!("expected sort command, got {other:?}"),
         }
     }
 

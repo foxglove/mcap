@@ -295,11 +295,10 @@ fn filter_indexed<W: Write + Seek>(
                     }
                 }
             }
-            // `publish_time` and `topic` are not index orders, so messages are read in log-time
-            // order (for a stable tie-break), buffered, re-sorted, then written. This holds the
-            // selected message set in memory; making these orderings memory-bounded is a known
-            // follow-up.
-            MessageOrder::PublishTime | MessageOrder::Topic => {
+            // `topic` is not an index order, so messages are read in log-time order (for a stable
+            // tie-break), buffered, re-sorted, then written. This holds the selected message set in
+            // memory; making this ordering memory-bounded is a known follow-up.
+            MessageOrder::Topic => {
                 let mut reader = mcap::sans_io::IndexedReader::new_with_options(
                     summary,
                     indexed_opts.with_order(mcap::sans_io::indexed_reader::ReadOrder::LogTime),
@@ -421,8 +420,8 @@ fn checked_slice(input: &[u8], offset: u64, length: usize) -> Result<&[u8]> {
 }
 
 /// A message buffered so it can be re-sorted before writing. Used by the linear path (summaryless
-/// input, which cannot be streamed in a sorted order) and by the indexed path for the
-/// `publish_time`/`topic` orderings the index cannot produce directly.
+/// input, which cannot be streamed in a sorted order) and by the indexed path for the `topic`
+/// ordering the index cannot produce directly.
 struct BufferedMessage {
     channel: Arc<mcap::Channel<'static>>,
     sequence: u32,
@@ -443,7 +442,6 @@ fn write_ordered_buffer<W: Write + Seek>(
 ) -> Result<()> {
     match order {
         MessageOrder::LogTime => messages.sort_by_key(|message| message.log_time),
-        MessageOrder::PublishTime => messages.sort_by_key(|message| message.publish_time),
         MessageOrder::Topic => messages.sort_by(|a, b| {
             a.channel
                 .topic
@@ -1530,10 +1528,9 @@ mod tests {
         }
     }
 
-    /// Two channels (`/alpha`, `/beta`) interleaved in log-time order, with publish_time running
-    /// opposite to log_time, so the `publish_time` and `topic` orderings are observably different
-    /// from the stored/log-time order. Covers the indexed path (chunked, with a summary) and both
-    /// linear paths (chunked-summaryless and fully unchunked).
+    /// Two channels (`/alpha`, `/beta`) interleaved in log-time order, so the `topic` ordering is
+    /// observably different from the stored/log-time order. Covers the indexed path (chunked, with
+    /// a summary) and both linear paths (chunked-summaryless and fully unchunked).
     fn write_multichannel_input(chunked: bool, summaryless: bool) -> Vec<u8> {
         let mut output = Cursor::new(Vec::new());
         {
@@ -1567,7 +1564,7 @@ mod tests {
                                 channel_id: channel,
                                 sequence: t as u32,
                                 log_time: t,
-                                publish_time: 100 - t,
+                                publish_time: t,
                             },
                             payload,
                         )
@@ -1579,39 +1576,15 @@ mod tests {
         output.into_inner()
     }
 
-    /// `(topic, log_time, publish_time)` for every output message, in file order.
-    fn output_topic_log_publish(output: &[u8]) -> Vec<(String, u64, u64)> {
+    /// `(topic, log_time)` for every output message, in file order.
+    fn output_topic_log_times(output: &[u8]) -> Vec<(String, u64)> {
         mcap::MessageStream::new(output)
             .expect("message stream")
             .map(|message| {
                 let message = message.expect("message");
-                (
-                    message.channel.topic.clone(),
-                    message.log_time,
-                    message.publish_time,
-                )
+                (message.channel.topic.clone(), message.log_time)
             })
             .collect()
-    }
-
-    #[test]
-    fn publish_time_orders_messages_by_publish_time() {
-        for (chunked, summaryless) in [(true, false), (true, true), (false, true)] {
-            let input = write_multichannel_input(chunked, summaryless);
-            let output = run_filter(&input, &ordered_options(MessageOrder::PublishTime));
-            let publish_times: Vec<u64> = output_topic_log_publish(&output)
-                .into_iter()
-                .map(|(_, _, publish_time)| publish_time)
-                .collect();
-            let mut expected = publish_times.clone();
-            expected.sort_unstable();
-            assert_eq!(
-                publish_times, expected,
-                "messages should ascend by publish time (chunked={chunked}, summaryless={summaryless})"
-            );
-            assert_eq!(publish_times.first(), Some(&96));
-            assert_eq!(publish_times.last(), Some(&100));
-        }
     }
 
     #[test]
@@ -1619,9 +1592,9 @@ mod tests {
         for (chunked, summaryless) in [(true, false), (true, true), (false, true)] {
             let input = write_multichannel_input(chunked, summaryless);
             let output = run_filter(&input, &ordered_options(MessageOrder::Topic));
-            let entries = output_topic_log_publish(&output);
+            let entries = output_topic_log_times(&output);
 
-            let topics: Vec<&str> = entries.iter().map(|(topic, _, _)| topic.as_str()).collect();
+            let topics: Vec<&str> = entries.iter().map(|(topic, _)| topic.as_str()).collect();
             assert_eq!(
                 topics,
                 vec![
@@ -1630,10 +1603,8 @@ mod tests {
                 ],
                 "each channel's messages should be grouped together (chunked={chunked}, summaryless={summaryless})"
             );
-            let alpha_log_times: Vec<u64> = entries[..5]
-                .iter()
-                .map(|(_, log_time, _)| *log_time)
-                .collect();
+            let alpha_log_times: Vec<u64> =
+                entries[..5].iter().map(|(_, log_time)| *log_time).collect();
             assert_eq!(
                 alpha_log_times,
                 vec![0, 1, 2, 3, 4],
