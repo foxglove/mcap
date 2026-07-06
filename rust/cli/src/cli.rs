@@ -76,7 +76,8 @@ pub enum Command {
     Completion(CompletionCommand),
     /// Create a compressed copy of an MCAP file
     ///
-    /// Messages are copied in the input's stored order; use `mcap sort` to reorder by log time.
+    /// Messages are copied in the input's stored order by default; pass `--order log-time` (or use
+    /// `mcap filter`) to reorder.
     Compress(CompressCommand),
     /// Convert supported input files to MCAP
     #[command(
@@ -85,7 +86,8 @@ pub enum Command {
     Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file
     ///
-    /// Messages are copied in the input's stored order; use `mcap sort` to reorder by log time.
+    /// Messages are copied in the input's stored order by default; pass `--order log-time` (or use
+    /// `mcap filter`) to reorder.
     Decompress(DecompressCommand),
     /// Check an MCAP file structure
     Doctor(DoctorCommand),
@@ -130,6 +132,10 @@ pub struct CompressCommand {
     /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long = "compression", default_value = "zstd")]
     pub compression: String,
+
+    /// Message order in the output: preserve (keep the input's stored order) or log-time (sort by log time)
+    #[arg(long = "order", value_enum, default_value = "preserve")]
+    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -144,6 +150,10 @@ pub struct DecompressCommand {
     /// Target uncompressed chunk size for output
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
+
+    /// Message order in the output: preserve (keep the input's stored order) or log-time (sort by log time)
+    #[arg(long = "order", value_enum, default_value = "preserve")]
+    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -516,6 +526,14 @@ pub struct FilterCommand {
     /// log time). See `mcap sort` for sorting by log time as a standalone operation.
     #[arg(long = "order", value_enum, default_value = "preserve")]
     pub order: MessageOrder,
+
+    /// Disable all output CRC fields
+    #[arg(long = "no-crc", default_value_t = false)]
+    pub no_crc: bool,
+
+    /// Write records outside of chunks
+    #[arg(long = "no-chunks", default_value_t = false)]
+    pub no_chunks: bool,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

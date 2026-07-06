@@ -86,7 +86,8 @@ mod tests {
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
         CompressCommand, DoctorCommand, DuCommand, GetAttachmentCommand, GetMetadataCommand,
         InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, RecoverCommand, SortCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MessageOrder, RecoverCommand,
+        SortCommand,
     };
     use crate::context::CommandContext;
 
@@ -256,6 +257,7 @@ mod tests {
                 output: None,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 compression: "invalid".to_string(),
+                order: MessageOrder::Preserve,
             }),
         )
         .expect_err("compress should reject invalid compression");

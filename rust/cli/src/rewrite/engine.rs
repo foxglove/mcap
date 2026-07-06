@@ -42,6 +42,10 @@ fn filter_to_writer<W: Write + Seek>(
         .use_chunks(opts.use_chunks)
         .chunk_size(Some(opts.chunk_size))
         .compression(opts.compression)
+        .calculate_chunk_crcs(opts.include_crc)
+        .calculate_data_section_crc(opts.include_crc)
+        .calculate_summary_section_crc(opts.include_crc)
+        .calculate_attachment_crcs(opts.include_crc)
         .disable_seeking(disable_seeking);
 
     write_options = write_options.library(crate::cli::LIBRARY_IDENTIFIER.clone());
@@ -713,6 +717,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         }
     }
 
@@ -920,6 +925,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -946,6 +952,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -973,6 +980,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -1002,6 +1010,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -1029,6 +1038,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -1054,6 +1064,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -1078,6 +1089,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -1102,6 +1114,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -1125,6 +1138,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -1148,6 +1162,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -1171,6 +1186,7 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
+            include_crc: true,
         };
         // The CLI is the writer of the output, so it stamps its own identity, not the source's.
         let output = run_filter(&input, &opts);
@@ -1383,6 +1399,40 @@ mod tests {
                 "log_time should sort messages by log time (chunked={chunked})"
             );
         }
+    }
+
+    fn data_section_crc(output: &[u8]) -> u32 {
+        for record in mcap::read::LinearReader::new(output).expect("reader") {
+            if let mcap::records::Record::DataEnd(data_end) = record.expect("record") {
+                return data_end.data_section_crc;
+            }
+        }
+        panic!("output has no DataEnd record");
+    }
+
+    #[test]
+    fn include_crc_false_disables_output_crcs() {
+        let input = write_filter_test_input(true, false);
+
+        let with_crc = run_filter(&input, &include_all_options());
+        assert_ne!(
+            data_section_crc(&with_crc),
+            0,
+            "CRCs are emitted by default"
+        );
+
+        let without_crc = run_filter(
+            &input,
+            &ResolvedOptions {
+                include_crc: false,
+                ..include_all_options()
+            },
+        );
+        assert_eq!(
+            data_section_crc(&without_crc),
+            0,
+            "include_crc=false must zero output CRCs"
+        );
     }
 
     #[test]

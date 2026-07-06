@@ -474,6 +474,7 @@ mod tests {
                 output: None,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 compression: "zstd".to_string(),
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -490,6 +491,8 @@ mod tests {
             "1024",
             "--compression",
             "lz4",
+            "--order",
+            "log-time",
         ])
         .expect("compress with flags should parse");
         assert_eq!(
@@ -499,6 +502,7 @@ mod tests {
                 output: Some("out.mcap".into()),
                 chunk_size: 1024,
                 compression: "lz4".to_string(),
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -513,6 +517,7 @@ mod tests {
                 file: Some("in.mcap".into()),
                 output: None,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -527,6 +532,8 @@ mod tests {
             "out.mcap",
             "--chunk-size",
             "2048",
+            "--order",
+            "log-time",
         ])
         .expect("decompress with flags should parse");
         assert_eq!(
@@ -535,6 +542,7 @@ mod tests {
                 file: Some("in.mcap".into()),
                 output: Some("out.mcap".into()),
                 chunk_size: 2048,
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -585,6 +593,8 @@ mod tests {
                 output_compression: None,
                 chunk_size: 2048,
                 order: MessageOrder::Preserve,
+                no_crc: false,
+                no_chunks: false,
             })
         );
     }
@@ -621,6 +631,29 @@ mod tests {
                 // Deprecated include flags default off and are no-ops.
                 assert!(!filter.include_metadata);
                 assert!(!filter.include_attachments);
+            }
+            other => panic!("expected filter command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_filter_no_crc_and_no_chunks() {
+        let default = Args::try_parse_from(["mcap", "filter", "in.mcap"])
+            .expect("filter should parse without transcode flags");
+        match default.command {
+            Command::Filter(filter) => {
+                assert!(!filter.no_crc);
+                assert!(!filter.no_chunks);
+            }
+            other => panic!("expected filter command, got {other:?}"),
+        }
+
+        let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--no-crc", "--no-chunks"])
+            .expect("filter should parse --no-crc/--no-chunks");
+        match args.command {
+            Command::Filter(filter) => {
+                assert!(filter.no_crc);
+                assert!(filter.no_chunks);
             }
             other => panic!("expected filter command, got {other:?}"),
         }
