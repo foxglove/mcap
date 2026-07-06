@@ -41,10 +41,10 @@ mod tests {
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        CoalesceChannels, Command, CompletionCommand, CompressCommand, CompressionFormat,
-        ConvertCommand, DecompressCommand, DoctorCommand, DuCommand, FilterCommand,
-        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
-        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        CoalesceChannels, Command, CommonRewriteArgs, CompletionCommand, CompressCommand,
+        CompressionFormat, ConvertCommand, DecompressCommand, DoctorCommand, DuCommand,
+        FilterCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand,
+        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
         ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, MessageOrder,
         RecoverCommand, SortCommand,
     };
@@ -470,11 +470,14 @@ mod tests {
         assert_eq!(
             args.command,
             Command::Compress(CompressCommand {
-                file: Some("in.mcap".into()),
-                output: None,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: None,
+                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                    no_crc: false,
+                    order: MessageOrder::Preserve,
+                },
                 compression: "zstd".to_string(),
-                order: MessageOrder::Preserve,
             })
         );
     }
@@ -491,6 +494,7 @@ mod tests {
             "1024",
             "--compression",
             "lz4",
+            "--no-crc",
             "--order",
             "log-time",
         ])
@@ -498,11 +502,14 @@ mod tests {
         assert_eq!(
             args.command,
             Command::Compress(CompressCommand {
-                file: Some("in.mcap".into()),
-                output: Some("out.mcap".into()),
-                chunk_size: 1024,
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: Some("out.mcap".into()),
+                    chunk_size: 1024,
+                    no_crc: true,
+                    order: MessageOrder::LogTime,
+                },
                 compression: "lz4".to_string(),
-                order: MessageOrder::LogTime,
             })
         );
     }
@@ -514,10 +521,13 @@ mod tests {
         assert_eq!(
             args.command,
             Command::Decompress(DecompressCommand {
-                file: Some("in.mcap".into()),
-                output: None,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                order: MessageOrder::Preserve,
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: None,
+                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                    no_crc: false,
+                    order: MessageOrder::Preserve,
+                },
             })
         );
     }
@@ -532,6 +542,7 @@ mod tests {
             "out.mcap",
             "--chunk-size",
             "2048",
+            "--no-crc",
             "--order",
             "log-time",
         ])
@@ -539,10 +550,13 @@ mod tests {
         assert_eq!(
             args.command,
             Command::Decompress(DecompressCommand {
-                file: Some("in.mcap".into()),
-                output: Some("out.mcap".into()),
-                chunk_size: 2048,
-                order: MessageOrder::LogTime,
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: Some("out.mcap".into()),
+                    chunk_size: 2048,
+                    no_crc: true,
+                    order: MessageOrder::LogTime,
+                },
             })
         );
     }
@@ -569,13 +583,20 @@ mod tests {
             "lz4",
             "--chunk-size",
             "2048",
+            "--no-crc",
+            "--no-chunks",
         ])
         .expect("filter should parse");
         assert_eq!(
             args.command,
             Command::Filter(FilterCommand {
-                file: Some("in.mcap".into()),
-                output: Some("out.mcap".into()),
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: Some("out.mcap".into()),
+                    chunk_size: 2048,
+                    no_crc: true,
+                    order: MessageOrder::Preserve,
+                },
                 include_topic_regex: vec!["camera.*".to_string()],
                 exclude_topic_regex: vec![],
                 last_per_channel_topic_regex: vec!["camera_.*".to_string()],
@@ -591,8 +612,7 @@ mod tests {
                 include_attachments: true,
                 compression: Some(CompressionFormat::Lz4),
                 output_compression: None,
-                chunk_size: 2048,
-                order: MessageOrder::Preserve,
+                no_chunks: true,
             })
         );
     }
@@ -639,7 +659,7 @@ mod tests {
         let default = Args::try_parse_from(["mcap", "filter", "in.mcap"])
             .expect("filter should parse without --order");
         match default.command {
-            Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::Preserve),
+            Command::Filter(filter) => assert_eq!(filter.common.order, MessageOrder::Preserve),
             other => panic!("expected filter command, got {other:?}"),
         }
 
@@ -647,7 +667,7 @@ mod tests {
             let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order", value])
                 .unwrap_or_else(|_| panic!("filter should parse --order {value}"));
             match args.command {
-                Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::LogTime),
+                Command::Filter(filter) => assert_eq!(filter.common.order, MessageOrder::LogTime),
                 other => panic!("expected filter command, got {other:?}"),
             }
         }

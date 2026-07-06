@@ -110,8 +110,11 @@ pub struct CompletionCommand {
     pub shell: Shell,
 }
 
+/// Options shared by every rewrite-based command (`filter`, `compress`, `decompress`). Each
+/// command flattens these and adds only the knobs that apply to it, so the common definitions
+/// (and their help text / defaults) live in one place.
 #[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct CompressCommand {
+pub struct CommonRewriteArgs {
     /// Input MCAP file path. If omitted, reads from stdin.
     pub file: Option<PathBuf>,
 
@@ -123,9 +126,9 @@ pub struct CompressCommand {
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Compression algorithm for output file: zstd, lz4, or none
-    #[arg(long = "compression", default_value = "zstd")]
-    pub compression: String,
+    /// Disable all output CRC fields
+    #[arg(long = "no-crc", default_value_t = false)]
+    pub no_crc: bool,
 
     /// Message order in the output: preserve (keep the input order) or log_time
     #[arg(long = "order", value_enum, default_value = "preserve")]
@@ -133,21 +136,19 @@ pub struct CompressCommand {
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
+pub struct CompressCommand {
+    #[command(flatten)]
+    pub common: CommonRewriteArgs,
+
+    /// Compression algorithm for output file: zstd, lz4, or none
+    #[arg(long = "compression", default_value = "zstd")]
+    pub compression: String,
+}
+
+#[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct DecompressCommand {
-    /// Input MCAP file path. If omitted, reads from stdin.
-    pub file: Option<PathBuf>,
-
-    /// Output file path. If omitted, writes to stdout.
-    #[arg(short = 'o', long = "output")]
-    pub output: Option<PathBuf>,
-
-    /// Target uncompressed chunk size for output
-    #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
-    pub chunk_size: u64,
-
-    /// Message order in the output: preserve (keep the input order) or log_time
-    #[arg(long = "order", value_enum, default_value = "preserve")]
-    pub order: MessageOrder,
+    #[command(flatten)]
+    pub common: CommonRewriteArgs,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -435,12 +436,8 @@ pub struct DuCommand {
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct FilterCommand {
-    /// Input MCAP file path. If omitted, reads from stdin.
-    pub file: Option<PathBuf>,
-
-    /// Output file path. If omitted, writes to stdout.
-    #[arg(short = 'o', long = "output")]
-    pub output: Option<PathBuf>,
+    #[command(flatten)]
+    pub common: CommonRewriteArgs,
 
     /// Include topics matching this regex (repeatable)
     #[arg(short = 'y', long = "include-topic-regex")]
@@ -512,13 +509,9 @@ pub struct FilterCommand {
     #[arg(long = "output-compression", value_enum, hide = true)]
     pub output_compression: Option<CompressionFormat>,
 
-    /// Target uncompressed chunk size for output
-    #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
-    pub chunk_size: u64,
-
-    /// Message order in the output: preserve (keep the input order) or log_time
-    #[arg(long = "order", value_enum, default_value = "preserve")]
-    pub order: MessageOrder,
+    /// Write records outside of chunks
+    #[arg(long = "no-chunks", default_value_t = false)]
+    pub no_chunks: bool,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

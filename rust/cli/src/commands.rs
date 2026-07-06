@@ -84,10 +84,10 @@ mod tests {
     use super::dispatch;
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
-        CompressCommand, DoctorCommand, DuCommand, GetAttachmentCommand, GetMetadataCommand,
-        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MessageOrder, RecoverCommand,
-        SortCommand,
+        CommonRewriteArgs, CompressCommand, DoctorCommand, DuCommand, GetAttachmentCommand,
+        GetMetadataCommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand,
+        ListChunksCommand, ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand,
+        MessageOrder, RecoverCommand, SortCommand,
     };
     use crate::context::CommandContext;
 
@@ -253,11 +253,14 @@ mod tests {
         let err = dispatch(
             &CommandContext::default(),
             Command::Compress(CompressCommand {
-                file: None,
-                output: None,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                common: CommonRewriteArgs {
+                    file: None,
+                    output: None,
+                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                    no_crc: false,
+                    order: MessageOrder::Preserve,
+                },
                 compression: "invalid".to_string(),
-                order: MessageOrder::Preserve,
             }),
         )
         .expect_err("compress should reject invalid compression");

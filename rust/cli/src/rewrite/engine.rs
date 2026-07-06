@@ -42,7 +42,16 @@ fn filter_to_writer<W: Write + Seek>(
         .use_chunks(opts.use_chunks)
         .chunk_size(Some(opts.chunk_size))
         .compression(opts.compression)
+        .calculate_chunk_crcs(opts.include_crc)
+        .calculate_data_section_crc(opts.include_crc)
+        .calculate_summary_section_crc(opts.include_crc)
+        .calculate_attachment_crcs(opts.include_crc)
         .disable_seeking(disable_seeking);
+
+    // Message indexes only accompany chunks; skip them for unchunked output (mirrors `merge`).
+    if !opts.use_chunks {
+        write_options = write_options.emit_message_indexes(false);
+    }
 
     write_options = write_options.library(crate::cli::LIBRARY_IDENTIFIER.clone());
     if let Some(header) = read_header(input)? {
@@ -535,6 +544,23 @@ mod tests {
     use regex::Regex;
 
     use super::{filter_to_writer, MessageOrder, ResolvedOptions};
+    use crate::cli::CommonRewriteArgs;
+
+    /// Builds rewrite options from the shared CLI args, exercising the engine defaults (CRC on,
+    /// chunked, metadata/attachments kept).
+    fn rewrite_options(
+        file: Option<std::path::PathBuf>,
+        output: Option<std::path::PathBuf>,
+        chunk_size: u64,
+    ) -> super::RewriteOptions {
+        super::RewriteOptions::from(&CommonRewriteArgs {
+            file,
+            output,
+            chunk_size,
+            no_crc: false,
+            order: MessageOrder::Preserve,
+        })
+    }
 
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
         write_filter_test_input_with_options(chunked, summaryless, true, true, true, true)
@@ -720,6 +746,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         }
     }
@@ -927,6 +954,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
@@ -953,6 +981,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
@@ -980,6 +1009,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
@@ -1009,6 +1039,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
@@ -1036,6 +1067,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
@@ -1061,6 +1093,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
@@ -1085,6 +1118,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
@@ -1109,6 +1143,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
@@ -1132,6 +1167,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
@@ -1155,6 +1191,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
@@ -1178,6 +1215,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         // The CLI is the writer of the output, so it stamps its own identity, not the source's.
@@ -1214,9 +1252,7 @@ mod tests {
         ));
 
         let mut options =
-            super::RewriteOptions::new(Some(input_path.clone()), Some(output_path.clone()), 1024);
-        options.include_metadata = true;
-        options.include_attachments = true;
+            rewrite_options(Some(input_path.clone()), Some(output_path.clone()), 1024);
         options.use_chunks = false;
         options.output_compression = "none".to_string();
 
@@ -1248,7 +1284,7 @@ mod tests {
         let path = dir.path().join("same-path.mcap");
         std::fs::write(&path, &input).expect("write input");
 
-        let options = super::RewriteOptions::new(
+        let options = rewrite_options(
             Some(path.clone()),
             Some(path.clone()),
             mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
@@ -1261,8 +1297,8 @@ mod tests {
     }
 
     #[test]
-    fn rewrite_new_default_preserves_message_order() {
-        // `compress`/`decompress` build their options via `RewriteOptions::new`, which defaults to
+    fn rewrite_common_args_default_preserves_message_order() {
+        // `compress`/`decompress` build their options from the shared args, which default to
         // `preserve`. Lock in that an out-of-order indexed input is copied in its stored order
         // rather than silently re-sorted to log time.
         let input = write_unsorted_input(true, false);
@@ -1271,17 +1307,15 @@ mod tests {
         let output_path = dir.path().join("out.mcap");
         std::fs::write(&input_path, &input).expect("write input");
 
-        let options = super::RewriteOptions::new(
+        let options = rewrite_options(
             Some(input_path),
             Some(output_path.clone()),
             mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-        )
-        .include_metadata(true)
-        .include_attachments(true);
+        );
         assert_eq!(
             options.order,
             MessageOrder::Preserve,
-            "RewriteOptions::new should default to preserve"
+            "the shared rewrite defaults should preserve order"
         );
         super::run(options, crate::source::SourceOptions::default())
             .expect("rewrite should succeed");
@@ -1410,5 +1444,116 @@ mod tests {
                 "equal log_times must preserve file order (chunked={chunked}, summaryless={summaryless})"
             );
         }
+    }
+
+    /// Every CRC-bearing field written to an output MCAP, so a test can assert whether CRCs were
+    /// calculated. `LinearReader` yields top-level records (chunks are not flattened), so the
+    /// chunk `uncompressed_crc` is observable here.
+    struct OutputCrcs {
+        chunk_crcs: Vec<u32>,
+        attachment_crcs: Vec<u32>,
+        data_section_crc: u32,
+        summary_crc: u32,
+    }
+
+    fn collect_output_crcs(output: &[u8]) -> OutputCrcs {
+        let mut crcs = OutputCrcs {
+            chunk_crcs: Vec::new(),
+            attachment_crcs: Vec::new(),
+            data_section_crc: 0,
+            summary_crc: 0,
+        };
+        for record in mcap::read::LinearReader::new(output).expect("reader") {
+            match record.expect("record") {
+                mcap::records::Record::Chunk { header, .. } => {
+                    crcs.chunk_crcs.push(header.uncompressed_crc);
+                }
+                mcap::records::Record::Attachment { crc, .. } => crcs.attachment_crcs.push(crc),
+                mcap::records::Record::DataEnd(end) => crcs.data_section_crc = end.data_section_crc,
+                mcap::records::Record::Footer(footer) => crcs.summary_crc = footer.summary_crc,
+                _ => {}
+            }
+        }
+        crcs
+    }
+
+    #[test]
+    fn include_crc_writes_nonzero_crc_fields() {
+        let input = write_filter_test_input(true, false);
+        let output = run_filter(&input, &include_all_options());
+        let crcs = collect_output_crcs(&output);
+        assert!(
+            !crcs.chunk_crcs.is_empty(),
+            "the fixture should produce chunks"
+        );
+        assert!(
+            crcs.chunk_crcs.iter().all(|&crc| crc != 0),
+            "chunk CRCs should be written by default"
+        );
+        assert!(
+            crcs.attachment_crcs.iter().all(|&crc| crc != 0),
+            "attachment CRCs should be written by default"
+        );
+        assert_ne!(
+            crcs.data_section_crc, 0,
+            "data section CRC should be written"
+        );
+        assert_ne!(crcs.summary_crc, 0, "summary CRC should be written");
+    }
+
+    #[test]
+    fn no_crc_zeroes_every_crc_field() {
+        let input = write_filter_test_input(true, false);
+        let opts = ResolvedOptions {
+            include_crc: false,
+            ..include_all_options()
+        };
+        let output = run_filter(&input, &opts);
+        let crcs = collect_output_crcs(&output);
+        assert!(
+            !crcs.chunk_crcs.is_empty(),
+            "output should still be chunked when only CRCs are disabled"
+        );
+        assert!(
+            crcs.chunk_crcs.iter().all(|&crc| crc == 0),
+            "chunk CRCs should be omitted"
+        );
+        assert!(
+            crcs.attachment_crcs.iter().all(|&crc| crc == 0),
+            "attachment CRCs should be omitted"
+        );
+        assert_eq!(
+            crcs.data_section_crc, 0,
+            "data section CRC should be omitted"
+        );
+        assert_eq!(crcs.summary_crc, 0, "summary CRC should be omitted");
+    }
+
+    #[test]
+    fn no_chunks_writes_records_outside_of_chunks_losslessly() {
+        let input = write_filter_test_input(true, false);
+        let opts = ResolvedOptions {
+            use_chunks: false,
+            ..include_all_options()
+        };
+        let output = run_filter(&input, &opts);
+
+        let opcodes = top_level_opcodes(&output);
+        assert!(
+            !opcodes.contains(&mcap::records::op::CHUNK),
+            "no chunk records should be written"
+        );
+        assert!(
+            opcodes.contains(&mcap::records::op::MESSAGE),
+            "messages should be written at the top level"
+        );
+
+        // Records survive the unchunked rewrite unchanged.
+        let stats = analyze_output(&output);
+        assert_eq!(stats.topic_counts["camera_a"], 100);
+        assert_eq!(stats.topic_counts["camera_b"], 100);
+        assert_eq!(stats.topic_counts["radar_a"], 100);
+        assert_eq!(stats.metadata_count, 1);
+        assert_eq!(stats.attachment_count, 1);
     }
 }
