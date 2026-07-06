@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::cli::CompressCommand;
+use crate::cli::{CompressCommand, MessageOrder};
 use crate::context::CommandContext;
 use crate::rewrite::{self, RewriteOptions};
 
@@ -11,7 +11,7 @@ pub fn run(ctx: &CommandContext, args: CompressCommand) -> Result<()> {
         .include_metadata(true)
         .include_attachments(true)
         // A compressed copy preserves the input's message order; use `mcap sort` to reorder.
-        .order_by_log_time(false);
+        .order(MessageOrder::Preserve);
     rewrite::run(
         options,
         crate::source::SourceOptions::new(ctx.allow_remote_scan()),

@@ -28,8 +28,9 @@ pub(crate) struct RewriteOptions {
     pub(crate) output_compression: String,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
-    /// Sort output messages by log time; when false the input's stored order is preserved.
-    pub(crate) order_by_log_time: bool,
+    /// Message order applied to the output (e.g. preserve the input's stored order, or sort by log
+    /// time).
+    pub(crate) order: MessageOrder,
 }
 
 impl From<&FilterCommand> for RewriteOptions {
@@ -56,7 +57,7 @@ impl From<&FilterCommand> for RewriteOptions {
                 .to_string(),
             chunk_size: args.chunk_size,
             use_chunks: true,
-            order_by_log_time: matches!(args.order, MessageOrder::LogTime),
+            order: args.order,
         }
     }
 }
@@ -80,7 +81,7 @@ impl RewriteOptions {
             output_compression: "zstd".to_string(),
             chunk_size,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         }
     }
 
@@ -104,8 +105,8 @@ impl RewriteOptions {
         self
     }
 
-    pub(crate) fn order_by_log_time(mut self, value: bool) -> Self {
-        self.order_by_log_time = value;
+    pub(crate) fn order(mut self, value: MessageOrder) -> Self {
+        self.order = value;
         self
     }
 }
@@ -125,8 +126,9 @@ pub(crate) struct ResolvedOptions {
     pub(crate) compression: Option<mcap::Compression>,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
-    /// Sort output messages by log time; when false the input's stored order is preserved.
-    pub(crate) order_by_log_time: bool,
+    /// Message order applied to the output (e.g. preserve the input's stored order, or sort by log
+    /// time).
+    pub(crate) order: MessageOrder,
 }
 
 pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> {
@@ -160,7 +162,7 @@ pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> 
         compression: parse_output_compression(&args.output_compression)?,
         chunk_size: args.chunk_size,
         use_chunks: args.use_chunks,
-        order_by_log_time: args.order_by_log_time,
+        order: args.order,
     })
 }
 
@@ -287,7 +289,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         assert!(include_topic("camera_a", &opts));
         assert!(!include_topic("radar_a", &opts));
@@ -335,19 +337,26 @@ mod tests {
     }
 
     #[test]
-    fn order_maps_to_order_by_log_time() {
+    fn order_is_copied_from_filter_command() {
         let mut args = default_filter_command();
-        // preserve (the default) does not sort.
-        assert!(!RewriteOptions::from(&args).order_by_log_time);
+        // preserve is the default.
+        assert_eq!(RewriteOptions::from(&args).order, MessageOrder::Preserve);
         args.order = MessageOrder::LogTime;
-        assert!(RewriteOptions::from(&args).order_by_log_time);
+        assert_eq!(RewriteOptions::from(&args).order, MessageOrder::LogTime);
     }
 
     #[test]
-    fn order_by_log_time_builder_sets_flag() {
+    fn order_builder_sets_order() {
         let opts = RewriteOptions::new(None, None, mcap::WriteOptions::DEFAULT_CHUNK_SIZE);
-        assert!(!opts.order_by_log_time, "new() defaults to preserve");
-        assert!(opts.order_by_log_time(true).order_by_log_time);
+        assert_eq!(
+            opts.order,
+            MessageOrder::Preserve,
+            "new() defaults to preserve"
+        );
+        assert_eq!(
+            opts.order(MessageOrder::LogTime).order,
+            MessageOrder::LogTime
+        );
     }
 
     #[test]

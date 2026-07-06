@@ -8,6 +8,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 
 use super::options::{include_topic, resolve_options, ResolvedOptions, RewriteOptions};
+use crate::cli::MessageOrder;
 use crate::{parse, source};
 
 pub(crate) fn run(args: RewriteOptions, source_options: source::SourceOptions) -> Result<()> {
@@ -230,10 +231,9 @@ fn filter_indexed<W: Write + Seek>(
 
     if !(has_topic_filters && included_topics.is_empty()) {
         // `preserve` reads the input in its stored order; `log_time` re-sorts into log-time order.
-        let read_order = if opts.order_by_log_time {
-            mcap::sans_io::indexed_reader::ReadOrder::LogTime
-        } else {
-            mcap::sans_io::indexed_reader::ReadOrder::File
+        let read_order = match opts.order {
+            MessageOrder::Preserve => mcap::sans_io::indexed_reader::ReadOrder::File,
+            MessageOrder::LogTime => mcap::sans_io::indexed_reader::ReadOrder::LogTime,
         };
         let mut indexed_opts = mcap::sans_io::IndexedReaderOptions::new()
             .with_order(read_order)
@@ -372,6 +372,13 @@ fn filter_linear<W: Write + Seek>(
         bail!("including last-per-channel topics is not supported for non-indexed input");
     }
 
+    // A summaryless input cannot be streamed in log-time order, so when sorting is requested its
+    // messages are buffered (owning their payloads) and sorted before being written.
+    let sort_by_log_time = match opts.order {
+        MessageOrder::Preserve => false,
+        MessageOrder::LogTime => true,
+    };
+
     // Metadata is written first, before any messages (see module docs). Metadata records are never
     // stored inside chunks, so a top-level linear scan surfaces them without decompressing chunks.
     if opts.include_metadata {
@@ -387,10 +394,8 @@ fn filter_linear<W: Write + Seek>(
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
     // Collected during the message pass (borrowing from `input`, no copy) and written last.
     let mut pending_attachments = Vec::<mcap::Attachment>::new();
-    // When `order_by_log_time` is set we cannot stream a summaryless input in order, so messages
-    // are buffered here (owning their payloads) and sorted before being written. This buffers the
-    // whole selected message set in memory; making the summaryless ordered path memory-bounded is a
-    // known follow-up.
+    // Messages buffered for the sorted path. This holds the whole selected message set in memory;
+    // making the summaryless ordered path memory-bounded is a known follow-up.
     let mut buffered_messages = Vec::<BufferedMessage>::new();
 
     for record in mcap::read::ChunkFlattener::new(input)? {
@@ -431,7 +436,7 @@ fn filter_linear<W: Write + Seek>(
                     continue;
                 }
 
-                if opts.order_by_log_time {
+                if sort_by_log_time {
                     buffered_messages.push(BufferedMessage {
                         channel,
                         sequence: header.sequence,
@@ -468,7 +473,7 @@ fn filter_linear<W: Write + Seek>(
     // Messages buffered for log-time ordering are sorted and written before the attachments. The
     // sort is stable in log time, matching the indexed reader's tie-break (log_time, then the
     // record's file position, approximated here by insertion order).
-    if opts.order_by_log_time {
+    if sort_by_log_time {
         buffered_messages.sort_by_key(|message| message.log_time);
         for message in &buffered_messages {
             writer.write(&mcap::Message {
@@ -521,7 +526,7 @@ mod tests {
 
     use regex::Regex;
 
-    use super::{filter_to_writer, ResolvedOptions};
+    use super::{filter_to_writer, MessageOrder, ResolvedOptions};
 
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
         write_filter_test_input_with_options(chunked, summaryless, true, true, true, true)
@@ -707,7 +712,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         }
     }
 
@@ -719,9 +724,9 @@ mod tests {
         }
     }
 
-    fn ordered_options(order_by_log_time: bool) -> ResolvedOptions {
+    fn ordered_options(order: MessageOrder) -> ResolvedOptions {
         ResolvedOptions {
-            order_by_log_time,
+            order,
             ..include_all_options()
         }
     }
@@ -914,7 +919,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -940,7 +945,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -967,7 +972,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -996,7 +1001,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -1023,7 +1028,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -1048,7 +1053,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -1072,7 +1077,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -1096,7 +1101,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -1119,7 +1124,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -1142,7 +1147,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -1165,7 +1170,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
-            order_by_log_time: false,
+            order: MessageOrder::Preserve,
         };
         // The CLI is the writer of the output, so it stamps its own identity, not the source's.
         let output = run_filter(&input, &opts);
@@ -1265,8 +1270,9 @@ mod tests {
         )
         .include_metadata(true)
         .include_attachments(true);
-        assert!(
-            !options.order_by_log_time,
+        assert_eq!(
+            options.order,
+            MessageOrder::Preserve,
             "RewriteOptions::new should default to preserve"
         );
         super::run(options, crate::source::SourceOptions::default())
@@ -1342,14 +1348,14 @@ mod tests {
             .expect("summary present");
         assert!(!summary.chunk_indexes.is_empty());
 
-        let preserved = run_filter(&input, &ordered_options(false));
+        let preserved = run_filter(&input, &ordered_options(MessageOrder::Preserve));
         assert_eq!(
             analyze_output(&preserved).log_times,
             vec![30, 10, 20, 5, 25],
             "preserve should keep the input's stored order"
         );
 
-        let sorted = run_filter(&input, &ordered_options(true));
+        let sorted = run_filter(&input, &ordered_options(MessageOrder::LogTime));
         assert_eq!(
             analyze_output(&sorted).log_times,
             vec![5, 10, 20, 25, 30],
@@ -1363,14 +1369,14 @@ mod tests {
         for (chunked, summaryless) in [(true, true), (false, true)] {
             let input = write_unsorted_input(chunked, summaryless);
 
-            let preserved = run_filter(&input, &ordered_options(false));
+            let preserved = run_filter(&input, &ordered_options(MessageOrder::Preserve));
             assert_eq!(
                 analyze_output(&preserved).log_times,
                 vec![30, 10, 20, 5, 25],
                 "preserve should keep the input's stored order (chunked={chunked})"
             );
 
-            let sorted = run_filter(&input, &ordered_options(true));
+            let sorted = run_filter(&input, &ordered_options(MessageOrder::LogTime));
             assert_eq!(
                 analyze_output(&sorted).log_times,
                 vec![5, 10, 20, 25, 30],
@@ -1389,7 +1395,7 @@ mod tests {
         let expected = vec![(5, 3), (10, 2), (10, 0), (10, 1), (20, 0)];
         for (chunked, summaryless) in [(true, false), (true, true), (false, true)] {
             let input = write_messages_with_log_times(chunked, summaryless, &entries);
-            let output = run_filter(&input, &ordered_options(true));
+            let output = run_filter(&input, &ordered_options(MessageOrder::LogTime));
             assert_eq!(
                 output_message_identity(&output),
                 expected,
