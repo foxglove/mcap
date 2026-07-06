@@ -546,8 +546,8 @@ mod tests {
     use super::{filter_to_writer, MessageOrder, ResolvedOptions};
     use crate::cli::CommonRewriteArgs;
 
-    /// Builds the shared rewrite options the way `compress`/`decompress` do — from the common CLI
-    /// args, so the engine defaults (CRC on, chunked, metadata/attachments kept) are exercised.
+    /// Builds rewrite options from the shared CLI args, exercising the engine defaults (CRC on,
+    /// chunked, metadata/attachments kept).
     fn rewrite_options(
         file: Option<std::path::PathBuf>,
         output: Option<std::path::PathBuf>,
