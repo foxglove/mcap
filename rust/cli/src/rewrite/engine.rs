@@ -680,6 +680,20 @@ mod tests {
         stats
     }
 
+    /// Collects each output message's `(log_time, sequence)` in the order it appears, so ordering
+    /// (including the tie-break among equal log times) can be asserted.
+    fn output_message_identity(output: &[u8]) -> Vec<(u64, u32)> {
+        mcap::read::ChunkFlattener::new(output)
+            .expect("reader")
+            .filter_map(|record| match record.expect("record") {
+                mcap::records::Record::Message { header, .. } => {
+                    Some((header.log_time, header.sequence))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     fn include_all_options() -> ResolvedOptions {
         ResolvedOptions {
             output: None,
@@ -743,6 +757,51 @@ mod tests {
                         &mcap::records::MessageHeader {
                             channel_id: channel,
                             sequence: sequence as u32,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        b"x",
+                    )
+                    .expect("write");
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    /// Writes one channel's messages in the exact `(log_time, sequence)` file order given, so the
+    /// log-time sort's tie-break among equal log times can be asserted.
+    fn write_messages_with_log_times(
+        chunked: bool,
+        summaryless: bool,
+        entries: &[(u64, u32)],
+    ) -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut options = mcap::WriteOptions::new()
+                .use_chunks(chunked)
+                .library("test-recorder/0.0");
+            if chunked {
+                options = options.chunk_size(Some(1 << 20));
+            }
+            if summaryless {
+                options = options
+                    .emit_summary_records(false)
+                    .emit_summary_offsets(false);
+            }
+            let mut writer = options.create(&mut output).expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            for &(log_time, sequence) in entries {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: channel,
+                            sequence,
                             log_time,
                             publish_time: log_time,
                         },
@@ -1316,6 +1375,25 @@ mod tests {
                 analyze_output(&sorted).log_times,
                 vec![5, 10, 20, 25, 30],
                 "log_time should sort messages by log time (chunked={chunked})"
+            );
+        }
+    }
+
+    #[test]
+    fn log_time_sort_is_stable_for_equal_log_times() {
+        // Three messages share log_time 10 but appear in scrambled sequence order in the file. A
+        // log-time sort must be stable — keeping their file order (sequences 2, 0, 1) — matching
+        // the indexed reader's "earlier in the file wins" tie-break for equal log times. This holds
+        // across the indexed path and both linear (summaryless) paths.
+        let entries = [(20, 0), (10, 2), (10, 0), (10, 1), (5, 3)];
+        let expected = vec![(5, 3), (10, 2), (10, 0), (10, 1), (20, 0)];
+        for (chunked, summaryless) in [(true, false), (true, true), (false, true)] {
+            let input = write_messages_with_log_times(chunked, summaryless, &entries);
+            let output = run_filter(&input, &ordered_options(true));
+            assert_eq!(
+                output_message_identity(&output),
+                expected,
+                "equal log_times must preserve file order (chunked={chunked}, summaryless={summaryless})"
             );
         }
     }
