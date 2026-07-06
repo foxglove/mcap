@@ -361,7 +361,10 @@ mod tests {
         args.no_chunks = true;
         let opts = build_filter_options(&args).expect("options");
         assert!(!opts.include_crc, "--no-crc should disable CRC fields");
-        assert!(!opts.use_chunks, "--no-chunks should write records outside of chunks");
+        assert!(
+            !opts.use_chunks,
+            "--no-chunks should write records outside of chunks"
+        );
     }
 
     #[test]

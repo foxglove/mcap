@@ -43,9 +43,8 @@ mod tests {
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
         CoalesceChannels, Command, CommonRewriteArgs, CompletionCommand, CompressCommand,
         CompressionFormat, ConvertCommand, DecompressCommand, DoctorCommand, DuCommand,
-        FilterCommand,
-        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
-        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        FilterCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand,
+        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
         ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, MessageOrder,
         RecoverCommand, SortCommand,
     };

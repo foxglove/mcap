@@ -1469,7 +1469,10 @@ mod tests {
         let input = write_filter_test_input(true, false);
         let output = run_filter(&input, &include_all_options());
         let crcs = collect_output_crcs(&output);
-        assert!(!crcs.chunk_crcs.is_empty(), "the fixture should produce chunks");
+        assert!(
+            !crcs.chunk_crcs.is_empty(),
+            "the fixture should produce chunks"
+        );
         assert!(
             crcs.chunk_crcs.iter().all(|&crc| crc != 0),
             "chunk CRCs should be written by default"
@@ -1478,7 +1481,10 @@ mod tests {
             crcs.attachment_crcs.iter().all(|&crc| crc != 0),
             "attachment CRCs should be written by default"
         );
-        assert_ne!(crcs.data_section_crc, 0, "data section CRC should be written");
+        assert_ne!(
+            crcs.data_section_crc, 0,
+            "data section CRC should be written"
+        );
         assert_ne!(crcs.summary_crc, 0, "summary CRC should be written");
     }
 
@@ -1503,7 +1509,10 @@ mod tests {
             crcs.attachment_crcs.iter().all(|&crc| crc == 0),
             "attachment CRCs should be omitted"
         );
-        assert_eq!(crcs.data_section_crc, 0, "data section CRC should be omitted");
+        assert_eq!(
+            crcs.data_section_crc, 0,
+            "data section CRC should be omitted"
+        );
         assert_eq!(crcs.summary_crc, 0, "summary CRC should be omitted");
     }
 
