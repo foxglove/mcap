@@ -210,6 +210,14 @@ fn filter_indexed<W: Write + Seek>(
                 }
             }
 
+            // These per-channel seed messages are always emitted as a log-time-sorted preamble
+            // ahead of the window, independent of `opts.order`. `--last-per-channel` is a
+            // log-time-window feature (the latest value on each topic as of `--start`), and its
+            // records are relocated here from their original positions before the window, so there
+            // is no meaningful stored order to "preserve" for them; log-time order keeps the
+            // preamble deterministic and monotonic up to the window boundary. (The `IndexedReader`
+            // does not surface per-message file offsets, so honoring `preserve` here would require
+            // a library change or an extra pass for no practical benefit.)
             pre_start_messages.sort_by_key(|message| {
                 (
                     message.log_time,
