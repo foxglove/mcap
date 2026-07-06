@@ -28,8 +28,6 @@ pub(crate) struct RewriteOptions {
     pub(crate) output_compression: String,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
-    /// Message order applied to the output (e.g. preserve the input's stored order, or sort by log
-    /// time).
     pub(crate) order: MessageOrder,
 }
 
@@ -126,8 +124,6 @@ pub(crate) struct ResolvedOptions {
     pub(crate) compression: Option<mcap::Compression>,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
-    /// Message order applied to the output (e.g. preserve the input's stored order, or sort by log
-    /// time).
     pub(crate) order: MessageOrder,
 }
 

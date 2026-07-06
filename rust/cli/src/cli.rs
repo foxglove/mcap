@@ -75,9 +75,6 @@ pub enum Command {
     #[command(verbatim_doc_comment)]
     Completion(CompletionCommand),
     /// Create a compressed copy of an MCAP file
-    ///
-    /// Messages are copied in the input's stored order by default; pass `--order log-time` (or use
-    /// `mcap filter`) to reorder.
     Compress(CompressCommand),
     /// Convert supported input files to MCAP
     #[command(
@@ -85,9 +82,6 @@ pub enum Command {
     )]
     Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file
-    ///
-    /// Messages are copied in the input's stored order by default; pass `--order log-time` (or use
-    /// `mcap filter`) to reorder.
     Decompress(DecompressCommand),
     /// Check an MCAP file structure
     Doctor(DoctorCommand),
