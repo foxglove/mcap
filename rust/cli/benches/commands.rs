@@ -280,7 +280,7 @@ fn bench_sort(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &
                             OsString::from("zstd"),
                             OsString::from("--chunk-size"),
                             OsString::from(config.chunk_bytes.to_string()),
-                            OsString::from("--output-file"),
+                            OsString::from("--output"),
                             output.as_os_str().to_owned(),
                         ];
                         let duration = run_mcap(&config.mcap_bin, args);
