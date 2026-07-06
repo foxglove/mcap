@@ -33,14 +33,15 @@ pub(crate) struct RewriteOptions {
 }
 
 /// Maps the arguments shared by every rewrite command onto their engine options: paths, chunk
-/// size, `--no-crc`, and message order. Metadata and attachments are included by default (all
-/// rewrite commands keep them; `filter` opts out via `--exclude-*`), and output is chunked with
-/// zstd compression unless a command overrides those.
+/// size, `--no-crc`, and message order. The output falls back to the deprecated `--output-file`
+/// alias, and message order defaults to `preserve` (`sort` overrides this to `log_time`). Metadata
+/// and attachments are included by default (all rewrite commands keep them; `filter` opts out via
+/// `--exclude-*`), and output is chunked with zstd compression unless a command overrides those.
 impl From<&CommonRewriteArgs> for RewriteOptions {
     fn from(args: &CommonRewriteArgs) -> Self {
         Self {
             file: args.file.clone(),
-            output: args.output.clone(),
+            output: args.output(),
             include_topic_regex: Vec::new(),
             exclude_topic_regex: Vec::new(),
             last_per_channel_topic_regex: Vec::new(),
@@ -56,7 +57,7 @@ impl From<&CommonRewriteArgs> for RewriteOptions {
             chunk_size: args.chunk_size,
             use_chunks: true,
             include_crc: !args.no_crc,
-            order: args.order,
+            order: args.order.unwrap_or(MessageOrder::Preserve),
         }
     }
 }
@@ -87,31 +88,16 @@ impl From<&FilterCommand> for RewriteOptions {
     }
 }
 
-/// `sort` is a `filter` preset that defaults `--order` to `log_time` instead of `preserve`,
-/// keeping metadata and attachments. It uses its own flag surface (`<FILE>` + `-o/--output`, plus
-/// chunking, compression, CRC, and order knobs) and does not expose topic/time selection. The
-/// deprecated `--output-file` alias is honored when `--output` is absent (clap requires one).
+/// `sort` is a `filter` preset over the shared args: it keeps metadata and attachments and does
+/// not expose topic/time selection, adds `--compression`/`--no-chunks`, and defaults `--order` to
+/// `log_time` instead of `preserve` (still overridable via the shared `--order`).
 impl From<&SortCommand> for RewriteOptions {
     fn from(args: &SortCommand) -> Self {
         Self {
-            file: Some(args.file.clone()),
-            output: args.output.clone().or_else(|| args.output_file.clone()),
-            include_topic_regex: Vec::new(),
-            exclude_topic_regex: Vec::new(),
-            last_per_channel_topic_regex: Vec::new(),
-            start: None,
-            start_secs: 0,
-            start_nsecs: 0,
-            end: None,
-            end_secs: 0,
-            end_nsecs: 0,
-            include_metadata: true,
-            include_attachments: true,
             output_compression: args.compression.as_str().to_string(),
-            chunk_size: args.chunk_size,
             use_chunks: !args.no_chunks,
-            include_crc: !args.no_crc,
-            order: args.order,
+            order: args.common.order.unwrap_or(MessageOrder::LogTime),
+            ..RewriteOptions::from(&args.common)
         }
     }
 }
@@ -246,9 +232,10 @@ mod tests {
             common: CommonRewriteArgs {
                 file: None,
                 output: None,
+                output_file: None,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 no_crc: false,
-                order: MessageOrder::Preserve,
+                order: None,
             },
             include_topic_regex: Vec::new(),
             exclude_topic_regex: Vec::new(),
@@ -382,9 +369,10 @@ mod tests {
         let common = CommonRewriteArgs {
             file: Some("in.mcap".into()),
             output: Some("out.mcap".into()),
+            output_file: None,
             chunk_size: 4096,
             no_crc: true,
-            order: MessageOrder::LogTime,
+            order: Some(MessageOrder::LogTime),
         };
         let opts = RewriteOptions::from(&common);
         assert_eq!(opts.file, Some("in.mcap".into()));
@@ -446,20 +434,32 @@ mod tests {
         assert!(opts.compression.is_none());
     }
 
+    fn default_sort_command() -> SortCommand {
+        SortCommand {
+            common: CommonRewriteArgs {
+                file: Some("in.mcap".into()),
+                output: Some("out.mcap".into()),
+                output_file: None,
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                no_crc: false,
+                order: None,
+            },
+            compression: CompressionFormat::Zstd,
+            no_chunks: false,
+        }
+    }
+
     #[test]
     fn sort_command_maps_flags_onto_the_engine_preset() {
-        // `sort` keeps metadata/attachments and translates its own flags (order, compression,
-        // chunking, CRC) onto the engine options.
-        let args = SortCommand {
-            file: "in.mcap".into(),
-            output: Some("out.mcap".into()),
-            output_file: None,
-            compression: CompressionFormat::Lz4,
-            chunk_size: 4096,
-            no_crc: true,
-            no_chunks: true,
-            order: MessageOrder::Preserve,
-        };
+        // `sort` keeps metadata/attachments and translates the shared args plus its own
+        // (compression, chunking) onto the engine options; an explicit --order is honored.
+        let mut args = default_sort_command();
+        args.common.chunk_size = 4096;
+        args.common.no_crc = true;
+        args.common.order = Some(MessageOrder::Preserve);
+        args.compression = CompressionFormat::Lz4;
+        args.no_chunks = true;
+
         let opts = RewriteOptions::from(&args);
         assert_eq!(opts.file, Some("in.mcap".into()));
         assert_eq!(opts.output, Some("out.mcap".into()));
@@ -477,18 +477,19 @@ mod tests {
     }
 
     #[test]
+    fn sort_command_defaults_unset_order_to_log_time() {
+        // Unlike the copy commands (which resolve an unset --order to preserve), `sort` resolves
+        // it to log_time.
+        let opts = RewriteOptions::from(&default_sort_command());
+        assert_eq!(opts.order, MessageOrder::LogTime);
+    }
+
+    #[test]
     fn sort_command_honors_deprecated_output_file_alias() {
         // When only the deprecated `--output-file` is set, it supplies the output path.
-        let args = SortCommand {
-            file: "in.mcap".into(),
-            output: None,
-            output_file: Some("out.mcap".into()),
-            compression: CompressionFormat::Zstd,
-            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-            no_crc: false,
-            no_chunks: false,
-            order: MessageOrder::LogTime,
-        };
+        let mut args = default_sort_command();
+        args.common.output = None;
+        args.common.output_file = Some("out.mcap".into());
         assert_eq!(RewriteOptions::from(&args).output, Some("out.mcap".into()));
     }
 

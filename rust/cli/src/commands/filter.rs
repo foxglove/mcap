@@ -10,6 +10,7 @@ use crate::rewrite::{self, RewriteOptions};
 use crate::source;
 
 pub fn run(ctx: &CommandContext, args: FilterCommand) -> Result<()> {
+    args.common.warn_deprecations();
     if args.include_metadata {
         warn!("--include-metadata is deprecated and has no effect; metadata is included by default (use --exclude-metadata to drop it)");
     }

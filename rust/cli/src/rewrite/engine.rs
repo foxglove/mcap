@@ -556,9 +556,10 @@ mod tests {
         super::RewriteOptions::from(&CommonRewriteArgs {
             file,
             output,
+            output_file: None,
             chunk_size,
             no_crc: false,
-            order: MessageOrder::Preserve,
+            order: None,
         })
     }
 

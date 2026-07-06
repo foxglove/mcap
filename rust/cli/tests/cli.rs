@@ -118,8 +118,11 @@ fn exit_code_0_on_valid_file() {
 fn exit_code_2_on_missing_required_flag() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(&dir, "in.mcap", &build_mcap(1));
-    // `sort` requires `--output-file`; clap reports the missing argument with exit code 2.
-    assert_eq!(mcap(&["sort", path_str(&path)]).status.code(), Some(2));
+    // `get metadata` requires `-n/--name`; clap reports the missing argument with exit code 2.
+    assert_eq!(
+        mcap(&["get", "metadata", path_str(&path)]).status.code(),
+        Some(2)
+    );
 }
 
 #[test]

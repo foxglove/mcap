@@ -6,7 +6,6 @@
 //! last); `sort` only supplies the preset options. `--order` stays a real flag so future modes
 //! (for example `publish_time`) apply to `sort` too.
 use anyhow::Result;
-use log::warn;
 
 use crate::cli::SortCommand;
 use crate::context::CommandContext;
@@ -14,9 +13,7 @@ use crate::rewrite::{self, RewriteOptions};
 use crate::source;
 
 pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
-    if args.output_file.is_some() {
-        warn!("--output-file is deprecated; use --output instead");
-    }
+    args.common.warn_deprecations();
     rewrite::run(
         RewriteOptions::from(&args),
         source::SourceOptions::new(ctx.allow_remote_scan()),
@@ -33,19 +30,21 @@ mod tests {
     use mcap::records::{op, MessageHeader};
 
     use super::run;
-    use crate::cli::{CompressionFormat, MessageOrder, SortCommand};
+    use crate::cli::{CommonRewriteArgs, CompressionFormat, MessageOrder, SortCommand};
     use crate::context::CommandContext;
 
     fn sort_command(file: PathBuf, output: PathBuf) -> SortCommand {
         SortCommand {
-            file,
-            output: Some(output),
-            output_file: None,
+            common: CommonRewriteArgs {
+                file: Some(file),
+                output: Some(output),
+                output_file: None,
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                no_crc: false,
+                order: None,
+            },
             compression: CompressionFormat::Zstd,
-            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-            no_crc: false,
             no_chunks: false,
-            order: MessageOrder::LogTime,
         }
     }
 
@@ -217,16 +216,10 @@ mod tests {
         // Passing the deprecated `--output-file` (with `--output` absent) still produces sorted
         // output; the handler warns but does not fail.
         let output = run_sort(build_out_of_order_indexed_input(), |input, out| {
-            SortCommand {
-                file: input.clone(),
-                output: None,
-                output_file: Some(out.clone()),
-                compression: CompressionFormat::Zstd,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                no_crc: false,
-                no_chunks: false,
-                order: MessageOrder::LogTime,
-            }
+            let mut command = sort_command(input.clone(), out.clone());
+            command.common.output = None;
+            command.common.output_file = Some(out.clone());
+            command
         });
         assert_eq!(output_log_times(&output), vec![10, 20, 30]);
     }
@@ -237,7 +230,7 @@ mod tests {
         // sorting, so future modes (for example `publish_time`) can slot in the same way.
         let output = run_sort(build_out_of_order_indexed_input(), |input, out| {
             let mut command = sort_command(input.clone(), out.clone());
-            command.order = MessageOrder::Preserve;
+            command.common.order = Some(MessageOrder::Preserve);
             command
         });
         assert_eq!(

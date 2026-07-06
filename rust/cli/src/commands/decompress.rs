@@ -5,6 +5,7 @@ use crate::context::CommandContext;
 use crate::rewrite::{self, RewriteOptions};
 
 pub fn run(ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
+    args.common.warn_deprecations();
     // `filter`-style rewrite with a preset: rechunk uncompressed, keeping metadata and
     // attachments. Paths, chunk size, `--no-crc`, and order come from the shared args.
     let options = RewriteOptions::from(&args.common).compression("none");

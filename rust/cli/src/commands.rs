@@ -256,9 +256,10 @@ mod tests {
                 common: CommonRewriteArgs {
                     file: None,
                     output: None,
+                    output_file: None,
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
-                    order: MessageOrder::Preserve,
+                    order: None,
                 },
                 compression: "invalid".to_string(),
             }),
@@ -272,14 +273,16 @@ mod tests {
         let err = dispatch(
             &CommandContext::default(),
             Command::Sort(SortCommand {
-                file: PathBuf::from("does-not-exist.mcap"),
-                output: Some(PathBuf::from("sorted.mcap")),
-                output_file: None,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                common: CommonRewriteArgs {
+                    file: Some(PathBuf::from("does-not-exist.mcap")),
+                    output: Some(PathBuf::from("sorted.mcap")),
+                    output_file: None,
+                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                    no_crc: false,
+                    order: Some(MessageOrder::LogTime),
+                },
                 compression: crate::cli::CompressionFormat::Zstd,
-                no_crc: false,
                 no_chunks: false,
-                order: MessageOrder::LogTime,
             }),
         )
         .expect_err("sort should fail on missing input file");
