@@ -28,14 +28,15 @@ pub(crate) struct RewriteOptions {
     pub(crate) output_compression: String,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
+    pub(crate) include_crc: bool,
     pub(crate) order: MessageOrder,
 }
 
 impl From<&FilterCommand> for RewriteOptions {
     fn from(args: &FilterCommand) -> Self {
         Self {
-            file: args.file.clone(),
-            output: args.output.clone(),
+            file: args.common.file.clone(),
+            output: args.common.output.clone(),
             include_topic_regex: args.include_topic_regex.clone(),
             exclude_topic_regex: args.exclude_topic_regex.clone(),
             last_per_channel_topic_regex: args.last_per_channel_topic_regex.clone(),
@@ -53,9 +54,10 @@ impl From<&FilterCommand> for RewriteOptions {
                 .unwrap_or(CompressionFormat::Zstd)
                 .as_str()
                 .to_string(),
-            chunk_size: args.chunk_size,
-            use_chunks: true,
-            order: args.order,
+            chunk_size: args.common.chunk_size,
+            use_chunks: !args.no_chunks,
+            include_crc: !args.common.no_crc,
+            order: args.common.order,
         }
     }
 }
@@ -79,6 +81,7 @@ impl RewriteOptions {
             output_compression: "zstd".to_string(),
             chunk_size,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         }
     }
@@ -90,6 +93,11 @@ impl RewriteOptions {
 
     pub(crate) fn use_chunks(mut self, value: bool) -> Self {
         self.use_chunks = value;
+        self
+    }
+
+    pub(crate) fn include_crc(mut self, value: bool) -> Self {
+        self.include_crc = value;
         self
     }
 
@@ -124,6 +132,7 @@ pub(crate) struct ResolvedOptions {
     pub(crate) compression: Option<mcap::Compression>,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
+    pub(crate) include_crc: bool,
     pub(crate) order: MessageOrder,
 }
 
@@ -158,6 +167,7 @@ pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> 
         compression: parse_output_compression(&args.output_compression)?,
         chunk_size: args.chunk_size,
         use_chunks: args.use_chunks,
+        include_crc: args.include_crc,
         order: args.order,
     })
 }
@@ -221,12 +231,17 @@ mod tests {
     use regex::Regex;
 
     use super::{build_filter_options, include_topic, ResolvedOptions, RewriteOptions};
-    use crate::cli::{CompressionFormat, FilterCommand, MessageOrder};
+    use crate::cli::{CommonRewriteArgs, CompressionFormat, FilterCommand, MessageOrder};
 
     fn default_filter_command() -> FilterCommand {
         FilterCommand {
-            file: None,
-            output: None,
+            common: CommonRewriteArgs {
+                file: None,
+                output: None,
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                no_crc: false,
+                order: MessageOrder::Preserve,
+            },
             include_topic_regex: Vec::new(),
             exclude_topic_regex: Vec::new(),
             last_per_channel_topic_regex: Vec::new(),
@@ -242,8 +257,7 @@ mod tests {
             include_attachments: false,
             compression: None,
             output_compression: None,
-            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-            order: MessageOrder::Preserve,
+            no_chunks: false,
         }
     }
 
@@ -285,6 +299,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            include_crc: true,
             order: MessageOrder::Preserve,
         };
         assert!(include_topic("camera_a", &opts));
@@ -330,6 +345,23 @@ mod tests {
         let opts = build_filter_options(&args).expect("options");
         assert!(!opts.include_metadata);
         assert!(!opts.include_attachments);
+    }
+
+    #[test]
+    fn defaults_enable_crc_and_chunks() {
+        let opts = build_filter_options(&default_filter_command()).expect("options");
+        assert!(opts.include_crc, "CRC should be on by default");
+        assert!(opts.use_chunks, "chunking should be on by default");
+    }
+
+    #[test]
+    fn no_crc_and_no_chunks_flags_map_to_engine_options() {
+        let mut args = default_filter_command();
+        args.common.no_crc = true;
+        args.no_chunks = true;
+        let opts = build_filter_options(&args).expect("options");
+        assert!(!opts.include_crc, "--no-crc should disable CRC fields");
+        assert!(!opts.use_chunks, "--no-chunks should write records outside of chunks");
     }
 
     #[test]
