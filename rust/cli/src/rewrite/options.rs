@@ -103,6 +103,11 @@ impl RewriteOptions {
         self.include_attachments = value;
         self
     }
+
+    pub(crate) fn order_by_log_time(mut self, value: bool) -> Self {
+        self.order_by_log_time = value;
+        self
+    }
 }
 
 /// Validated, engine-ready form of [`RewriteOptions`]: regexes compiled, timestamps parsed, and the
@@ -336,6 +341,13 @@ mod tests {
         assert!(!RewriteOptions::from(&args).order_by_log_time);
         args.order = MessageOrder::LogTime;
         assert!(RewriteOptions::from(&args).order_by_log_time);
+    }
+
+    #[test]
+    fn order_by_log_time_builder_sets_flag() {
+        let opts = RewriteOptions::new(None, None, mcap::WriteOptions::DEFAULT_CHUNK_SIZE);
+        assert!(!opts.order_by_log_time, "new() defaults to preserve");
+        assert!(opts.order_by_log_time(true).order_by_log_time);
     }
 
     #[test]

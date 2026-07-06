@@ -9,7 +9,9 @@ pub fn run(ctx: &CommandContext, args: CompressCommand) -> Result<()> {
         .compression(args.compression)
         .use_chunks(true)
         .include_metadata(true)
-        .include_attachments(true);
+        .include_attachments(true)
+        // A compressed copy preserves the input's message order; use `mcap sort` to reorder.
+        .order_by_log_time(false);
     rewrite::run(
         options,
         crate::source::SourceOptions::new(ctx.allow_remote_scan()),
