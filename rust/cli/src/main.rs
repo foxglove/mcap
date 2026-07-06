@@ -528,7 +528,6 @@ mod tests {
                     no_crc: false,
                     order: MessageOrder::Preserve,
                 },
-                no_chunks: false,
             })
         );
     }
@@ -544,7 +543,6 @@ mod tests {
             "--chunk-size",
             "2048",
             "--no-crc",
-            "--no-chunks",
             "--order",
             "log-time",
         ])
@@ -559,7 +557,6 @@ mod tests {
                     no_crc: true,
                     order: MessageOrder::LogTime,
                 },
-                no_chunks: true,
             })
         );
     }

@@ -9,7 +9,7 @@ pub fn run(ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
         .compression("none")
         .include_metadata(true)
         .include_attachments(true)
-        .use_chunks(!args.no_chunks)
+        .use_chunks(true)
         .include_crc(!args.common.no_crc)
         .order(args.common.order);
     rewrite::run(

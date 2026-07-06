@@ -149,10 +149,6 @@ pub struct CompressCommand {
 pub struct DecompressCommand {
     #[command(flatten)]
     pub common: CommonRewriteArgs,
-
-    /// Write records outside of chunks
-    #[arg(long = "no-chunks", default_value_t = false)]
-    pub no_chunks: bool,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
