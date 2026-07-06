@@ -593,8 +593,6 @@ mod tests {
                 output_compression: None,
                 chunk_size: 2048,
                 order: MessageOrder::Preserve,
-                no_crc: false,
-                no_chunks: false,
             })
         );
     }
@@ -631,29 +629,6 @@ mod tests {
                 // Deprecated include flags default off and are no-ops.
                 assert!(!filter.include_metadata);
                 assert!(!filter.include_attachments);
-            }
-            other => panic!("expected filter command, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn parses_filter_no_crc_and_no_chunks() {
-        let default = Args::try_parse_from(["mcap", "filter", "in.mcap"])
-            .expect("filter should parse without transcode flags");
-        match default.command {
-            Command::Filter(filter) => {
-                assert!(!filter.no_crc);
-                assert!(!filter.no_chunks);
-            }
-            other => panic!("expected filter command, got {other:?}"),
-        }
-
-        let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--no-crc", "--no-chunks"])
-            .expect("filter should parse --no-crc/--no-chunks");
-        match args.command {
-            Command::Filter(filter) => {
-                assert!(filter.no_crc);
-                assert!(filter.no_chunks);
             }
             other => panic!("expected filter command, got {other:?}"),
         }

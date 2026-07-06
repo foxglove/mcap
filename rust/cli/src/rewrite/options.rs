@@ -31,8 +31,6 @@ pub(crate) struct RewriteOptions {
     /// Message order applied to the output (e.g. preserve the input's stored order, or sort by log
     /// time).
     pub(crate) order: MessageOrder,
-    /// Emit CRC fields in the output; when false all output CRCs are disabled.
-    pub(crate) include_crc: bool,
 }
 
 impl From<&FilterCommand> for RewriteOptions {
@@ -58,9 +56,8 @@ impl From<&FilterCommand> for RewriteOptions {
                 .as_str()
                 .to_string(),
             chunk_size: args.chunk_size,
-            use_chunks: !args.no_chunks,
+            use_chunks: true,
             order: args.order,
-            include_crc: !args.no_crc,
         }
     }
 }
@@ -85,7 +82,6 @@ impl RewriteOptions {
             chunk_size,
             use_chunks: true,
             order: MessageOrder::Preserve,
-            include_crc: true,
         }
     }
 
@@ -133,8 +129,6 @@ pub(crate) struct ResolvedOptions {
     /// Message order applied to the output (e.g. preserve the input's stored order, or sort by log
     /// time).
     pub(crate) order: MessageOrder,
-    /// Emit CRC fields in the output; when false all output CRCs are disabled.
-    pub(crate) include_crc: bool,
 }
 
 pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> {
@@ -169,7 +163,6 @@ pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> 
         chunk_size: args.chunk_size,
         use_chunks: args.use_chunks,
         order: args.order,
-        include_crc: args.include_crc,
     })
 }
 
@@ -255,8 +248,6 @@ mod tests {
             output_compression: None,
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             order: MessageOrder::Preserve,
-            no_crc: false,
-            no_chunks: false,
         }
     }
 
@@ -299,7 +290,6 @@ mod tests {
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
             order: MessageOrder::Preserve,
-            include_crc: true,
         };
         assert!(include_topic("camera_a", &opts));
         assert!(!include_topic("radar_a", &opts));
@@ -353,21 +343,6 @@ mod tests {
         assert_eq!(RewriteOptions::from(&args).order, MessageOrder::Preserve);
         args.order = MessageOrder::LogTime;
         assert_eq!(RewriteOptions::from(&args).order, MessageOrder::LogTime);
-    }
-
-    #[test]
-    fn no_crc_and_no_chunks_map_to_engine_options() {
-        let mut args = default_filter_command();
-        // Defaults keep CRCs and chunking on.
-        let opts = RewriteOptions::from(&args);
-        assert!(opts.include_crc);
-        assert!(opts.use_chunks);
-
-        args.no_crc = true;
-        args.no_chunks = true;
-        let opts = RewriteOptions::from(&args);
-        assert!(!opts.include_crc);
-        assert!(!opts.use_chunks);
     }
 
     #[test]

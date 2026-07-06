@@ -526,14 +526,6 @@ pub struct FilterCommand {
     /// log time). See `mcap sort` for sorting by log time as a standalone operation.
     #[arg(long = "order", value_enum, default_value = "preserve")]
     pub order: MessageOrder,
-
-    /// Disable all output CRC fields
-    #[arg(long = "no-crc", default_value_t = false)]
-    pub no_crc: bool,
-
-    /// Write records outside of chunks
-    #[arg(long = "no-chunks", default_value_t = false)]
-    pub no_chunks: bool,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
