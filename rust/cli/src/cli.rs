@@ -126,6 +126,10 @@ pub struct CompressCommand {
     /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long = "compression", default_value = "zstd")]
     pub compression: String,
+
+    /// Message order in the output: preserve (keep the input order) or log_time
+    #[arg(long = "order", value_enum, default_value = "preserve")]
+    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -140,6 +144,10 @@ pub struct DecompressCommand {
     /// Target uncompressed chunk size for output
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
+
+    /// Message order in the output: preserve (keep the input order) or log_time
+    #[arg(long = "order", value_enum, default_value = "preserve")]
+    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -320,6 +328,18 @@ impl CompressionFormat {
     }
 }
 
+/// Output message order for the rewrite commands (`filter`, `compress`, `decompress`).
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum MessageOrder {
+    /// Keep the input's stored message order.
+    #[default]
+    #[value(name = "preserve")]
+    Preserve,
+    /// Sort messages by log time.
+    #[value(name = "log_time", alias = "log-time")]
+    LogTime,
+}
+
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct ConvertCommand {
     /// Local path to the input file
@@ -495,6 +515,10 @@ pub struct FilterCommand {
     /// Target uncompressed chunk size for output
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
+
+    /// Message order in the output: preserve (keep the input order) or log_time
+    #[arg(long = "order", value_enum, default_value = "preserve")]
+    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]

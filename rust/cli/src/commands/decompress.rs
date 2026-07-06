@@ -9,7 +9,8 @@ pub fn run(ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
         .compression("none")
         .include_metadata(true)
         .include_attachments(true)
-        .use_chunks(true);
+        .use_chunks(true)
+        .order(args.order);
     rewrite::run(
         options,
         crate::source::SourceOptions::new(ctx.allow_remote_scan()),

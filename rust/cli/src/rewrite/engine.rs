@@ -8,6 +8,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 
 use super::options::{include_topic, resolve_options, ResolvedOptions, RewriteOptions};
+use crate::cli::MessageOrder;
 use crate::{parse, source};
 
 pub(crate) fn run(args: RewriteOptions, source_options: source::SourceOptions) -> Result<()> {
@@ -205,6 +206,14 @@ fn filter_indexed<W: Write + Seek>(
                 }
             }
 
+            // These per-channel seed messages are always emitted as a log-time-sorted preamble
+            // ahead of the window, independent of `opts.order`. `--last-per-channel` is a
+            // log-time-window feature (the latest value on each topic as of `--start`), and its
+            // records are relocated here from their original positions before the window, so there
+            // is no meaningful stored order to "preserve" for them; log-time order keeps the
+            // preamble deterministic and monotonic up to the window boundary. (The `IndexedReader`
+            // does not surface per-message file offsets, so honoring `preserve` here would require
+            // a library change or an extra pass for no practical benefit.)
             pre_start_messages.sort_by_key(|message| {
                 (
                     message.log_time,
@@ -229,8 +238,13 @@ fn filter_indexed<W: Write + Seek>(
     }
 
     if !(has_topic_filters && included_topics.is_empty()) {
+        // `preserve` reads the input in its stored order; `log_time` re-sorts into log-time order.
+        let read_order = match opts.order {
+            MessageOrder::Preserve => mcap::sans_io::indexed_reader::ReadOrder::File,
+            MessageOrder::LogTime => mcap::sans_io::indexed_reader::ReadOrder::LogTime,
+        };
         let mut indexed_opts = mcap::sans_io::IndexedReaderOptions::new()
-            .with_order(mcap::sans_io::indexed_reader::ReadOrder::LogTime)
+            .with_order(read_order)
             .log_time_on_or_after(opts.start);
         if opts.end != u64::MAX {
             indexed_opts = indexed_opts.log_time_before(opts.end);
@@ -348,6 +362,15 @@ fn checked_slice(input: &[u8], offset: u64, length: usize) -> Result<&[u8]> {
     })
 }
 
+/// A message buffered during the linear path so summaryless input can be re-sorted by log time.
+struct BufferedMessage {
+    channel: Arc<mcap::Channel<'static>>,
+    sequence: u32,
+    log_time: u64,
+    publish_time: u64,
+    data: Vec<u8>,
+}
+
 fn filter_linear<W: Write + Seek>(
     input: &[u8],
     writer: &mut mcap::Writer<W>,
@@ -356,6 +379,13 @@ fn filter_linear<W: Write + Seek>(
     if !opts.last_per_channel_topics.is_empty() {
         bail!("including last-per-channel topics is not supported for non-indexed input");
     }
+
+    // A summaryless input cannot be streamed in log-time order, so when sorting is requested its
+    // messages are buffered (owning their payloads) and sorted before being written.
+    let sort_by_log_time = match opts.order {
+        MessageOrder::Preserve => false,
+        MessageOrder::LogTime => true,
+    };
 
     // Metadata is written first, before any messages (see module docs). Metadata records are never
     // stored inside chunks, so a top-level linear scan surfaces them without decompressing chunks.
@@ -372,6 +402,9 @@ fn filter_linear<W: Write + Seek>(
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
     // Collected during the message pass (borrowing from `input`, no copy) and written last.
     let mut pending_attachments = Vec::<mcap::Attachment>::new();
+    // Messages buffered for the sorted path. This holds the whole selected message set in memory;
+    // making the summaryless ordered path memory-bounded is a known follow-up.
+    let mut buffered_messages = Vec::<BufferedMessage>::new();
 
     for record in mcap::read::ChunkFlattener::new(input)? {
         match record? {
@@ -411,13 +444,23 @@ fn filter_linear<W: Write + Seek>(
                     continue;
                 }
 
-                writer.write(&mcap::Message {
-                    channel,
-                    sequence: header.sequence,
-                    log_time: header.log_time,
-                    publish_time: header.publish_time,
-                    data: Cow::Borrowed(data.as_ref()),
-                })?;
+                if sort_by_log_time {
+                    buffered_messages.push(BufferedMessage {
+                        channel,
+                        sequence: header.sequence,
+                        log_time: header.log_time,
+                        publish_time: header.publish_time,
+                        data: data.into_owned(),
+                    });
+                } else {
+                    writer.write(&mcap::Message {
+                        channel,
+                        sequence: header.sequence,
+                        log_time: header.log_time,
+                        publish_time: header.publish_time,
+                        data: Cow::Borrowed(data.as_ref()),
+                    })?;
+                }
             }
             mcap::records::Record::Attachment { header, data, .. } if opts.include_attachments => {
                 // Kept regardless of the message time range.
@@ -432,6 +475,22 @@ fn filter_linear<W: Write + Seek>(
             // Metadata is handled up front; everything else (indexes, statistics, etc.) is
             // regenerated by the writer.
             _ => {}
+        }
+    }
+
+    // Messages buffered for log-time ordering are sorted and written before the attachments. The
+    // sort is stable in log time, matching the indexed reader's tie-break (log_time, then the
+    // record's file position, approximated here by insertion order).
+    if sort_by_log_time {
+        buffered_messages.sort_by_key(|message| message.log_time);
+        for message in &buffered_messages {
+            writer.write(&mcap::Message {
+                channel: message.channel.clone(),
+                sequence: message.sequence,
+                log_time: message.log_time,
+                publish_time: message.publish_time,
+                data: Cow::Borrowed(message.data.as_slice()),
+            })?;
         }
     }
 
@@ -475,7 +534,7 @@ mod tests {
 
     use regex::Regex;
 
-    use super::{filter_to_writer, ResolvedOptions};
+    use super::{filter_to_writer, MessageOrder, ResolvedOptions};
 
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
         write_filter_test_input_with_options(chunked, summaryless, true, true, true, true)
@@ -634,6 +693,20 @@ mod tests {
         stats
     }
 
+    /// Collects each output message's `(log_time, sequence)` in the order it appears, so ordering
+    /// (including the tie-break among equal log times) can be asserted.
+    fn output_message_identity(output: &[u8]) -> Vec<(u64, u32)> {
+        mcap::read::ChunkFlattener::new(output)
+            .expect("reader")
+            .filter_map(|record| match record.expect("record") {
+                mcap::records::Record::Message { header, .. } => {
+                    Some((header.log_time, header.sequence))
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
     fn include_all_options() -> ResolvedOptions {
         ResolvedOptions {
             output: None,
@@ -647,6 +720,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         }
     }
 
@@ -656,6 +730,101 @@ mod tests {
             end,
             ..include_all_options()
         }
+    }
+
+    fn ordered_options(order: MessageOrder) -> ResolvedOptions {
+        ResolvedOptions {
+            order,
+            ..include_all_options()
+        }
+    }
+
+    /// Writes a single channel whose messages are stored out of log-time order, so `preserve`
+    /// (stored order) and `log_time` (sorted) produce observably different outputs.
+    fn write_unsorted_input(chunked: bool, summaryless: bool) -> Vec<u8> {
+        let log_times = [30u64, 10, 20, 5, 25];
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut options = mcap::WriteOptions::new()
+                .use_chunks(chunked)
+                .library("test-recorder/0.0");
+            if chunked {
+                // A large chunk keeps every message in one chunk, so file order is the write order.
+                options = options.chunk_size(Some(1 << 20));
+            }
+            if summaryless {
+                options = options
+                    .emit_summary_records(false)
+                    .emit_summary_offsets(false);
+            }
+            let mut writer = options.create(&mut output).expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            for (sequence, &log_time) in log_times.iter().enumerate() {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: channel,
+                            sequence: sequence as u32,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        b"x",
+                    )
+                    .expect("write");
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    /// Writes one channel's messages in the exact `(log_time, sequence)` file order given, so the
+    /// log-time sort's tie-break among equal log times can be asserted.
+    fn write_messages_with_log_times(
+        chunked: bool,
+        summaryless: bool,
+        entries: &[(u64, u32)],
+    ) -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut options = mcap::WriteOptions::new()
+                .use_chunks(chunked)
+                .library("test-recorder/0.0");
+            if chunked {
+                options = options.chunk_size(Some(1 << 20));
+            }
+            if summaryless {
+                options = options
+                    .emit_summary_records(false)
+                    .emit_summary_offsets(false);
+            }
+            let mut writer = options.create(&mut output).expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            for &(log_time, sequence) in entries {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: channel,
+                            sequence,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        b"x",
+                    )
+                    .expect("write");
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
     }
 
     /// Builds a chunk-indexed file whose summary omits metadata/attachment index records — a
@@ -758,6 +927,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -783,6 +953,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -809,6 +980,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -837,6 +1009,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -863,6 +1036,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -887,6 +1061,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -910,6 +1085,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         let output = run_filter(&input, &opts);
         let stats = analyze_output(&output);
@@ -933,6 +1109,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -955,6 +1132,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -977,6 +1155,7 @@ mod tests {
             compression: Some(mcap::Compression::Lz4),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         let mut output = Cursor::new(Vec::new());
         let err = filter_to_writer(&input, &mut output, &opts, false)
@@ -999,6 +1178,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         // The CLI is the writer of the output, so it stamps its own identity, not the source's.
         let output = run_filter(&input, &opts);
@@ -1081,6 +1261,40 @@ mod tests {
     }
 
     #[test]
+    fn rewrite_new_default_preserves_message_order() {
+        // `compress`/`decompress` build their options via `RewriteOptions::new`, which defaults to
+        // `preserve`. Lock in that an out-of-order indexed input is copied in its stored order
+        // rather than silently re-sorted to log time.
+        let input = write_unsorted_input(true, false);
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input_path = dir.path().join("in.mcap");
+        let output_path = dir.path().join("out.mcap");
+        std::fs::write(&input_path, &input).expect("write input");
+
+        let options = super::RewriteOptions::new(
+            Some(input_path),
+            Some(output_path.clone()),
+            mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+        )
+        .include_metadata(true)
+        .include_attachments(true);
+        assert_eq!(
+            options.order,
+            MessageOrder::Preserve,
+            "RewriteOptions::new should default to preserve"
+        );
+        super::run(options, crate::source::SourceOptions::default())
+            .expect("rewrite should succeed");
+
+        let output = std::fs::read(&output_path).expect("read output");
+        assert_eq!(
+            analyze_output(&output).log_times,
+            vec![30, 10, 20, 5, 25],
+            "the shared engine default must preserve the input's stored order"
+        );
+    }
+
+    #[test]
     fn indexed_attachments_are_not_time_filtered() {
         // The fixture's attachment has log_time 50; a [0, 10) window excludes it from the message
         // range but the attachment is still kept.
@@ -1131,5 +1345,70 @@ mod tests {
         let input = write_filter_test_input(false, true);
         let output = run_filter(&input, &include_all_options());
         assert_standard_placement(&output);
+    }
+
+    #[test]
+    fn indexed_preserve_keeps_stored_order_while_log_time_sorts() {
+        let input = write_unsorted_input(true, false);
+        // Sanity: this fixture takes the indexed path.
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary present");
+        assert!(!summary.chunk_indexes.is_empty());
+
+        let preserved = run_filter(&input, &ordered_options(MessageOrder::Preserve));
+        assert_eq!(
+            analyze_output(&preserved).log_times,
+            vec![30, 10, 20, 5, 25],
+            "preserve should keep the input's stored order"
+        );
+
+        let sorted = run_filter(&input, &ordered_options(MessageOrder::LogTime));
+        assert_eq!(
+            analyze_output(&sorted).log_times,
+            vec![5, 10, 20, 25, 30],
+            "log_time should sort messages by log time"
+        );
+    }
+
+    #[test]
+    fn linear_preserve_keeps_stored_order_while_log_time_sorts() {
+        // Both a chunked-summaryless and a fully unchunked input take the linear path.
+        for (chunked, summaryless) in [(true, true), (false, true)] {
+            let input = write_unsorted_input(chunked, summaryless);
+
+            let preserved = run_filter(&input, &ordered_options(MessageOrder::Preserve));
+            assert_eq!(
+                analyze_output(&preserved).log_times,
+                vec![30, 10, 20, 5, 25],
+                "preserve should keep the input's stored order (chunked={chunked})"
+            );
+
+            let sorted = run_filter(&input, &ordered_options(MessageOrder::LogTime));
+            assert_eq!(
+                analyze_output(&sorted).log_times,
+                vec![5, 10, 20, 25, 30],
+                "log_time should sort messages by log time (chunked={chunked})"
+            );
+        }
+    }
+
+    #[test]
+    fn log_time_sort_is_stable_for_equal_log_times() {
+        // Three messages share log_time 10 but appear in scrambled sequence order in the file. A
+        // log-time sort must be stable — keeping their file order (sequences 2, 0, 1) — matching
+        // the indexed reader's "earlier in the file wins" tie-break for equal log times. This holds
+        // across the indexed path and both linear (summaryless) paths.
+        let entries = [(20, 0), (10, 2), (10, 0), (10, 1), (5, 3)];
+        let expected = vec![(5, 3), (10, 2), (10, 0), (10, 1), (20, 0)];
+        for (chunked, summaryless) in [(true, false), (true, true), (false, true)] {
+            let input = write_messages_with_log_times(chunked, summaryless, &entries);
+            let output = run_filter(&input, &ordered_options(MessageOrder::LogTime));
+            assert_eq!(
+                output_message_identity(&output),
+                expected,
+                "equal log_times must preserve file order (chunked={chunked}, summaryless={summaryless})"
+            );
+        }
     }
 }

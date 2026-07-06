@@ -7,6 +7,7 @@ use regex::Regex;
 
 use crate::cli::{
     parse_output_compression, parse_timestamp_or_nanos, CompressionFormat, FilterCommand,
+    MessageOrder,
 };
 
 #[derive(Debug, Clone)]
@@ -27,6 +28,7 @@ pub(crate) struct RewriteOptions {
     pub(crate) output_compression: String,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
+    pub(crate) order: MessageOrder,
 }
 
 impl From<&FilterCommand> for RewriteOptions {
@@ -53,6 +55,7 @@ impl From<&FilterCommand> for RewriteOptions {
                 .to_string(),
             chunk_size: args.chunk_size,
             use_chunks: true,
+            order: args.order,
         }
     }
 }
@@ -76,6 +79,7 @@ impl RewriteOptions {
             output_compression: "zstd".to_string(),
             chunk_size,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         }
     }
 
@@ -98,6 +102,11 @@ impl RewriteOptions {
         self.include_attachments = value;
         self
     }
+
+    pub(crate) fn order(mut self, value: MessageOrder) -> Self {
+        self.order = value;
+        self
+    }
 }
 
 /// Validated, engine-ready form of [`RewriteOptions`]: regexes compiled, timestamps parsed, and the
@@ -115,6 +124,7 @@ pub(crate) struct ResolvedOptions {
     pub(crate) compression: Option<mcap::Compression>,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
+    pub(crate) order: MessageOrder,
 }
 
 pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> {
@@ -148,6 +158,7 @@ pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> 
         compression: parse_output_compression(&args.output_compression)?,
         chunk_size: args.chunk_size,
         use_chunks: args.use_chunks,
+        order: args.order,
     })
 }
 
@@ -209,8 +220,8 @@ fn build_filter_options(args: &FilterCommand) -> Result<ResolvedOptions> {
 mod tests {
     use regex::Regex;
 
-    use super::{build_filter_options, include_topic, ResolvedOptions};
-    use crate::cli::{CompressionFormat, FilterCommand};
+    use super::{build_filter_options, include_topic, ResolvedOptions, RewriteOptions};
+    use crate::cli::{CompressionFormat, FilterCommand, MessageOrder};
 
     fn default_filter_command() -> FilterCommand {
         FilterCommand {
@@ -232,6 +243,7 @@ mod tests {
             compression: None,
             output_compression: None,
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            order: MessageOrder::Preserve,
         }
     }
 
@@ -273,6 +285,7 @@ mod tests {
             compression: Some(mcap::Compression::Zstd),
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             use_chunks: true,
+            order: MessageOrder::Preserve,
         };
         assert!(include_topic("camera_a", &opts));
         assert!(!include_topic("radar_a", &opts));
@@ -317,6 +330,20 @@ mod tests {
         let opts = build_filter_options(&args).expect("options");
         assert!(!opts.include_metadata);
         assert!(!opts.include_attachments);
+    }
+
+    #[test]
+    fn order_builder_sets_order() {
+        let opts = RewriteOptions::new(None, None, mcap::WriteOptions::DEFAULT_CHUNK_SIZE);
+        assert_eq!(
+            opts.order,
+            MessageOrder::Preserve,
+            "new() defaults to preserve"
+        );
+        assert_eq!(
+            opts.order(MessageOrder::LogTime).order,
+            MessageOrder::LogTime
+        );
     }
 
     #[test]
