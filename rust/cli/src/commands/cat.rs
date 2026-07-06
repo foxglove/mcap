@@ -5,13 +5,16 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context as _, Result};
 use mcap::sans_io::indexed_reader::ReadOrder;
-use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor};
+use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor, SerializeOptions};
 
 use crate::cli::CatCommand;
 use crate::context::CommandContext;
 use crate::{parse, render, source};
 
 const MESSAGE_PREVIEW_LEN: usize = 10;
+
+const PROTOBUF_SERIALIZE_OPTIONS: SerializeOptions =
+    SerializeOptions::new().skip_default_fields(false);
 
 pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
     let opts = CatOptions::from_args(&args)?;
@@ -752,8 +755,11 @@ impl JsonTranscoders {
                 };
                 let message = DynamicMessage::decode(descriptor, data)
                     .context("failed to parse message")?;
-                let json = serde_json::to_vec(&message).context("failed to marshal message")?;
-                Ok(Cow::Owned(json))
+                let mut serializer = serde_json::Serializer::new(Vec::new());
+                message
+                    .serialize_with_options(&mut serializer, &PROTOBUF_SERIALIZE_OPTIONS)
+                    .context("failed to marshal message")?;
+                Ok(Cow::Owned(serializer.into_inner()))
             }
             "ros1msg" => {
                 let transcoder = match self.ros1_transcoders.get(&schema.id) {
@@ -2127,7 +2133,7 @@ mod tests {
     }
 
     #[test]
-    fn protobuf_json_uses_lower_camel_case_and_omits_zero_values() {
+    fn protobuf_json_uses_lower_camel_case_and_emits_default_values() {
         let descriptor = vec![
             10, 122, 10, 12, 115, 97, 109, 112, 108, 101, 46, 112, 114, 111, 116, 111, 18, 4, 116,
             101, 115, 116, 34, 92, 10, 6, 83, 97, 109, 112, 108, 101, 18, 29, 10, 10, 115, 110, 97,
@@ -2151,12 +2157,14 @@ mod tests {
             metadata: BTreeMap::new(),
         });
         let mut transcoders = JsonTranscoders::default();
+        // Payload sets `snake_case` = "hello" and `count` = 7, leaving `zero_value` at its proto3
+        // default (0). The default-valued field must still be emitted. See issue #1642.
         let encoded = transcoders
             .encode(&channel, &[10, 5, b'h', b'e', b'l', b'l', b'o', 24, 7])
             .expect("protobuf should encode");
         assert_eq!(
             String::from_utf8(encoded.into_owned()).expect("valid utf8"),
-            r#"{"snakeCase":"hello","count":7}"#
+            r#"{"snakeCase":"hello","zeroValue":0,"count":7}"#
         );
     }
 
