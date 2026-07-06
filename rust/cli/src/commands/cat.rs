@@ -13,6 +13,8 @@ use crate::{parse, render, source};
 
 const MESSAGE_PREVIEW_LEN: usize = 10;
 
+// prost-reflect's default JSON serialization follows the canonical proto3 mapping, which omits
+// fields at their default value. Emit them instead so default-valued fields stay visible (#1642).
 const PROTOBUF_SERIALIZE_OPTIONS: SerializeOptions =
     SerializeOptions::new().skip_default_fields(false);
 
@@ -2168,9 +2170,9 @@ mod tests {
         );
     }
 
-    /// Builds a `FileDescriptorSet` for a proto3 `test.Presence` message exercising the full range
-    /// of presence rules: an implicit-presence scalar and enum, an explicit `optional` scalar, a
-    /// message field, a repeated field, and a map field.
+    // Builds a `FileDescriptorSet` for a proto3 `test.Presence` message exercising the full range
+    // of presence rules: an implicit-presence scalar and enum, an explicit `optional` scalar, a
+    // message field, a repeated field, and a map field.
     fn presence_schema_descriptor() -> Vec<u8> {
         use prost_reflect::prost::Message as _;
         use prost_reflect::prost_types::{
