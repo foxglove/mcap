@@ -6,6 +6,7 @@
 //! last); `sort` only supplies the preset options. `--order` stays a real flag so future modes
 //! (for example `publish_time`) apply to `sort` too.
 use anyhow::Result;
+use log::warn;
 
 use crate::cli::SortCommand;
 use crate::context::CommandContext;
@@ -13,6 +14,9 @@ use crate::rewrite::{self, RewriteOptions};
 use crate::source;
 
 pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
+    if args.output_file.is_some() {
+        warn!("--output-file is deprecated; use --output instead");
+    }
     rewrite::run(
         RewriteOptions::from(&args),
         source::SourceOptions::new(ctx.allow_remote_scan()),
@@ -32,10 +36,11 @@ mod tests {
     use crate::cli::{CompressionFormat, MessageOrder, SortCommand};
     use crate::context::CommandContext;
 
-    fn sort_command(file: PathBuf, output_file: PathBuf) -> SortCommand {
+    fn sort_command(file: PathBuf, output: PathBuf) -> SortCommand {
         SortCommand {
             file,
-            output_file,
+            output: Some(output),
+            output_file: None,
             compression: CompressionFormat::Zstd,
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             no_crc: false,
@@ -203,6 +208,25 @@ mod tests {
     fn sorts_summaryless_input() {
         let output = run_sort(build_out_of_order_summaryless_input(), |input, out| {
             sort_command(input.clone(), out.clone())
+        });
+        assert_eq!(output_log_times(&output), vec![10, 20, 30]);
+    }
+
+    #[test]
+    fn deprecated_output_file_alias_still_writes_output() {
+        // Passing the deprecated `--output-file` (with `--output` absent) still produces sorted
+        // output; the handler warns but does not fail.
+        let output = run_sort(build_out_of_order_indexed_input(), |input, out| {
+            SortCommand {
+                file: input.clone(),
+                output: None,
+                output_file: Some(out.clone()),
+                compression: CompressionFormat::Zstd,
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                no_crc: false,
+                no_chunks: false,
+                order: MessageOrder::LogTime,
+            }
         });
         assert_eq!(output_log_times(&output), vec![10, 20, 30]);
     }

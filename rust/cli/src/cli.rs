@@ -551,8 +551,12 @@ pub struct SortCommand {
     pub file: PathBuf,
 
     /// Local path for the destination sorted MCAP file
-    #[arg(short = 'o', long = "output-file")]
-    pub output_file: PathBuf,
+    #[arg(short = 'o', long = "output", required_unless_present = "output_file")]
+    pub output: Option<PathBuf>,
+
+    /// Deprecated: use --output.
+    #[arg(long = "output-file", hide = true)]
+    pub output_file: Option<PathBuf>,
 
     /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]

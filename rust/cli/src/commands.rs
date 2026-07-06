@@ -273,7 +273,8 @@ mod tests {
             &CommandContext::default(),
             Command::Sort(SortCommand {
                 file: PathBuf::from("does-not-exist.mcap"),
-                output_file: PathBuf::from("sorted.mcap"),
+                output: Some(PathBuf::from("sorted.mcap")),
+                output_file: None,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 compression: crate::cli::CompressionFormat::Zstd,
                 no_crc: false,

@@ -701,13 +701,35 @@ mod tests {
             args.command,
             Command::Sort(SortCommand {
                 file: "in.mcap".into(),
-                output_file: "out.mcap".into(),
+                output: Some("out.mcap".into()),
+                output_file: None,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 compression: CompressionFormat::Zstd,
                 no_crc: false,
                 no_chunks: false,
                 // `sort` defaults `--order` to log_time (the whole point of the command), unlike
                 // the other rewrite commands, which default to preserve.
+                order: MessageOrder::LogTime,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_sort_output_file_deprecated_alias() {
+        // `--output-file` is retained as a hidden deprecated alias for `--output`; it parses into
+        // the separate field so the handler can warn.
+        let args = Args::try_parse_from(["mcap", "sort", "in.mcap", "--output-file", "out.mcap"])
+            .expect("deprecated --output-file should still parse");
+        assert_eq!(
+            args.command,
+            Command::Sort(SortCommand {
+                file: "in.mcap".into(),
+                output: None,
+                output_file: Some("out.mcap".into()),
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                compression: CompressionFormat::Zstd,
+                no_crc: false,
+                no_chunks: false,
                 order: MessageOrder::LogTime,
             })
         );
@@ -760,7 +782,8 @@ mod tests {
             args.command,
             Command::Sort(SortCommand {
                 file: "in.mcap".into(),
-                output_file: "out.mcap".into(),
+                output: Some("out.mcap".into()),
+                output_file: None,
                 chunk_size: 1024,
                 compression: CompressionFormat::None,
                 no_crc: true,
@@ -839,6 +862,7 @@ mod tests {
 
     #[test]
     fn sort_requires_output_file() {
-        Args::try_parse_from(["mcap", "sort", "in.mcap"]).expect_err("sort requires --output-file");
+        Args::try_parse_from(["mcap", "sort", "in.mcap"])
+            .expect_err("sort requires an output path");
     }
 }

@@ -88,13 +88,14 @@ impl From<&FilterCommand> for RewriteOptions {
 }
 
 /// `sort` is a `filter` preset that defaults `--order` to `log_time` instead of `preserve`,
-/// keeping metadata and attachments. It uses its own flag surface (`<FILE>` + `-o/--output-file`,
-/// plus chunking, compression, CRC, and order knobs) and does not expose topic/time selection.
+/// keeping metadata and attachments. It uses its own flag surface (`<FILE>` + `-o/--output`, plus
+/// chunking, compression, CRC, and order knobs) and does not expose topic/time selection. The
+/// deprecated `--output-file` alias is honored when `--output` is absent (clap requires one).
 impl From<&SortCommand> for RewriteOptions {
     fn from(args: &SortCommand) -> Self {
         Self {
             file: Some(args.file.clone()),
-            output: Some(args.output_file.clone()),
+            output: args.output.clone().or_else(|| args.output_file.clone()),
             include_topic_regex: Vec::new(),
             exclude_topic_regex: Vec::new(),
             last_per_channel_topic_regex: Vec::new(),
@@ -451,7 +452,8 @@ mod tests {
         // chunking, CRC) onto the engine options.
         let args = SortCommand {
             file: "in.mcap".into(),
-            output_file: "out.mcap".into(),
+            output: Some("out.mcap".into()),
+            output_file: None,
             compression: CompressionFormat::Lz4,
             chunk_size: 4096,
             no_crc: true,
@@ -472,6 +474,22 @@ mod tests {
         assert!(!opts.include_crc, "--no-crc should disable CRC fields");
         assert!(opts.include_metadata, "metadata is kept by default");
         assert!(opts.include_attachments, "attachments are kept by default");
+    }
+
+    #[test]
+    fn sort_command_honors_deprecated_output_file_alias() {
+        // When only the deprecated `--output-file` is set, it supplies the output path.
+        let args = SortCommand {
+            file: "in.mcap".into(),
+            output: None,
+            output_file: Some("out.mcap".into()),
+            compression: CompressionFormat::Zstd,
+            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+            no_crc: false,
+            no_chunks: false,
+            order: MessageOrder::LogTime,
+        };
+        assert_eq!(RewriteOptions::from(&args).output, Some("out.mcap".into()));
     }
 
     #[test]
