@@ -473,11 +473,12 @@ mod tests {
                 common: CommonRewriteArgs {
                     file: Some("in.mcap".into()),
                     output: None,
+                    output_file: None,
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
-                    order: MessageOrder::Preserve,
                 },
                 compression: "zstd".to_string(),
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -505,11 +506,12 @@ mod tests {
                 common: CommonRewriteArgs {
                     file: Some("in.mcap".into()),
                     output: Some("out.mcap".into()),
+                    output_file: None,
                     chunk_size: 1024,
                     no_crc: true,
-                    order: MessageOrder::LogTime,
                 },
                 compression: "lz4".to_string(),
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -524,10 +526,11 @@ mod tests {
                 common: CommonRewriteArgs {
                     file: Some("in.mcap".into()),
                     output: None,
+                    output_file: None,
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
-                    order: MessageOrder::Preserve,
                 },
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -553,10 +556,11 @@ mod tests {
                 common: CommonRewriteArgs {
                     file: Some("in.mcap".into()),
                     output: Some("out.mcap".into()),
+                    output_file: None,
                     chunk_size: 2048,
                     no_crc: true,
-                    order: MessageOrder::LogTime,
                 },
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -593,9 +597,9 @@ mod tests {
                 common: CommonRewriteArgs {
                     file: Some("in.mcap".into()),
                     output: Some("out.mcap".into()),
+                    output_file: None,
                     chunk_size: 2048,
                     no_crc: true,
-                    order: MessageOrder::Preserve,
                 },
                 include_topic_regex: vec!["camera.*".to_string()],
                 exclude_topic_regex: vec![],
@@ -613,6 +617,7 @@ mod tests {
                 compression: Some(CompressionFormat::Lz4),
                 output_compression: None,
                 no_chunks: true,
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -656,10 +661,13 @@ mod tests {
 
     #[test]
     fn filter_order_defaults_to_preserve_and_parses_log_time() {
+        // Each rewrite command owns its `--order` (so its default shows in --help): filter defaults
+        // to preserve; sort defaults to log_time. The flag name and values are identical across
+        // commands.
         let default = Args::try_parse_from(["mcap", "filter", "in.mcap"])
             .expect("filter should parse without --order");
         match default.command {
-            Command::Filter(filter) => assert_eq!(filter.common.order, MessageOrder::Preserve),
+            Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::Preserve),
             other => panic!("expected filter command, got {other:?}"),
         }
 
@@ -667,7 +675,7 @@ mod tests {
             let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order", value])
                 .unwrap_or_else(|_| panic!("filter should parse --order {value}"));
             match args.command {
-                Command::Filter(filter) => assert_eq!(filter.common.order, MessageOrder::LogTime),
+                Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::LogTime),
                 other => panic!("expected filter command, got {other:?}"),
             }
         }
@@ -700,12 +708,40 @@ mod tests {
         assert_eq!(
             args.command,
             Command::Sort(SortCommand {
-                file: "in.mcap".into(),
-                output_file: "out.mcap".into(),
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: Some("out.mcap".into()),
+                    output_file: None,
+                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                    no_crc: false,
+                },
                 compression: CompressionFormat::Zstd,
-                no_crc: false,
                 no_chunks: false,
+                // `sort` defaults --order to log_time; the copy commands default to preserve.
+                order: MessageOrder::LogTime,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_sort_output_file_deprecated_alias() {
+        // `--output-file` is retained as a hidden deprecated alias for `--output` on every rewrite
+        // command; it parses into the separate field so the handler can warn.
+        let args = Args::try_parse_from(["mcap", "sort", "in.mcap", "--output-file", "out.mcap"])
+            .expect("deprecated --output-file should still parse");
+        assert_eq!(
+            args.command,
+            Command::Sort(SortCommand {
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: None,
+                    output_file: Some("out.mcap".into()),
+                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                    no_crc: false,
+                },
+                compression: CompressionFormat::Zstd,
+                no_chunks: false,
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -749,17 +785,25 @@ mod tests {
             "1024",
             "--no-crc",
             "--no-chunks",
+            "--order",
+            "preserve",
         ])
         .expect("sort with flags should parse");
         assert_eq!(
             args.command,
             Command::Sort(SortCommand {
-                file: "in.mcap".into(),
-                output_file: "out.mcap".into(),
-                chunk_size: 1024,
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: Some("out.mcap".into()),
+                    output_file: None,
+                    chunk_size: 1024,
+                    no_crc: true,
+                },
                 compression: CompressionFormat::None,
-                no_crc: true,
                 no_chunks: true,
+                // `--order` stays a real flag on `sort`, so it can be overridden (and future
+                // modes like publish_time can be added) rather than being locked to log_time.
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -830,7 +874,15 @@ mod tests {
     }
 
     #[test]
-    fn sort_requires_output_file() {
-        Args::try_parse_from(["mcap", "sort", "in.mcap"]).expect_err("sort requires --output-file");
+    fn parses_sort_without_output_streams_to_stdout() {
+        // `sort` now shares the rewrite args, so (like filter/compress/decompress) omitting the
+        // output is allowed and writes to stdout rather than being a required flag.
+        let args = Args::try_parse_from(["mcap", "sort", "in.mcap"]).expect("sort should parse");
+        let Command::Sort(sort) = args.command else {
+            panic!("expected a sort command");
+        };
+        assert_eq!(sort.common.file, Some("in.mcap".into()));
+        assert_eq!(sort.common.output, None);
+        assert_eq!(sort.common.output_file, None);
     }
 }

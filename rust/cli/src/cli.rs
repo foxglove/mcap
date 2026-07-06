@@ -4,6 +4,7 @@ use std::sync::LazyLock;
 use anyhow::{bail, Context, Result};
 use clap::{ArgAction, Parser, Subcommand};
 use clap_complete::Shell;
+use log::warn;
 
 use crate::logsetup;
 
@@ -110,9 +111,9 @@ pub struct CompletionCommand {
     pub shell: Shell,
 }
 
-/// Options shared by every rewrite-based command (`filter`, `compress`, `decompress`). Each
-/// command flattens these and adds only the knobs that apply to it, so the common definitions
-/// (and their help text / defaults) live in one place.
+/// Options shared by every rewrite-based command (`filter`, `compress`, `decompress`, `sort`).
+/// Each command flattens these and adds only the knobs that apply to it, so the common definitions
+/// (and their help text) live in one place.
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct CommonRewriteArgs {
     /// Input MCAP file path. If omitted, reads from stdin.
@@ -122,6 +123,10 @@ pub struct CommonRewriteArgs {
     #[arg(short = 'o', long = "output")]
     pub output: Option<PathBuf>,
 
+    /// Deprecated: use --output.
+    #[arg(long = "output-file", hide = true)]
+    pub output_file: Option<PathBuf>,
+
     /// Target uncompressed chunk size for output
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
@@ -129,10 +134,22 @@ pub struct CommonRewriteArgs {
     /// Disable all output CRC fields
     #[arg(long = "no-crc", default_value_t = false)]
     pub no_crc: bool,
+}
 
-    /// Message order in the output: preserve (keep the input order) or log_time
-    #[arg(long = "order", value_enum, default_value = "preserve")]
-    pub order: MessageOrder,
+impl CommonRewriteArgs {
+    /// The resolved output path: the `-o/--output` value, falling back to the deprecated
+    /// `--output-file` alias. `None` means write to stdout.
+    pub(crate) fn output(&self) -> Option<PathBuf> {
+        self.output.clone().or_else(|| self.output_file.clone())
+    }
+
+    /// Warns about any deprecated shared flags that were supplied. Called by every rewrite
+    /// command handler.
+    pub(crate) fn warn_deprecations(&self) {
+        if self.output_file.is_some() {
+            warn!("--output-file is deprecated; use --output instead");
+        }
+    }
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -143,12 +160,20 @@ pub struct CompressCommand {
     /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long = "compression", default_value = "zstd")]
     pub compression: String,
+
+    /// Message order in the output: preserve (keep the input order) or log_time
+    #[arg(long = "order", value_enum, default_value = "preserve")]
+    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct DecompressCommand {
     #[command(flatten)]
     pub common: CommonRewriteArgs,
+
+    /// Message order in the output: preserve (keep the input order) or log_time
+    #[arg(long = "order", value_enum, default_value = "preserve")]
+    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -512,6 +537,10 @@ pub struct FilterCommand {
     /// Write records outside of chunks
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
+
+    /// Message order in the output: preserve (keep the input order) or log_time
+    #[arg(long = "order", value_enum, default_value = "preserve")]
+    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -547,28 +576,23 @@ pub struct RecoverCommand {
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct SortCommand {
-    /// Local path to the source MCAP file
-    pub file: PathBuf,
-
-    /// Local path for the destination sorted MCAP file
-    #[arg(short = 'o', long = "output-file")]
-    pub output_file: PathBuf,
+    #[command(flatten)]
+    pub common: CommonRewriteArgs,
 
     /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
-    /// Target uncompressed chunk size in bytes
-    #[arg(long, default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
-    pub chunk_size: u64,
-
-    /// Disable all output CRC fields
-    #[arg(long = "no-crc", default_value_t = false)]
-    pub no_crc: bool,
-
     /// Write records outside of chunks
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
+
+    /// Message order in the output: preserve (keep the input order) or log_time.
+    ///
+    /// `sort` defaults to log_time; it accepts the same flag as the other rewrite commands so it
+    /// can be overridden (and future modes such as publish_time will apply here too).
+    #[arg(long = "order", value_enum, default_value = "log_time")]
+    pub order: MessageOrder,
 }
 
 pub type InfoCommand = FileCommand;
