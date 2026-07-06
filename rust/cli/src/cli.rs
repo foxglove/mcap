@@ -134,12 +134,6 @@ pub struct CommonRewriteArgs {
     /// Disable all output CRC fields
     #[arg(long = "no-crc", default_value_t = false)]
     pub no_crc: bool,
-
-    /// Message order in the output: preserve (keep the input order) or log_time.
-    ///
-    /// Defaults to preserve, except `sort`, which defaults to log_time.
-    #[arg(long = "order", value_enum)]
-    pub order: Option<MessageOrder>,
 }
 
 impl CommonRewriteArgs {
@@ -166,12 +160,20 @@ pub struct CompressCommand {
     /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long = "compression", default_value = "zstd")]
     pub compression: String,
+
+    /// Message order in the output: preserve (keep the input order) or log_time
+    #[arg(long = "order", value_enum, default_value = "preserve")]
+    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct DecompressCommand {
     #[command(flatten)]
     pub common: CommonRewriteArgs,
+
+    /// Message order in the output: preserve (keep the input order) or log_time
+    #[arg(long = "order", value_enum, default_value = "preserve")]
+    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -535,6 +537,10 @@ pub struct FilterCommand {
     /// Write records outside of chunks
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
+
+    /// Message order in the output: preserve (keep the input order) or log_time
+    #[arg(long = "order", value_enum, default_value = "preserve")]
+    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -580,6 +586,13 @@ pub struct SortCommand {
     /// Write records outside of chunks
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
+
+    /// Message order in the output: preserve (keep the input order) or log_time.
+    ///
+    /// `sort` defaults to log_time; it accepts the same flag as the other rewrite commands so it
+    /// can be overridden (and future modes such as publish_time will apply here too).
+    #[arg(long = "order", value_enum, default_value = "log_time")]
+    pub order: MessageOrder,
 }
 
 pub type InfoCommand = FileCommand;

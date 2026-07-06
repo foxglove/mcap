@@ -33,10 +33,13 @@ pub(crate) struct RewriteOptions {
 }
 
 /// Maps the arguments shared by every rewrite command onto their engine options: paths, chunk
-/// size, `--no-crc`, and message order. The output falls back to the deprecated `--output-file`
-/// alias, and message order defaults to `preserve` (`sort` overrides this to `log_time`). Metadata
+/// size, and `--no-crc`. The output falls back to the deprecated `--output-file` alias. Metadata
 /// and attachments are included by default (all rewrite commands keep them; `filter` opts out via
 /// `--exclude-*`), and output is chunked with zstd compression unless a command overrides those.
+///
+/// Message order is *not* shared here — each command owns its `--order` (with its own default) and
+/// applies it via [`RewriteOptions::order`] or the `From` overrides, so this base uses `preserve`
+/// as a neutral placeholder.
 impl From<&CommonRewriteArgs> for RewriteOptions {
     fn from(args: &CommonRewriteArgs) -> Self {
         Self {
@@ -57,7 +60,7 @@ impl From<&CommonRewriteArgs> for RewriteOptions {
             chunk_size: args.chunk_size,
             use_chunks: true,
             include_crc: !args.no_crc,
-            order: args.order.unwrap_or(MessageOrder::Preserve),
+            order: MessageOrder::Preserve,
         }
     }
 }
@@ -83,20 +86,21 @@ impl From<&FilterCommand> for RewriteOptions {
                 .as_str()
                 .to_string(),
             use_chunks: !args.no_chunks,
+            order: args.order,
             ..RewriteOptions::from(&args.common)
         }
     }
 }
 
 /// `sort` is a `filter` preset over the shared args: it keeps metadata and attachments and does
-/// not expose topic/time selection, adds `--compression`/`--no-chunks`, and defaults `--order` to
-/// `log_time` instead of `preserve` (still overridable via the shared `--order`).
+/// not expose topic/time selection, adds `--compression`/`--no-chunks`, and its `--order` defaults
+/// to `log_time` instead of `preserve` (still overridable).
 impl From<&SortCommand> for RewriteOptions {
     fn from(args: &SortCommand) -> Self {
         Self {
             output_compression: args.compression.as_str().to_string(),
             use_chunks: !args.no_chunks,
-            order: args.common.order.unwrap_or(MessageOrder::LogTime),
+            order: args.order,
             ..RewriteOptions::from(&args.common)
         }
     }
@@ -105,6 +109,11 @@ impl From<&SortCommand> for RewriteOptions {
 impl RewriteOptions {
     pub(crate) fn compression(mut self, value: impl Into<String>) -> Self {
         self.output_compression = value.into();
+        self
+    }
+
+    pub(crate) fn order(mut self, order: MessageOrder) -> Self {
+        self.order = order;
         self
     }
 }
@@ -235,7 +244,6 @@ mod tests {
                 output_file: None,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 no_crc: false,
-                order: None,
             },
             include_topic_regex: Vec::new(),
             exclude_topic_regex: Vec::new(),
@@ -253,6 +261,7 @@ mod tests {
             compression: None,
             output_compression: None,
             no_chunks: false,
+            order: MessageOrder::Preserve,
         }
     }
 
@@ -363,22 +372,23 @@ mod tests {
     }
 
     #[test]
-    fn common_args_map_paths_order_and_defaults() {
-        // `compress`/`decompress` build their options from the shared args; this locks in that
-        // mapping (order + `--no-crc`) and the engine defaults (chunked, metadata/attachments kept).
+    fn common_args_map_paths_and_defaults() {
+        // Every rewrite command builds on the shared args; this locks in that mapping
+        // (paths + `--no-crc`) and the engine defaults (chunked, metadata/attachments kept). Order
+        // is not part of the shared args — each command supplies its own — so the base uses the
+        // `preserve` placeholder here.
         let common = CommonRewriteArgs {
             file: Some("in.mcap".into()),
             output: Some("out.mcap".into()),
             output_file: None,
             chunk_size: 4096,
             no_crc: true,
-            order: Some(MessageOrder::LogTime),
         };
         let opts = RewriteOptions::from(&common);
         assert_eq!(opts.file, Some("in.mcap".into()));
         assert_eq!(opts.output, Some("out.mcap".into()));
         assert_eq!(opts.chunk_size, 4096);
-        assert_eq!(opts.order, MessageOrder::LogTime);
+        assert_eq!(opts.order, MessageOrder::Preserve);
         assert!(!opts.include_crc, "--no-crc should disable CRC fields");
         assert!(opts.use_chunks, "output should be chunked by default");
         assert!(opts.include_metadata, "metadata should be kept by default");
@@ -442,10 +452,10 @@ mod tests {
                 output_file: None,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 no_crc: false,
-                order: None,
             },
             compression: CompressionFormat::Zstd,
             no_chunks: false,
+            order: MessageOrder::LogTime,
         }
     }
 
@@ -456,7 +466,7 @@ mod tests {
         let mut args = default_sort_command();
         args.common.chunk_size = 4096;
         args.common.no_crc = true;
-        args.common.order = Some(MessageOrder::Preserve);
+        args.order = MessageOrder::Preserve;
         args.compression = CompressionFormat::Lz4;
         args.no_chunks = true;
 
@@ -477,9 +487,9 @@ mod tests {
     }
 
     #[test]
-    fn sort_command_defaults_unset_order_to_log_time() {
-        // Unlike the copy commands (which resolve an unset --order to preserve), `sort` resolves
-        // it to log_time.
+    fn sort_command_defaults_order_to_log_time() {
+        // `sort`'s `--order` defaults to log_time (the copy commands default to preserve), and the
+        // mapping carries it through.
         let opts = RewriteOptions::from(&default_sort_command());
         assert_eq!(opts.order, MessageOrder::LogTime);
     }

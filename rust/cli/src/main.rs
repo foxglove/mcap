@@ -476,9 +476,9 @@ mod tests {
                     output_file: None,
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
-                    order: None,
                 },
                 compression: "zstd".to_string(),
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -509,9 +509,9 @@ mod tests {
                     output_file: None,
                     chunk_size: 1024,
                     no_crc: true,
-                    order: Some(MessageOrder::LogTime),
                 },
                 compression: "lz4".to_string(),
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -529,8 +529,8 @@ mod tests {
                     output_file: None,
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
-                    order: None,
                 },
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -559,8 +559,8 @@ mod tests {
                     output_file: None,
                     chunk_size: 2048,
                     no_crc: true,
-                    order: Some(MessageOrder::LogTime),
                 },
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -600,7 +600,6 @@ mod tests {
                     output_file: None,
                     chunk_size: 2048,
                     no_crc: true,
-                    order: None,
                 },
                 include_topic_regex: vec!["camera.*".to_string()],
                 exclude_topic_regex: vec![],
@@ -618,6 +617,7 @@ mod tests {
                 compression: Some(CompressionFormat::Lz4),
                 output_compression: None,
                 no_chunks: true,
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -660,13 +660,14 @@ mod tests {
     }
 
     #[test]
-    fn filter_order_defaults_to_unset_and_parses_log_time() {
-        // The shared `--order` has no clap default (it is `None` when unset); each command resolves
-        // that to its own default (preserve for filter, log_time for sort) when building options.
+    fn filter_order_defaults_to_preserve_and_parses_log_time() {
+        // Each rewrite command owns its `--order` (so its default shows in --help): filter defaults
+        // to preserve; sort defaults to log_time. The flag name and values are identical across
+        // commands.
         let default = Args::try_parse_from(["mcap", "filter", "in.mcap"])
             .expect("filter should parse without --order");
         match default.command {
-            Command::Filter(filter) => assert_eq!(filter.common.order, None),
+            Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::Preserve),
             other => panic!("expected filter command, got {other:?}"),
         }
 
@@ -674,9 +675,7 @@ mod tests {
             let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order", value])
                 .unwrap_or_else(|_| panic!("filter should parse --order {value}"));
             match args.command {
-                Command::Filter(filter) => {
-                    assert_eq!(filter.common.order, Some(MessageOrder::LogTime))
-                }
+                Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::LogTime),
                 other => panic!("expected filter command, got {other:?}"),
             }
         }
@@ -715,12 +714,11 @@ mod tests {
                     output_file: None,
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
-                    // `sort` leaves --order unset here and resolves it to log_time at runtime
-                    // (the copy commands resolve an unset --order to preserve).
-                    order: None,
                 },
                 compression: CompressionFormat::Zstd,
                 no_chunks: false,
+                // `sort` defaults --order to log_time; the copy commands default to preserve.
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -740,10 +738,10 @@ mod tests {
                     output_file: Some("out.mcap".into()),
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
-                    order: None,
                 },
                 compression: CompressionFormat::Zstd,
                 no_chunks: false,
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -800,12 +798,12 @@ mod tests {
                     output_file: None,
                     chunk_size: 1024,
                     no_crc: true,
-                    // `--order` stays a real flag on `sort`, so it can be overridden (and future
-                    // modes like publish_time can be added) rather than being locked to log_time.
-                    order: Some(MessageOrder::Preserve),
                 },
                 compression: CompressionFormat::None,
                 no_chunks: true,
+                // `--order` stays a real flag on `sort`, so it can be overridden (and future
+                // modes like publish_time can be added) rather than being locked to log_time.
+                order: MessageOrder::Preserve,
             })
         );
     }

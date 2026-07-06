@@ -259,9 +259,9 @@ mod tests {
                     output_file: None,
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
-                    order: None,
                 },
                 compression: "invalid".to_string(),
+                order: MessageOrder::Preserve,
             }),
         )
         .expect_err("compress should reject invalid compression");
@@ -279,10 +279,10 @@ mod tests {
                     output_file: None,
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
-                    order: Some(MessageOrder::LogTime),
                 },
                 compression: crate::cli::CompressionFormat::Zstd,
                 no_chunks: false,
+                order: MessageOrder::LogTime,
             }),
         )
         .expect_err("sort should fail on missing input file");

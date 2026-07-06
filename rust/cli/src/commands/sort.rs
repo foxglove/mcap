@@ -41,10 +41,10 @@ mod tests {
                 output_file: None,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                 no_crc: false,
-                order: None,
             },
             compression: CompressionFormat::Zstd,
             no_chunks: false,
+            order: MessageOrder::LogTime,
         }
     }
 
@@ -230,7 +230,7 @@ mod tests {
         // sorting, so future modes (for example `publish_time`) can slot in the same way.
         let output = run_sort(build_out_of_order_indexed_input(), |input, out| {
             let mut command = sort_command(input.clone(), out.clone());
-            command.common.order = Some(MessageOrder::Preserve);
+            command.order = MessageOrder::Preserve;
             command
         });
         assert_eq!(

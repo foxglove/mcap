@@ -559,7 +559,6 @@ mod tests {
             output_file: None,
             chunk_size,
             no_crc: false,
-            order: None,
         })
     }
 
