@@ -706,6 +706,9 @@ mod tests {
                 compression: CompressionFormat::Zstd,
                 no_crc: false,
                 no_chunks: false,
+                // `sort` defaults `--order` to log_time (the whole point of the command), unlike
+                // the other rewrite commands, which default to preserve.
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -749,6 +752,8 @@ mod tests {
             "1024",
             "--no-crc",
             "--no-chunks",
+            "--order",
+            "preserve",
         ])
         .expect("sort with flags should parse");
         assert_eq!(
@@ -760,6 +765,9 @@ mod tests {
                 compression: CompressionFormat::None,
                 no_crc: true,
                 no_chunks: true,
+                // `--order` stays a real flag on `sort`, so it can be overridden (and future
+                // modes like publish_time can be added) rather than being locked to log_time.
+                order: MessageOrder::Preserve,
             })
         );
     }

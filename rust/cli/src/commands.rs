@@ -278,6 +278,7 @@ mod tests {
                 compression: crate::cli::CompressionFormat::Zstd,
                 no_crc: false,
                 no_chunks: false,
+                order: MessageOrder::LogTime,
             }),
         )
         .expect_err("sort should fail on missing input file");

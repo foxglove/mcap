@@ -569,6 +569,10 @@ pub struct SortCommand {
     /// Write records outside of chunks
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
+
+    /// Message order in the output: log_time (the default) or preserve (keep the input order)
+    #[arg(long = "order", value_enum, default_value = "log_time")]
+    pub order: MessageOrder,
 }
 
 pub type InfoCommand = FileCommand;

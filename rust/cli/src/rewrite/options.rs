@@ -7,7 +7,7 @@ use regex::Regex;
 
 use crate::cli::{
     parse_output_compression, parse_timestamp_or_nanos, CommonRewriteArgs, CompressionFormat,
-    FilterCommand, MessageOrder,
+    FilterCommand, MessageOrder, SortCommand,
 };
 
 #[derive(Debug, Clone)]
@@ -83,6 +83,34 @@ impl From<&FilterCommand> for RewriteOptions {
                 .to_string(),
             use_chunks: !args.no_chunks,
             ..RewriteOptions::from(&args.common)
+        }
+    }
+}
+
+/// `sort` is a `filter` preset that defaults `--order` to `log_time` instead of `preserve`,
+/// keeping metadata and attachments. It uses its own flag surface (`<FILE>` + `-o/--output-file`,
+/// plus chunking, compression, CRC, and order knobs) and does not expose topic/time selection.
+impl From<&SortCommand> for RewriteOptions {
+    fn from(args: &SortCommand) -> Self {
+        Self {
+            file: Some(args.file.clone()),
+            output: Some(args.output_file.clone()),
+            include_topic_regex: Vec::new(),
+            exclude_topic_regex: Vec::new(),
+            last_per_channel_topic_regex: Vec::new(),
+            start: None,
+            start_secs: 0,
+            start_nsecs: 0,
+            end: None,
+            end_secs: 0,
+            end_nsecs: 0,
+            include_metadata: true,
+            include_attachments: true,
+            output_compression: args.compression.as_str().to_string(),
+            chunk_size: args.chunk_size,
+            use_chunks: !args.no_chunks,
+            include_crc: !args.no_crc,
+            order: args.order,
         }
     }
 }
@@ -208,7 +236,9 @@ mod tests {
     use regex::Regex;
 
     use super::{build_filter_options, include_topic, ResolvedOptions, RewriteOptions};
-    use crate::cli::{CommonRewriteArgs, CompressionFormat, FilterCommand, MessageOrder};
+    use crate::cli::{
+        CommonRewriteArgs, CompressionFormat, FilterCommand, MessageOrder, SortCommand,
+    };
 
     fn default_filter_command() -> FilterCommand {
         FilterCommand {
@@ -413,6 +443,35 @@ mod tests {
         args.output_compression = Some(CompressionFormat::None);
         let opts = build_filter_options(&args).expect("options");
         assert!(opts.compression.is_none());
+    }
+
+    #[test]
+    fn sort_command_maps_flags_onto_the_engine_preset() {
+        // `sort` keeps metadata/attachments and translates its own flags (order, compression,
+        // chunking, CRC) onto the engine options.
+        let args = SortCommand {
+            file: "in.mcap".into(),
+            output_file: "out.mcap".into(),
+            compression: CompressionFormat::Lz4,
+            chunk_size: 4096,
+            no_crc: true,
+            no_chunks: true,
+            order: MessageOrder::Preserve,
+        };
+        let opts = RewriteOptions::from(&args);
+        assert_eq!(opts.file, Some("in.mcap".into()));
+        assert_eq!(opts.output, Some("out.mcap".into()));
+        assert_eq!(
+            opts.order,
+            MessageOrder::Preserve,
+            "sort honors an explicit --order override"
+        );
+        assert_eq!(opts.output_compression, "lz4");
+        assert_eq!(opts.chunk_size, 4096);
+        assert!(!opts.use_chunks, "--no-chunks should write outside chunks");
+        assert!(!opts.include_crc, "--no-crc should disable CRC fields");
+        assert!(opts.include_metadata, "metadata is kept by default");
+        assert!(opts.include_attachments, "attachments are kept by default");
     }
 
     #[test]

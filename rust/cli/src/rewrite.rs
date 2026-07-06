@@ -18,5 +18,5 @@
 mod engine;
 mod options;
 
-pub(crate) use engine::{incomplete_indexed_summary_error, run, summary_supports_indexed_read};
+pub(crate) use engine::{run, summary_supports_indexed_read};
 pub(crate) use options::RewriteOptions;
