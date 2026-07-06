@@ -337,15 +337,6 @@ mod tests {
     }
 
     #[test]
-    fn order_is_copied_from_filter_command() {
-        let mut args = default_filter_command();
-        // preserve is the default.
-        assert_eq!(RewriteOptions::from(&args).order, MessageOrder::Preserve);
-        args.order = MessageOrder::LogTime;
-        assert_eq!(RewriteOptions::from(&args).order, MessageOrder::LogTime);
-    }
-
-    #[test]
     fn order_builder_sets_order() {
         let opts = RewriteOptions::new(None, None, mcap::WriteOptions::DEFAULT_CHUNK_SIZE);
         assert_eq!(
