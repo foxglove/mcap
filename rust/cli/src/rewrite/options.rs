@@ -25,7 +25,7 @@ pub(crate) struct RewriteOptions {
     pub(crate) end_nsecs: u64,
     pub(crate) include_metadata: bool,
     pub(crate) include_attachments: bool,
-    pub(crate) output_compression: Option<mcap::Compression>,
+    pub(crate) compression: Option<mcap::Compression>,
     pub(crate) chunk_size: u64,
     pub(crate) use_chunks: bool,
     pub(crate) include_crc: bool,
@@ -56,7 +56,7 @@ impl From<&CommonRewriteArgs> for RewriteOptions {
             end_nsecs: 0,
             include_metadata: true,
             include_attachments: true,
-            output_compression: Some(mcap::Compression::Zstd),
+            compression: Some(mcap::Compression::Zstd),
             chunk_size: args.chunk_size,
             use_chunks: true,
             include_crc: !args.no_crc,
@@ -79,7 +79,7 @@ impl From<&FilterCommand> for RewriteOptions {
             end_nsecs: args.end_nsecs,
             include_metadata: !args.exclude_metadata,
             include_attachments: !args.exclude_attachments,
-            output_compression: args
+            compression: args
                 .compression
                 .or(args.output_compression)
                 .unwrap_or(CompressionFormat::Zstd)
@@ -97,7 +97,7 @@ impl From<&FilterCommand> for RewriteOptions {
 impl From<&SortCommand> for RewriteOptions {
     fn from(args: &SortCommand) -> Self {
         Self {
-            output_compression: args.compression.to_compression(),
+            compression: args.compression.to_compression(),
             use_chunks: !args.no_chunks,
             order: args.order,
             ..RewriteOptions::from(&args.common)
@@ -107,7 +107,7 @@ impl From<&SortCommand> for RewriteOptions {
 
 impl RewriteOptions {
     pub(crate) fn compression(mut self, value: Option<mcap::Compression>) -> Self {
-        self.output_compression = value;
+        self.compression = value;
         self
     }
 
@@ -164,7 +164,7 @@ pub(crate) fn resolve_options(args: &RewriteOptions) -> Result<ResolvedOptions> 
         end,
         include_metadata: args.include_metadata,
         include_attachments: args.include_attachments,
-        compression: args.output_compression,
+        compression: args.compression,
         chunk_size: args.chunk_size,
         use_chunks: args.use_chunks,
         include_crc: args.include_crc,
@@ -477,10 +477,7 @@ mod tests {
             MessageOrder::Preserve,
             "sort honors an explicit --order override"
         );
-        assert!(matches!(
-            opts.output_compression,
-            Some(mcap::Compression::Lz4)
-        ));
+        assert!(matches!(opts.compression, Some(mcap::Compression::Lz4)));
         assert_eq!(opts.chunk_size, 4096);
         assert!(!opts.use_chunks, "--no-chunks should write outside chunks");
         assert!(!opts.include_crc, "--no-crc should disable CRC fields");
