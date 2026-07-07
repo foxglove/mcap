@@ -375,7 +375,7 @@ pub struct ConvertCommand {
     /// Local path for the destination MCAP file
     pub output: PathBuf,
 
-    /// Chunk compression algorithm for output MCAP
+    /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
@@ -410,7 +410,7 @@ pub struct MergeCommand {
     #[arg(short = 'o', long = "output-file")]
     pub output_file: Option<PathBuf>,
 
-    /// Chunk compression algorithm for output MCAP
+    /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
@@ -567,7 +567,7 @@ pub struct RecoverCommand {
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Compression for the output file: preserve, none, zstd, or lz4.
+    /// Compression algorithm for output file: zstd, lz4, none, or preserve
     ///
     /// `preserve` (the default) keeps the input file's compression (uncompressed if the input is
     /// unchunked).
