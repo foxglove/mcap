@@ -265,10 +265,7 @@ mod tests {
             }),
         )
         .expect_err("compress should fail on missing input file");
-        assert!(
-            err.to_string().contains("couldn't open")
-                || err.to_string().contains("failed to canonicalize input")
-        );
+        assert!(err.to_string().contains("couldn't open"));
     }
 
     #[test]
@@ -289,9 +286,6 @@ mod tests {
             }),
         )
         .expect_err("sort should fail on missing input file");
-        assert!(
-            err.to_string().contains("couldn't open")
-                || err.to_string().contains("failed to canonicalize input")
-        );
+        assert!(err.to_string().contains("couldn't open"));
     }
 }
