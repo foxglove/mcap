@@ -157,7 +157,7 @@ pub struct CompressCommand {
     #[command(flatten)]
     pub common: CommonRewriteArgs,
 
-    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
+    /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long = "compression", value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
@@ -527,7 +527,7 @@ pub struct FilterCommand {
     #[arg(long = "include-attachments", default_value_t = false, hide = true)]
     pub include_attachments: bool,
 
-    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none (default: zstd)
+    /// Compression algorithm for output file: zstd, lz4, or none (default: zstd)
     #[arg(long = "compression", value_enum)]
     pub compression: Option<CompressionFormat>,
 
@@ -580,7 +580,7 @@ pub struct SortCommand {
     #[command(flatten)]
     pub common: CommonRewriteArgs,
 
-    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
+    /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
