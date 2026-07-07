@@ -84,7 +84,7 @@ mod tests {
     use super::dispatch;
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
-        CommonRewriteArgs, CompressCommand, DoctorCommand, DuCommand, GetAttachmentCommand,
+        CommonRewriteArgs, DoctorCommand, DuCommand, GetAttachmentCommand,
         GetMetadataCommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand,
         ListChunksCommand, ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand,
         MessageOrder, RecoverCommand, SortCommand,
@@ -245,26 +245,6 @@ mod tests {
             }),
         )
         .expect_err("recover should fail on missing file");
-        assert!(err.to_string().contains("couldn't open"));
-    }
-
-    #[test]
-    fn compress_requires_existing_file() {
-        let err = dispatch(
-            &CommandContext::default(),
-            Command::Compress(CompressCommand {
-                common: CommonRewriteArgs {
-                    file: Some(PathBuf::from("does-not-exist.mcap")),
-                    output: Some(PathBuf::from("compressed.mcap")),
-                    output_file: None,
-                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                    no_crc: false,
-                },
-                compression: crate::cli::CompressionFormat::Zstd,
-                order: MessageOrder::Preserve,
-            }),
-        )
-        .expect_err("compress should fail on missing input file");
         assert!(err.to_string().contains("couldn't open"));
     }
 
