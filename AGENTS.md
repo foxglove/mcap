@@ -11,7 +11,8 @@ This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) log fil
 **Bounded memory when reading.** Neither the language libraries nor the CLI may read (or force a consumer to read) an entire MCAP file into memory — files can be many GB. Reader memory should scale with the record or chunk being processed, not with the file length: holding one record, chunk, or attachment at a time is fine, but buffering the whole file, or all of its messages, is an out-of-memory foot-gun.
 
 - Memory-map (`mmap`) seekable local files where the language supports it, or have the API consumer supply the bytes (e.g. via their own mmap); use seek + bounded range reads for random access and streaming for sequential scans.
-- When input isn't seekable (e.g. a stdin pipe) or an operation needs random access over a stream (e.g. sorting), spool to a temporary file and mmap it rather than buffering in memory. A tmpfs temp dir keeps the spool resident, though that is typically swap-backed.
+- Prefer explicit `read`/`seek` (I/O-agnostic "sans-io" readers) as the default access method and treat `mmap` as an optimization. What matters is never requiring the whole file to be resident; the access method is secondary. (`mmap` pages a real disk file on demand, but inflates resident memory and helps nothing when the bytes live on a tmpfs spool.)
+- When input isn't seekable (e.g. a stdin pipe) or an operation needs random access over a stream (e.g. sorting), spool to a temporary file rather than buffering in memory. Put the spool on the output volume (or a configured temp dir), not `/tmp` — it is often a tmpfs (RAM/swap-backed) that defeats the spool.
 
 ## General prerequisites
 
@@ -86,6 +87,8 @@ The Go workspace (`go/go.work`) includes the core library (`go/mcap`), ROS tools
 | Format | `cargo fmt --all -- --check`                                  |
 
 The Rust workspace is defined at the repo root and includes the `mcap` library crate under `rust/mcap` and the `mcap-cli` CLI crate under `rust/cli`.
+
+When reading, prefer the I/O-agnostic `mcap::sans_io` readers (`LinearReader`, `IndexedReader`, `SummaryReader`) driven from a `File`'s `read`/`seek` for bounded, large-file, stdin, or remote paths. The `mcap::read` slice API (`MessageStream`, `LinearReader`, `Summary::read`/`stream_chunk`, `read::attachment`/`metadata`) is a convenience layer over `sans_io` that assumes the whole file is addressable as `&[u8]` (memory-mapped or buffered); use it only when that already holds, not as the path that scales.
 
 ## C++
 

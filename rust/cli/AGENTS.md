@@ -36,6 +36,12 @@ When adding a command that can complete despite losing data, return `CommandOutc
 
 Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://`/`abfs://`) are handled in `source.rs` via `object_store`. Bounded, indexed reads — a summary-section read, or a single attachment/metadata range read under the no-opt-in caps — are allowed without a flag. Any command that would scan or download an entire remote file requires the global `--allow-remote-scan` flag; gate new whole-file remote reads behind `SourceOptions::allow_remote_scan` accordingly.
 
+### Bounded-memory reads
+
+MCAP files can be many GB, so no command may read a whole file into memory (see the root `AGENTS.md` design principle). Commands today receive the input as an mmapped `&[u8]` from `source.rs`; for new or large-scale read paths, prefer driving the I/O-agnostic `mcap::sans_io` readers from the input `File`/range reader. The `mcap::read` slice API (`MessageStream`, `LinearReader`, `read::attachment`/`metadata`, `Summary::stream_chunk`) is a convenience layer that assumes the whole file is addressable — fine when that already holds, but not the path that scales.
+
+An operation that must reorder more data than fits in memory (e.g. sorting a file into an order it isn't already stored in) should spill to a temporary file on the output volume — not `/tmp`, which is often a RAM-backed tmpfs — and read it back via seek/streaming rather than mmap.
+
 ### Output and logging
 
 Results go to stdout; diagnostics and warnings go to stderr. Use the `render` helpers for tabular output so column alignment and byte/time formatting stay consistent.
