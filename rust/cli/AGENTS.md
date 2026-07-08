@@ -41,9 +41,9 @@ Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://
 The root `AGENTS.md` "bounded memory when reading" principle maps onto two forms in the `mcap` crate:
 
 - `mcap::sans_io` (`LinearReader`, `IndexedReader`, `SummaryReader`) is the caller-driven byte-source form. Drive it from the input `File` (seek + read) or the remote range reader. Prefer this — one code path that stays bounded for local files, stdin, and remote inputs.
-- The `mcap::read` slice API (`MessageStream`, `LinearReader`, `read::attachment`/`metadata`, `Summary::stream_chunk`) needs the whole file as one `&[u8]`. Use it only when you already have that — a small input, or a seekable on-disk local file you have deliberately memory-mapped (`mmap` pages such a file on demand, so it stays bounded). Don't `mmap` a stdin or remote spool: a pipe can't be mapped, and a spool on a tmpfs `/tmp` just puts the bytes back in RAM.
+- The `mcap::read` slice API (`MessageStream`, `LinearReader`, `read::attachment`/`metadata`, `Summary::stream_chunk`) needs the whole file as one `&[u8]`. Use it only when you already have that — a small input, or a seekable on-disk local file you have deliberately memory-mapped (`mmap` pages such a file on demand, so it stays bounded).
 
-The CLI may also spool to a temporary file — the application-level strategy the libraries deliberately avoid — when an operation needs random access over a non-seekable or reordered stream (e.g. sorting a file into an order it isn't stored in). Put the spool on the output volume (or a configured temp dir), not `/tmp`, and read it back with seek + read, not `mmap`.
+The CLI may also spool to a temporary file — the application-level strategy the libraries deliberately avoid — when an operation needs random access over a non-seekable or reordered stream (e.g. sorting a file into an order it isn't stored in). Put the spool on the output volume or a configured temp dir, not `/tmp`, which is frequently a tmpfs: a tmpfs spool is RAM/swap-backed, so it keeps the data in memory and defeats the point of spilling to disk.
 
 ### Output and logging
 
