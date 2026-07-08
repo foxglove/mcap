@@ -8,7 +8,7 @@ This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) log fil
 
 ## Design principles
 
-**Bounded memory when reading.** Neither the language libraries nor the CLI may read (or force a consumer to read) an entire MCAP file into memory — files may reach hundreds of GBs. Reader memory should scale with the record or chunk being processed, not with the file length: holding one record, chunk, or attachment at a time is fine, but buffering the whole file, or all of its messages, is an out-of-memory foot-gun.
+**Bounded memory when reading.** Neither the language libraries nor the CLI may read (or force a consumer to read) an entire MCAP file into memory — files may reach hundreds of GB. Reader memory should scale with the record or chunk being processed, not with the file length: holding one record, chunk, or attachment at a time is fine, but buffering the whole file, or all of its messages, is an out-of-memory foot-gun.
 
 - Memory-map (`mmap`) seekable local files where the language supports it, or have the API consumer supply the bytes (e.g. via their own mmap); use seek + bounded range reads for random access and streaming for sequential scans.
 - Prefer explicit `read`/`seek` (I/O-agnostic "sans-io" readers) as the default access method and treat `mmap` as an optimization. What matters is never requiring the whole file to be resident; the access method is secondary. (`mmap` pages a real disk file on demand, but inflates resident memory and helps nothing when the bytes live on a tmpfs spool.)
