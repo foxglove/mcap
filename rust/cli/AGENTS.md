@@ -38,9 +38,11 @@ Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://
 
 ### Bounded-memory reads
 
-MCAP files may reach hundreds of GB, so no command may read a whole file into memory (see the root `AGENTS.md` design principle). Drive the I/O-agnostic `mcap::sans_io` readers from the input `File`/range reader. Reserve the `mcap::read` slice API (`MessageStream`, `LinearReader`, `read::attachment`/`metadata`, `Summary::stream_chunk`), which assumes the whole file is addressable as `&[u8]`, for cases where that already holds — a small file, or a deliberately memory-mapped seekable local file.
+MCAP files may reach hundreds of GB, so no command may hold a whole file in memory (see the root `AGENTS.md` design principle).
 
-An operation that must reorder more data than fits in memory (e.g. sorting a file into an order it isn't already stored in) should spill to a temporary file on the output volume — not `/tmp`, which is often a RAM-backed tmpfs — and read it back via seek/streaming rather than mmap.
+- Drive the `mcap::sans_io` readers (`LinearReader`, `IndexedReader`, `SummaryReader`) from the input `File` (seek + read) or the remote range reader. This is the default — one code path that stays bounded for local files, stdin, and remote inputs.
+- The `mcap::read` slice API (`MessageStream`, `LinearReader`, `read::attachment`/`metadata`, `Summary::stream_chunk`) needs the whole file as one `&[u8]`, so use it only when you already have that: a small input, or a seekable on-disk local file you have deliberately memory-mapped (`mmap` pages such a file on demand, so it stays bounded). Don't use it — or `mmap` — for stdin or remote inputs, which would force materializing the whole file first: a pipe can't be mapped, and a spool on a tmpfs `/tmp` just puts the bytes back in RAM.
+- An operation that needs random access over a non-seekable or reordered stream (e.g. sorting a file into an order it isn't stored in) must spool to a temporary file. Put the spool on the output volume (or a configured temp dir), not `/tmp`, and read it back with seek + read, not `mmap`.
 
 ### Output and logging
 

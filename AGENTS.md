@@ -10,9 +10,8 @@ This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) log fil
 
 **Bounded memory when reading.** Neither the language libraries nor the CLI may read (or force a consumer to read) an entire MCAP file into memory — files may reach hundreds of GB. Reader memory should scale with the record or chunk being processed, not with the file length: holding one record, chunk, or attachment at a time is fine, but buffering the whole file, or all of its messages, is an out-of-memory foot-gun.
 
-- Default to I/O-agnostic ("sans-io") readers driven by `read`/`seek`: use bounded range reads for random access and streaming for sequential scans. The access method is secondary to never holding the whole file — this keeps one code path bounded across local files, stdin, and remote ranges.
-- `mmap` is an optimization, not the default: use it for seekable on-disk local files (or bytes an API consumer supplies), where its zero-copy access pages on demand. It inflates resident memory, is a foot-gun under hard memory limits, and buys nothing on a tmpfs spool — so don't `mmap` a spooled stdin/remote input; `seek` or stream it instead.
-- When input isn't seekable (e.g. a stdin pipe) or an operation needs random access over a stream (e.g. sorting), spool to a temporary file rather than buffering in memory. Put the spool on the output volume (or a configured temp dir), not `/tmp` — it is often a tmpfs (RAM/swap-backed) that defeats the spool.
+- Offer both access modes, each bounded: **streaming** for sequential scans (yield one record at a time), and **index-based random access** via the summary and chunk/message indexes (seek to a chunk or record and read a bounded range), so a consumer can read any part of an arbitrarily large file without loading the rest. Decompress at most one chunk at a time, and never make "read all records/messages" the only option.
+- Let the caller own I/O: read from caller-supplied bytes or byte ranges instead of hard-coding how bytes are fetched. A reader that requests the ranges it needs stays bounded across local files, streams, and remote objects, and lets the caller choose how to fetch them (memory-map, seek + read, or HTTP range requests) — so avoid APIs that require the whole file to be one contiguous buffer.
 
 ## General prerequisites
 
@@ -87,8 +86,6 @@ The Go workspace (`go/go.work`) includes the core library (`go/mcap`), ROS tools
 | Format | `cargo fmt --all -- --check`                                  |
 
 The Rust workspace is defined at the repo root and includes the `mcap` library crate under `rust/mcap` and the `mcap-cli` CLI crate under `rust/cli`.
-
-When reading, prefer the I/O-agnostic `mcap::sans_io` readers (`LinearReader`, `IndexedReader`, `SummaryReader`) driven from a `File`'s `read`/`seek` for bounded, large-file, stdin, or remote paths. The `mcap::read` slice API (`MessageStream`, `LinearReader`, `Summary::read`/`stream_chunk`, `read::attachment`/`metadata`) is a convenience layer over `sans_io` that assumes the whole file is addressable as `&[u8]` (memory-mapped or buffered); use it only when that already holds, not as the path that scales.
 
 ## C++
 
