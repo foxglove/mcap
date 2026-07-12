@@ -20,8 +20,7 @@ pub(crate) struct WriterConfig {
 }
 
 /// Creates the output writer with the CLI's library identity and the requested encoding. Message
-/// indexes only accompany chunks, so they are disabled for unchunked output (matching both
-/// pipelines' historical behavior).
+/// indexes only accompany chunks, so they are disabled for unchunked output.
 pub(crate) fn create_writer<W: Write + Seek>(
     sink: W,
     config: &WriterConfig,
@@ -110,15 +109,11 @@ pub(crate) fn summary_supports_indexed_read(summary: &mcap::Summary) -> bool {
         .all(|channel_id| summary.channels.contains_key(channel_id))
 }
 
-/// Whether every message the statistics record counts is reachable through the chunk message
-/// indexes. When this is false the file has messages outside the indexes (loose top-level messages,
-/// or missing message-index records), so an index-only read would silently drop records and the
-/// caller must fall back to a linear scan.
-///
-/// Returns `false` when statistics are absent (completeness can't be proven); callers that must not
-/// drop records (`merge`) treat that as "fall back to a scan". Callers that only want to *avoid* a
-/// proven-lossy fast path should use [`summary_has_unindexed_messages`] instead, which keeps the
-/// fast path for stats-less inputs rather than penalizing them.
+/// Whether every message counted by the statistics record is reachable through the chunk message
+/// indexes. Returns `false` when statistics are absent, since completeness can't be proven. A
+/// `false` result means an index-only read could miss records, so the caller must use a linear
+/// scan. See [`summary_has_unindexed_messages`] for the variant that keeps the fast path for
+/// stats-less inputs.
 pub(crate) fn summary_indexes_all_messages(input: &[u8], summary: &mcap::Summary) -> bool {
     let Some(stats) = summary.stats.as_ref() else {
         return false;
@@ -127,12 +122,10 @@ pub(crate) fn summary_indexes_all_messages(input: &[u8], summary: &mcap::Summary
 }
 
 /// Whether the summary *proves* at least one message lives outside the chunk message indexes: the
-/// statistics record reports a different message count than the indexes cover, or a message-index
-/// record can't be parsed. When statistics are absent this returns `false`, because completeness
-/// cannot be proven and a well-formed stats-less indexed file must keep the indexed fast path (an
-/// index-only read of it is correct and cheaper, and features like `--last-per-channel` require
-/// it). Detecting loose messages in a stats-less file would require a full scan and is left to a
-/// follow-up.
+/// statistics count differs from what the indexes cover, or a message index can't be parsed.
+/// Returns `false` when statistics are absent, so a well-formed stats-less indexed file keeps the
+/// indexed fast path (an index-only read of it is correct and cheaper, and `--last-per-channel`
+/// requires it).
 pub(crate) fn summary_has_unindexed_messages(input: &[u8], summary: &mcap::Summary) -> bool {
     let Some(stats) = summary.stats.as_ref() else {
         return false;

@@ -67,7 +67,7 @@ fn filter_with_writer<W: Write + Seek>(
         // An index-only read skips messages that live outside the chunk indexes (loose top-level
         // messages, or chunks missing message-index records). Divert to a lossless linear scan only
         // when the summary *proves* such messages exist; a stats-less indexed file keeps the fast
-        // path (the read is still correct there, and `--last-per-channel` needs it).
+        // path (its index read is correct, and `--last-per-channel` needs it).
         if !summary.chunk_indexes.is_empty()
             && !common::summary_has_unindexed_messages(input, &summary)
         {

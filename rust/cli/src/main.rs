@@ -859,7 +859,7 @@ mod tests {
             args.command,
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
-                // `-o` is now the canonical `--output`; `--output-file` is the deprecated alias.
+                // `-o` is the canonical `--output`; `--output-file` is the deprecated alias.
                 output: Some("out.mcap".into()),
                 output_file: None,
                 compression: CompressionFormat::None,
@@ -874,8 +874,8 @@ mod tests {
 
     #[test]
     fn parses_merge_deprecated_output_file_alias() {
-        // The deprecated `--output-file` still parses (into its own field) for backward
-        // compatibility; the handler resolves it and warns.
+        // The deprecated `--output-file` parses into its own field; the handler resolves it and
+        // warns.
         let args = Args::try_parse_from(["mcap", "merge", "a.mcap", "--output-file", "out.mcap"])
             .expect("merge with --output-file should parse");
         let Command::Merge(merge) = args.command else {
