@@ -1046,6 +1046,180 @@ mod tests {
         assert!(err.to_string().contains("mcap recover"));
     }
 
+    /// Builds a chunk-indexed file that also carries a loose top-level Message record (spec-legal
+    /// but discouraged for indexed files). The statistics message count and footer are patched to
+    /// account for the spliced record, matching what a real writer of such a file would emit.
+    fn write_indexed_input_with_loose_message() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        let channel_id;
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .emit_summary_offsets(false)
+                .calculate_data_section_crc(false)
+                .calculate_summary_section_crc(false)
+                .calculate_chunk_crcs(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            channel_id = writer
+                .add_channel(schema_id, "/mixed", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 10,
+                        publish_time: 10,
+                    },
+                    &[10],
+                )
+                .expect("chunked message");
+            writer.finish().expect("finish");
+        }
+
+        let mut bytes = output.into_inner();
+        let mut body = Vec::new();
+        body.extend_from_slice(&channel_id.to_le_bytes());
+        body.extend_from_slice(&2u32.to_le_bytes()); // sequence
+        body.extend_from_slice(&1u64.to_le_bytes()); // log_time
+        body.extend_from_slice(&1u64.to_le_bytes()); // publish_time
+        body.extend_from_slice(&[1]); // payload
+        let mut loose_message = Vec::with_capacity(9 + body.len());
+        loose_message.push(mcap::records::op::MESSAGE);
+        loose_message.extend_from_slice(&(body.len() as u64).to_le_bytes());
+        loose_message.extend_from_slice(&body);
+
+        let record_offset = |bytes: &[u8], target: u8| {
+            let mut offset = mcap::MAGIC.len();
+            let end = bytes.len() - mcap::MAGIC.len();
+            while offset < end {
+                let opcode = bytes[offset];
+                let length =
+                    u64::from_le_bytes(bytes[offset + 1..offset + 9].try_into().unwrap()) as usize;
+                if opcode == target {
+                    return offset;
+                }
+                offset += 9 + length;
+            }
+            panic!("record opcode {target:#04x} not found");
+        };
+
+        let data_end_offset = record_offset(&bytes, mcap::records::op::DATA_END);
+        bytes.splice(
+            data_end_offset..data_end_offset,
+            loose_message.iter().copied(),
+        );
+        // Shift the summary start in the footer past the spliced record.
+        let footer = record_offset(&bytes, mcap::records::op::FOOTER) + 9;
+        let summary_start = u64::from_le_bytes(bytes[footer..footer + 8].try_into().unwrap());
+        bytes[footer..footer + 8]
+            .copy_from_slice(&(summary_start + loose_message.len() as u64).to_le_bytes());
+        // Account for the loose message in the statistics count so the summary is self-consistent.
+        let stats = record_offset(&bytes, mcap::records::op::STATISTICS) + 9;
+        bytes[stats..stats + 8].copy_from_slice(&2u64.to_le_bytes());
+        bytes
+    }
+
+    #[test]
+    fn indexed_input_with_loose_message_falls_back_to_linear_and_keeps_it() {
+        // A chunk-indexed input whose statistics report more messages than the indexes cover has a
+        // loose top-level message. The index-only path would silently drop it, so the engine must
+        // fall back to a lossless linear scan and keep every message.
+        let input = write_indexed_input_with_loose_message();
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary present");
+        assert!(
+            !summary.chunk_indexes.is_empty(),
+            "fixture should be chunk-indexed"
+        );
+        assert!(
+            !super::common::summary_indexes_all_messages(&input, &summary),
+            "fixture should have a message outside the indexes"
+        );
+
+        let output = run_filter(&input, &include_all_options());
+        let mut log_times = analyze_output(&output).log_times;
+        log_times.sort_unstable();
+        assert_eq!(
+            log_times,
+            vec![1, 10],
+            "the loose top-level message must be preserved, not dropped"
+        );
+    }
+
+    /// A chunk-indexed input that omits the statistics record (spec-legal). Completeness can't be
+    /// proven, so the engine must keep the indexed fast path rather than diverting to the linear
+    /// scan (which would hard-fail `--last-per-channel`).
+    fn write_indexed_input_without_statistics() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(10))
+                .emit_statistics(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let camera = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            for i in 0..100u32 {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: camera,
+                            sequence: i,
+                            log_time: i as u64,
+                            publish_time: i as u64,
+                        },
+                        b"a",
+                    )
+                    .expect("write");
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    #[test]
+    fn stats_less_indexed_input_keeps_indexed_path_for_last_per_channel() {
+        let input = write_indexed_input_without_statistics();
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary present");
+        assert!(
+            !summary.chunk_indexes.is_empty(),
+            "fixture should be chunk-indexed"
+        );
+        assert!(
+            summary.stats.is_none(),
+            "fixture should omit the statistics record"
+        );
+        assert!(
+            !super::common::summary_has_unindexed_messages(&input, &summary),
+            "a stats-less indexed file must not be treated as having unindexed messages"
+        );
+
+        // `--last-per-channel` only works on the indexed path; on the linear path it hard-fails. A
+        // stats-less indexed file must therefore keep the fast path and produce output, not error.
+        let opts = ResolvedOptions {
+            last_per_channel_topics: vec![Regex::new("^camera_a$").expect("regex")],
+            start: 50,
+            ..include_all_options()
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        // 50 messages in [50, MAX) plus one pre-start seed at log_time 49.
+        assert_eq!(stats.topic_counts["camera_a"], 51);
+    }
+
     #[test]
     fn filter_stamps_cli_writer_library() {
         let input = write_filter_test_input(true, false);
@@ -1401,179 +1575,5 @@ mod tests {
         assert_eq!(stats.topic_counts["radar_a"], 100);
         assert_eq!(stats.metadata_count, 1);
         assert_eq!(stats.attachment_count, 1);
-    }
-
-    /// Builds a chunk-indexed file that also carries a loose top-level Message record (spec-legal
-    /// but discouraged for indexed files). The statistics message count and footer are patched to
-    /// account for the spliced record, matching what a real writer of such a file would emit.
-    fn write_indexed_input_with_loose_message() -> Vec<u8> {
-        let mut output = Cursor::new(Vec::new());
-        let channel_id;
-        {
-            let mut writer = mcap::WriteOptions::new()
-                .emit_summary_offsets(false)
-                .calculate_data_section_crc(false)
-                .calculate_summary_section_crc(false)
-                .calculate_chunk_crcs(false)
-                .library("test-recorder/0.0")
-                .create(&mut output)
-                .expect("writer");
-            let schema_id = writer
-                .add_schema("schema", "jsonschema", br#"{}"#)
-                .expect("schema");
-            channel_id = writer
-                .add_channel(schema_id, "/mixed", "json", &BTreeMap::new())
-                .expect("channel");
-            writer
-                .write_to_known_channel(
-                    &mcap::records::MessageHeader {
-                        channel_id,
-                        sequence: 1,
-                        log_time: 10,
-                        publish_time: 10,
-                    },
-                    &[10],
-                )
-                .expect("chunked message");
-            writer.finish().expect("finish");
-        }
-
-        let mut bytes = output.into_inner();
-        let mut body = Vec::new();
-        body.extend_from_slice(&channel_id.to_le_bytes());
-        body.extend_from_slice(&2u32.to_le_bytes()); // sequence
-        body.extend_from_slice(&1u64.to_le_bytes()); // log_time
-        body.extend_from_slice(&1u64.to_le_bytes()); // publish_time
-        body.extend_from_slice(&[1]); // payload
-        let mut loose_message = Vec::with_capacity(9 + body.len());
-        loose_message.push(mcap::records::op::MESSAGE);
-        loose_message.extend_from_slice(&(body.len() as u64).to_le_bytes());
-        loose_message.extend_from_slice(&body);
-
-        let record_offset = |bytes: &[u8], target: u8| {
-            let mut offset = mcap::MAGIC.len();
-            let end = bytes.len() - mcap::MAGIC.len();
-            while offset < end {
-                let opcode = bytes[offset];
-                let length =
-                    u64::from_le_bytes(bytes[offset + 1..offset + 9].try_into().unwrap()) as usize;
-                if opcode == target {
-                    return offset;
-                }
-                offset += 9 + length;
-            }
-            panic!("record opcode {target:#04x} not found");
-        };
-
-        let data_end_offset = record_offset(&bytes, mcap::records::op::DATA_END);
-        bytes.splice(
-            data_end_offset..data_end_offset,
-            loose_message.iter().copied(),
-        );
-        // Shift the summary start in the footer past the spliced record.
-        let footer = record_offset(&bytes, mcap::records::op::FOOTER) + 9;
-        let summary_start = u64::from_le_bytes(bytes[footer..footer + 8].try_into().unwrap());
-        bytes[footer..footer + 8]
-            .copy_from_slice(&(summary_start + loose_message.len() as u64).to_le_bytes());
-        // Account for the loose message in the statistics count so the summary is self-consistent.
-        let stats = record_offset(&bytes, mcap::records::op::STATISTICS) + 9;
-        bytes[stats..stats + 8].copy_from_slice(&2u64.to_le_bytes());
-        bytes
-    }
-
-    #[test]
-    fn indexed_input_with_loose_message_falls_back_to_linear_and_keeps_it() {
-        // A chunk-indexed input whose statistics report more messages than the indexes cover has a
-        // loose top-level message. The index-only path would silently drop it, so the engine must
-        // fall back to a lossless linear scan and keep every message.
-        let input = write_indexed_input_with_loose_message();
-        let summary = mcap::Summary::read(&input)
-            .expect("summary read")
-            .expect("summary present");
-        assert!(
-            !summary.chunk_indexes.is_empty(),
-            "fixture should be chunk-indexed"
-        );
-        assert!(
-            !super::common::summary_indexes_all_messages(&input, &summary),
-            "fixture should have a message outside the indexes"
-        );
-
-        let output = run_filter(&input, &include_all_options());
-        let mut log_times = analyze_output(&output).log_times;
-        log_times.sort_unstable();
-        assert_eq!(
-            log_times,
-            vec![1, 10],
-            "the loose top-level message must be preserved, not dropped"
-        );
-    }
-
-    /// A chunk-indexed input that omits the statistics record (spec-legal). Completeness can't be
-    /// proven, so the engine must keep the indexed fast path rather than diverting to the linear
-    /// scan (which would hard-fail `--last-per-channel`).
-    fn write_indexed_input_without_statistics() -> Vec<u8> {
-        let mut output = Cursor::new(Vec::new());
-        {
-            let mut writer = mcap::WriteOptions::new()
-                .chunk_size(Some(10))
-                .emit_statistics(false)
-                .library("test-recorder/0.0")
-                .create(&mut output)
-                .expect("writer");
-            let schema_id = writer
-                .add_schema("schema", "jsonschema", br#"{}"#)
-                .expect("schema");
-            let camera = writer
-                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
-                .expect("channel");
-            for i in 0..100u32 {
-                writer
-                    .write_to_known_channel(
-                        &mcap::records::MessageHeader {
-                            channel_id: camera,
-                            sequence: i,
-                            log_time: i as u64,
-                            publish_time: i as u64,
-                        },
-                        b"a",
-                    )
-                    .expect("write");
-            }
-            writer.finish().expect("finish");
-        }
-        output.into_inner()
-    }
-
-    #[test]
-    fn stats_less_indexed_input_keeps_indexed_path_for_last_per_channel() {
-        let input = write_indexed_input_without_statistics();
-        let summary = mcap::Summary::read(&input)
-            .expect("summary read")
-            .expect("summary present");
-        assert!(
-            !summary.chunk_indexes.is_empty(),
-            "fixture should be chunk-indexed"
-        );
-        assert!(
-            summary.stats.is_none(),
-            "fixture should omit the statistics record"
-        );
-        assert!(
-            !super::common::summary_has_unindexed_messages(&input, &summary),
-            "a stats-less indexed file must not be treated as having unindexed messages"
-        );
-
-        // `--last-per-channel` only works on the indexed path; on the linear path it hard-fails. A
-        // stats-less indexed file must therefore keep the fast path and produce output, not error.
-        let opts = ResolvedOptions {
-            last_per_channel_topics: vec![Regex::new("^camera_a$").expect("regex")],
-            start: 50,
-            ..include_all_options()
-        };
-        let output = run_filter(&input, &opts);
-        let stats = analyze_output(&output);
-        // 50 messages in [50, MAX) plus one pre-start seed at log_time 49.
-        assert_eq!(stats.topic_counts["camera_a"], 51);
     }
 }
