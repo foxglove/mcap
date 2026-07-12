@@ -71,34 +71,32 @@ mod tests {
     }
 
     #[test]
-    fn build_merge_options_prefers_output_over_deprecated_output_file() {
-        let options = build_merge_options(MergeCommand {
-            files: vec!["a.mcap".into()],
-            output: Some("out.mcap".into()),
-            output_file: Some("legacy.mcap".into()),
-            compression: CompressionFormat::Zstd,
-            chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-            no_crc: false,
-            no_chunks: false,
-            allow_duplicate_metadata: false,
-            coalesce_channels: CoalesceChannels::Auto,
-        });
-        assert_eq!(options.output, Some(PathBuf::from("out.mcap")));
-    }
-
-    #[test]
-    fn build_merge_options_falls_back_to_deprecated_output_file() {
-        let options = build_merge_options(MergeCommand {
+    fn build_merge_options_resolves_output_preferring_output_over_output_file() {
+        let base = || MergeCommand {
             files: vec!["a.mcap".into()],
             output: None,
-            output_file: Some("legacy.mcap".into()),
+            output_file: None,
             compression: CompressionFormat::Zstd,
             chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
             no_crc: false,
             no_chunks: false,
             allow_duplicate_metadata: false,
             coalesce_channels: CoalesceChannels::Auto,
+        };
+
+        // `--output` wins when both are supplied.
+        let both = build_merge_options(MergeCommand {
+            output: Some("out.mcap".into()),
+            output_file: Some("legacy.mcap".into()),
+            ..base()
         });
-        assert_eq!(options.output, Some(PathBuf::from("legacy.mcap")));
+        assert_eq!(both.output, Some(PathBuf::from("out.mcap")));
+
+        // The deprecated `--output-file` supplies the path when `--output` is absent.
+        let fallback = build_merge_options(MergeCommand {
+            output_file: Some("legacy.mcap".into()),
+            ..base()
+        });
+        assert_eq!(fallback.output, Some(PathBuf::from("legacy.mcap")));
     }
 }

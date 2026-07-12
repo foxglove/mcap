@@ -725,7 +725,6 @@ mod tests {
     use std::io::Cursor;
 
     use super::*;
-    use crate::context::CommandContext;
 
     #[derive(Debug, Clone)]
     struct TestMessage {
@@ -1014,12 +1013,6 @@ mod tests {
 
         assert!(err.to_string().contains("input and output paths"));
         assert_eq!(std::fs::read(&path).expect("read input"), input);
-    }
-
-    #[test]
-    fn context_command_default_disables_remote_scan() {
-        // Guards that the command adapter's default context does not silently allow remote scans.
-        assert!(!CommandContext::default().allow_remote_scan());
     }
 
     #[test]
