@@ -146,9 +146,15 @@ impl CommonRewriteArgs {
     /// Warns about any deprecated shared flags that were supplied. Called by every rewrite
     /// command handler.
     pub(crate) fn warn_deprecations(&self) {
-        if self.output_file.is_some() {
-            warn!("--output-file is deprecated; use --output instead");
-        }
+        warn_output_file_deprecation(self.output_file.as_deref());
+    }
+}
+
+/// Warns when the deprecated `--output-file` alias is supplied. Shared by the rewrite commands and
+/// `merge` so the deprecation message stays identical across commands.
+pub(crate) fn warn_output_file_deprecation(output_file: Option<&std::path::Path>) {
+    if output_file.is_some() {
+        warn!("--output-file is deprecated; use --output instead");
     }
 }
 
@@ -407,7 +413,11 @@ pub struct MergeCommand {
     pub files: Vec<PathBuf>,
 
     /// Output file path. If omitted, writes to stdout.
-    #[arg(short = 'o', long = "output-file")]
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+
+    /// Deprecated: use --output.
+    #[arg(long = "output-file", hide = true)]
     pub output_file: Option<PathBuf>,
 
     /// Compression algorithm for output file: zstd, lz4, or none
