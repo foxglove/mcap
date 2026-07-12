@@ -65,10 +65,11 @@ fn filter_with_writer<W: Write + Seek>(
 ) -> Result<()> {
     if let Some(summary) = common::read_indexed_summary(input)? {
         // An index-only read skips messages that live outside the chunk indexes (loose top-level
-        // messages, or chunks missing message-index records), so only take the fast path when the
-        // summary proves every message is indexed; otherwise fall back to a lossless linear scan.
+        // messages, or chunks missing message-index records). Divert to a lossless linear scan only
+        // when the summary *proves* such messages exist; a stats-less indexed file keeps the fast
+        // path (the read is still correct there, and `--last-per-channel` needs it).
         if !summary.chunk_indexes.is_empty()
-            && common::summary_indexes_all_messages(input, &summary)
+            && !common::summary_has_unindexed_messages(input, &summary)
         {
             return filter_indexed(input, &summary, writer, opts);
         }
@@ -1506,5 +1507,73 @@ mod tests {
             vec![1, 10],
             "the loose top-level message must be preserved, not dropped"
         );
+    }
+
+    /// A chunk-indexed input that omits the statistics record (spec-legal). Completeness can't be
+    /// proven, so the engine must keep the indexed fast path rather than diverting to the linear
+    /// scan (which would hard-fail `--last-per-channel`).
+    fn write_indexed_input_without_statistics() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(10))
+                .emit_statistics(false)
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let camera = writer
+                .add_channel(schema_id, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            for i in 0..100u32 {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: camera,
+                            sequence: i,
+                            log_time: i as u64,
+                            publish_time: i as u64,
+                        },
+                        b"a",
+                    )
+                    .expect("write");
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    #[test]
+    fn stats_less_indexed_input_keeps_indexed_path_for_last_per_channel() {
+        let input = write_indexed_input_without_statistics();
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary present");
+        assert!(
+            !summary.chunk_indexes.is_empty(),
+            "fixture should be chunk-indexed"
+        );
+        assert!(
+            summary.stats.is_none(),
+            "fixture should omit the statistics record"
+        );
+        assert!(
+            !super::common::summary_has_unindexed_messages(&input, &summary),
+            "a stats-less indexed file must not be treated as having unindexed messages"
+        );
+
+        // `--last-per-channel` only works on the indexed path; on the linear path it hard-fails. A
+        // stats-less indexed file must therefore keep the fast path and produce output, not error.
+        let opts = ResolvedOptions {
+            last_per_channel_topics: vec![Regex::new("^camera_a$").expect("regex")],
+            start: 50,
+            ..include_all_options()
+        };
+        let output = run_filter(&input, &opts);
+        let stats = analyze_output(&output);
+        // 50 messages in [50, MAX) plus one pre-start seed at log_time 49.
+        assert_eq!(stats.topic_counts["camera_a"], 51);
     }
 }

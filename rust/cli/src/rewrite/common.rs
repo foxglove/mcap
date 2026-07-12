@@ -114,10 +114,40 @@ pub(crate) fn summary_supports_indexed_read(summary: &mcap::Summary) -> bool {
 /// indexes. When this is false the file has messages outside the indexes (loose top-level messages,
 /// or missing message-index records), so an index-only read would silently drop records and the
 /// caller must fall back to a linear scan.
+///
+/// Returns `false` when statistics are absent (completeness can't be proven); callers that must not
+/// drop records (`merge`) treat that as "fall back to a scan". Callers that only want to *avoid* a
+/// proven-lossy fast path should use [`summary_has_unindexed_messages`] instead, which keeps the
+/// fast path for stats-less inputs rather than penalizing them.
 pub(crate) fn summary_indexes_all_messages(input: &[u8], summary: &mcap::Summary) -> bool {
     let Some(stats) = summary.stats.as_ref() else {
         return false;
     };
+    indexed_message_count(input, summary) == Some(stats.message_count)
+}
+
+/// Whether the summary *proves* at least one message lives outside the chunk message indexes: the
+/// statistics record reports a different message count than the indexes cover, or a message-index
+/// record can't be parsed. When statistics are absent this returns `false`, because completeness
+/// cannot be proven and a well-formed stats-less indexed file must keep the indexed fast path (an
+/// index-only read of it is correct and cheaper, and features like `--last-per-channel` require
+/// it). Detecting loose messages in a stats-less file would require a full scan and is left to a
+/// follow-up.
+pub(crate) fn summary_has_unindexed_messages(input: &[u8], summary: &mcap::Summary) -> bool {
+    let Some(stats) = summary.stats.as_ref() else {
+        return false;
+    };
+    match indexed_message_count(input, summary) {
+        Some(indexed_messages) => indexed_messages != stats.message_count,
+        // An unparseable message index can't be trusted; fall back to a lossless scan.
+        None => true,
+    }
+}
+
+/// Sums the messages reachable through the chunk message indexes, or `None` if a message-index
+/// record can't be parsed. Offsets are de-duplicated so a shared message-index record is counted
+/// once.
+fn indexed_message_count(input: &[u8], summary: &mcap::Summary) -> Option<u64> {
     let mut offsets = std::collections::HashSet::new();
     let mut indexed_messages = 0u64;
     for offset in summary
@@ -126,13 +156,11 @@ pub(crate) fn summary_indexes_all_messages(input: &[u8], summary: &mcap::Summary
         .flat_map(|chunk| chunk.message_index_offsets.values())
     {
         if offsets.insert(*offset) {
-            let Ok(count) = message_index_count(input, *offset) else {
-                return false;
-            };
+            let count = message_index_count(input, *offset).ok()?;
             indexed_messages = indexed_messages.saturating_add(count as u64);
         }
     }
-    indexed_messages == stats.message_count
+    Some(indexed_messages)
 }
 
 fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
