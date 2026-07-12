@@ -139,7 +139,7 @@ pub(crate) fn summary_has_unindexed_messages(input: &[u8], summary: &mcap::Summa
     };
     match indexed_message_count(input, summary) {
         Some(indexed_messages) => indexed_messages != stats.message_count,
-        // An unparseable message index can't be trusted; fall back to a lossless scan.
+        // An unparsable message index can't be trusted; fall back to a lossless scan.
         None => true,
     }
 }
