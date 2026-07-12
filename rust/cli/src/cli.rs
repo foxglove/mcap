@@ -146,15 +146,9 @@ impl CommonRewriteArgs {
     /// Warns about any deprecated shared flags that were supplied. Called by every rewrite
     /// command handler.
     pub(crate) fn warn_deprecations(&self) {
-        warn_output_file_deprecation(self.output_file.as_deref());
-    }
-}
-
-/// Warns when the deprecated `--output-file` alias is supplied. Shared by the rewrite commands and
-/// `merge` so the deprecation message stays identical across commands.
-pub(crate) fn warn_output_file_deprecation(output_file: Option<&std::path::Path>) {
-    if output_file.is_some() {
-        warn!("--output-file is deprecated; use --output instead");
+        if self.output_file.is_some() {
+            warn!("--output-file is deprecated; use --output instead");
+        }
     }
 }
 

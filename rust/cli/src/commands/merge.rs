@@ -2,14 +2,19 @@
 //! is a thin adapter over the shared [`crate::rewrite`] merge pipeline, which owns the read/merge/
 //! write machinery and the standardized record placement.
 use anyhow::Result;
+use log::warn;
 
-use crate::cli::{warn_output_file_deprecation, MergeCommand};
+use crate::cli::MergeCommand;
 use crate::context::CommandContext;
 use crate::rewrite::{self, MergeOptions};
 use crate::source::SourceOptions;
 
 pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
-    warn_output_file_deprecation(args.output_file.as_deref());
+    // `merge` keeps its own args struct (its positional file list collides with the single-input
+    // `CommonRewriteArgs`), so it warns about the deprecated `--output-file` alias itself.
+    if args.output_file.is_some() {
+        warn!("--output-file is deprecated; use --output instead");
+    }
     rewrite::run_merge(
         build_merge_options(args),
         SourceOptions::new(ctx.allow_remote_scan()),
