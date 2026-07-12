@@ -369,9 +369,9 @@ struct MetadataKey {
 }
 
 /// Writes a metadata record, optionally deduplicating. With `dedup` off (the single-input rewrite
-/// commands) every record is written verbatim. With `dedup` on (`merge`), records identical in name
-/// and content are written once; a repeated name with *different* content is an error unless
-/// `allow_duplicate_names` is set.
+/// commands) every record is written verbatim. With `dedup` on (`merge`), a repeated metadata name
+/// is an error unless `allow_duplicate_names` is set; once it is, records identical in name and
+/// content are written once and a repeated name with differing content is kept.
 pub(crate) fn write_metadata_record<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     state: &mut MetadataState,
