@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
-use super::common::{self, checked_slice};
+use super::common;
 use super::options::{include_topic, resolve_options, ResolvedOptions, RewriteOptions};
 use crate::cli::MessageOrder;
 use crate::source;
@@ -142,8 +142,7 @@ fn filter_indexed<W: Write + Seek>(
             while let Some(event) = reader.next_event() {
                 match event? {
                     mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                        let chunk_data = checked_slice(input, offset, length)?;
-                        reader.insert_chunk_record_data(offset, chunk_data)?;
+                        common::service_chunk_request(&mut reader, input, offset, length)?;
                     }
                     mcap::sans_io::IndexedReadEvent::Message { header, data } => {
                         if pending_channels.remove(&header.channel_id) {
@@ -213,8 +212,7 @@ fn filter_indexed<W: Write + Seek>(
         while let Some(event) = reader.next_event() {
             match event? {
                 mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                    let chunk_data = checked_slice(input, offset, length)?;
-                    reader.insert_chunk_record_data(offset, chunk_data)?;
+                    common::service_chunk_request(&mut reader, input, offset, length)?;
                 }
                 mcap::sans_io::IndexedReadEvent::Message { header, data } => {
                     let channel = summary.channels.get(&header.channel_id).ok_or_else(|| {

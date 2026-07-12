@@ -199,7 +199,7 @@ fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
 
 /// Bounds-checks a `[offset, offset + length)` slice of the input, used to hand chunk bytes to an
 /// [`mcap::sans_io::IndexedReader`] on demand.
-pub(crate) fn checked_slice(input: &[u8], offset: u64, length: usize) -> Result<&[u8]> {
+fn checked_slice(input: &[u8], offset: u64, length: usize) -> Result<&[u8]> {
     let start = usize::try_from(offset)
         .with_context(|| format!("chunk offset out of range for this platform: {offset}"))?;
     let end = start
@@ -208,6 +208,19 @@ pub(crate) fn checked_slice(input: &[u8], offset: u64, length: usize) -> Result<
     input.get(start..end).ok_or_else(|| {
         anyhow::anyhow!("chunk read out of bounds at offset {offset} length {length}")
     })
+}
+
+/// Fulfills an [`mcap::sans_io::IndexedReader`] `ReadChunkRequest` by handing the reader the
+/// requested slice of the input. Shared by every indexed read loop (single-input and merge).
+pub(crate) fn service_chunk_request(
+    reader: &mut mcap::sans_io::IndexedReader,
+    input: &[u8],
+    offset: u64,
+    length: usize,
+) -> Result<()> {
+    let chunk_data = checked_slice(input, offset, length)?;
+    reader.insert_chunk_record_data(offset, chunk_data)?;
+    Ok(())
 }
 
 /// Resolves a channel record against the known schemas into an owned [`mcap::Channel`].

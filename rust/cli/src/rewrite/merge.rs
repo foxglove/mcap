@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
-use mcap::records::{MessageHeader, Record};
+use mcap::records::MessageHeader;
 
 use super::common;
 use crate::cli::CoalesceChannels;
@@ -56,13 +56,6 @@ struct InputRef<'a> {
     data: &'a [u8],
 }
 
-struct InputMessageReader<'a> {
-    name: &'a str,
-    records: mcap::read::ChunkFlattener<'a>,
-    schemas: HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channels: HashMap<u16, Arc<mcap::Channel<'static>>>,
-}
-
 struct IndexedInputMessageReader<'a> {
     input_idx: usize,
     input_order: usize,
@@ -81,8 +74,6 @@ enum MergeMessageStream<'a> {
     Indexed(IndexedInputMessageReader<'a>),
     Materialized(MaterializedInputMessages),
 }
-
-type InputMessage = (Arc<mcap::Channel<'static>>, MessageHeader, Vec<u8>);
 
 #[derive(Debug, Clone)]
 struct PendingMessage {
@@ -323,100 +314,6 @@ fn write_metadata_records<W: Write + Seek>(
     .with_context(|| format!("failed to read metadata from '{}'", input.name))
 }
 
-impl<'a> InputMessageReader<'a> {
-    fn new(input: &InputRef<'a>) -> Result<Self> {
-        Ok(Self {
-            name: input.name,
-            records: mcap::read::ChunkFlattener::new(input.data)
-                .with_context(|| format!("failed to stream records from '{}'", input.name))?,
-            schemas: HashMap::new(),
-            channels: HashMap::new(),
-        })
-    }
-}
-
-fn next_message_from_input(input: &mut InputMessageReader<'_>) -> Result<Option<InputMessage>> {
-    for record in input.records.by_ref() {
-        let record = record.with_context(|| format!("failed to parse '{}'", input.name))?;
-        match record {
-            Record::Schema { header, data } => {
-                let schema = Arc::new(mcap::Schema {
-                    id: header.id,
-                    name: header.name.clone(),
-                    encoding: header.encoding.clone(),
-                    data: std::borrow::Cow::Owned(data.into_owned()),
-                });
-                if let Some(existing) = input.schemas.get(&header.id) {
-                    if existing.name != schema.name
-                        || existing.encoding != schema.encoding
-                        || existing.data.as_ref() != schema.data.as_ref()
-                    {
-                        return Err(mcap::McapError::ConflictingSchemas(header.name).into());
-                    }
-                } else {
-                    input.schemas.insert(header.id, schema);
-                }
-            }
-            Record::Channel(channel) => {
-                let schema = if channel.schema_id == 0 {
-                    None
-                } else {
-                    Some(
-                        input
-                            .schemas
-                            .get(&channel.schema_id)
-                            .cloned()
-                            .ok_or_else(|| {
-                                anyhow::anyhow!(
-                                    "encountered channel '{}' with unknown schema {} in '{}'",
-                                    channel.topic,
-                                    channel.schema_id,
-                                    input.name
-                                )
-                            })?,
-                    )
-                };
-                let parsed_channel = Arc::new(mcap::Channel {
-                    id: channel.id,
-                    topic: channel.topic.clone(),
-                    schema: schema.clone(),
-                    message_encoding: channel.message_encoding.clone(),
-                    metadata: channel.metadata.clone(),
-                });
-
-                if let Some(existing) = input.channels.get(&channel.id) {
-                    if existing.topic != parsed_channel.topic
-                        || existing.schema.as_ref().map(|schema| schema.id)
-                            != parsed_channel.schema.as_ref().map(|schema| schema.id)
-                        || existing.message_encoding != parsed_channel.message_encoding
-                        || existing.metadata != parsed_channel.metadata
-                    {
-                        return Err(mcap::McapError::ConflictingChannels(channel.topic).into());
-                    }
-                } else {
-                    input.channels.insert(channel.id, parsed_channel);
-                }
-            }
-            Record::Message { header, data } => {
-                let channel = input
-                    .channels
-                    .get(&header.channel_id)
-                    .cloned()
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "encountered message referencing unknown channel {} in '{}'",
-                            header.channel_id,
-                            input.name
-                        )
-                    })?;
-                return Ok(Some((channel, header, data.into_owned())));
-            }
-            _ => {}
-        }
-    }
-    Ok(None)
-}
-
 impl<'a> IndexedInputMessageReader<'a> {
     fn new(input_idx: usize, input: &InputRef<'a>, summary: mcap::Summary) -> Result<Self> {
         let reader = mcap::sans_io::IndexedReader::new_with_options(
@@ -440,8 +337,7 @@ impl<'a> IndexedInputMessageReader<'a> {
         while let Some(event) = self.reader.next_event() {
             match event.with_context(|| format!("failed to read indexed '{}'", self.name))? {
                 mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                    let chunk_data = common::checked_slice(self.data, offset, length)?;
-                    self.reader.insert_chunk_record_data(offset, chunk_data)?;
+                    common::service_chunk_request(&mut self.reader, self.data, offset, length)?;
                 }
                 mcap::sans_io::IndexedReadEvent::Message { header, data } => {
                     let channel = self
@@ -475,20 +371,28 @@ impl<'a> IndexedInputMessageReader<'a> {
 
 impl MaterializedInputMessages {
     fn new(input_idx: usize, input: &InputRef<'_>) -> Result<Self> {
-        let mut reader = InputMessageReader::new(input)?;
+        // A summaryless or incompletely-indexed input can't be read in log-time order on the fly,
+        // so read every message (in stored order) and sort. `mcap::MessageStream` resolves each
+        // message's channel and applies the same schema/channel conflict checks merge needs.
+        let stream = mcap::MessageStream::new(input.data)
+            .with_context(|| format!("failed to stream records from '{}'", input.name))?;
         let mut messages = Vec::new();
-        let mut input_order = 0usize;
-        while let Some((channel, header, data)) = next_message_from_input(&mut reader)
-            .with_context(|| format!("failed reading messages from '{}'", input.name))?
-        {
+        for (input_order, message) in stream.enumerate() {
+            let message = message
+                .with_context(|| format!("failed reading messages from '{}'", input.name))?;
+            let header = MessageHeader {
+                channel_id: message.channel.id,
+                sequence: message.sequence,
+                log_time: message.log_time,
+                publish_time: message.publish_time,
+            };
             messages.push(PendingMessage::new(
                 input_idx,
                 input_order,
-                channel,
+                message.channel,
                 header,
-                data,
+                message.data.into_owned(),
             ));
-            input_order += 1;
         }
         messages.sort_by_key(|message| (message.log_time, message.input_order));
 
@@ -1295,7 +1199,7 @@ mod tests {
             .expect("header")
             .expect("record")
         {
-            Record::Header(header) => header,
+            mcap::records::Record::Header(header) => header,
             _ => panic!("expected header"),
         };
         assert!(header.profile.is_empty());
