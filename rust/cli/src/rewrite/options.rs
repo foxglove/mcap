@@ -6,13 +6,14 @@ use anyhow::{bail, Context, Result};
 use regex::Regex;
 
 use crate::cli::{
-    parse_timestamp_or_nanos, CommonRewriteArgs, CompressionFormat, FilterCommand, MessageOrder,
-    SortCommand,
+    parse_timestamp_or_nanos, CoalesceChannels, CommonRewriteArgs, CompressionFormat,
+    FilterCommand, MergeCommand, MessageOrder, SortCommand,
 };
 
 #[derive(Debug, Clone)]
 pub(crate) struct RewriteOptions {
-    pub(crate) file: Option<PathBuf>,
+    /// Input paths. Empty means read a single input from stdin; more than one triggers a merge.
+    pub(crate) files: Vec<PathBuf>,
     pub(crate) output: Option<PathBuf>,
     pub(crate) include_topic_regex: Vec<String>,
     pub(crate) exclude_topic_regex: Vec<String>,
@@ -30,6 +31,11 @@ pub(crate) struct RewriteOptions {
     pub(crate) use_chunks: bool,
     pub(crate) include_crc: bool,
     pub(crate) order: MessageOrder,
+    // Merge-only knobs. They are inert for a single input (only `merge` sets them, and channel
+    // coalescing needs multiple inputs); `merge` builds them via `From<&MergeCommand>`.
+    pub(crate) coalesce_channels: CoalesceChannels,
+    pub(crate) dedup_metadata: bool,
+    pub(crate) allow_duplicate_metadata: bool,
 }
 
 /// Maps the arguments shared by every rewrite command onto their engine options: paths, chunk
@@ -43,7 +49,7 @@ pub(crate) struct RewriteOptions {
 impl From<&CommonRewriteArgs> for RewriteOptions {
     fn from(args: &CommonRewriteArgs) -> Self {
         Self {
-            file: args.file.clone(),
+            files: args.file.clone().into_iter().collect(),
             output: args.output(),
             include_topic_regex: Vec::new(),
             exclude_topic_regex: Vec::new(),
@@ -61,6 +67,42 @@ impl From<&CommonRewriteArgs> for RewriteOptions {
             use_chunks: true,
             include_crc: !args.no_crc,
             order: MessageOrder::Preserve,
+            coalesce_channels: CoalesceChannels::Auto,
+            dedup_metadata: false,
+            allow_duplicate_metadata: false,
+        }
+    }
+}
+
+/// `merge` builds the same engine options as the single-input commands, but with the merge-only
+/// knobs set: it always sorts by log time, deduplicates metadata, and applies the requested
+/// channel coalescing. It keeps its own args struct (its positional file list collides with the
+/// single-input `CommonRewriteArgs`), so this maps the fields directly and resolves the output path
+/// with the same `--output` over deprecated `--output-file` precedence.
+impl From<&MergeCommand> for RewriteOptions {
+    fn from(args: &MergeCommand) -> Self {
+        Self {
+            files: args.files.clone(),
+            output: args.output.clone().or_else(|| args.output_file.clone()),
+            include_topic_regex: Vec::new(),
+            exclude_topic_regex: Vec::new(),
+            last_per_channel_topic_regex: Vec::new(),
+            start: None,
+            start_secs: 0,
+            start_nsecs: 0,
+            end: None,
+            end_secs: 0,
+            end_nsecs: 0,
+            include_metadata: true,
+            include_attachments: true,
+            compression: args.compression.to_compression(),
+            chunk_size: args.chunk_size,
+            use_chunks: !args.no_chunks,
+            include_crc: !args.no_crc,
+            order: MessageOrder::LogTime,
+            coalesce_channels: args.coalesce_channels,
+            dedup_metadata: true,
+            allow_duplicate_metadata: args.allow_duplicate_metadata,
         }
     }
 }
@@ -384,7 +426,7 @@ mod tests {
             no_crc: true,
         };
         let opts = RewriteOptions::from(&common);
-        assert_eq!(opts.file, Some("in.mcap".into()));
+        assert_eq!(opts.files, vec![std::path::PathBuf::from("in.mcap")]);
         assert_eq!(opts.output, Some("out.mcap".into()));
         assert_eq!(opts.chunk_size, 4096);
         assert_eq!(opts.order, MessageOrder::Preserve);
@@ -470,7 +512,7 @@ mod tests {
         args.no_chunks = true;
 
         let opts = RewriteOptions::from(&args);
-        assert_eq!(opts.file, Some("in.mcap".into()));
+        assert_eq!(opts.files, vec![std::path::PathBuf::from("in.mcap")]);
         assert_eq!(opts.output, Some("out.mcap".into()));
         assert_eq!(
             opts.order,

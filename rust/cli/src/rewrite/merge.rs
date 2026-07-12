@@ -4,30 +4,16 @@
 //! unique to merging live here (cross-input schema/channel remapping and coalescing, metadata
 //! deduplication, and the k-way merge heap).
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
-use std::io::{IsTerminal as _, Seek, Write};
-use std::path::PathBuf;
+use std::collections::{BTreeMap, BinaryHeap, HashMap};
+use std::io::{Seek, Write};
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 use mcap::records::MessageHeader;
 
 use super::common;
+use super::common::InputRef;
 use crate::cli::CoalesceChannels;
-use crate::source::{self, SourceOptions};
-
-/// Engine-facing options for a merge. The command adapter builds this from `MergeCommand`.
-#[derive(Debug, Clone)]
-pub(crate) struct MergeOptions {
-    pub(crate) files: Vec<PathBuf>,
-    pub(crate) output: Option<PathBuf>,
-    pub(crate) compression: Option<mcap::Compression>,
-    pub(crate) chunk_size: u64,
-    pub(crate) include_crc: bool,
-    pub(crate) chunked: bool,
-    pub(crate) allow_duplicate_metadata: bool,
-    pub(crate) coalesce_channels: CoalesceChannels,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct SchemaKey {
@@ -42,18 +28,6 @@ struct ChannelKey {
     topic: String,
     message_encoding: String,
     metadata: Vec<(String, String)>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct MetadataKey {
-    name: String,
-    entries: Vec<(String, String)>,
-}
-
-#[derive(Debug, Clone)]
-struct InputRef<'a> {
-    name: &'a str,
-    data: &'a [u8],
 }
 
 struct IndexedInputMessageReader<'a> {
@@ -138,12 +112,6 @@ impl Ord for PendingMessage {
 }
 
 #[derive(Default)]
-struct MetadataState {
-    seen_metadata: HashSet<MetadataKey>,
-    metadata_names: HashSet<String>,
-}
-
-#[derive(Default)]
 struct IdMaps {
     schema_ids: HashMap<(usize, u16), u16>,
     schema_ids_by_content: HashMap<SchemaKey, u16>,
@@ -152,68 +120,16 @@ struct IdMaps {
     next_output_channel_id: u16,
 }
 
-pub(crate) fn run_merge(opts: MergeOptions, source_options: SourceOptions) -> Result<()> {
-    if let Some(output_path) = &opts.output {
-        for input_path in &opts.files {
-            source::ensure_distinct_local_input_output(input_path, output_path)?;
-        }
-    }
-
-    let mut mapped_inputs = Vec::with_capacity(opts.files.len());
-    let mut input_names = Vec::with_capacity(opts.files.len());
-    for path in &opts.files {
-        let mapped = source::load_path(path, source_options)?;
-        mapped_inputs.push(mapped);
-        input_names.push(source::redacted_display(path));
-    }
-
-    let input_refs: Vec<InputRef<'_>> = mapped_inputs
-        .iter()
-        .zip(input_names.iter())
-        .map(|(mapped, name)| InputRef {
-            name: name.as_str(),
-            data: mapped.as_slice(),
-        })
-        .collect();
-
-    if let Some(output_path) = &opts.output {
-        let output = std::fs::File::create(output_path)
-            .with_context(|| format!("failed to open '{}' for writing", output_path.display()))?;
-        merge_inputs(&input_refs, output, &opts, false)
-    } else {
-        if std::io::stdout().is_terminal() {
-            bail!("{}", source::PLEASE_REDIRECT);
-        }
-        let stdout = std::io::stdout();
-        let output = mcap::write::NoSeek::new(stdout.lock());
-        merge_inputs(&input_refs, output, &opts, true)
-    }
-}
-
-fn merge_inputs<W: Write + Seek>(
+/// Writes the merged data section into an existing writer: metadata (deduplicated across inputs)
+/// first, then the k-way log-time-merged messages, then attachments. The caller owns writer
+/// creation, the profile, and `finish` (see [`super::engine::run`]).
+pub(super) fn write_merged<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
     inputs: &[InputRef<'_>],
-    sink: W,
-    opts: &MergeOptions,
-    disable_seeking: bool,
+    coalesce_channels: CoalesceChannels,
+    dedup_metadata: bool,
+    allow_duplicate_metadata: bool,
 ) -> Result<()> {
-    let profiles = inputs
-        .iter()
-        .map(read_profile)
-        .collect::<Result<Vec<_>>>()?;
-    let output_profile = output_profile(&profiles);
-
-    let mut writer = common::create_writer(
-        sink,
-        &common::WriterConfig {
-            profile: output_profile,
-            use_chunks: opts.chunked,
-            chunk_size: opts.chunk_size,
-            compression: opts.compression,
-            include_crc: opts.include_crc,
-        },
-        disable_seeking,
-    )?;
-
     let summaries = inputs
         .iter()
         // Treat summary lookup as best effort and fall back to linear scans when
@@ -221,97 +137,35 @@ fn merge_inputs<W: Write + Seek>(
         .map(|input| mcap::Summary::read(input.data).unwrap_or_default())
         .collect::<Vec<_>>();
 
-    merge_messages(
-        inputs,
-        &summaries,
-        &mut writer,
-        opts.coalesce_channels,
-        opts.allow_duplicate_metadata,
-    )?;
-
+    // Metadata is written first, before any messages (see module docs).
+    let mut metadata_state = common::MetadataState::default();
     for (idx, input) in inputs.iter().enumerate() {
-        write_attachments(&mut writer, input, summaries[idx].as_ref())?;
+        common::for_each_metadata(input.data, summaries[idx].as_ref(), |metadata| {
+            common::write_metadata_record(
+                writer,
+                &mut metadata_state,
+                metadata,
+                dedup_metadata,
+                allow_duplicate_metadata,
+            )
+        })
+        .with_context(|| format!("failed to read metadata from '{}'", input.name))?;
     }
 
-    writer.finish().context("failed to finish mcap writer")?;
+    merge_messages(writer, inputs, &summaries, coalesce_channels)?;
+
+    // Attachments are written last, after all messages (see module docs).
+    for (idx, input) in inputs.iter().enumerate() {
+        common::for_each_attachment(input.data, summaries[idx].as_ref(), |attachment| {
+            writer
+                .attach(&attachment)
+                .with_context(|| format!("failed to write attachment from '{}'", input.name))?;
+            Ok(())
+        })
+        .with_context(|| format!("failed to read attachments from '{}'", input.name))?;
+    }
+
     Ok(())
-}
-
-fn read_profile(input: &InputRef<'_>) -> Result<String> {
-    Ok(common::read_header(input.data)
-        .with_context(|| format!("failed to read header from '{}'", input.name))?
-        .map(|header| header.profile)
-        .unwrap_or_default())
-}
-
-fn output_profile(profiles: &[String]) -> String {
-    let Some(first) = profiles.first() else {
-        return String::new();
-    };
-    if profiles.iter().all(|profile| profile == first) {
-        first.clone()
-    } else {
-        String::new()
-    }
-}
-
-fn write_merged_metadata<W: Write + Seek>(
-    writer: &mut mcap::Writer<W>,
-    state: &mut MetadataState,
-    metadata_record: mcap::records::Metadata,
-    allow_duplicate_metadata: bool,
-) -> Result<()> {
-    if state.metadata_names.contains(&metadata_record.name) && !allow_duplicate_metadata {
-        bail!(
-            "metadata name '{}' was previously encountered. Supply --allow-duplicate-metadata to override.",
-            metadata_record.name
-        );
-    }
-
-    let key = metadata_key(&metadata_record);
-    if state.seen_metadata.insert(key) {
-        writer.write_metadata(&metadata_record)?;
-        state.metadata_names.insert(metadata_record.name.clone());
-    }
-    Ok(())
-}
-
-fn metadata_key(metadata_record: &mcap::records::Metadata) -> MetadataKey {
-    MetadataKey {
-        name: metadata_record.name.clone(),
-        entries: metadata_record
-            .metadata
-            .iter()
-            .map(|(key, value)| (key.clone(), value.clone()))
-            .collect(),
-    }
-}
-
-fn write_attachments<W: Write + Seek>(
-    writer: &mut mcap::Writer<W>,
-    input: &InputRef<'_>,
-    summary: Option<&mcap::Summary>,
-) -> Result<()> {
-    common::for_each_attachment(input.data, summary, |attachment| {
-        writer
-            .attach(&attachment)
-            .with_context(|| format!("failed to write attachment from '{}'", input.name))?;
-        Ok(())
-    })
-    .with_context(|| format!("failed to read attachments from '{}'", input.name))
-}
-
-fn write_metadata_records<W: Write + Seek>(
-    writer: &mut mcap::Writer<W>,
-    state: &mut MetadataState,
-    input: &InputRef<'_>,
-    summary: Option<&mcap::Summary>,
-    allow_duplicate_metadata: bool,
-) -> Result<()> {
-    common::for_each_metadata(input.data, summary, |metadata| {
-        write_merged_metadata(writer, state, metadata, allow_duplicate_metadata)
-    })
-    .with_context(|| format!("failed to read metadata from '{}'", input.name))
 }
 
 impl<'a> IndexedInputMessageReader<'a> {
@@ -416,27 +270,15 @@ impl MergeMessageStream<'_> {
 }
 
 fn merge_messages<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
     inputs: &[InputRef<'_>],
     summaries: &[Option<mcap::Summary>],
-    writer: &mut mcap::Writer<W>,
     coalesce_channels: CoalesceChannels,
-    allow_duplicate_metadata: bool,
 ) -> Result<()> {
     let mut id_maps = IdMaps {
         next_output_channel_id: 1,
         ..IdMaps::default()
     };
-    let mut metadata_state = MetadataState::default();
-
-    for (input_idx, input) in inputs.iter().enumerate() {
-        write_metadata_records(
-            writer,
-            &mut metadata_state,
-            input,
-            summaries[input_idx].as_ref(),
-            allow_duplicate_metadata,
-        )?;
-    }
 
     let mut streams = Vec::<MergeMessageStream<'_>>::with_capacity(inputs.len());
     for (input_idx, input) in inputs.iter().enumerate() {
@@ -850,52 +692,65 @@ mod tests {
         bytes[offset..offset + 8].copy_from_slice(&message_count.to_le_bytes());
     }
 
+    /// Runs the merge phase over in-memory inputs (as `merge` configures it: dedup metadata on),
+    /// returning the finished MCAP bytes.
     fn merge_bytes(
         inputs: &[(&str, &[u8])],
         coalesce_channels: CoalesceChannels,
         allow_duplicate_metadata: bool,
     ) -> Result<Vec<u8>> {
-        let options = MergeOptions {
-            files: Vec::new(),
-            output: None,
-            compression: None,
-            chunk_size: 1024,
-            include_crc: true,
-            chunked: true,
-            allow_duplicate_metadata,
-            coalesce_channels,
-        };
         let input_refs = inputs
             .iter()
             .map(|(name, data)| InputRef { name, data })
             .collect::<Vec<_>>();
 
         let mut output = Cursor::new(Vec::<u8>::new());
-        merge_inputs(&input_refs, &mut output, &options, false)?;
+        {
+            let mut writer = common::create_writer(
+                &mut output,
+                &common::WriterConfig {
+                    profile: common::common_profile(&input_refs)?,
+                    use_chunks: true,
+                    chunk_size: 1024,
+                    compression: None,
+                    include_crc: true,
+                },
+                false,
+            )?;
+            write_merged(
+                &mut writer,
+                &input_refs,
+                coalesce_channels,
+                true,
+                allow_duplicate_metadata,
+            )?;
+            writer.finish()?;
+        }
         Ok(output.into_inner())
     }
 
-    fn merge_options(files: Vec<PathBuf>, output: Option<PathBuf>) -> MergeOptions {
-        MergeOptions {
-            files,
-            output,
-            compression: None,
+    fn merge_command(files: Vec<&str>, output: Option<&str>) -> crate::cli::MergeCommand {
+        crate::cli::MergeCommand {
+            files: files.into_iter().map(Into::into).collect(),
+            output: output.map(Into::into),
+            output_file: None,
+            compression: crate::cli::CompressionFormat::Zstd,
             chunk_size: 1024,
-            include_crc: true,
-            chunked: true,
+            no_crc: false,
+            no_chunks: false,
             allow_duplicate_metadata: false,
             coalesce_channels: CoalesceChannels::Auto,
         }
     }
 
     #[test]
-    fn run_merge_rejects_remote_input_without_scan_opt_in() {
-        let err = run_merge(
-            merge_options(
-                vec!["http://example.com/a.mcap".into()],
-                Some("out.mcap".into()),
-            ),
-            SourceOptions::default(),
+    fn run_rejects_remote_input_without_scan_opt_in() {
+        let err = crate::rewrite::run(
+            crate::rewrite::RewriteOptions::from(&merge_command(
+                vec!["http://example.com/a.mcap"],
+                Some("out.mcap"),
+            )),
+            crate::source::SourceOptions::default(),
         )
         .expect_err("remote merge input should require opt-in");
 
@@ -903,20 +758,132 @@ mod tests {
     }
 
     #[test]
-    fn run_merge_rejects_same_input_and_output_without_truncating() {
+    fn run_rejects_same_input_and_output_without_truncating() {
         let input = build_mcap("profile", &[], &[], &[], true, true);
         let dir = tempfile::TempDir::new().expect("temp dir");
         let path = dir.path().join("same-path.mcap");
         std::fs::write(&path, &input).expect("write input");
+        let path_str = path.to_str().expect("utf-8 path");
 
-        let err = run_merge(
-            merge_options(vec![path.clone()], Some(path.clone())),
-            SourceOptions::default(),
+        let err = crate::rewrite::run(
+            crate::rewrite::RewriteOptions::from(&merge_command(vec![path_str], Some(path_str))),
+            crate::source::SourceOptions::default(),
         )
         .expect_err("same input/output should fail");
 
         assert!(err.to_string().contains("input and output paths"));
         assert_eq!(std::fs::read(&path).expect("read input"), input);
+    }
+
+    /// Runs the `merge` command over the given input bytes written to a temp file and returns the
+    /// output bytes. `configure` can set merge-only flags on the command.
+    fn run_merge_command(
+        input: &[u8],
+        configure: impl FnOnce(&mut crate::cli::MergeCommand),
+    ) -> Vec<u8> {
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let input_path = dir.path().join("in.mcap");
+        let output_path = dir.path().join("out.mcap");
+        std::fs::write(&input_path, input).expect("write input");
+
+        let mut command = merge_command(
+            vec![input_path.to_str().expect("utf-8 path")],
+            Some(output_path.to_str().expect("utf-8 path")),
+        );
+        configure(&mut command);
+
+        crate::rewrite::run(
+            crate::rewrite::RewriteOptions::from(&command),
+            crate::source::SourceOptions::default(),
+        )
+        .expect("merge of one input should succeed");
+        std::fs::read(&output_path).expect("read output")
+    }
+
+    #[test]
+    fn merge_single_input_preserves_channel_ids_and_sorts_by_log_time() {
+        // A single input takes the rewrite path: it keeps the input's channel IDs (rather than
+        // renumbering them the way a multi-input merge does) while still applying the merge presets
+        // (log-time order).
+        let input = build_mcap(
+            "profile",
+            &[
+                TestMessage {
+                    channel_id: 7,
+                    topic: "/demo".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 30,
+                    payload: vec![1],
+                },
+                TestMessage {
+                    channel_id: 7,
+                    topic: "/demo".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 10,
+                    payload: vec![2],
+                },
+                TestMessage {
+                    channel_id: 7,
+                    topic: "/demo".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 20,
+                    payload: vec![3],
+                },
+            ],
+            &[],
+            &[],
+            true,
+            true,
+        );
+
+        let output = run_merge_command(&input, |_| {});
+
+        let summary = mcap::Summary::read(&output)
+            .expect("summary")
+            .expect("present");
+        assert!(
+            summary.channels.contains_key(&7),
+            "single-input merge preserves the input channel ID"
+        );
+        let log_times = mcap::MessageStream::new(&output)
+            .expect("stream")
+            .map(|message| message.expect("message").log_time)
+            .collect::<Vec<_>>();
+        assert_eq!(log_times, vec![10, 20, 30], "merge sorts by log time");
+    }
+
+    #[test]
+    fn merge_single_input_deduplicates_identical_metadata() {
+        // The merge preset also deduplicates metadata on the single-input path.
+        let metadata = mcap::records::Metadata {
+            name: "m".to_string(),
+            metadata: BTreeMap::from([("k".to_string(), "v".to_string())]),
+        };
+        let input = build_mcap(
+            "profile",
+            &[TestMessage {
+                channel_id: 1,
+                topic: "/demo".to_string(),
+                metadata: BTreeMap::new(),
+                log_time: 1,
+                payload: vec![1],
+            }],
+            &[metadata.clone(), metadata],
+            &[],
+            true,
+            true,
+        );
+
+        let output = run_merge_command(&input, |command| command.allow_duplicate_metadata = true);
+
+        let summary = mcap::Summary::read(&output)
+            .expect("summary")
+            .expect("present");
+        assert_eq!(
+            summary.metadata_indexes.len(),
+            1,
+            "merge-of-one deduplicates identical metadata records"
+        );
     }
 
     #[test]

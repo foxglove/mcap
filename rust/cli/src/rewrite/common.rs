@@ -47,6 +47,13 @@ pub(crate) fn create_writer<W: Write + Seek>(
         .context("failed to create mcap writer")
 }
 
+/// A named MCAP input: a display name for diagnostics plus its bytes.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct InputRef<'a> {
+    pub(crate) name: &'a str,
+    pub(crate) data: &'a [u8],
+}
+
 /// Reads the leading [`Header`](mcap::records::Header) record, if present. Used to carry the input
 /// profile onto the output.
 pub(crate) fn read_header(input: &[u8]) -> Result<Option<mcap::records::Header>> {
@@ -56,6 +63,24 @@ pub(crate) fn read_header(input: &[u8]) -> Result<Option<mcap::records::Header>>
         Some(Ok(_)) | None => Ok(None),
         Some(Err(err)) => Err(err.into()),
     }
+}
+
+/// The profile to stamp on the output: the shared profile when every input agrees, otherwise empty.
+/// For a single input this is just that input's profile.
+pub(crate) fn common_profile(inputs: &[InputRef<'_>]) -> Result<String> {
+    let mut common: Option<String> = None;
+    for input in inputs {
+        let profile = read_header(input.data)
+            .with_context(|| format!("failed to read header from '{}'", input.name))?
+            .map(|header| header.profile)
+            .unwrap_or_default();
+        match &common {
+            None => common = Some(profile),
+            Some(existing) if *existing != profile => return Ok(String::new()),
+            Some(_) => {}
+        }
+    }
+    Ok(common.unwrap_or_default())
 }
 
 fn incomplete_indexed_summary_error() -> anyhow::Error {
@@ -325,6 +350,58 @@ where
                 data: std::borrow::Cow::Borrowed(data.as_ref()),
             })?;
         }
+    }
+    Ok(())
+}
+
+/// Tracks metadata records already written so a merge can drop exact duplicates and enforce the
+/// name-conflict policy across inputs.
+#[derive(Default)]
+pub(crate) struct MetadataState {
+    seen: std::collections::HashSet<MetadataKey>,
+    names: std::collections::HashSet<String>,
+}
+
+#[derive(PartialEq, Eq, Hash)]
+struct MetadataKey {
+    name: String,
+    entries: Vec<(String, String)>,
+}
+
+/// Writes a metadata record, optionally deduplicating. With `dedup` off (the single-input rewrite
+/// commands) every record is written verbatim. With `dedup` on (`merge`), records identical in name
+/// and content are written once; a repeated name with *different* content is an error unless
+/// `allow_duplicate_names` is set.
+pub(crate) fn write_metadata_record<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
+    state: &mut MetadataState,
+    metadata: mcap::records::Metadata,
+    dedup: bool,
+    allow_duplicate_names: bool,
+) -> Result<()> {
+    if !dedup {
+        writer.write_metadata(&metadata)?;
+        return Ok(());
+    }
+
+    if state.names.contains(&metadata.name) && !allow_duplicate_names {
+        bail!(
+            "metadata name '{}' was previously encountered. Supply --allow-duplicate-metadata to override.",
+            metadata.name
+        );
+    }
+
+    let key = MetadataKey {
+        name: metadata.name.clone(),
+        entries: metadata
+            .metadata
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect(),
+    };
+    if state.seen.insert(key) {
+        writer.write_metadata(&metadata)?;
+        state.names.insert(metadata.name.clone());
     }
     Ok(())
 }

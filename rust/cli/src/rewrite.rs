@@ -15,14 +15,13 @@
 //! into it), so the layout serves linear readers and keeps message chunks unfragmented.
 //!
 //! The module is split into [`options`] (the caller-facing [`RewriteOptions`], its resolution into
-//! the validated [`options::ResolvedOptions`], and record selection), [`engine`] (the single-input
-//! read / select / place pipeline), [`merge`] (the multi-input k-way merge pipeline), and
-//! [`common`] (the low-level helpers both pipelines share).
+//! the validated [`options::ResolvedOptions`], and record selection), [`engine`] (the unified
+//! [`run`] entrypoint plus the single-input read / select / place pipeline), [`merge`] (the
+//! multi-input k-way merge phase), and [`common`] (the low-level helpers both pipelines share).
 mod common;
 mod engine;
 mod merge;
 mod options;
 
 pub(crate) use engine::run;
-pub(crate) use merge::{run_merge, MergeOptions};
 pub(crate) use options::RewriteOptions;

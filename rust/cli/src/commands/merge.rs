@@ -1,12 +1,13 @@
-//! The `merge` command: k-way merge several MCAP inputs into one output ordered by log time. This
-//! is a thin adapter over the shared [`crate::rewrite`] merge pipeline, which owns the read/merge/
-//! write machinery and the standardized record placement.
+//! The `merge` command: a thin adapter over the shared [`crate::rewrite`] engine. `merge` is just a
+//! rewrite with multiple inputs and the merge-only knobs set (log-time order, metadata dedup, and
+//! channel coalescing); the engine dispatches to its k-way merge phase when given more than one
+//! input.
 use anyhow::Result;
 use log::warn;
 
 use crate::cli::MergeCommand;
 use crate::context::CommandContext;
-use crate::rewrite::{self, MergeOptions};
+use crate::rewrite::{self, RewriteOptions};
 use crate::source::SourceOptions;
 
 pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
@@ -15,65 +16,20 @@ pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     if args.output_file.is_some() {
         warn!("--output-file is deprecated; use --output instead");
     }
-    rewrite::run_merge(
-        build_merge_options(args),
+    rewrite::run(
+        RewriteOptions::from(&args),
         SourceOptions::new(ctx.allow_remote_scan()),
     )
 }
 
-/// Maps the parsed `merge` CLI arguments onto the engine-facing [`MergeOptions`]. The output path
-/// prefers `--output`, falling back to the deprecated `--output-file` alias.
-fn build_merge_options(args: MergeCommand) -> MergeOptions {
-    MergeOptions {
-        files: args.files,
-        output: args.output.or(args.output_file),
-        compression: args.compression.to_compression(),
-        chunk_size: args.chunk_size,
-        include_crc: !args.no_crc,
-        chunked: !args.no_chunks,
-        allow_duplicate_metadata: args.allow_duplicate_metadata,
-        coalesce_channels: args.coalesce_channels,
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
+    use super::*;
+    use crate::cli::{CoalesceChannels, CompressionFormat};
 
-    use super::build_merge_options;
-    use crate::cli::{CoalesceChannels, CompressionFormat, MergeCommand};
-
-    #[test]
-    fn build_merge_options_maps_cli_fields() {
-        let options = build_merge_options(MergeCommand {
-            files: vec!["a.mcap".into(), "b.mcap".into()],
-            output: Some("out.mcap".into()),
-            output_file: None,
-            compression: CompressionFormat::Lz4,
-            chunk_size: 4096,
-            no_crc: true,
-            no_chunks: true,
-            allow_duplicate_metadata: true,
-            coalesce_channels: CoalesceChannels::Force,
-        });
-
-        assert_eq!(
-            options.files,
-            vec![PathBuf::from("a.mcap"), PathBuf::from("b.mcap")]
-        );
-        assert_eq!(options.output, Some(PathBuf::from("out.mcap")));
-        assert!(matches!(options.compression, Some(mcap::Compression::Lz4)));
-        assert_eq!(options.chunk_size, 4096);
-        assert!(!options.include_crc);
-        assert!(!options.chunked);
-        assert!(options.allow_duplicate_metadata);
-        assert_eq!(options.coalesce_channels, CoalesceChannels::Force);
-    }
-
-    #[test]
-    fn build_merge_options_resolves_output_preferring_output_over_output_file() {
-        let base = || MergeCommand {
-            files: vec!["a.mcap".into()],
+    fn merge_command(files: Vec<&str>) -> MergeCommand {
+        MergeCommand {
+            files: files.into_iter().map(Into::into).collect(),
             output: None,
             output_file: None,
             compression: CompressionFormat::Zstd,
@@ -82,21 +38,54 @@ mod tests {
             no_chunks: false,
             allow_duplicate_metadata: false,
             coalesce_channels: CoalesceChannels::Auto,
-        };
+        }
+    }
 
+    #[test]
+    fn merge_options_set_the_merge_only_knobs() {
+        let options = RewriteOptions::from(&MergeCommand {
+            compression: CompressionFormat::Lz4,
+            chunk_size: 4096,
+            no_crc: true,
+            no_chunks: true,
+            allow_duplicate_metadata: true,
+            coalesce_channels: CoalesceChannels::Force,
+            ..merge_command(vec!["a.mcap", "b.mcap"])
+        });
+
+        assert_eq!(
+            options.files,
+            vec![
+                std::path::PathBuf::from("a.mcap"),
+                std::path::PathBuf::from("b.mcap")
+            ]
+        );
+        assert!(matches!(options.compression, Some(mcap::Compression::Lz4)));
+        assert_eq!(options.chunk_size, 4096);
+        assert!(!options.include_crc);
+        assert!(!options.use_chunks);
+        assert!(options.allow_duplicate_metadata);
+        assert_eq!(options.coalesce_channels, CoalesceChannels::Force);
+        // Merge always sorts by log time and deduplicates metadata.
+        assert_eq!(options.order, crate::cli::MessageOrder::LogTime);
+        assert!(options.dedup_metadata);
+    }
+
+    #[test]
+    fn merge_resolves_output_preferring_output_over_output_file() {
         // `--output` wins when both are supplied.
-        let both = build_merge_options(MergeCommand {
+        let both = RewriteOptions::from(&MergeCommand {
             output: Some("out.mcap".into()),
             output_file: Some("legacy.mcap".into()),
-            ..base()
+            ..merge_command(vec!["a.mcap"])
         });
-        assert_eq!(both.output, Some(PathBuf::from("out.mcap")));
+        assert_eq!(both.output, Some("out.mcap".into()));
 
         // The deprecated `--output-file` supplies the path when `--output` is absent.
-        let fallback = build_merge_options(MergeCommand {
+        let fallback = RewriteOptions::from(&MergeCommand {
             output_file: Some("legacy.mcap".into()),
-            ..base()
+            ..merge_command(vec!["a.mcap"])
         });
-        assert_eq!(fallback.output, Some(PathBuf::from("legacy.mcap")));
+        assert_eq!(fallback.output, Some("legacy.mcap".into()));
     }
 }
