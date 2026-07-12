@@ -477,7 +477,7 @@ mod tests {
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
                 },
-                compression: "zstd".to_string(),
+                compression: CompressionFormat::Zstd,
                 order: MessageOrder::Preserve,
             })
         );
@@ -510,10 +510,17 @@ mod tests {
                     chunk_size: 1024,
                     no_crc: true,
                 },
-                compression: "lz4".to_string(),
+                compression: CompressionFormat::Lz4,
                 order: MessageOrder::LogTime,
             })
         );
+    }
+
+    #[test]
+    fn rejects_compress_invalid_compression() {
+        let err = Args::try_parse_from(["mcap", "compress", "in.mcap", "--compression", "invalid"])
+            .expect_err("invalid compression should be rejected at parse time");
+        assert_eq!(err.kind(), clap::error::ErrorKind::InvalidValue);
     }
 
     #[test]

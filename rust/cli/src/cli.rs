@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::{ArgAction, Parser, Subcommand};
 use clap_complete::Shell;
 use log::warn;
@@ -158,8 +158,8 @@ pub struct CompressCommand {
     pub common: CommonRewriteArgs,
 
     /// Compression algorithm for output file: zstd, lz4, or none
-    #[arg(long = "compression", default_value = "zstd")]
-    pub compression: String,
+    #[arg(long = "compression", value_enum, default_value = "zstd")]
+    pub compression: CompressionFormat,
 
     /// Message order in the output: preserve (keep the input order), log_time, or topic
     #[arg(long = "order", value_enum, default_value = "preserve")]
@@ -345,11 +345,12 @@ pub enum CompressionFormat {
 }
 
 impl CompressionFormat {
-    pub fn as_str(self) -> &'static str {
+    /// Convert to the library's compression enum, where `None` means uncompressed.
+    pub fn to_compression(self) -> Option<mcap::Compression> {
         match self {
-            CompressionFormat::Zstd => "zstd",
-            CompressionFormat::Lz4 => "lz4",
-            CompressionFormat::None => "none",
+            CompressionFormat::Zstd => Some(mcap::Compression::Zstd),
+            CompressionFormat::Lz4 => Some(mcap::Compression::Lz4),
+            CompressionFormat::None => None,
         }
     }
 }
@@ -379,7 +380,7 @@ pub struct ConvertCommand {
     /// Local path for the destination MCAP file
     pub output: PathBuf,
 
-    /// Chunk compression algorithm for output MCAP
+    /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
@@ -414,7 +415,7 @@ pub struct MergeCommand {
     #[arg(short = 'o', long = "output-file")]
     pub output_file: Option<PathBuf>,
 
-    /// Chunk compression algorithm for output MCAP
+    /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
@@ -531,7 +532,7 @@ pub struct FilterCommand {
     #[arg(long = "include-attachments", default_value_t = false, hide = true)]
     pub include_attachments: bool,
 
-    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none (default: zstd)
+    /// Compression algorithm for output file: zstd, lz4, or none (default: zstd)
     #[arg(long = "compression", value_enum)]
     pub compression: Option<CompressionFormat>,
 
@@ -571,7 +572,7 @@ pub struct RecoverCommand {
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Compression for the output file: preserve, none, zstd, or lz4.
+    /// Compression algorithm for output file: zstd, lz4, none, or preserve
     ///
     /// `preserve` (the default) keeps the input file's compression (uncompressed if the input is
     /// unchunked).
@@ -584,7 +585,7 @@ pub struct SortCommand {
     #[command(flatten)]
     pub common: CommonRewriteArgs,
 
-    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
+    /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
@@ -611,18 +612,6 @@ pub type ListChannelsCommand = FileCommand;
 pub type ListChunksCommand = FileCommand;
 pub type ListMetadataCommand = FileCommand;
 pub type ListSchemasCommand = FileCommand;
-
-/// Parse a CLI-supplied output compression value, where `none` disables compression.
-pub(crate) fn parse_output_compression(value: &str) -> Result<Option<mcap::Compression>> {
-    match value {
-        "zstd" => Ok(Some(mcap::Compression::Zstd)),
-        "lz4" => Ok(Some(mcap::Compression::Lz4)),
-        "none" | "" => Ok(None),
-        _ => bail!(
-            "unrecognized compression format '{value}': valid options are 'lz4', 'zstd', or 'none'"
-        ),
-    }
-}
 
 /// Parse a CLI-supplied timestamp as either integer nanoseconds or an RFC3339 string.
 ///
@@ -655,33 +644,6 @@ mod tests {
         assert!(library.starts_with("mcap-cli/"));
         assert!(library.ends_with(mcap::LIBRARY_IDENTIFIER));
         assert!(library.contains(" mcap-rust/"));
-    }
-
-    #[test]
-    fn parse_output_compression_supports_known_values() {
-        assert!(matches!(
-            super::parse_output_compression("zstd").expect("zstd should parse"),
-            Some(mcap::Compression::Zstd)
-        ));
-        assert!(matches!(
-            super::parse_output_compression("lz4").expect("lz4 should parse"),
-            Some(mcap::Compression::Lz4)
-        ));
-        assert!(super::parse_output_compression("none")
-            .expect("none should parse")
-            .is_none());
-        assert!(super::parse_output_compression("")
-            .expect("empty should parse")
-            .is_none());
-    }
-
-    #[test]
-    fn parse_output_compression_rejects_unknown_values() {
-        let err =
-            super::parse_output_compression("snappy").expect_err("unknown compression should fail");
-        assert!(err
-            .to_string()
-            .contains("unrecognized compression format 'snappy'"));
     }
 
     #[test]

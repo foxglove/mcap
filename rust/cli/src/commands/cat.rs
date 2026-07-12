@@ -5,13 +5,18 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context as _, Result};
 use mcap::sans_io::indexed_reader::ReadOrder;
-use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor};
+use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor, SerializeOptions};
 
 use crate::cli::CatCommand;
 use crate::context::CommandContext;
 use crate::{parse, render, source};
 
 const MESSAGE_PREVIEW_LEN: usize = 10;
+
+// prost-reflect's default JSON serialization follows the canonical proto3 mapping, which omits
+// fields at their default value. Emit them instead so default-valued fields stay visible (#1642).
+const PROTOBUF_SERIALIZE_OPTIONS: SerializeOptions =
+    SerializeOptions::new().skip_default_fields(false);
 
 pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
     let opts = CatOptions::from_args(&args)?;
@@ -752,8 +757,11 @@ impl JsonTranscoders {
                 };
                 let message = DynamicMessage::decode(descriptor, data)
                     .context("failed to parse message")?;
-                let json = serde_json::to_vec(&message).context("failed to marshal message")?;
-                Ok(Cow::Owned(json))
+                let mut serializer = serde_json::Serializer::new(Vec::new());
+                message
+                    .serialize_with_options(&mut serializer, &PROTOBUF_SERIALIZE_OPTIONS)
+                    .context("failed to marshal message")?;
+                Ok(Cow::Owned(serializer.into_inner()))
             }
             "ros1msg" => {
                 let transcoder = match self.ros1_transcoders.get(&schema.id) {
@@ -2127,7 +2135,7 @@ mod tests {
     }
 
     #[test]
-    fn protobuf_json_uses_lower_camel_case_and_omits_zero_values() {
+    fn protobuf_json_uses_lower_camel_case_and_emits_default_values() {
         let descriptor = vec![
             10, 122, 10, 12, 115, 97, 109, 112, 108, 101, 46, 112, 114, 111, 116, 111, 18, 4, 116,
             101, 115, 116, 34, 92, 10, 6, 83, 97, 109, 112, 108, 101, 18, 29, 10, 10, 115, 110, 97,
@@ -2151,12 +2159,155 @@ mod tests {
             metadata: BTreeMap::new(),
         });
         let mut transcoders = JsonTranscoders::default();
+        // Payload sets `snake_case` = "hello" and `count` = 7, leaving `zero_value` at its proto3
+        // default (0). The default-valued field must still be emitted. See issue #1642.
         let encoded = transcoders
             .encode(&channel, &[10, 5, b'h', b'e', b'l', b'l', b'o', 24, 7])
             .expect("protobuf should encode");
         assert_eq!(
             String::from_utf8(encoded.into_owned()).expect("valid utf8"),
-            r#"{"snakeCase":"hello","count":7}"#
+            r#"{"snakeCase":"hello","zeroValue":0,"count":7}"#
+        );
+    }
+
+    // Builds a `FileDescriptorSet` for a proto3 `test.Presence` message exercising the full range
+    // of presence rules: an implicit-presence scalar and enum, an explicit `optional` scalar, a
+    // message field, a repeated field, and a map field.
+    fn presence_schema_descriptor() -> Vec<u8> {
+        use prost_reflect::prost::Message as _;
+        use prost_reflect::prost_types::{
+            field_descriptor_proto::{Label, Type},
+            DescriptorProto, EnumDescriptorProto, EnumValueDescriptorProto, FieldDescriptorProto,
+            FileDescriptorProto, FileDescriptorSet, MessageOptions, OneofDescriptorProto,
+        };
+
+        fn field(name: &str, number: i32, label: Label, ty: Type) -> FieldDescriptorProto {
+            FieldDescriptorProto {
+                name: Some(name.to_string()),
+                number: Some(number),
+                label: Some(label as i32),
+                r#type: Some(ty as i32),
+                ..Default::default()
+            }
+        }
+
+        let color_enum = EnumDescriptorProto {
+            name: Some("Color".to_string()),
+            value: vec![
+                EnumValueDescriptorProto {
+                    name: Some("COLOR_UNSPECIFIED".to_string()),
+                    number: Some(0),
+                    ..Default::default()
+                },
+                EnumValueDescriptorProto {
+                    name: Some("COLOR_RED".to_string()),
+                    number: Some(1),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let child = DescriptorProto {
+            name: Some("Child".to_string()),
+            ..Default::default()
+        };
+
+        let attrs_entry = DescriptorProto {
+            name: Some("AttrsEntry".to_string()),
+            field: vec![
+                field("key", 1, Label::Optional, Type::String),
+                field("value", 2, Label::Optional, Type::Int32),
+            ],
+            options: Some(MessageOptions {
+                map_entry: Some(true),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let mut color_field = field("color", 2, Label::Optional, Type::Enum);
+        color_field.type_name = Some(".test.Color".to_string());
+
+        // `optional` scalar: proto3 explicit presence is encoded as a synthetic single-field oneof.
+        let mut explicit_scalar = field("explicit_scalar", 3, Label::Optional, Type::Int32);
+        explicit_scalar.proto3_optional = Some(true);
+        explicit_scalar.oneof_index = Some(0);
+
+        let mut child_field = field("child", 4, Label::Optional, Type::Message);
+        child_field.type_name = Some(".test.Child".to_string());
+
+        let mut attrs_field = field("attrs", 6, Label::Repeated, Type::Message);
+        attrs_field.type_name = Some(".test.Presence.AttrsEntry".to_string());
+
+        let presence = DescriptorProto {
+            name: Some("Presence".to_string()),
+            field: vec![
+                field("implicit_scalar", 1, Label::Optional, Type::Int32),
+                color_field,
+                explicit_scalar,
+                child_field,
+                field("items", 5, Label::Repeated, Type::Int32),
+                attrs_field,
+            ],
+            nested_type: vec![attrs_entry],
+            oneof_decl: vec![OneofDescriptorProto {
+                name: Some("_explicit_scalar".to_string()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+
+        let file = FileDescriptorProto {
+            name: Some("sample.proto".to_string()),
+            package: Some("test".to_string()),
+            syntax: Some("proto3".to_string()),
+            message_type: vec![presence, child],
+            enum_type: vec![color_enum],
+            ..Default::default()
+        };
+
+        FileDescriptorSet { file: vec![file] }.encode_to_vec()
+    }
+
+    #[test]
+    fn protobuf_json_emits_scalar_enum_and_collection_defaults_but_omits_absent_presence_fields() {
+        let schema = Arc::new(mcap::Schema {
+            id: 2,
+            name: "test.Presence".to_string(),
+            encoding: "protobuf".to_string(),
+            data: Cow::Owned(presence_schema_descriptor()),
+        });
+        let channel = Arc::new(mcap::Channel {
+            id: 1,
+            topic: "proto".to_string(),
+            schema: Some(schema),
+            message_encoding: "protobuf".to_string(),
+            metadata: BTreeMap::new(),
+        });
+        let mut transcoders = JsonTranscoders::default();
+
+        // Empty payload: every field sits at its proto3 default. Implicit-presence scalars/enums
+        // and repeated/map fields must be emitted with their defaults (0, the enum's zero-variant
+        // name, [], {}), while unset explicit-presence fields (`optional` scalar and message
+        // field) must stay absent. See issue #1642.
+        let encoded = transcoders
+            .encode(&channel, &[])
+            .expect("empty protobuf message should encode");
+        assert_eq!(
+            String::from_utf8(encoded.into_owned()).expect("valid utf8"),
+            r#"{"implicitScalar":0,"color":"COLOR_UNSPECIFIED","items":[],"attrs":{}}"#
+        );
+
+        // Explicitly setting the presence-tracked fields (even to their default value) makes them
+        // present, so they are emitted: `explicit_scalar` = 0 (tag 24) and an empty `child`
+        // message (tag 34).
+        let encoded = transcoders
+            .encode(&channel, &[24, 0, 34, 0])
+            .expect("protobuf message should encode");
+        assert_eq!(
+            String::from_utf8(encoded.into_owned()).expect("valid utf8"),
+            r#"{"implicitScalar":0,"color":"COLOR_UNSPECIFIED","explicitScalar":0,"child":{},"items":[],"attrs":{}}"#
         );
     }
 

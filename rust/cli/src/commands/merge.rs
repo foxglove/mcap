@@ -7,7 +7,7 @@ use std::sync::Arc;
 use anyhow::{bail, Context, Result};
 use mcap::records::{MessageHeader, Record};
 
-use crate::cli::{CoalesceChannels, CompressionFormat, MergeCommand};
+use crate::cli::{CoalesceChannels, MergeCommand};
 use crate::context::CommandContext;
 
 #[derive(Debug, Clone)]
@@ -194,16 +194,10 @@ pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
 }
 
 fn build_merge_options(args: MergeCommand) -> MergeOptions {
-    let compression = match args.compression {
-        CompressionFormat::Zstd => Some(mcap::Compression::Zstd),
-        CompressionFormat::Lz4 => Some(mcap::Compression::Lz4),
-        CompressionFormat::None => None,
-    };
-
     MergeOptions {
         files: args.files,
         output_file: args.output_file,
-        compression,
+        compression: args.compression.to_compression(),
         chunk_size: args.chunk_size,
         include_crc: !args.no_crc,
         chunked: !args.no_chunks,
@@ -884,6 +878,7 @@ mod tests {
     use std::io::Cursor;
 
     use super::*;
+    use crate::cli::CompressionFormat;
 
     #[derive(Debug, Clone)]
     struct TestMessage {
