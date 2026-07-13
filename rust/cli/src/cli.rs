@@ -78,6 +78,9 @@ pub enum Command {
     #[command(verbatim_doc_comment)]
     Completion(CompletionCommand),
     /// Create a compressed copy of an MCAP file
+    ///
+    /// Equivalent to running `mcap filter --compression=zstd` (pick another
+    /// algorithm with `--compression`).
     Compress(CompressCommand),
     /// Convert supported input files to MCAP
     #[command(
@@ -85,12 +88,19 @@ pub enum Command {
     )]
     Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file
+    ///
+    /// Equivalent to running `mcap filter --compression=none`.
     Decompress(DecompressCommand),
     /// Check an MCAP file structure
     Doctor(DoctorCommand),
     /// Compute byte usage statistics for MCAP records
     Du(DuCommand),
     /// Copy filtered MCAP data to a new file
+    ///
+    /// The general-purpose rewrite command: copies selected records to a new
+    /// file, optionally selecting by topic and time range and changing
+    /// compression, chunking, and message order. `compress`, `decompress`, and
+    /// `sort` are presets over this command.
     Filter(FilterCommand),
     /// Get a record from an MCAP file
     Get(GetCommand),
@@ -103,6 +113,8 @@ pub enum Command {
     /// Recover data from a potentially corrupt MCAP file
     Recover(RecoverCommand),
     /// Read an MCAP file and write it back with messages reordered (log_time, preserve, or topic)
+    ///
+    /// Equivalent to running `mcap filter --order=log_time`.
     Sort(SortCommand),
 }
 
