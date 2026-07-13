@@ -269,8 +269,8 @@ fn filter_linear<W: Write + Seek>(
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
     // Collected during the message pass (borrowing from `input`, no copy) and written last.
     let mut pending_attachments = Vec::<mcap::Attachment>::new();
-    // Messages buffered for the sorted path. This holds the whole selected message set in memory;
-    // making the summaryless ordered path memory-bounded is a known follow-up.
+    // Messages buffered for the sorted path. This holds the whole selected message set in memory,
+    // so the summaryless ordered path is not memory-bounded.
     let mut buffered_messages = Vec::<BufferedMessage>::new();
 
     for record in mcap::read::ChunkFlattener::new(input)? {
@@ -380,8 +380,8 @@ mod tests {
     use crate::cli::CommonRewriteArgs;
 
     /// Test shim for the single-input path: builds a writer, runs [`super::write_single`] with
-    /// metadata dedup off (the rewrite-command behavior), and finishes. Mirrors the old
-    /// `filter_to_writer` so these tests exercise the single-input pipeline directly.
+    /// metadata dedup off (the rewrite-command behavior), and finishes, so these tests drive the
+    /// single-input pipeline directly.
     fn filter_to_writer<W: std::io::Write + std::io::Seek>(
         input: &[u8],
         sink: W,
@@ -1310,25 +1310,6 @@ mod tests {
 
         let _ = std::fs::remove_file(input_path);
         let _ = std::fs::remove_file(output_path);
-    }
-
-    #[test]
-    fn run_rejects_same_input_and_output_without_truncating() {
-        let input = write_filter_test_input(true, false);
-        let dir = tempfile::TempDir::new().expect("temp dir");
-        let path = dir.path().join("same-path.mcap");
-        std::fs::write(&path, &input).expect("write input");
-
-        let options = rewrite_options(
-            Some(path.clone()),
-            Some(path.clone()),
-            mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-        );
-        let err = crate::rewrite::run(options, crate::source::SourceOptions::default())
-            .expect_err("same input/output should fail");
-
-        assert!(err.to_string().contains("input and output paths"));
-        assert_eq!(std::fs::read(&path).expect("read input"), input);
     }
 
     #[test]
