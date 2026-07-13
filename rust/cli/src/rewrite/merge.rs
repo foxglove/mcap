@@ -285,9 +285,12 @@ fn write_attachments<W: Write + Seek>(
     summary: Option<&mcap::Summary>,
 ) -> Result<()> {
     common::for_each_attachment(input.data, summary, |attachment| {
-        writer
-            .attach(&attachment)
-            .with_context(|| format!("failed to write attachment from '{}'", input.name))?;
+        writer.attach(&attachment).with_context(|| {
+            format!(
+                "failed to write attachment '{}' from '{}'",
+                attachment.name, input.name
+            )
+        })?;
         Ok(())
     })
     .with_context(|| format!("failed to read attachments from '{}'", input.name))
