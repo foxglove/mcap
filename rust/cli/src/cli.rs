@@ -64,55 +64,55 @@ pub struct Args {
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum Command {
-    /// Add records to an existing MCAP file
+    /// Add records to an existing MCAP file.
     Add(AddCommand),
-    /// Concatenate the messages in one or more MCAP files to stdout
+    /// Concatenate the messages in one or more MCAP files to stdout.
     Cat(CatCommand),
-    /// Generate shell completion scripts
+    /// Generate shell completion scripts.
     ///
     /// To load completions in the current shell session:
     ///   bash:       source <(mcap completion bash)
     ///   zsh:        source <(mcap completion zsh)
     ///   fish:       mcap completion fish | source
     ///   powershell: mcap completion powershell | Out-String | Invoke-Expression
-    #[command(verbatim_doc_comment)]
+    #[command(verbatim_doc_comment, about = "Generate shell completion scripts")]
     Completion(CompletionCommand),
-    /// Create a compressed copy of an MCAP file
+    /// Create a compressed copy of an MCAP file.
     ///
     /// Equivalent to running `mcap filter --compression=zstd` (pick another
     /// algorithm with `--compression`).
     Compress(CompressCommand),
-    /// Convert supported input files to MCAP
+    /// Convert supported input files to MCAP.
     #[command(
         long_about = "Convert supported input files to MCAP.\n\nSupported inputs:\n  .bag  ROS 1 bag\n  .db3  ROS 2 SQLite db3"
     )]
     Convert(ConvertCommand),
-    /// Create an uncompressed copy of an MCAP file
+    /// Create an uncompressed copy of an MCAP file.
     ///
     /// Equivalent to running `mcap filter --compression=none`.
     Decompress(DecompressCommand),
-    /// Check an MCAP file structure
+    /// Check an MCAP file structure.
     Doctor(DoctorCommand),
-    /// Compute byte usage statistics for MCAP records
+    /// Compute byte usage statistics for MCAP records.
     Du(DuCommand),
-    /// Copy filtered MCAP data to a new file
+    /// Copy filtered MCAP data to a new file.
     ///
     /// The general-purpose rewrite command: copies selected records to a new
     /// file, optionally selecting by topic and time range and changing
     /// compression, chunking, and message order. `compress`, `decompress`, and
     /// `sort` are presets over this command.
     Filter(FilterCommand),
-    /// Get a record from an MCAP file
+    /// Get a record from an MCAP file.
     Get(GetCommand),
-    /// Report statistics about an MCAP file
+    /// Report statistics about an MCAP file.
     Info(InfoCommand),
-    /// List records of an MCAP file
+    /// List records of an MCAP file.
     List(ListCommand),
-    /// Merge MCAP files
+    /// Merge MCAP files.
     Merge(MergeCommand),
-    /// Recover data from a potentially corrupt MCAP file
+    /// Recover data from a potentially corrupt MCAP file.
     Recover(RecoverCommand),
-    /// Read an MCAP file and write it back with messages reordered (log_time, preserve, or topic)
+    /// Read an MCAP file and write it back with messages reordered (log_time, preserve, or topic).
     ///
     /// Equivalent to running `mcap filter --order=log_time`.
     Sort(SortCommand),
@@ -233,9 +233,9 @@ pub struct CatCommand {
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum AddSubcommand {
-    /// Add an attachment to an MCAP file
+    /// Add an attachment to an MCAP file.
     Attachment(AddAttachmentCommand),
-    /// Add metadata to an MCAP file
+    /// Add metadata to an MCAP file.
     Metadata(AddMetadataCommand),
 }
 
@@ -296,9 +296,9 @@ pub struct GetCommand {
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum GetSubcommand {
-    /// Get an attachment by name or offset
+    /// Get an attachment by name or offset.
     Attachment(GetAttachmentCommand),
-    /// Get metadata by name
+    /// Get metadata by name.
     Metadata(GetMetadataCommand),
 }
 
@@ -339,15 +339,15 @@ pub struct ListCommand {
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum ListSubcommand {
-    /// List attachments in an MCAP file
+    /// List attachments in an MCAP file.
     Attachments(ListAttachmentsCommand),
-    /// List channels in an MCAP file
+    /// List channels in an MCAP file.
     Channels(ListChannelsCommand),
-    /// List chunks in an MCAP file
+    /// List chunks in an MCAP file.
     Chunks(ListChunksCommand),
-    /// List metadata in an MCAP file
+    /// List metadata in an MCAP file.
     Metadata(ListMetadataCommand),
-    /// List schemas in an MCAP file
+    /// List schemas in an MCAP file.
     Schemas(ListSchemasCommand),
 }
 
