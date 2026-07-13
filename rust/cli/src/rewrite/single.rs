@@ -1154,8 +1154,8 @@ mod tests {
             "fixture should be chunk-indexed"
         );
         assert!(
-            !super::common::summary_indexes_all_messages(&input, &summary),
-            "fixture should have a message outside the indexes"
+            super::common::summary_has_unindexed_messages(&input, &summary),
+            "fixture should have a message outside the indexes (the gate the single path uses)"
         );
 
         let output = run_filter(&input, &include_all_options());
