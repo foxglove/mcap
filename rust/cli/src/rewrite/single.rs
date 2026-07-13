@@ -99,6 +99,12 @@ fn filter_indexed<W: Write + Seek>(
         })?;
     }
 
+    // For `topic` ordering, fold each last-per-channel seed into its channel's group (below) so the
+    // channel — seed included — stays in its own chunk, rather than emitting a separate cross-topic
+    // preamble. The other orders keep the log-time preamble written up front.
+    let fold_seeds_into_groups = matches!(opts.order, MessageOrder::Topic);
+    let mut pre_start_buffered = Vec::<BufferedMessage>::new();
+
     if !opts.last_per_channel_topics.is_empty() && opts.start > 0 {
         let target_topics: BTreeSet<String> = summary
             .channels
@@ -152,14 +158,11 @@ fn filter_indexed<W: Write + Seek>(
                 }
             }
 
-            // These per-channel seed messages are always emitted as a log-time-sorted preamble
-            // ahead of the window, independent of `opts.order`. `--last-per-channel` is a
-            // log-time-window feature (the latest value on each topic as of `--start`), and its
-            // records are relocated here from their original positions before the window, so there
-            // is no meaningful stored order to "preserve" for them; log-time order keeps the
-            // preamble deterministic and monotonic up to the window boundary. (The `IndexedReader`
-            // does not surface per-message file offsets, so honoring `preserve` here would require
-            // a library change or an extra pass for no practical benefit.)
+            // `--last-per-channel` is a log-time-window feature (the latest value on each topic as
+            // of `--start`), and its records are relocated from before the window, so there is no
+            // meaningful stored order to "preserve"; a log-time sort keeps them deterministic. For
+            // `topic` these seeds are folded into their channel's group so each channel — seed
+            // included — stays in one chunk; the other orders emit them as a preamble up front.
             pre_start_messages.sort_by_key(|message| {
                 (
                     message.log_time,
@@ -169,29 +172,39 @@ fn filter_indexed<W: Write + Seek>(
                 )
             });
             for message in pre_start_messages {
-                let channel = summary.channels.get(&message.channel_id).ok_or_else(|| {
-                    anyhow::anyhow!("message references unknown channel {}", message.channel_id)
-                })?;
-                writer.write(&mcap::Message {
-                    channel: channel.clone(),
-                    sequence: message.sequence,
-                    log_time: message.log_time,
-                    publish_time: message.publish_time,
-                    data: Cow::Borrowed(message.data.as_slice()),
-                })?;
+                let channel = summary
+                    .channels
+                    .get(&message.channel_id)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("message references unknown channel {}", message.channel_id)
+                    })?
+                    .clone();
+                if fold_seeds_into_groups {
+                    pre_start_buffered.push(BufferedMessage {
+                        channel,
+                        sequence: message.sequence,
+                        log_time: message.log_time,
+                        publish_time: message.publish_time,
+                        data: message.data,
+                    });
+                } else {
+                    writer.write(&mcap::Message {
+                        channel,
+                        sequence: message.sequence,
+                        log_time: message.log_time,
+                        publish_time: message.publish_time,
+                        data: Cow::Borrowed(message.data.as_slice()),
+                    })?;
+                }
             }
         }
     }
 
     if !(has_topic_filters && included_topics.is_empty()) {
-        // `preserve` reads the input in its stored order; `log_time` re-sorts into log-time order.
-        let read_order = match opts.order {
-            MessageOrder::Preserve => mcap::sans_io::indexed_reader::ReadOrder::File,
-            MessageOrder::LogTime => mcap::sans_io::indexed_reader::ReadOrder::LogTime,
-        };
-        let mut indexed_opts = mcap::sans_io::IndexedReaderOptions::new()
-            .with_order(read_order)
-            .log_time_on_or_after(opts.start);
+        // The time window and topic filters apply regardless of ordering; the read order is chosen
+        // per `opts.order` below.
+        let mut indexed_opts =
+            mcap::sans_io::IndexedReaderOptions::new().log_time_on_or_after(opts.start);
         if opts.end != u64::MAX {
             indexed_opts = indexed_opts.log_time_before(opts.end);
         }
@@ -199,7 +212,24 @@ fn filter_indexed<W: Write + Seek>(
             indexed_opts = indexed_opts.include_topics(included_topics.iter().cloned());
         }
 
-        let mut reader = mcap::sans_io::IndexedReader::new_with_options(summary, indexed_opts)?;
+        // `preserve` reads in stored (file) order; `log_time` and `topic` read in the reader's
+        // log-time order. `preserve`/`log_time` stream straight to the writer (memory-bounded: one
+        // chunk resident at a time), while `topic` is not an index order, so its messages are
+        // buffered in memory here and re-sorted before writing.
+        let read_order = match opts.order {
+            MessageOrder::Preserve => mcap::sans_io::indexed_reader::ReadOrder::File,
+            MessageOrder::LogTime | MessageOrder::Topic => {
+                mcap::sans_io::indexed_reader::ReadOrder::LogTime
+            }
+        };
+        let buffer_for_ordering = matches!(opts.order, MessageOrder::Topic);
+        let mut reader = mcap::sans_io::IndexedReader::new_with_options(
+            summary,
+            indexed_opts.with_order(read_order),
+        )?;
+        // For `topic`, start from the folded last-per-channel seeds (empty otherwise); the window
+        // messages append below and `write_ordered_buffer` groups each channel, seeds and all.
+        let mut buffered_messages = pre_start_buffered;
         while let Some(event) = reader.next_event() {
             match event? {
                 mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
@@ -209,15 +239,28 @@ fn filter_indexed<W: Write + Seek>(
                     let channel = summary.channels.get(&header.channel_id).ok_or_else(|| {
                         anyhow::anyhow!("message references unknown channel {}", header.channel_id)
                     })?;
-                    writer.write(&mcap::Message {
-                        channel: channel.clone(),
-                        sequence: header.sequence,
-                        log_time: header.log_time,
-                        publish_time: header.publish_time,
-                        data: Cow::Borrowed(data),
-                    })?;
+                    if buffer_for_ordering {
+                        buffered_messages.push(BufferedMessage {
+                            channel: channel.clone(),
+                            sequence: header.sequence,
+                            log_time: header.log_time,
+                            publish_time: header.publish_time,
+                            data: data.to_vec(),
+                        });
+                    } else {
+                        writer.write(&mcap::Message {
+                            channel: channel.clone(),
+                            sequence: header.sequence,
+                            log_time: header.log_time,
+                            publish_time: header.publish_time,
+                            data: Cow::Borrowed(data),
+                        })?;
+                    }
                 }
             }
+        }
+        if buffer_for_ordering {
+            write_ordered_buffer(writer, buffered_messages, opts.order)?;
         }
     }
 
@@ -234,13 +277,62 @@ fn filter_indexed<W: Write + Seek>(
     Ok(())
 }
 
-/// A message buffered during the linear path so summaryless input can be re-sorted by log time.
+/// A message buffered so it can be re-sorted before writing. Used by the linear path (summaryless
+/// input, which cannot be streamed in a sorted order) and by the indexed path for the `topic`
+/// ordering the index cannot produce directly.
 struct BufferedMessage {
     channel: Arc<mcap::Channel<'static>>,
     sequence: u32,
     log_time: u64,
     publish_time: u64,
     data: Vec<u8>,
+}
+
+/// Sorts `messages` by `order` and writes them. The sorts are stable, so records that compare equal
+/// keep their buffered (log-time for indexed input, file order for linear input) relative order,
+/// matching the indexed reader's "earlier wins" tie-break. For `topic`, the writer's chunk is
+/// flushed on every channel boundary so each channel occupies its own contiguous chunk(s), letting
+/// a single-topic reader fetch one byte range instead of scanning chunks scattered across the file.
+fn write_ordered_buffer<W: Write + Seek>(
+    writer: &mut mcap::Writer<W>,
+    mut messages: Vec<BufferedMessage>,
+    order: MessageOrder,
+) -> Result<()> {
+    match order {
+        MessageOrder::LogTime => messages.sort_by_key(|message| message.log_time),
+        MessageOrder::Topic => messages.sort_by(|a, b| {
+            a.channel
+                .topic
+                .cmp(&b.channel.topic)
+                .then_with(|| a.channel.id.cmp(&b.channel.id))
+                .then_with(|| a.log_time.cmp(&b.log_time))
+        }),
+        // `preserve` writes messages directly instead of buffering, so it never reaches here.
+        MessageOrder::Preserve => {}
+    }
+
+    let group_by_channel = matches!(order, MessageOrder::Topic);
+    let mut previous_channel_id: Option<u16> = None;
+    for message in &messages {
+        if group_by_channel {
+            // Messages are grouped by channel, so flushing at each channel change puts every
+            // channel in its own chunk(s). The first message opens the first chunk itself.
+            if previous_channel_id.is_some_and(|previous| previous != message.channel.id) {
+                writer
+                    .flush()
+                    .context("failed to flush chunk between channels")?;
+            }
+            previous_channel_id = Some(message.channel.id);
+        }
+        writer.write(&mcap::Message {
+            channel: message.channel.clone(),
+            sequence: message.sequence,
+            log_time: message.log_time,
+            publish_time: message.publish_time,
+            data: Cow::Borrowed(message.data.as_slice()),
+        })?;
+    }
+    Ok(())
 }
 
 fn filter_linear<W: Write + Seek>(
@@ -252,12 +344,9 @@ fn filter_linear<W: Write + Seek>(
         bail!("including last-per-channel topics is not supported for non-indexed input");
     }
 
-    // A summaryless input cannot be streamed in log-time order, so when sorting is requested its
-    // messages are buffered (owning their payloads) and sorted before being written.
-    let sort_by_log_time = match opts.order {
-        MessageOrder::Preserve => false,
-        MessageOrder::LogTime => true,
-    };
+    // A summaryless input cannot be streamed in a sorted order, so any ordering other than
+    // `preserve` buffers its messages (owning their payloads) and sorts them before writing.
+    let buffer_for_ordering = !matches!(opts.order, MessageOrder::Preserve);
 
     // Metadata is written first, before any messages (see module docs). Metadata records are never
     // stored inside chunks, so a top-level linear scan surfaces them without decompressing chunks.
@@ -315,7 +404,7 @@ fn filter_linear<W: Write + Seek>(
                     continue;
                 }
 
-                if sort_by_log_time {
+                if buffer_for_ordering {
                     buffered_messages.push(BufferedMessage {
                         channel,
                         sequence: header.sequence,
@@ -349,20 +438,10 @@ fn filter_linear<W: Write + Seek>(
         }
     }
 
-    // Messages buffered for log-time ordering are sorted and written before the attachments. The
-    // sort is stable in log time, matching the indexed reader's tie-break (log_time, then the
-    // record's file position, approximated here by insertion order).
-    if sort_by_log_time {
-        buffered_messages.sort_by_key(|message| message.log_time);
-        for message in &buffered_messages {
-            writer.write(&mcap::Message {
-                channel: message.channel.clone(),
-                sequence: message.sequence,
-                log_time: message.log_time,
-                publish_time: message.publish_time,
-                data: Cow::Borrowed(message.data.as_slice()),
-            })?;
-        }
+    // Buffered messages are sorted and written before the attachments. The sort is stable, so
+    // equal keys keep their insertion (file) order, matching the indexed reader's tie-break.
+    if buffer_for_ordering {
+        write_ordered_buffer(writer, buffered_messages, opts.order)?;
     }
 
     // Attachments are written last, after all messages (see module docs).
@@ -1483,6 +1562,171 @@ mod tests {
                 expected,
                 "equal log_times must preserve file order (chunked={chunked}, summaryless={summaryless})"
             );
+        }
+    }
+
+    /// Two channels (`/alpha`, `/beta`) interleaved in log-time order, so the `topic` ordering is
+    /// observably different from the stored/log-time order. Covers the indexed path (chunked, with
+    /// a summary) and both linear paths (chunked-summaryless and fully unchunked).
+    fn write_multichannel_input(chunked: bool, summaryless: bool) -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut options = mcap::WriteOptions::new()
+                .use_chunks(chunked)
+                .library("test-recorder/0.0");
+            if chunked {
+                // One large chunk keeps every message together so the input is a single chunk.
+                options = options.chunk_size(Some(1 << 20));
+            }
+            if summaryless {
+                options = options
+                    .emit_summary_records(false)
+                    .emit_summary_offsets(false);
+            }
+            let mut writer = options.create(&mut output).expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let alpha = writer
+                .add_channel(schema_id, "/alpha", "json", &BTreeMap::new())
+                .expect("alpha");
+            let beta = writer
+                .add_channel(schema_id, "/beta", "json", &BTreeMap::new())
+                .expect("beta");
+            for t in 0..5u64 {
+                for (channel, payload) in [(beta, b"b".as_slice()), (alpha, b"a")] {
+                    writer
+                        .write_to_known_channel(
+                            &mcap::records::MessageHeader {
+                                channel_id: channel,
+                                sequence: t as u32,
+                                log_time: t,
+                                publish_time: t,
+                            },
+                            payload,
+                        )
+                        .expect("write");
+                }
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    /// `(topic, log_time)` for every output message, in file order.
+    fn output_topic_log_times(output: &[u8]) -> Vec<(String, u64)> {
+        mcap::MessageStream::new(output)
+            .expect("message stream")
+            .map(|message| {
+                let message = message.expect("message");
+                (message.channel.topic.clone(), message.log_time)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn topic_groups_channels_and_orders_within_by_log_time() {
+        for (chunked, summaryless) in [(true, false), (true, true), (false, true)] {
+            let input = write_multichannel_input(chunked, summaryless);
+            let output = run_filter(&input, &ordered_options(MessageOrder::Topic));
+            let entries = output_topic_log_times(&output);
+
+            let topics: Vec<&str> = entries.iter().map(|(topic, _)| topic.as_str()).collect();
+            assert_eq!(
+                topics,
+                vec![
+                    "/alpha", "/alpha", "/alpha", "/alpha", "/alpha", "/beta", "/beta", "/beta",
+                    "/beta", "/beta"
+                ],
+                "each channel's messages should be grouped together (chunked={chunked}, summaryless={summaryless})"
+            );
+            let alpha_log_times: Vec<u64> =
+                entries[..5].iter().map(|(_, log_time)| *log_time).collect();
+            assert_eq!(
+                alpha_log_times,
+                vec![0, 1, 2, 3, 4],
+                "messages within a channel should ascend by log time"
+            );
+        }
+    }
+
+    #[test]
+    fn topic_isolates_each_channel_into_its_own_chunk() {
+        let input = write_multichannel_input(true, false);
+        // Sanity: this fixture takes the indexed path.
+        let summary = mcap::Summary::read(&input)
+            .expect("summary read")
+            .expect("summary present");
+        assert!(!summary.chunk_indexes.is_empty());
+
+        let output = run_filter(&input, &ordered_options(MessageOrder::Topic));
+        let summary = mcap::Summary::read(&output)
+            .expect("summary read")
+            .expect("summary present");
+        assert_eq!(
+            summary.chunk_indexes.len(),
+            2,
+            "topic ordering should place each channel in its own chunk"
+        );
+        for chunk_index in &summary.chunk_indexes {
+            assert_eq!(
+                chunk_index.message_index_offsets.len(),
+                1,
+                "each chunk should contain exactly one channel"
+            );
+        }
+    }
+
+    #[test]
+    fn topic_folds_last_per_channel_seeds_into_their_channel_chunks() {
+        // `topic` combined with `--last-per-channel-topics`: each matching channel's pre-start seed
+        // is grouped into that channel's own chunk (ahead of its window messages) rather than
+        // emitted as a separate cross-topic preamble, so every output chunk holds one channel.
+        let input = write_filter_test_input(true, false);
+        let opts = ResolvedOptions {
+            last_per_channel_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            start: 50,
+            order: MessageOrder::Topic,
+            ..include_all_options()
+        };
+        let output = run_filter(&input, &opts);
+
+        let summary = mcap::Summary::read(&output)
+            .expect("summary read")
+            .expect("summary present");
+        let mut chunks = summary.chunk_indexes.clone();
+        chunks.sort_by_key(|chunk| chunk.chunk_start_offset);
+
+        for chunk in &chunks {
+            // Full topic isolation: no chunk mixes channels, even with the folded seeds.
+            assert_eq!(
+                chunk.message_index_offsets.len(),
+                1,
+                "each chunk should hold exactly one channel"
+            );
+            let channel_id = *chunk
+                .message_index_offsets
+                .keys()
+                .next()
+                .expect("chunk has a channel");
+            let topic = &summary
+                .channels
+                .get(&channel_id)
+                .expect("channel present")
+                .topic;
+            if topic.starts_with("camera_") {
+                // The seed (log time 49, before --start) is folded into the channel's chunk.
+                assert!(
+                    chunk.message_start_time < 50,
+                    "seeded channel chunk should start at its pre-start seed"
+                );
+            } else {
+                // Channels without a seed contain only window messages (log time >= --start).
+                assert_eq!(
+                    chunk.message_start_time, 50,
+                    "non-seeded channel chunk should start at the window"
+                );
+            }
         }
     }
 

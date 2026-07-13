@@ -3,8 +3,8 @@
 //! It is a thin preset over the shared [`crate::rewrite`] engine: `sort` is `filter` with
 //! `--order` defaulting to `log_time` instead of `preserve`. The engine handles reading (indexed
 //! or summaryless), ordering, and the standardized record placement (metadata first, attachments
-//! last); `sort` only supplies the preset options. `--order` stays a real flag so future modes
-//! (for example `publish_time`) apply to `sort` too.
+//! last); `sort` only supplies the preset options. `--order` is a real flag, so its other modes
+//! (`preserve` and `topic`) apply to `sort` too.
 use anyhow::Result;
 
 use crate::cli::SortCommand;
@@ -226,8 +226,8 @@ mod tests {
 
     #[test]
     fn order_preserve_keeps_stored_order() {
-        // `--order` remains a real flag; `preserve` copies the input's stored order rather than
-        // sorting, so future modes (for example `publish_time`) can slot in the same way.
+        // `--order` is a real flag; `preserve` copies the input's stored order rather than
+        // sorting.
         let output = run_sort(build_out_of_order_indexed_input(), |input, out| {
             let mut command = sort_command(input.clone(), out.clone());
             command.order = MessageOrder::Preserve;
@@ -237,6 +237,71 @@ mod tests {
             output_log_times(&output),
             vec![30, 10, 20],
             "preserve should keep the input's stored order"
+        );
+    }
+
+    /// Indexed input with two channels (`/alpha`, `/beta`) interleaved in log-time order, so the
+    /// `topic` ordering is observably different when driven through the `sort` command preset.
+    fn build_multichannel_indexed_input() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .library("test-recorder/0.0")
+                .create(&mut output)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let alpha = writer
+                .add_channel(schema_id, "/alpha", "json", &BTreeMap::new())
+                .expect("alpha");
+            let beta = writer
+                .add_channel(schema_id, "/beta", "json", &BTreeMap::new())
+                .expect("beta");
+            for t in 0..5u64 {
+                for (channel_id, payload) in [(beta, b"b".as_slice()), (alpha, b"a")] {
+                    writer
+                        .write_to_known_channel(
+                            &MessageHeader {
+                                channel_id,
+                                sequence: t as u32,
+                                log_time: t,
+                                publish_time: t,
+                            },
+                            payload,
+                        )
+                        .expect("message");
+                }
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    fn output_topics(output: &[u8]) -> Vec<String> {
+        mcap::MessageStream::new(output)
+            .expect("message stream")
+            .map(|message| message.expect("message").channel.topic.clone())
+            .collect()
+    }
+
+    #[test]
+    fn order_topic_groups_channels() {
+        // End-to-end through the `sort` command: `--order topic` groups each channel's messages
+        // together. Chunk isolation is covered by the engine tests in `rewrite::single`.
+        let output = run_sort(build_multichannel_indexed_input(), |input, out| {
+            let mut command = sort_command(input.clone(), out.clone());
+            command.order = MessageOrder::Topic;
+            command
+        });
+
+        assert_eq!(
+            output_topics(&output),
+            vec![
+                "/alpha", "/alpha", "/alpha", "/alpha", "/alpha", "/beta", "/beta", "/beta",
+                "/beta", "/beta"
+            ],
+            "topic ordering should group each channel's messages together"
         );
     }
 

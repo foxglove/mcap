@@ -678,11 +678,15 @@ mod tests {
             other => panic!("expected filter command, got {other:?}"),
         }
 
-        for value in ["log_time", "log-time"] {
+        for (value, expected) in [
+            ("log_time", MessageOrder::LogTime),
+            ("log-time", MessageOrder::LogTime),
+            ("topic", MessageOrder::Topic),
+        ] {
             let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order", value])
                 .unwrap_or_else(|_| panic!("filter should parse --order {value}"));
             match args.command {
-                Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::LogTime),
+                Command::Filter(filter) => assert_eq!(filter.order, expected),
                 other => panic!("expected filter command, got {other:?}"),
             }
         }
@@ -808,8 +812,8 @@ mod tests {
                 },
                 compression: CompressionFormat::None,
                 no_chunks: true,
-                // `--order` stays a real flag on `sort`, so it can be overridden (and future
-                // modes like publish_time can be added) rather than being locked to log_time.
+                // `--order` is a real flag on `sort`, so it can be overridden rather than being
+                // locked to its log_time default.
                 order: MessageOrder::Preserve,
             })
         );
