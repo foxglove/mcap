@@ -99,6 +99,12 @@ fn filter_indexed<W: Write + Seek>(
         })?;
     }
 
+    // For `topic` ordering, fold each last-per-channel seed into its channel's group (below) so the
+    // channel — seed included — stays in its own chunk, rather than emitting a separate cross-topic
+    // preamble. The other orders keep the log-time preamble written up front.
+    let fold_seeds_into_groups = matches!(opts.order, MessageOrder::Topic);
+    let mut pre_start_buffered = Vec::<BufferedMessage>::new();
+
     if !opts.last_per_channel_topics.is_empty() && opts.start > 0 {
         let target_topics: BTreeSet<String> = summary
             .channels
@@ -152,14 +158,11 @@ fn filter_indexed<W: Write + Seek>(
                 }
             }
 
-            // These per-channel seed messages are always emitted as a log-time-sorted preamble
-            // ahead of the window, independent of `opts.order`. `--last-per-channel` is a
-            // log-time-window feature (the latest value on each topic as of `--start`), and its
-            // records are relocated here from their original positions before the window, so there
-            // is no meaningful stored order to "preserve" for them; log-time order keeps the
-            // preamble deterministic and monotonic up to the window boundary. (The `IndexedReader`
-            // does not surface per-message file offsets, so honoring `preserve` here would require
-            // a library change or an extra pass for no practical benefit.)
+            // `--last-per-channel` is a log-time-window feature (the latest value on each topic as
+            // of `--start`), and its records are relocated from before the window, so there is no
+            // meaningful stored order to "preserve"; a log-time sort keeps them deterministic. For
+            // `topic` these seeds are folded into their channel's group so each channel — seed
+            // included — stays in one chunk; the other orders emit them as a preamble up front.
             pre_start_messages.sort_by_key(|message| {
                 (
                     message.log_time,
@@ -169,16 +172,30 @@ fn filter_indexed<W: Write + Seek>(
                 )
             });
             for message in pre_start_messages {
-                let channel = summary.channels.get(&message.channel_id).ok_or_else(|| {
-                    anyhow::anyhow!("message references unknown channel {}", message.channel_id)
-                })?;
-                writer.write(&mcap::Message {
-                    channel: channel.clone(),
-                    sequence: message.sequence,
-                    log_time: message.log_time,
-                    publish_time: message.publish_time,
-                    data: Cow::Borrowed(message.data.as_slice()),
-                })?;
+                let channel = summary
+                    .channels
+                    .get(&message.channel_id)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("message references unknown channel {}", message.channel_id)
+                    })?
+                    .clone();
+                if fold_seeds_into_groups {
+                    pre_start_buffered.push(BufferedMessage {
+                        channel,
+                        sequence: message.sequence,
+                        log_time: message.log_time,
+                        publish_time: message.publish_time,
+                        data: message.data,
+                    });
+                } else {
+                    writer.write(&mcap::Message {
+                        channel,
+                        sequence: message.sequence,
+                        log_time: message.log_time,
+                        publish_time: message.publish_time,
+                        data: Cow::Borrowed(message.data.as_slice()),
+                    })?;
+                }
             }
         }
     }
@@ -210,7 +227,9 @@ fn filter_indexed<W: Write + Seek>(
             summary,
             indexed_opts.with_order(read_order),
         )?;
-        let mut buffered_messages = Vec::<BufferedMessage>::new();
+        // For `topic`, start from the folded last-per-channel seeds (empty otherwise); the window
+        // messages append below and `write_ordered_buffer` groups each channel, seeds and all.
+        let mut buffered_messages = pre_start_buffered;
         while let Some(event) = reader.next_event() {
             match event? {
                 mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
@@ -296,10 +315,9 @@ fn write_ordered_buffer<W: Write + Seek>(
     let mut previous_channel_id: Option<u16> = None;
     for message in &messages {
         if group_by_channel {
-            // Flush before each channel, including the first: any records written earlier (e.g. a
-            // last-per-channel preamble) leave a chunk open, and the first grouped channel must not
-            // land in it. Flushing with no open chunk is a no-op.
-            if previous_channel_id != Some(message.channel.id) {
+            // Messages are grouped by channel, so flushing at each channel change puts every
+            // channel in its own chunk(s). The first message opens the first chunk itself.
+            if previous_channel_id.is_some_and(|previous| previous != message.channel.id) {
                 writer
                     .flush()
                     .context("failed to flush chunk between channels")?;
@@ -1660,10 +1678,10 @@ mod tests {
     }
 
     #[test]
-    fn topic_isolates_channels_after_last_per_channel_preamble() {
-        // `topic` combined with `--last-per-channel-topics`: the pre-start preamble is written
-        // directly and leaves a chunk open. The first grouped channel must start its own chunk
-        // rather than leaking into that preamble chunk.
+    fn topic_folds_last_per_channel_seeds_into_their_channel_chunks() {
+        // `topic` combined with `--last-per-channel-topics`: each matching channel's pre-start seed
+        // is grouped into that channel's own chunk (ahead of its window messages) rather than
+        // emitted as a separate cross-topic preamble, so every output chunk holds one channel.
         let input = write_filter_test_input(true, false);
         let opts = ResolvedOptions {
             last_per_channel_topics: vec![Regex::new("^camera_.*$").expect("regex")],
@@ -1679,19 +1697,36 @@ mod tests {
         let mut chunks = summary.chunk_indexes.clone();
         chunks.sort_by_key(|chunk| chunk.chunk_start_offset);
 
-        // The leading preamble chunk holds only the pre-start seed messages (log time < start); it
-        // must not absorb any grouped window message (which would push its end time to >= start).
-        assert!(
-            chunks[0].message_end_time < 50,
-            "preamble chunk should not absorb window messages"
-        );
-        // Every grouped channel that follows occupies its own chunk.
-        for chunk in &chunks[1..] {
+        for chunk in &chunks {
+            // Full topic isolation: no chunk mixes channels, even with the folded seeds.
             assert_eq!(
                 chunk.message_index_offsets.len(),
                 1,
-                "each grouped channel should occupy its own chunk"
+                "each chunk should hold exactly one channel"
             );
+            let channel_id = *chunk
+                .message_index_offsets
+                .keys()
+                .next()
+                .expect("chunk has a channel");
+            let topic = &summary
+                .channels
+                .get(&channel_id)
+                .expect("channel present")
+                .topic;
+            if topic.starts_with("camera_") {
+                // The seed (log time 49, before --start) is folded into the channel's chunk.
+                assert!(
+                    chunk.message_start_time < 50,
+                    "seeded channel chunk should start at its pre-start seed"
+                );
+            } else {
+                // Channels without a seed contain only window messages (log time >= --start).
+                assert_eq!(
+                    chunk.message_start_time, 50,
+                    "non-seeded channel chunk should start at the window"
+                );
+            }
         }
     }
 
