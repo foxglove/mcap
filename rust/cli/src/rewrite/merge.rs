@@ -5,7 +5,7 @@
 //! deduplication, and the k-way merge heap).
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
-use std::io::{IsTerminal as _, Seek, Write};
+use std::io::{Seek, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -176,18 +176,8 @@ pub(crate) fn run_merge(opts: MergeOptions, source_options: SourceOptions) -> Re
         })
         .collect();
 
-    if let Some(output_path) = &opts.output {
-        let output = std::fs::File::create(output_path)
-            .with_context(|| format!("failed to open '{}' for writing", output_path.display()))?;
-        merge_inputs(&input_refs, output, &opts, false)
-    } else {
-        if std::io::stdout().is_terminal() {
-            bail!("{}", source::PLEASE_REDIRECT);
-        }
-        let stdout = std::io::stdout();
-        let output = mcap::write::NoSeek::new(stdout.lock());
-        merge_inputs(&input_refs, output, &opts, true)
-    }
+    let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
+    merge_inputs(&input_refs, sink, &opts, disable_seeking)
 }
 
 fn merge_inputs<W: Write + Seek>(

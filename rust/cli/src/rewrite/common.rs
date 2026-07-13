@@ -1,7 +1,8 @@
 //! Low-level helpers shared by the single-input rewrite pipeline ([`super::single`]) and the
 //! multi-input merge pipeline ([`super::merge`]): input slicing, summary/index inspection, the
 //! writer builder, and the index-or-scan traversals for metadata and attachments.
-use std::io::{Seek, Write};
+use std::io::{IsTerminal as _, Seek, Write};
+use std::path::Path;
 
 use anyhow::{bail, Context, Result};
 
@@ -41,6 +42,58 @@ pub(crate) fn create_writer<W: Write + Seek>(
     write_options
         .create(sink)
         .context("failed to create mcap writer")
+}
+
+/// The output a rewrite writes to: a file, or stdout wrapped so the writer treats it as
+/// non-seekable. A single type lets both entrypoints hand any output to the same generic writer.
+pub(crate) enum OutputSink {
+    File(std::fs::File),
+    Stdout(mcap::write::NoSeek<std::io::StdoutLock<'static>>),
+}
+
+impl Write for OutputSink {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match self {
+            OutputSink::File(file) => file.write(buf),
+            OutputSink::Stdout(stdout) => stdout.write(buf),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        match self {
+            OutputSink::File(file) => file.flush(),
+            OutputSink::Stdout(stdout) => stdout.flush(),
+        }
+    }
+}
+
+impl Seek for OutputSink {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        match self {
+            OutputSink::File(file) => file.seek(pos),
+            OutputSink::Stdout(stdout) => stdout.seek(pos),
+        }
+    }
+}
+
+/// Opens the destination for a rewrite: the given path, or stdout when `None`. Returns the sink and
+/// whether the writer must disable seeking (stdout can't seek). Errors if stdout is a terminal, to
+/// avoid dumping binary there.
+pub(crate) fn open_output(output: Option<&Path>) -> Result<(OutputSink, bool)> {
+    match output {
+        Some(path) => {
+            let file = std::fs::File::create(path)
+                .with_context(|| format!("failed to open '{}' for writing", path.display()))?;
+            Ok((OutputSink::File(file), false))
+        }
+        None => {
+            if std::io::stdout().is_terminal() {
+                bail!("{}", crate::source::PLEASE_REDIRECT);
+            }
+            let stdout = mcap::write::NoSeek::new(std::io::stdout().lock());
+            Ok((OutputSink::Stdout(stdout), true))
+        }
+    }
 }
 
 /// Reads the leading [`Header`](mcap::records::Header) record, if present. Used to carry the input

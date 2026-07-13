@@ -3,7 +3,7 @@
 //! placing records in the standard layout. Multi-input merges go through [`super::merge`] instead.
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
-use std::io::{IsTerminal as _, Seek, Write};
+use std::io::{Seek, Write};
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
@@ -20,18 +20,8 @@ pub(crate) fn run(args: RewriteOptions, source_options: source::SourceOptions) -
     }
     let input = source::load_input(args.file.as_deref(), source_options)?;
 
-    if let Some(output) = &opts.output {
-        let writer = std::fs::File::create(output)
-            .with_context(|| format!("failed to open '{}' for writing", output.display()))?;
-        filter_to_writer(input.as_slice(), writer, &opts, false)
-    } else {
-        if std::io::stdout().is_terminal() {
-            bail!("{}", source::PLEASE_REDIRECT);
-        }
-        let stdout = std::io::stdout();
-        let writer = mcap::write::NoSeek::new(stdout.lock());
-        filter_to_writer(input.as_slice(), writer, &opts, true)
-    }
+    let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
+    filter_to_writer(input.as_slice(), sink, &opts, disable_seeking)
 }
 
 fn filter_to_writer<W: Write + Seek>(
