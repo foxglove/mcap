@@ -514,7 +514,7 @@ mod tests {
 
     #[test]
     fn rejects_compress_order_flag() {
-        // Reordering was removed from `compress`; only `sort` reorders now.
+        // `--order` was removed from `compress`; reordering now lives on `filter`/`sort`.
         let err = Args::try_parse_from(["mcap", "compress", "in.mcap", "--order", "log_time"])
             .expect_err("compress should no longer accept --order");
         assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);
@@ -574,7 +574,7 @@ mod tests {
 
     #[test]
     fn rejects_decompress_order_flag() {
-        // Reordering was removed from `decompress`; only `sort` reorders now.
+        // `--order` was removed from `decompress`; reordering now lives on `filter`/`sort`.
         let err = Args::try_parse_from(["mcap", "decompress", "in.mcap", "--order", "log_time"])
             .expect_err("decompress should no longer accept --order");
         assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);

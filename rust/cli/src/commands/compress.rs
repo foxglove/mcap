@@ -6,10 +6,9 @@ use crate::rewrite::{self, RewriteOptions};
 
 pub fn run(ctx: &CommandContext, args: CompressCommand) -> Result<()> {
     args.common.warn_deprecations();
-    // `filter`-style rewrite with a preset: chunk with the chosen compression, keeping metadata
-    // and attachments in their stored order. Paths, chunk size, and `--no-crc` come from the shared
-    // args. `compress` doesn't reorder (use `sort --compression=…` for that), so this only changes
-    // compression.
+    // `filter`-style rewrite with a preset: chunk with the chosen compression, keeping metadata and
+    // attachments and preserving the input's message order (`compress` doesn't reorder). Paths,
+    // chunk size, and `--no-crc` come from the shared args.
     let options = RewriteOptions::from(&args.common).compression(args.compression.to_compression());
     rewrite::run(
         options,
