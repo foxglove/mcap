@@ -224,7 +224,9 @@ fn filter_indexed<W: Write + Seek>(
     // Attachments are written last, kept regardless of the message time range.
     if opts.include_attachments {
         common::for_each_attachment(input, Some(summary), |attachment| {
-            writer.attach(&attachment)?;
+            writer
+                .attach(&attachment)
+                .with_context(|| format!("failed to write attachment '{}'", attachment.name))?;
             Ok(())
         })?;
     }
@@ -365,7 +367,9 @@ fn filter_linear<W: Write + Seek>(
 
     // Attachments are written last, after all messages (see module docs).
     for attachment in &pending_attachments {
-        writer.attach(attachment)?;
+        writer
+            .attach(attachment)
+            .with_context(|| format!("failed to write attachment '{}'", attachment.name))?;
     }
 
     Ok(())
