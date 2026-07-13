@@ -1380,6 +1380,60 @@ mod tests {
     }
 
     #[test]
+    fn merge_single_input_force_coalesces_intra_file_channels() {
+        // One file with two channels sharing topic/schema/encoding but differing only in
+        // metadata. `--coalesce-channels force` collapses them into a single renumbered
+        // output channel. This only happens because merge-of-one uses the merge path;
+        // routing it through the single-input rewrite path would make the flag a no-op.
+        let input = build_mcap(
+            "profile",
+            &[
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/topic".to_string(),
+                    metadata: BTreeMap::from([(String::from("host"), String::from("a"))]),
+                    log_time: 0,
+                    payload: vec![1],
+                },
+                TestMessage {
+                    channel_id: 2,
+                    topic: "/topic".to_string(),
+                    metadata: BTreeMap::from([(String::from("host"), String::from("b"))]),
+                    log_time: 1,
+                    payload: vec![2],
+                },
+            ],
+            &[],
+            &[],
+            true,
+            true,
+        );
+
+        let merged = merge_bytes(
+            &[("only", input.as_slice())],
+            CoalesceChannels::Force,
+            false,
+        )
+        .expect("merge");
+
+        let summary = mcap::Summary::read(&merged)
+            .expect("summary")
+            .expect("present");
+        assert_eq!(summary.channels.len(), 1);
+        let output_channel_id = *summary.channels.keys().next().expect("channel");
+        assert_eq!(output_channel_id, 1);
+
+        let messages = mcap::MessageStream::new(&merged)
+            .expect("stream")
+            .map(|message| {
+                let message = message.expect("message");
+                (message.channel.id, message.log_time)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(messages, vec![(1, 0), (1, 1)]);
+    }
+
+    #[test]
     fn merge_auto_keeps_channels_distinct_when_metadata_differs() {
         let left = build_mcap(
             "profile",
