@@ -1,4 +1,4 @@
-//! Low-level helpers shared by the single-input rewrite pipeline ([`super::engine`]) and the
+//! Low-level helpers shared by the single-input rewrite pipeline ([`super::single`]) and the
 //! multi-input merge pipeline ([`super::merge`]): input slicing, summary/index inspection, the
 //! writer builder, and the index-or-scan traversals for metadata and attachments.
 use std::io::{Seek, Write};

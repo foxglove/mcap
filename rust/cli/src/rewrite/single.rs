@@ -1,113 +1,22 @@
-//! The unified [`run`] entrypoint for every rewrite command and `merge`, plus the single-input
-//! read / select / place pipeline. [`run`] loads the inputs, builds the writer, and dispatches to
-//! the single-input path here or the multi-input [`super::merge`] path based on input count.
+//! The single-input rewrite pipeline: read one MCAP and write a new one, choosing an indexed or
+//! linear read path, applying record selection (topic/time range, `--last-per-channel`), and
+//! placing records in the standard layout. Driven by [`super::run`]; multi-input merges go through
+//! [`super::merge`] instead.
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
-use std::io::{IsTerminal as _, Seek, Write};
+use std::io::{Seek, Write};
 use std::sync::Arc;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 
-use super::common::{self, InputRef};
-use super::merge;
-use super::options::{include_topic, resolve_options, ResolvedOptions, RewriteOptions};
+use super::common;
+use super::options::{include_topic, ResolvedOptions};
 use crate::cli::MessageOrder;
-use crate::source::{self, InputData};
 
-/// The entrypoint for every rewrite command (`filter`/`sort`/`compress`/`decompress`) and `merge`.
-/// Loads the inputs (an empty file list means a single input from stdin), then dispatches on count:
-/// more than one input is a k-way merge, otherwise a single-input rewrite that preserves channel
-/// IDs. The merge-only knobs on [`RewriteOptions`] are inert for a single input.
-pub(crate) fn run(args: RewriteOptions, source_options: source::SourceOptions) -> Result<()> {
-    let opts = resolve_options(&args)?;
-
-    if let Some(output) = opts.output.as_deref() {
-        for file in &args.files {
-            source::ensure_distinct_local_input_output(file, output)?;
-        }
-    }
-
-    // An empty file list means a single input read from stdin; otherwise load each path.
-    let mut mapped_inputs: Vec<InputData> = Vec::new();
-    let mut names: Vec<String> = Vec::new();
-    if args.files.is_empty() {
-        mapped_inputs.push(source::load_input(None, source_options)?);
-        names.push("<stdin>".to_string());
-    } else {
-        for file in &args.files {
-            mapped_inputs.push(source::load_path(file, source_options)?);
-            names.push(source::redacted_display(file));
-        }
-    }
-    let inputs: Vec<InputRef<'_>> = mapped_inputs
-        .iter()
-        .zip(names.iter())
-        .map(|(mapped, name)| InputRef {
-            name: name.as_str(),
-            data: mapped.as_slice(),
-        })
-        .collect();
-
-    if let Some(output) = &opts.output {
-        let sink = std::fs::File::create(output)
-            .with_context(|| format!("failed to open '{}' for writing", output.display()))?;
-        run_with_writer(sink, false, &inputs, &args, &opts)
-    } else {
-        if std::io::stdout().is_terminal() {
-            bail!("{}", source::PLEASE_REDIRECT);
-        }
-        let stdout = std::io::stdout();
-        let sink = mcap::write::NoSeek::new(stdout.lock());
-        run_with_writer(sink, true, &inputs, &args, &opts)
-    }
-}
-
-/// Builds the output writer and dispatches the message phase by input count: multiple inputs are
-/// merged (with cross-input channel-ID remapping and coalescing); a single input is rewritten with
-/// its channel IDs preserved.
-fn run_with_writer<W: Write + Seek>(
-    sink: W,
-    disable_seeking: bool,
-    inputs: &[InputRef<'_>],
-    args: &RewriteOptions,
-    opts: &ResolvedOptions,
-) -> Result<()> {
-    let mut writer = common::create_writer(
-        sink,
-        &common::WriterConfig {
-            profile: common::common_profile(inputs)?,
-            use_chunks: opts.use_chunks,
-            chunk_size: opts.chunk_size,
-            compression: opts.compression,
-            include_crc: opts.include_crc,
-        },
-        disable_seeking,
-    )?;
-
-    if inputs.len() > 1 {
-        merge::write_merged(
-            &mut writer,
-            inputs,
-            args.coalesce_channels,
-            args.dedup_metadata,
-            args.allow_duplicate_metadata,
-        )?;
-    } else {
-        let input = inputs.first().expect("at least one input is always loaded");
-        write_single(
-            &mut writer,
-            input.data,
-            opts,
-            args.dedup_metadata,
-            args.allow_duplicate_metadata,
-        )?;
-    }
-
-    writer.finish().context("failed to finish mcap writer")?;
-    Ok(())
-}
-
-fn write_single<W: Write + Seek>(
+/// Rewrites a single input into `writer`: metadata first, then the selected messages (in stored or
+/// log-time order), then attachments. Chooses the indexed fast path when the summary proves every
+/// message is indexed, otherwise a lossless linear scan. Channel IDs are preserved.
+pub(super) fn write_single<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     input: &[u8],
     opts: &ResolvedOptions,
@@ -504,8 +413,8 @@ mod tests {
         file: Option<std::path::PathBuf>,
         output: Option<std::path::PathBuf>,
         chunk_size: u64,
-    ) -> super::RewriteOptions {
-        super::RewriteOptions::from(&CommonRewriteArgs {
+    ) -> crate::rewrite::RewriteOptions {
+        crate::rewrite::RewriteOptions::from(&CommonRewriteArgs {
             file,
             output,
             output_file: None,
@@ -1382,7 +1291,7 @@ mod tests {
         options.use_chunks = false;
         options.compression = None;
 
-        super::run(options, crate::source::SourceOptions::default())
+        crate::rewrite::run(options, crate::source::SourceOptions::default())
             .expect("rewrite should succeed");
         let output = std::fs::read(&output_path).expect("read output");
         let summary = mcap::Summary::read(&output)
@@ -1415,7 +1324,7 @@ mod tests {
             Some(path.clone()),
             mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
         );
-        let err = super::run(options, crate::source::SourceOptions::default())
+        let err = crate::rewrite::run(options, crate::source::SourceOptions::default())
             .expect_err("same input/output should fail");
 
         assert!(err.to_string().contains("input and output paths"));
@@ -1443,7 +1352,7 @@ mod tests {
             MessageOrder::Preserve,
             "the shared rewrite defaults should preserve order"
         );
-        super::run(options, crate::source::SourceOptions::default())
+        crate::rewrite::run(options, crate::source::SourceOptions::default())
             .expect("rewrite should succeed");
 
         let output = std::fs::read(&output_path).expect("read output");

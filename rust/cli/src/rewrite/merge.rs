@@ -1,6 +1,6 @@
 //! The multi-input `merge` pipeline: k-way merge the messages of several MCAP inputs into one
 //! output, ordered by log time. Shares the writer setup, summary/index inspection, and metadata /
-//! attachment traversals with the single-input [`super::engine`] via [`super::common`]; the parts
+//! attachment traversals with the single-input [`super::single`] via [`super::common`]; the parts
 //! unique to merging live here (cross-input schema/channel remapping and coalescing, metadata
 //! deduplication, and the k-way merge heap).
 use std::cmp::Ordering;
@@ -122,7 +122,7 @@ struct IdMaps {
 
 /// Writes the merged data section into an existing writer: metadata (deduplicated across inputs)
 /// first, then the k-way log-time-merged messages, then attachments. The caller owns writer
-/// creation, the profile, and `finish` (see [`super::engine::run`]).
+/// creation, the profile, and `finish` (see [`super::run`]).
 pub(super) fn write_merged<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     inputs: &[InputRef<'_>],
