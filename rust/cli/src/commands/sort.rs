@@ -286,7 +286,9 @@ mod tests {
     }
 
     #[test]
-    fn order_topic_groups_each_channel_into_its_own_chunk() {
+    fn order_topic_groups_channels() {
+        // End-to-end through the `sort` command: `--order topic` groups each channel's messages
+        // together. Chunk isolation is covered by the engine tests in `rewrite::single`.
         let output = run_sort(build_multichannel_indexed_input(), |input, out| {
             let mut command = sort_command(input.clone(), out.clone());
             command.order = MessageOrder::Topic;
@@ -300,15 +302,6 @@ mod tests {
                 "/beta", "/beta"
             ],
             "topic ordering should group each channel's messages together"
-        );
-
-        let summary = mcap::Summary::read(&output)
-            .expect("summary read")
-            .expect("summary present");
-        assert_eq!(
-            summary.chunk_indexes.len(),
-            2,
-            "topic ordering should place each channel in its own chunk"
         );
     }
 

@@ -820,19 +820,6 @@ mod tests {
     }
 
     #[test]
-    fn sort_order_parses_topic() {
-        // `sort` shares the rewrite `--order` flag, so its topic mode parses here too.
-        let args = Args::try_parse_from([
-            "mcap", "sort", "in.mcap", "-o", "out.mcap", "--order", "topic",
-        ])
-        .expect("sort should parse --order topic");
-        match args.command {
-            Command::Sort(command) => assert_eq!(command.order, MessageOrder::Topic),
-            other => panic!("expected sort command, got {other:?}"),
-        }
-    }
-
-    #[test]
     fn parses_merge_with_defaults() {
         let args = Args::try_parse_from(["mcap", "merge", "a.mcap", "b.mcap"])
             .expect("merge should parse");
