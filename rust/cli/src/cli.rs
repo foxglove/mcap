@@ -114,8 +114,9 @@ pub struct CompletionCommand {
 }
 
 /// Options shared by every rewrite-based command (`filter`, `compress`, `decompress`, `sort`).
-/// Each command flattens these and adds only the knobs that apply to it, so the common definitions
-/// (and their help text) live in one place.
+/// `filter`, `compress`, and `sort` flatten these and add the knobs that apply to them; `decompress`
+/// needs nothing more and is an alias for this struct. Keeping the common definitions (and their
+/// help text) in one place keeps the commands consistent.
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct CommonRewriteArgs {
     /// Input MCAP file path. If omitted, reads from stdin.
@@ -164,11 +165,9 @@ pub struct CompressCommand {
     pub compression: CompressionFormat,
 }
 
-#[derive(clap::Args, Debug, PartialEq, Eq)]
-pub struct DecompressCommand {
-    #[command(flatten)]
-    pub common: CommonRewriteArgs,
-}
+/// `decompress` adds no knobs of its own (it just forces compression off), so it is the shared
+/// rewrite args directly rather than an empty wrapper around them.
+pub type DecompressCommand = CommonRewriteArgs;
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 #[command(arg_required_else_help = true)]

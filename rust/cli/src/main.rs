@@ -42,9 +42,9 @@ mod tests {
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
         CoalesceChannels, Command, CommonRewriteArgs, CompletionCommand, CompressCommand,
-        CompressionFormat, ConvertCommand, DecompressCommand, DoctorCommand, DuCommand,
-        FilterCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand,
-        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        CompressionFormat, ConvertCommand, DoctorCommand, DuCommand, FilterCommand,
+        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
+        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
         ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, MessageOrder,
         RecoverCommand, SortCommand,
     };
@@ -533,14 +533,12 @@ mod tests {
             .expect("decompress should parse");
         assert_eq!(
             args.command,
-            Command::Decompress(DecompressCommand {
-                common: CommonRewriteArgs {
-                    file: Some("in.mcap".into()),
-                    output: None,
-                    output_file: None,
-                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                    no_crc: false,
-                },
+            Command::Decompress(CommonRewriteArgs {
+                file: Some("in.mcap".into()),
+                output: None,
+                output_file: None,
+                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                no_crc: false,
             })
         );
     }
@@ -560,14 +558,12 @@ mod tests {
         .expect("decompress with flags should parse");
         assert_eq!(
             args.command,
-            Command::Decompress(DecompressCommand {
-                common: CommonRewriteArgs {
-                    file: Some("in.mcap".into()),
-                    output: Some("out.mcap".into()),
-                    output_file: None,
-                    chunk_size: 2048,
-                    no_crc: true,
-                },
+            Command::Decompress(CommonRewriteArgs {
+                file: Some("in.mcap".into()),
+                output: Some("out.mcap".into()),
+                output_file: None,
+                chunk_size: 2048,
+                no_crc: true,
             })
         );
     }
