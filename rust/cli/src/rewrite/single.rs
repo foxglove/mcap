@@ -296,7 +296,10 @@ fn write_ordered_buffer<W: Write + Seek>(
     let mut previous_channel_id: Option<u16> = None;
     for message in &messages {
         if group_by_channel {
-            if previous_channel_id.is_some_and(|previous| previous != message.channel.id) {
+            // Flush before each channel, including the first: any records written earlier (e.g. a
+            // last-per-channel preamble) leave a chunk open, and the first grouped channel must not
+            // land in it. Flushing with no open chunk is a no-op.
+            if previous_channel_id != Some(message.channel.id) {
                 writer
                     .flush()
                     .context("failed to flush chunk between channels")?;
@@ -1652,6 +1655,42 @@ mod tests {
                 chunk_index.message_index_offsets.len(),
                 1,
                 "each chunk should contain exactly one channel"
+            );
+        }
+    }
+
+    #[test]
+    fn topic_isolates_channels_after_last_per_channel_preamble() {
+        // `topic` combined with `--last-per-channel-topics`: the pre-start preamble is written
+        // directly and leaves a chunk open. The first grouped channel must start its own chunk
+        // rather than leaking into that preamble chunk.
+        let input = write_filter_test_input(true, false);
+        let opts = ResolvedOptions {
+            last_per_channel_topics: vec![Regex::new("^camera_.*$").expect("regex")],
+            start: 50,
+            order: MessageOrder::Topic,
+            ..include_all_options()
+        };
+        let output = run_filter(&input, &opts);
+
+        let summary = mcap::Summary::read(&output)
+            .expect("summary read")
+            .expect("summary present");
+        let mut chunks = summary.chunk_indexes.clone();
+        chunks.sort_by_key(|chunk| chunk.chunk_start_offset);
+
+        // The leading preamble chunk holds only the pre-start seed messages (log time < start); it
+        // must not absorb any grouped window message (which would push its end time to >= start).
+        assert!(
+            chunks[0].message_end_time < 50,
+            "preamble chunk should not absorb window messages"
+        );
+        // Every grouped channel that follows occupies its own chunk.
+        for chunk in &chunks[1..] {
+            assert_eq!(
+                chunk.message_index_offsets.len(),
+                1,
+                "each grouped channel should occupy its own chunk"
             );
         }
     }

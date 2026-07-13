@@ -53,7 +53,7 @@ Run `mcap --help` for detailed usage information, or `mcap <command> --help` for
       list        List records of an MCAP file
       merge       Merge MCAP files
       recover     Recover data from a potentially corrupt MCAP file
-      sort        Read an MCAP file and write messages sorted by log time
+      sort        Read an MCAP file and write it back with messages reordered (log_time, preserve, or topic)
       help        Print this message or the help of the given subcommand(s)
 
     Options:

@@ -100,7 +100,7 @@ pub enum Command {
     Merge(MergeCommand),
     /// Recover data from a potentially corrupt MCAP file
     Recover(RecoverCommand),
-    /// Read an MCAP file and write messages sorted by log time
+    /// Read an MCAP file and write it back with messages reordered (log_time, preserve, or topic)
     Sort(SortCommand),
 }
 
@@ -368,6 +368,7 @@ pub enum MessageOrder {
     /// Group each channel's messages together (channels ordered by topic name, then channel ID),
     /// placing every channel in its own chunk(s) with its messages in ascending log time. This lets
     /// a single-topic reader fetch one contiguous byte range instead of scanning the whole file.
+    /// Buffers all selected messages in memory while reordering.
     #[value(name = "topic")]
     Topic,
 }
