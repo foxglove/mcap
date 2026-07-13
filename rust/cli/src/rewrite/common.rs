@@ -1,16 +1,13 @@
-//! Low-level helpers shared by the single-input rewrite pipeline ([`super::single`]) and the
-//! multi-input merge pipeline ([`super::merge`]): input slicing, summary/index inspection, the
-//! writer builder, and the index-or-scan traversals for metadata and attachments.
+//! Low-level helpers used across the rewrite module — by the [`super::run`] dispatcher and both the
+//! single-input ([`super::single`]) and multi-input ([`super::merge`]) pipelines: the writer
+//! builder, input slicing, header/profile reads, summary/index inspection, and the index-or-scan
+//! traversals for metadata and attachments.
 use std::io::{Seek, Write};
-use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 
-/// Number of bytes per message-index entry (a `(log_time, offset)` pair of `uint64`s).
-const MESSAGE_INDEX_ENTRY_SIZE: usize = 16;
-
-/// Output encoding for a rewritten MCAP. Both the single-input and merge pipelines build one of
-/// these and hand it to [`create_writer`] so the writer is configured identically.
+/// Output encoding for a rewritten MCAP. The dispatcher builds one of these and hands it to
+/// [`create_writer`] so the writer is configured identically regardless of input count.
 pub(crate) struct WriterConfig {
     pub(crate) profile: String,
     pub(crate) use_chunks: bool,
@@ -181,6 +178,9 @@ fn indexed_message_count(input: &[u8], summary: &mcap::Summary) -> Option<u64> {
     Some(indexed_messages)
 }
 
+/// Number of bytes per message-index entry (a `(log_time, offset)` pair of `uint64`s).
+const MESSAGE_INDEX_ENTRY_SIZE: usize = 16;
+
 fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
     let start = usize::try_from(offset).with_context(|| {
         format!("message index offset out of range for this platform: {offset}")
@@ -246,32 +246,6 @@ pub(crate) fn service_chunk_request(
     let chunk_data = checked_slice(input, offset, length)?;
     reader.insert_chunk_record_data(offset, chunk_data)?;
     Ok(())
-}
-
-/// Resolves a channel record against the known schemas into an owned [`mcap::Channel`].
-pub(crate) fn build_channel(
-    channel: &mcap::records::Channel,
-    schemas: &std::collections::HashMap<u16, Arc<mcap::Schema<'static>>>,
-) -> Result<Arc<mcap::Channel<'static>>> {
-    let schema = if channel.schema_id == 0 {
-        None
-    } else {
-        Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
-            anyhow::anyhow!(
-                "encountered channel with topic {} with unknown schema ID {}",
-                channel.topic,
-                channel.schema_id
-            )
-        })?)
-    };
-
-    Ok(Arc::new(mcap::Channel {
-        id: channel.id,
-        topic: channel.topic.clone(),
-        schema,
-        message_encoding: channel.message_encoding.clone(),
-        metadata: channel.metadata.clone(),
-    }))
 }
 
 /// Visits every metadata record in the input, preferring the summary index and falling back to a
@@ -404,4 +378,91 @@ pub(crate) fn write_metadata_record<W: Write + Seek>(
         state.names.insert(metadata.name.clone());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Builds a well-formed MessageIndex record whose entry array holds `entry_count` entries.
+    fn message_index_record(entry_count: usize) -> Vec<u8> {
+        let byte_len = (entry_count * MESSAGE_INDEX_ENTRY_SIZE) as u32;
+        let mut body = Vec::new();
+        body.extend_from_slice(&0u16.to_le_bytes()); // channel_id (not used by the count)
+        body.extend_from_slice(&byte_len.to_le_bytes()); // entry array byte length
+        body.extend_from_slice(&vec![0u8; byte_len as usize]); // entries
+        let mut record = vec![mcap::records::op::MESSAGE_INDEX];
+        record.extend_from_slice(&(body.len() as u64).to_le_bytes());
+        record.extend_from_slice(&body);
+        record
+    }
+
+    #[test]
+    fn message_index_count_counts_entries() {
+        assert_eq!(message_index_count(&message_index_record(0), 0).unwrap(), 0);
+        assert_eq!(message_index_count(&message_index_record(3), 0).unwrap(), 3);
+    }
+
+    #[test]
+    fn message_index_count_honors_a_nonzero_offset() {
+        let mut buf = vec![0xAAu8; 5]; // arbitrary leading bytes
+        buf.extend_from_slice(&message_index_record(2));
+        assert_eq!(message_index_count(&buf, 5).unwrap(), 2);
+    }
+
+    #[test]
+    fn message_index_count_rejects_wrong_opcode() {
+        let mut record = message_index_record(1);
+        record[0] = mcap::records::op::MESSAGE;
+        let err = message_index_count(&record, 0).unwrap_err();
+        assert!(err.to_string().contains("expected MessageIndex record"));
+    }
+
+    #[test]
+    fn message_index_count_rejects_misaligned_entries() {
+        // A 15-byte entry array is not a multiple of the 16-byte entry size.
+        let mut body = Vec::new();
+        body.extend_from_slice(&0u16.to_le_bytes());
+        body.extend_from_slice(&15u32.to_le_bytes());
+        body.extend_from_slice(&[0u8; 15]);
+        let mut record = vec![mcap::records::op::MESSAGE_INDEX];
+        record.extend_from_slice(&(body.len() as u64).to_le_bytes());
+        record.extend_from_slice(&body);
+        let err = message_index_count(&record, 0).unwrap_err();
+        assert!(err.to_string().contains("misaligned"));
+    }
+
+    #[test]
+    fn message_index_count_rejects_length_mismatch() {
+        let mut record = message_index_record(1); // byte_len 16, body 22, length 22
+                                                  // Shrink the declared record length so the body no longer equals 6 + byte_len.
+        record[1..9].copy_from_slice(&14u64.to_le_bytes());
+        let err = message_index_count(&record, 0).unwrap_err();
+        assert!(err.to_string().contains("length mismatch"));
+    }
+
+    #[test]
+    fn message_index_count_rejects_out_of_bounds_header() {
+        let err = message_index_count(&[], 0).unwrap_err();
+        assert!(err.to_string().contains("out of bounds"));
+    }
+
+    #[test]
+    fn checked_slice_returns_the_requested_range() {
+        assert_eq!(
+            checked_slice(&[0u8, 1, 2, 3, 4], 1, 2).unwrap().to_vec(),
+            vec![1u8, 2]
+        );
+    }
+
+    #[test]
+    fn checked_slice_rejects_out_of_bounds() {
+        let err = checked_slice(&[0u8, 1], 0, 5).unwrap_err();
+        assert!(err.to_string().contains("out of bounds"));
+    }
+
+    #[test]
+    fn checked_slice_rejects_overflow() {
+        assert!(checked_slice(&[0u8, 1, 2], u64::MAX, 1).is_err());
+    }
 }

@@ -286,7 +286,7 @@ fn filter_linear<W: Write + Seek>(
             }
             mcap::records::Record::Channel(channel) => {
                 if channel.schema_id == 0 || schemas.contains_key(&channel.schema_id) {
-                    let resolved = common::build_channel(&channel, &schemas)?;
+                    let resolved = build_channel(&channel, &schemas)?;
                     channels.insert(channel.id, resolved);
                 }
                 channel_defs.insert(channel.id, channel);
@@ -302,7 +302,7 @@ fn filter_linear<W: Write + Seek>(
                     let Some(channel_def) = channel_defs.get(&header.channel_id) else {
                         bail!("message references unknown channel {}", header.channel_id);
                     };
-                    let resolved = common::build_channel(channel_def, &schemas)?;
+                    let resolved = build_channel(channel_def, &schemas)?;
                     channels.insert(header.channel_id, resolved.clone());
                     resolved
                 };
@@ -367,6 +367,33 @@ fn filter_linear<W: Write + Seek>(
     }
 
     Ok(())
+}
+
+/// Resolves a channel record against the known schemas into an owned [`mcap::Channel`]. Used by the
+/// linear path to rebuild channels as it flattens the data section.
+fn build_channel(
+    channel: &mcap::records::Channel,
+    schemas: &HashMap<u16, Arc<mcap::Schema<'static>>>,
+) -> Result<Arc<mcap::Channel<'static>>> {
+    let schema = if channel.schema_id == 0 {
+        None
+    } else {
+        Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
+            anyhow::anyhow!(
+                "encountered channel with topic {} with unknown schema ID {}",
+                channel.topic,
+                channel.schema_id
+            )
+        })?)
+    };
+
+    Ok(Arc::new(mcap::Channel {
+        id: channel.id,
+        topic: channel.topic.clone(),
+        schema,
+        message_encoding: channel.message_encoding.clone(),
+        metadata: channel.metadata.clone(),
+    }))
 }
 
 #[cfg(test)]
