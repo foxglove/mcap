@@ -152,7 +152,9 @@ struct IdMaps {
     next_output_channel_id: u16,
 }
 
-pub(crate) fn run_merge(opts: MergeOptions, source_options: SourceOptions) -> Result<()> {
+/// The `merge` entrypoint: k-way merges the input files into one output ordered by log time.
+/// Re-exported as `rewrite::run_merge`.
+pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<()> {
     if let Some(output_path) = &opts.output {
         for input_path in &opts.files {
             source::ensure_distinct_local_input_output(input_path, output_path)?;
@@ -879,8 +881,8 @@ mod tests {
     }
 
     #[test]
-    fn run_merge_rejects_remote_input_without_scan_opt_in() {
-        let err = run_merge(
+    fn run_rejects_remote_input_without_scan_opt_in() {
+        let err = run(
             merge_options(
                 vec!["http://example.com/a.mcap".into()],
                 Some("out.mcap".into()),
@@ -893,13 +895,13 @@ mod tests {
     }
 
     #[test]
-    fn run_merge_rejects_same_input_and_output_without_truncating() {
+    fn run_rejects_same_input_and_output_without_truncating() {
         let input = build_mcap("profile", &[], &[], &[], true, true);
         let dir = tempfile::TempDir::new().expect("temp dir");
         let path = dir.path().join("same-path.mcap");
         std::fs::write(&path, &input).expect("write input");
 
-        let err = run_merge(
+        let err = run(
             merge_options(vec![path.clone()], Some(path.clone())),
             SourceOptions::default(),
         )

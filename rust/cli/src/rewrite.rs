@@ -24,6 +24,6 @@ mod merge;
 mod options;
 mod single;
 
-pub(crate) use merge::{run_merge, MergeOptions};
+pub(crate) use merge::{run as run_merge, MergeOptions};
 pub(crate) use options::RewriteOptions;
 pub(crate) use single::run;
