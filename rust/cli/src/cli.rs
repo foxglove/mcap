@@ -407,7 +407,11 @@ pub struct MergeCommand {
     pub files: Vec<PathBuf>,
 
     /// Output file path. If omitted, writes to stdout.
-    #[arg(short = 'o', long = "output-file")]
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+
+    /// Deprecated: use --output.
+    #[arg(long = "output-file", hide = true)]
     pub output_file: Option<PathBuf>,
 
     /// Compression algorithm for output file: zstd, lz4, or none
