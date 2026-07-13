@@ -226,7 +226,7 @@ mod tests {
 
     #[test]
     fn order_preserve_keeps_stored_order() {
-        // `--order` remains a real flag; `preserve` copies the input's stored order rather than
+        // `--order` is a real flag; `preserve` copies the input's stored order rather than
         // sorting.
         let output = run_sort(build_out_of_order_indexed_input(), |input, out| {
             let mut command = sort_command(input.clone(), out.clone());

@@ -198,8 +198,7 @@ fn filter_indexed<W: Write + Seek>(
         // `preserve` reads in stored (file) order; `log_time` and `topic` read in the reader's
         // log-time order. `preserve`/`log_time` stream straight to the writer (memory-bounded: one
         // chunk resident at a time), while `topic` is not an index order, so its messages are
-        // buffered here and re-sorted before writing. Buffering the selected set in memory is a
-        // known follow-up.
+        // buffered in memory here and re-sorted before writing.
         let read_order = match opts.order {
             MessageOrder::Preserve => mcap::sans_io::indexed_reader::ReadOrder::File,
             MessageOrder::LogTime | MessageOrder::Topic => {
