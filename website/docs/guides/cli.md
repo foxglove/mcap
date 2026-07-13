@@ -4,7 +4,7 @@ sidebar_position: 3
 
 # CLI
 
-The MCAP command line tool is useful for working with MCAP files.
+A command line tool for inspecting and manipulating MCAP files.
 
 ## Installation
 
@@ -36,6 +36,8 @@ Run `mcap --help` for detailed usage information, or `mcap <command> --help` for
 
     $ mcap --help
 
+    A command line tool for inspecting and manipulating MCAP files.
+
     Usage: mcap [OPTIONS] <COMMAND>
 
     Commands:
@@ -62,6 +64,12 @@ Run `mcap --help` for detailed usage information, or `mcap <command> --help` for
       -v, --verbose...         Verbosity (-v, -vv, -vvv, etc.)
       -h, --help               Print help
       -V, --version            Print version
+
+    Learn more:
+      Homepage       https://mcap.dev
+      Specification  https://mcap.dev/spec
+
+    MCAP is an open source project by Foxglove (https://foxglove.dev).
 
 ### Shell completion
 
