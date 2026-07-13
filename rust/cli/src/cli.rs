@@ -213,8 +213,20 @@ pub struct CatCommand {
     pub end_nsecs: u64,
 
     /// Print messages as JSON. Supported message encodings: ros1, protobuf, and json.
-    #[arg(long = "json", default_value_t = false)]
+    #[arg(long = "json", default_value_t = false, conflicts_with = "csv")]
     pub json: bool,
+
+    /// Print a single topic's messages as CSV. Requires --topic.
+    ///
+    /// Columns are the flattened message fields (dot notation) plus log_time,
+    /// publish_time, and sequence. Supported message encodings: ros1, protobuf,
+    /// and json.
+    #[arg(long = "csv", default_value_t = false)]
+    pub csv: bool,
+
+    /// Single topic to export as CSV. Required by --csv; ignored otherwise.
+    #[arg(long = "topic", conflicts_with = "topics")]
+    pub topic: Option<String>,
 }
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]

@@ -4,6 +4,7 @@ use std::io::{self, IsTerminal as _, Write as _};
 use std::sync::Arc;
 
 use anyhow::{bail, Context as _, Result};
+use log::warn;
 use mcap::sans_io::indexed_reader::ReadOrder;
 use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor, SerializeOptions};
 
@@ -23,18 +24,19 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let stdout = std::io::stdout();
     let mut writer = std::io::BufWriter::new(stdout.lock());
+    let mut csv_state = CsvState::default();
 
     if args.files.is_empty() {
         let stdin = std::io::stdin();
         if stdin.is_terminal() {
             bail!("supply a file");
         }
-        if cat_streaming(&mut writer, stdin.lock(), &opts)? {
+        if cat_streaming(&mut writer, stdin.lock(), &opts, &mut csv_state)? {
             return Ok(());
         }
     } else {
         for file in args.files {
-            if cat_file(&mut writer, &file, &opts, source_options)? {
+            if cat_file(&mut writer, &file, &opts, source_options, &mut csv_state)? {
                 return Ok(());
             }
         }
@@ -48,24 +50,30 @@ fn cat_file(
     file: &std::path::Path,
     opts: &CatOptions,
     source_options: source::SourceOptions,
+    csv_state: &mut CsvState,
 ) -> Result<bool> {
     if let Some(remote) = source::try_open_remote_mcap(file, source_options)? {
         let mut json_transcoders = JsonTranscoders::default();
-        match cat_remote_indexed(
-            writer,
-            file,
-            &remote,
-            opts,
-            source_options,
-            &mut json_transcoders,
-        )? {
+        let mut out = MessageWriter {
+            csv: csv_state,
+            json: &mut json_transcoders,
+        };
+        match cat_remote_indexed(writer, file, &remote, opts, source_options, &mut out)? {
             RemoteCatResult::BrokenPipe => return Ok(true),
             RemoteCatResult::Done => return Ok(false),
             RemoteCatResult::NeedsFullScan => {}
         }
     }
     let mcap = source::load_path(file, source_options)?;
-    cat_mcap(writer, &mcap, opts)
+    cat_mcap(writer, &mcap, opts, csv_state)
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+enum OutputMode {
+    #[default]
+    Fields,
+    Json,
+    Csv,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -73,17 +81,35 @@ struct CatOptions {
     topics: Vec<String>,
     start: u64,
     end: Option<u64>,
-    json: bool,
+    mode: OutputMode,
 }
 
 impl CatOptions {
     fn from_args(args: &CatCommand) -> Result<Self> {
-        let topics = args
-            .topics
-            .split(',')
-            .filter(|topic| !topic.is_empty())
-            .map(str::to_string)
-            .collect();
+        let mode = if args.csv {
+            OutputMode::Csv
+        } else if args.json {
+            OutputMode::Json
+        } else {
+            OutputMode::Fields
+        };
+
+        // In CSV mode a single topic selects the columns, so require --topic and
+        // reuse the existing topic-filtering machinery via the internal vec.
+        let topics = if mode == OutputMode::Csv {
+            let topic = args
+                .topic
+                .as_deref()
+                .filter(|topic| !topic.is_empty())
+                .context("--csv requires --topic <TOPIC>")?;
+            vec![topic.to_string()]
+        } else {
+            args.topics
+                .split(',')
+                .filter(|topic| !topic.is_empty())
+                .map(str::to_string)
+                .collect()
+        };
         let mut start = args.start_nsecs;
         if args.start_secs > 0 {
             start = args
@@ -102,7 +128,7 @@ impl CatOptions {
             topics,
             start,
             end: (end != 0).then_some(end),
-            json: args.json,
+            mode,
         })
     }
 
@@ -115,19 +141,28 @@ impl CatOptions {
     }
 }
 
-fn cat_mcap(writer: &mut impl std::io::Write, mcap: &[u8], opts: &CatOptions) -> Result<bool> {
+fn cat_mcap(
+    writer: &mut impl std::io::Write,
+    mcap: &[u8],
+    opts: &CatOptions,
+    csv_state: &mut CsvState,
+) -> Result<bool> {
     let mut json_transcoders = JsonTranscoders::default();
-    if let Some(broken_pipe) = cat_indexed(writer, mcap, opts, &mut json_transcoders)? {
+    let mut out = MessageWriter {
+        csv: csv_state,
+        json: &mut json_transcoders,
+    };
+    if let Some(broken_pipe) = cat_indexed(writer, mcap, opts, &mut out)? {
         return Ok(broken_pipe);
     }
-    cat_linear(writer, mcap, opts, &mut json_transcoders)
+    cat_linear(writer, mcap, opts, &mut out)
 }
 
 fn cat_indexed(
     writer: &mut impl std::io::Write,
     mcap: &[u8],
     opts: &CatOptions,
-    json_transcoders: &mut JsonTranscoders,
+    out: &mut MessageWriter<'_, '_>,
 ) -> Result<Option<bool>> {
     let summary = match mcap::Summary::read(mcap) {
         Ok(Some(summary)) => summary,
@@ -213,7 +248,7 @@ fn cat_indexed(
                     publish_time: header.publish_time,
                     data,
                 };
-                if write_message(writer, message, opts, json_transcoders)? {
+                if write_message(writer, message, opts, out)? {
                     return Ok(Some(true));
                 }
             }
@@ -236,7 +271,7 @@ fn cat_remote_indexed(
     remote: &source::RemoteMcap,
     opts: &CatOptions,
     source_options: source::SourceOptions,
-    json_transcoders: &mut JsonTranscoders,
+    out: &mut MessageWriter<'_, '_>,
 ) -> Result<RemoteCatResult> {
     let summary = remote.summary();
     if summary.chunk_indexes.is_empty() {
@@ -383,7 +418,7 @@ fn cat_remote_indexed(
                     publish_time: header.publish_time,
                     data,
                 };
-                if write_message(writer, message, opts, json_transcoders)? {
+                if write_message(writer, message, opts, out)? {
                     return Ok(RemoteCatResult::BrokenPipe);
                 }
             }
@@ -483,7 +518,7 @@ fn cat_linear(
     writer: &mut impl std::io::Write,
     mcap: &[u8],
     opts: &CatOptions,
-    json_transcoders: &mut JsonTranscoders,
+    out: &mut MessageWriter<'_, '_>,
 ) -> Result<bool> {
     for message in mcap::MessageStream::new(mcap)? {
         let message = message?;
@@ -497,7 +532,7 @@ fn cat_linear(
             publish_time: message.publish_time,
             data: message.data.as_ref(),
         };
-        if write_message(writer, message, opts, json_transcoders)? {
+        if write_message(writer, message, opts, out)? {
             return Ok(true);
         }
     }
@@ -508,12 +543,17 @@ fn cat_streaming(
     writer: &mut impl std::io::Write,
     mut source: impl std::io::Read,
     opts: &CatOptions,
+    csv_state: &mut CsvState,
 ) -> Result<bool> {
     let mut reader = mcap::sans_io::LinearReader::new();
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
     let mut json_transcoders = JsonTranscoders::default();
+    let mut out = MessageWriter {
+        csv: csv_state,
+        json: &mut json_transcoders,
+    };
 
     while let Some(event) = reader.next_event() {
         match event? {
@@ -532,7 +572,7 @@ fn cat_streaming(
                     &mut schemas,
                     &mut channel_defs,
                     &mut channels,
-                    &mut json_transcoders,
+                    &mut out,
                 )? {
                     return Ok(true);
                 }
@@ -550,7 +590,7 @@ fn handle_linear_record(
     schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
     channel_defs: &mut HashMap<u16, mcap::records::Channel>,
     channels: &mut HashMap<u16, Arc<mcap::Channel<'static>>>,
-    json_transcoders: &mut JsonTranscoders,
+    out: &mut MessageWriter<'_, '_>,
 ) -> Result<bool> {
     match record {
         mcap::records::Record::Schema { header, data } => {
@@ -587,7 +627,7 @@ fn handle_linear_record(
                 publish_time: header.publish_time,
                 data: data.as_ref(),
             };
-            return write_message(writer, message, opts, json_transcoders);
+            return write_message(writer, message, opts, out);
         }
         _ => {}
     }
@@ -628,37 +668,161 @@ struct CatMessage<'a, 'schema, 'data> {
     data: &'data [u8],
 }
 
+/// Bundles the per-invocation output state threaded through the read paths: the
+/// JSON transcoders (cached per file) and, in CSV mode, the derived header.
+struct MessageWriter<'csv, 'json> {
+    csv: &'csv mut CsvState,
+    json: &'json mut JsonTranscoders,
+}
+
 fn write_message(
     writer: &mut impl std::io::Write,
     message: CatMessage<'_, '_, '_>,
     opts: &CatOptions,
-    json_transcoders: &mut JsonTranscoders,
+    out: &mut MessageWriter<'_, '_>,
 ) -> Result<bool> {
-    if opts.json {
-        write_json_message(
+    match opts.mode {
+        OutputMode::Json => write_json_message(
             writer,
             message.channel,
             message.sequence,
             message.log_time,
             message.publish_time,
             message.data,
-            json_transcoders,
-        )
-    } else {
-        let schema_name = message
-            .channel
-            .schema
-            .as_ref()
-            .map(|schema| schema.name.as_str())
-            .unwrap_or("no schema");
-        write_message_fields(
-            writer,
-            message.log_time,
-            &message.channel.topic,
-            schema_name,
-            message.data,
-            MESSAGE_PREVIEW_LEN,
-        )
+            out.json,
+        ),
+        OutputMode::Csv => write_csv_message(writer, message, out),
+        OutputMode::Fields => {
+            let schema_name = message
+                .channel
+                .schema
+                .as_ref()
+                .map(|schema| schema.name.as_str())
+                .unwrap_or("no schema");
+            write_message_fields(
+                writer,
+                message.log_time,
+                &message.channel.topic,
+                schema_name,
+                message.data,
+                MESSAGE_PREVIEW_LEN,
+            )
+        }
+    }
+}
+
+/// Per-invocation CSV output state. The header is derived from the first message
+/// (a single topic almost always has a stable schema), so column memory is O(1)
+/// in the number of messages.
+#[derive(Debug, Default)]
+struct CsvState {
+    header: Option<Vec<String>>,
+    warned_extra_columns: bool,
+}
+
+fn write_csv_message(
+    writer: &mut impl std::io::Write,
+    message: CatMessage<'_, '_, '_>,
+    out: &mut MessageWriter<'_, '_>,
+) -> Result<bool> {
+    let value = out.json.decode_value(message.channel, message.data)?;
+    let mut fields = std::collections::BTreeMap::<String, String>::new();
+    flatten_value("", &value, &mut fields);
+
+    let csv_state = &mut *out.csv;
+    let mut csv_writer = csv::WriterBuilder::new().from_writer(&mut *writer);
+    let write_result: std::result::Result<(), csv::Error> = (|| {
+        if csv_state.header.is_none() {
+            let mut header = vec![
+                "log_time".to_string(),
+                "publish_time".to_string(),
+                "sequence".to_string(),
+            ];
+            header.extend(fields.keys().cloned());
+            csv_writer.write_record(&header)?;
+            csv_state.header = Some(header);
+        }
+        let header = csv_state.header.as_ref().expect("header set above");
+        let log_time = message.log_time.to_string();
+        let publish_time = message.publish_time.to_string();
+        let sequence = message.sequence.to_string();
+        let mut record: Vec<&str> = Vec::with_capacity(header.len());
+        record.push(&log_time);
+        record.push(&publish_time);
+        record.push(&sequence);
+        for column in &header[3..] {
+            record.push(fields.get(column).map(String::as_str).unwrap_or(""));
+        }
+        csv_writer.write_record(&record)
+    })();
+
+    match write_result {
+        Ok(()) => {}
+        Err(err) => match err.kind() {
+            csv::ErrorKind::Io(io_err) if io_err.kind() == io::ErrorKind::BrokenPipe => {
+                return Ok(true)
+            }
+            _ => return Err(err.into()),
+        },
+    }
+
+    // A later message with more fields (e.g. a longer variable-length array) than
+    // the first-message header has its extra columns dropped; warn once.
+    if !csv_state.warned_extra_columns {
+        if let Some(header) = &csv_state.header {
+            let known: BTreeSet<&str> = header[3..].iter().map(String::as_str).collect();
+            if fields.keys().any(|key| !known.contains(key.as_str())) {
+                warn!(
+                    "CSV rows for topic {} have fields absent from the header derived from the first message; extra columns are dropped",
+                    message.channel.topic
+                );
+                csv_state.warned_extra_columns = true;
+            }
+        }
+    }
+
+    io_result_to_broken_pipe(csv_writer.flush())
+}
+
+/// Flattens a decoded message into dot-notated scalar columns. Objects recurse
+/// with `parent.child`, arrays with `parent.0`, `parent.1`, and scalars become
+/// strings (null -> empty).
+fn flatten_value(
+    prefix: &str,
+    value: &serde_json::Value,
+    out: &mut std::collections::BTreeMap<String, String>,
+) {
+    use serde_json::Value;
+    let child_key = |segment: &str| {
+        if prefix.is_empty() {
+            segment.to_string()
+        } else {
+            format!("{prefix}.{segment}")
+        }
+    };
+    match value {
+        Value::Object(map) => {
+            for (key, child) in map {
+                flatten_value(&child_key(key), child, out);
+            }
+        }
+        Value::Array(items) => {
+            for (index, child) in items.iter().enumerate() {
+                flatten_value(&child_key(&index.to_string()), child, out);
+            }
+        }
+        Value::Null => {
+            out.insert(prefix.to_string(), String::new());
+        }
+        Value::Bool(value) => {
+            out.insert(prefix.to_string(), value.to_string());
+        }
+        Value::Number(value) => {
+            out.insert(prefix.to_string(), value.to_string());
+        }
+        Value::String(value) => {
+            out.insert(prefix.to_string(), value.clone());
+        }
     }
 }
 
@@ -786,6 +950,18 @@ impl JsonTranscoders {
                 "JSON output only supported for ros1msg, protobuf, and jsonschema schemas. Found: {encoding}"
             ),
         }
+    }
+
+    /// Decodes a message into a `serde_json::Value` by reusing the JSON encoder,
+    /// so CSV output supports the same encodings as `--json`.
+    fn decode_value(
+        &mut self,
+        channel: &mcap::Channel<'_>,
+        data: &[u8],
+    ) -> Result<serde_json::Value> {
+        let encoded = self.encode(channel, data)?;
+        serde_json::from_slice(encoded.as_ref())
+            .context("failed to parse decoded message as JSON for CSV output")
     }
 }
 
@@ -1173,7 +1349,8 @@ mod tests {
     use super::{
         cat_indexed, cat_mcap, cat_streaming, needs_in_chunk_definitions, parse_ros1_field_type,
         planned_chunk_reads, write_payload_preview, write_ros1_float, write_signed_decimal_time,
-        CatOptions, JsonTranscoders, Ros1MessageDef, MESSAGE_PREVIEW_LEN,
+        CatOptions, CsvState, JsonTranscoders, MessageWriter, OutputMode, Ros1MessageDef,
+        MESSAGE_PREVIEW_LEN,
     };
 
     const NO_MESSAGE_INDEX_LOG_TIME_LINES: &[&str] = &[
@@ -1553,6 +1730,7 @@ mod tests {
             Path::new(&url),
             &CatOptions::default(),
             crate::source::SourceOptions::new(true),
+            &mut CsvState::default(),
         )
         .expect("remote cat should scan unchunked messages with opt-in");
         assert!(!broken_pipe);
@@ -1572,6 +1750,7 @@ mod tests {
             Path::new(&url),
             &CatOptions::default(),
             crate::source::SourceOptions::new(true),
+            &mut CsvState::default(),
         )
         .expect("remote cat should use chunk indexes with opt-in");
         assert!(!broken_pipe);
@@ -1596,6 +1775,7 @@ mod tests {
             Path::new(&url),
             &CatOptions::default(),
             crate::source::SourceOptions::default(),
+            &mut CsvState::default(),
         )
         .expect_err("remote cat without chunk indexes should require opt-in");
         let message = err.to_string();
@@ -1614,6 +1794,7 @@ mod tests {
             Path::new(&url),
             &CatOptions::default(),
             crate::source::SourceOptions::default(),
+            &mut CsvState::default(),
         )
         .expect_err("remote cat should require opt-in before reading chunks");
         assert!(err.to_string().contains("remote cat would read"));
@@ -1747,8 +1928,13 @@ mod tests {
     fn cat_prefers_log_time_order_when_index_available() {
         let mcap = build_out_of_order_chunked_mcap();
         let mut out = Vec::new();
-        let broken_pipe =
-            cat_mcap(&mut out, &mcap, &CatOptions::default()).expect("cat should succeed");
+        let broken_pipe = cat_mcap(
+            &mut out,
+            &mcap,
+            &CatOptions::default(),
+            &mut CsvState::default(),
+        )
+        .expect("cat should succeed");
         assert!(!broken_pipe);
 
         let output = String::from_utf8(out).expect("valid utf8 output");
@@ -1781,7 +1967,10 @@ mod tests {
             &mut indexed_out,
             &mcap,
             &CatOptions::default(),
-            &mut json_transcoders,
+            &mut MessageWriter {
+                csv: &mut CsvState::default(),
+                json: &mut json_transcoders,
+            },
         )
         .expect("indexed cat should succeed");
         assert_eq!(indexed_result, Some(false));
@@ -1795,8 +1984,13 @@ mod tests {
     fn cat_falls_back_to_linear_order_without_index() {
         let mcap = build_out_of_order_linear_mcap_without_summary();
         let mut out = Vec::new();
-        let broken_pipe =
-            cat_mcap(&mut out, &mcap, &CatOptions::default()).expect("cat should succeed");
+        let broken_pipe = cat_mcap(
+            &mut out,
+            &mcap,
+            &CatOptions::default(),
+            &mut CsvState::default(),
+        )
+        .expect("cat should succeed");
         assert!(!broken_pipe);
 
         let output = String::from_utf8(out).expect("valid utf8 output");
@@ -1820,7 +2014,10 @@ mod tests {
             &mut indexed_out,
             mcap,
             &CatOptions::default(),
-            &mut json_transcoders,
+            &mut MessageWriter {
+                csv: &mut CsvState::default(),
+                json: &mut json_transcoders,
+            },
         )
         .expect("indexed cat should succeed");
         assert_eq!(indexed_result, Some(false));
@@ -1829,8 +2026,13 @@ mod tests {
         assert_eq!(indexed_lines, expected);
 
         let mut out = Vec::new();
-        let broken_pipe = cat_mcap(&mut out, mcap, &CatOptions::default())
-            .expect("cat should succeed through indexed chunk scan");
+        let broken_pipe = cat_mcap(
+            &mut out,
+            mcap,
+            &CatOptions::default(),
+            &mut CsvState::default(),
+        )
+        .expect("cat should succeed through indexed chunk scan");
         assert!(!broken_pipe);
 
         let output = String::from_utf8(out).expect("valid utf8 output");
@@ -1860,7 +2062,10 @@ mod tests {
             &mut out,
             mcap,
             &CatOptions::default(),
-            &mut json_transcoders,
+            &mut MessageWriter {
+                csv: &mut CsvState::default(),
+                json: &mut json_transcoders,
+            },
         )
         .expect("indexed cat should succeed");
         assert_eq!(indexed_result, Some(false));
@@ -1887,15 +2092,23 @@ mod tests {
             &mut indexed_out,
             mcap,
             &CatOptions::default(),
-            &mut json_transcoders,
+            &mut MessageWriter {
+                csv: &mut CsvState::default(),
+                json: &mut json_transcoders,
+            },
         )
         .expect("indexed planner should fall back");
         assert_eq!(indexed_result, None);
         assert!(indexed_out.is_empty());
 
         let mut out = Vec::new();
-        let broken_pipe = cat_mcap(&mut out, mcap, &CatOptions::default())
-            .expect("cat should succeed through linear fallback");
+        let broken_pipe = cat_mcap(
+            &mut out,
+            mcap,
+            &CatOptions::default(),
+            &mut CsvState::default(),
+        )
+        .expect("cat should succeed through linear fallback");
         assert!(!broken_pipe);
 
         let output = String::from_utf8(out).expect("valid utf8 output");
@@ -1969,8 +2182,16 @@ mod tests {
         };
         let mut out = Vec::new();
         let mut json_transcoders = JsonTranscoders::default();
-        let indexed_result = cat_indexed(&mut out, &mcap, &opts, &mut json_transcoders)
-            .expect("indexed cat should resolve chunk-local channel");
+        let indexed_result = cat_indexed(
+            &mut out,
+            &mcap,
+            &opts,
+            &mut MessageWriter {
+                csv: &mut CsvState::default(),
+                json: &mut json_transcoders,
+            },
+        )
+        .expect("indexed cat should resolve chunk-local channel");
         assert_eq!(indexed_result, Some(false));
 
         let output = String::from_utf8(out).expect("valid utf8 output");
@@ -2012,7 +2233,10 @@ mod tests {
                 topics: vec!["example".to_string()],
                 ..CatOptions::default()
             },
-            &mut json_transcoders,
+            &mut MessageWriter {
+                csv: &mut CsvState::default(),
+                json: &mut json_transcoders,
+            },
         )
         .expect("indexed cat should succeed");
         assert_eq!(result, Some(false));
@@ -2030,7 +2254,10 @@ mod tests {
                 topics: vec!["nope".to_string()],
                 ..CatOptions::default()
             },
-            &mut json_transcoders,
+            &mut MessageWriter {
+                csv: &mut CsvState::default(),
+                json: &mut json_transcoders,
+            },
         )
         .expect("indexed cat should succeed");
         assert_eq!(result, Some(false));
@@ -2044,10 +2271,11 @@ mod tests {
             topics: vec!["/camera".to_string()],
             start: 20,
             end: None,
-            json: false,
+            mode: OutputMode::Fields,
         };
         let mut out = Vec::new();
-        let broken_pipe = cat_mcap(&mut out, &mcap, &opts).expect("cat should succeed");
+        let broken_pipe =
+            cat_mcap(&mut out, &mcap, &opts, &mut CsvState::default()).expect("cat should succeed");
         assert!(!broken_pipe);
 
         let output = String::from_utf8(out).expect("valid utf8 output");
@@ -2066,8 +2294,9 @@ mod tests {
             ..CatOptions::default()
         };
         let mut out = Vec::new();
-        let broken_pipe = cat_streaming(&mut out, Cursor::new(mcap), &opts)
-            .expect("streaming cat should succeed");
+        let broken_pipe =
+            cat_streaming(&mut out, Cursor::new(mcap), &opts, &mut CsvState::default())
+                .expect("streaming cat should succeed");
         assert!(!broken_pipe);
 
         let output = String::from_utf8(out).expect("valid utf8 output");
@@ -2084,7 +2313,7 @@ mod tests {
         let mut out = Vec::new();
         let mut transcoders = JsonTranscoders::default();
         let opts = CatOptions {
-            json: true,
+            mode: OutputMode::Json,
             ..CatOptions::default()
         };
         let cat_message = super::CatMessage {
@@ -2094,8 +2323,16 @@ mod tests {
             publish_time: message.publish_time,
             data: message.data.as_ref(),
         };
-        let broken_pipe = super::write_message(&mut out, cat_message, &opts, &mut transcoders)
-            .expect("json message should write");
+        let broken_pipe = super::write_message(
+            &mut out,
+            cat_message,
+            &opts,
+            &mut MessageWriter {
+                csv: &mut CsvState::default(),
+                json: &mut transcoders,
+            },
+        )
+        .expect("json message should write");
         assert!(!broken_pipe);
 
         assert_eq!(
@@ -2112,7 +2349,7 @@ mod tests {
         let mut out = Vec::new();
         let mut transcoders = JsonTranscoders::default();
         let opts = CatOptions {
-            json: true,
+            mode: OutputMode::Json,
             ..CatOptions::default()
         };
         let cat_message = super::CatMessage {
@@ -2122,8 +2359,16 @@ mod tests {
             publish_time: message.publish_time,
             data: message.data.as_ref(),
         };
-        let broken_pipe = super::write_message(&mut out, cat_message, &opts, &mut transcoders)
-            .expect("schemaless json message should write");
+        let broken_pipe = super::write_message(
+            &mut out,
+            cat_message,
+            &opts,
+            &mut MessageWriter {
+                csv: &mut CsvState::default(),
+                json: &mut transcoders,
+            },
+        )
+        .expect("schemaless json message should write");
         assert!(!broken_pipe);
 
         assert_eq!(
@@ -2384,6 +2629,108 @@ mod tests {
         assert_eq!(
             String::from_utf8(out).expect("valid utf8"),
             r#""-Infinity""#
+        );
+    }
+
+    #[test]
+    fn flatten_value_flattens_objects_arrays_and_scalars() {
+        let value = serde_json::json!({
+            "pose": {"position": {"x": 1.5, "y": -2}},
+            "ranges": [10, 20],
+            "ok": true,
+            "name": "a",
+            "missing": null,
+        });
+        let mut fields = std::collections::BTreeMap::new();
+        super::flatten_value("", &value, &mut fields);
+
+        assert_eq!(
+            fields.get("pose.position.x").map(String::as_str),
+            Some("1.5")
+        );
+        assert_eq!(
+            fields.get("pose.position.y").map(String::as_str),
+            Some("-2")
+        );
+        assert_eq!(fields.get("ranges.0").map(String::as_str), Some("10"));
+        assert_eq!(fields.get("ranges.1").map(String::as_str), Some("20"));
+        assert_eq!(fields.get("ok").map(String::as_str), Some("true"));
+        assert_eq!(fields.get("name").map(String::as_str), Some("a"));
+        assert_eq!(fields.get("missing").map(String::as_str), Some(""));
+    }
+
+    fn json_cat_message<'a>(
+        message: &'a mcap::Message<'a>,
+        log_time: u64,
+    ) -> super::CatMessage<'a, 'a, 'a> {
+        super::CatMessage {
+            channel: &message.channel,
+            sequence: message.sequence,
+            log_time,
+            publish_time: message.publish_time,
+            data: message.data.as_ref(),
+        }
+    }
+
+    fn write_csv(messages: &[(u64, &[u8])]) -> String {
+        let opts = CatOptions {
+            mode: OutputMode::Csv,
+            ..CatOptions::default()
+        };
+        let mut csv_state = CsvState::default();
+        let mut transcoders = JsonTranscoders::default();
+        let mut out = MessageWriter {
+            csv: &mut csv_state,
+            json: &mut transcoders,
+        };
+        let mut buf = Vec::new();
+        for (log_time, data) in messages {
+            let message = sample_message(None, data.to_vec());
+            let broken_pipe = super::write_message(
+                &mut buf,
+                json_cat_message(&message, *log_time),
+                &opts,
+                &mut out,
+            )
+            .expect("csv message should write");
+            assert!(!broken_pipe);
+        }
+        String::from_utf8(buf).expect("csv output should be utf8")
+    }
+
+    #[test]
+    fn csv_writes_header_from_first_message_then_rows() {
+        let output = write_csv(&[(10, br#"{"a":1,"b":2}"#), (20, br#"{"a":3,"b":4}"#)]);
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,a,b\n10,43,1,1,2\n20,43,1,3,4\n"
+        );
+    }
+
+    #[test]
+    fn csv_fills_missing_fields_with_empty_cells() {
+        let output = write_csv(&[(10, br#"{"a":1,"b":2}"#), (20, br#"{"a":3}"#)]);
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,a,b\n10,43,1,1,2\n20,43,1,3,\n"
+        );
+    }
+
+    #[test]
+    fn csv_escapes_fields_with_commas_and_quotes() {
+        let output = write_csv(&[(10, br#"{"text":"a,\"b\""}"#)]);
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,text\n10,43,1,\"a,\"\"b\"\"\"\n"
+        );
+    }
+
+    #[test]
+    fn csv_flattens_nested_objects_into_dotted_columns() {
+        let output = write_csv(&[(10, br#"{"pose":{"x":1,"y":2}}"#)]);
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,pose.x,pose.y\n10,43,1,1,2\n"
         );
     }
 }

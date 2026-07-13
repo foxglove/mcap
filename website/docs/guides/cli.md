@@ -140,6 +140,23 @@ Echo messages for a specific topic to stdout as JSON:
     {"topic":"/tf","sequence":21,"log_time":1490149580.185428613,"publish_time":1490149580.185428613,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.197612248,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
     {"topic":"/tf","sequence":22,"log_time":1490149580.196638030,"publish_time":1490149580.196638030,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.207699065,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
 
+### CSV output
+
+Export a single topic to CSV with `--csv --topic <TOPIC>`. Message fields are
+decoded (same encodings as `--json`: `ros1msg`, `protobuf`, and `json`) and
+flattened into columns using dot notation (`pose.position.x`); array elements use
+an index suffix (`ranges.0`, `ranges.1`). Each row is prefixed with `log_time`,
+`publish_time`, and `sequence` columns. The column header is derived from the
+first message, so `--csv` requires exactly one topic:
+
+    $ mcap cat demo.mcap --csv --topic /chatter
+    log_time,publish_time,sequence,data
+    42,42,0,hello world
+    43,43,1,hello again
+
+The `log_time` column is epoch nanoseconds, which maps directly onto tabular
+ingest tools that expect an integer-nanosecond timestamp column.
+
 ### Remote file support
 
 The `mcap` CLI can read files over **HTTP(S)** and from object stores: **Amazon S3** (`s3://`, `s3a://`), **Google Cloud Storage** (`gs://`), and **Azure Blob Storage** (`az://`, `azure://`, `adl://`, `abfs://`, `abfss://`):

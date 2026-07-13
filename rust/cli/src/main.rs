@@ -74,6 +74,8 @@ mod tests {
                 end_secs: 0,
                 end_nsecs: 0,
                 json: false,
+                csv: false,
+                topic: None,
             })
         );
     }
@@ -91,6 +93,8 @@ mod tests {
                 end_secs: 0,
                 end_nsecs: 0,
                 json: false,
+                csv: false,
+                topic: None,
             })
         );
     }
@@ -120,6 +124,8 @@ mod tests {
                 end_secs: 0,
                 end_nsecs: 20_000_000_000,
                 json: true,
+                csv: false,
+                topic: None,
             })
         );
     }
@@ -148,6 +154,56 @@ mod tests {
             "1",
         ])
         .expect_err("end seconds and nanoseconds should conflict");
+        assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn parses_cat_csv_with_topic() {
+        let args = Args::try_parse_from(["mcap", "cat", "demo.mcap", "--csv", "--topic", "/tf"])
+            .expect("cat --csv --topic should parse");
+        assert_eq!(
+            args.command,
+            Command::Cat(CatCommand {
+                files: vec!["demo.mcap".into()],
+                topics: String::new(),
+                start_secs: 0,
+                start_nsecs: 0,
+                end_secs: 0,
+                end_nsecs: 0,
+                json: false,
+                csv: true,
+                topic: Some("/tf".to_string()),
+            })
+        );
+    }
+
+    #[test]
+    fn cat_rejects_csv_with_json() {
+        let parse_err = Args::try_parse_from([
+            "mcap",
+            "cat",
+            "demo.mcap",
+            "--csv",
+            "--json",
+            "--topic",
+            "/tf",
+        ])
+        .expect_err("--csv and --json should conflict");
+        assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn cat_rejects_topic_with_topics() {
+        let parse_err = Args::try_parse_from([
+            "mcap",
+            "cat",
+            "demo.mcap",
+            "--topic",
+            "/tf",
+            "--topics",
+            "/odom",
+        ])
+        .expect_err("--topic and --topics should conflict");
         assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
     }
 
