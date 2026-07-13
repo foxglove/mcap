@@ -1,27 +1,68 @@
-//! The single-input rewrite pipeline: read one MCAP and write a new one, choosing an indexed or
-//! linear read path, applying record selection (topic/time range, `--last-per-channel`), and
-//! placing records in the standard layout. Driven by [`super::run`]; multi-input merges go through
-//! [`super::merge`] instead.
+//! The single-input rewrite pipeline and its [`run`] entrypoint: reads one MCAP (or stdin) and
+//! writes a new one, choosing an indexed or linear read path, applying record selection, and
+//! placing records in the standard layout. Multi-input merges go through [`super::merge`] instead.
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap};
-use std::io::{Seek, Write};
+use std::io::{IsTerminal as _, Seek, Write};
 use std::sync::Arc;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 use super::common;
-use super::options::{include_topic, ResolvedOptions};
+use super::options::{include_topic, resolve_options, ResolvedOptions, RewriteOptions};
 use crate::cli::MessageOrder;
+use crate::source;
 
-/// Rewrites a single input into `writer`: metadata first, then the selected messages (in stored or
-/// log-time order), then attachments. Chooses the indexed fast path when the summary proves every
-/// message is indexed, otherwise a lossless linear scan. Channel IDs are preserved.
-pub(super) fn write_single<W: Write + Seek>(
-    writer: &mut mcap::Writer<W>,
+pub(crate) fn run(args: RewriteOptions, source_options: source::SourceOptions) -> Result<()> {
+    let opts = resolve_options(&args)?;
+    if let (Some(input), Some(output)) = (args.file.as_deref(), opts.output.as_deref()) {
+        source::ensure_distinct_local_input_output(input, output)?;
+    }
+    let input = source::load_input(args.file.as_deref(), source_options)?;
+
+    if let Some(output) = &opts.output {
+        let writer = std::fs::File::create(output)
+            .with_context(|| format!("failed to open '{}' for writing", output.display()))?;
+        filter_to_writer(input.as_slice(), writer, &opts, false)
+    } else {
+        if std::io::stdout().is_terminal() {
+            bail!("{}", source::PLEASE_REDIRECT);
+        }
+        let stdout = std::io::stdout();
+        let writer = mcap::write::NoSeek::new(stdout.lock());
+        filter_to_writer(input.as_slice(), writer, &opts, true)
+    }
+}
+
+fn filter_to_writer<W: Write + Seek>(
     input: &[u8],
+    sink: W,
     opts: &ResolvedOptions,
-    dedup_metadata: bool,
-    allow_duplicate_metadata: bool,
+    disable_seeking: bool,
+) -> Result<()> {
+    let profile = common::read_header(input)?
+        .map(|header| header.profile)
+        .unwrap_or_default();
+    let mut writer = common::create_writer(
+        sink,
+        &common::WriterConfig {
+            profile,
+            use_chunks: opts.use_chunks,
+            chunk_size: opts.chunk_size,
+            compression: opts.compression,
+            include_crc: opts.include_crc,
+        },
+        disable_seeking,
+    )?;
+    filter_with_writer(input, &mut writer, opts)?;
+    writer.finish().context("failed to finish mcap writer")?;
+    Ok(())
+}
+
+fn filter_with_writer<W: Write + Seek>(
+    input: &[u8],
+    writer: &mut mcap::Writer<W>,
+    opts: &ResolvedOptions,
 ) -> Result<()> {
     if let Some(summary) = common::read_indexed_summary(input)? {
         // An index-only read skips messages that live outside the chunk indexes (loose top-level
@@ -31,23 +72,10 @@ pub(super) fn write_single<W: Write + Seek>(
         if !summary.chunk_indexes.is_empty()
             && !common::summary_has_unindexed_messages(input, &summary)
         {
-            return filter_indexed(
-                input,
-                &summary,
-                writer,
-                opts,
-                dedup_metadata,
-                allow_duplicate_metadata,
-            );
+            return filter_indexed(input, &summary, writer, opts);
         }
     }
-    filter_linear(
-        input,
-        writer,
-        opts,
-        dedup_metadata,
-        allow_duplicate_metadata,
-    )
+    filter_linear(input, writer, opts)
 }
 
 #[derive(Debug, Clone)]
@@ -64,8 +92,6 @@ fn filter_indexed<W: Write + Seek>(
     summary: &mcap::Summary,
     writer: &mut mcap::Writer<W>,
     opts: &ResolvedOptions,
-    dedup_metadata: bool,
-    allow_duplicate_metadata: bool,
 ) -> Result<()> {
     let has_topic_filters = !opts.include_topics.is_empty() || !opts.exclude_topics.is_empty();
     let included_topics: BTreeSet<String> = summary
@@ -77,15 +103,9 @@ fn filter_indexed<W: Write + Seek>(
 
     // Metadata is written first, before any messages (see module docs).
     if opts.include_metadata {
-        let mut metadata_state = common::MetadataState::default();
         common::for_each_metadata(input, Some(summary), |metadata| {
-            common::write_metadata_record(
-                writer,
-                &mut metadata_state,
-                metadata,
-                dedup_metadata,
-                allow_duplicate_metadata,
-            )
+            writer.write_metadata(&metadata)?;
+            Ok(())
         })?;
     }
 
@@ -235,8 +255,6 @@ fn filter_linear<W: Write + Seek>(
     input: &[u8],
     writer: &mut mcap::Writer<W>,
     opts: &ResolvedOptions,
-    dedup_metadata: bool,
-    allow_duplicate_metadata: bool,
 ) -> Result<()> {
     if !opts.last_per_channel_topics.is_empty() {
         bail!("including last-per-channel topics is not supported for non-indexed input");
@@ -252,15 +270,9 @@ fn filter_linear<W: Write + Seek>(
     // Metadata is written first, before any messages (see module docs). Metadata records are never
     // stored inside chunks, so a top-level linear scan surfaces them without decompressing chunks.
     if opts.include_metadata {
-        let mut metadata_state = common::MetadataState::default();
         common::for_each_metadata(input, None, |metadata| {
-            common::write_metadata_record(
-                writer,
-                &mut metadata_state,
-                metadata,
-                dedup_metadata,
-                allow_duplicate_metadata,
-            )
+            writer.write_metadata(&metadata)?;
+            Ok(())
         })?;
     }
 
@@ -403,36 +415,8 @@ mod tests {
 
     use regex::Regex;
 
-    use super::{MessageOrder, ResolvedOptions};
+    use super::{filter_to_writer, MessageOrder, ResolvedOptions};
     use crate::cli::CommonRewriteArgs;
-
-    /// Test shim for the single-input path: builds a writer, runs [`super::write_single`] with
-    /// metadata dedup off (the rewrite-command behavior), and finishes, so these tests drive the
-    /// single-input pipeline directly.
-    fn filter_to_writer<W: std::io::Write + std::io::Seek>(
-        input: &[u8],
-        sink: W,
-        opts: &ResolvedOptions,
-        disable_seeking: bool,
-    ) -> anyhow::Result<()> {
-        let profile = super::common::read_header(input)?
-            .map(|header| header.profile)
-            .unwrap_or_default();
-        let mut writer = super::common::create_writer(
-            sink,
-            &super::common::WriterConfig {
-                profile,
-                use_chunks: opts.use_chunks,
-                chunk_size: opts.chunk_size,
-                compression: opts.compression,
-                include_crc: opts.include_crc,
-            },
-            disable_seeking,
-        )?;
-        super::write_single(&mut writer, input, opts, false, false)?;
-        writer.finish()?;
-        Ok(())
-    }
 
     /// Builds rewrite options from the shared CLI args, exercising the engine defaults (CRC on,
     /// chunked, metadata/attachments kept).
@@ -440,8 +424,8 @@ mod tests {
         file: Option<std::path::PathBuf>,
         output: Option<std::path::PathBuf>,
         chunk_size: u64,
-    ) -> crate::rewrite::RewriteOptions {
-        crate::rewrite::RewriteOptions::from(&CommonRewriteArgs {
+    ) -> super::RewriteOptions {
+        super::RewriteOptions::from(&CommonRewriteArgs {
             file,
             output,
             output_file: None,
@@ -1318,7 +1302,7 @@ mod tests {
         options.use_chunks = false;
         options.compression = None;
 
-        crate::rewrite::run(options, crate::source::SourceOptions::default())
+        super::run(options, crate::source::SourceOptions::default())
             .expect("rewrite should succeed");
         let output = std::fs::read(&output_path).expect("read output");
         let summary = mcap::Summary::read(&output)
@@ -1337,6 +1321,25 @@ mod tests {
 
         let _ = std::fs::remove_file(input_path);
         let _ = std::fs::remove_file(output_path);
+    }
+
+    #[test]
+    fn run_rejects_same_input_and_output_without_truncating() {
+        let input = write_filter_test_input(true, false);
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let path = dir.path().join("same-path.mcap");
+        std::fs::write(&path, &input).expect("write input");
+
+        let options = rewrite_options(
+            Some(path.clone()),
+            Some(path.clone()),
+            mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+        );
+        let err = super::run(options, crate::source::SourceOptions::default())
+            .expect_err("same input/output should fail");
+
+        assert!(err.to_string().contains("input and output paths"));
+        assert_eq!(std::fs::read(&path).expect("read input"), input);
     }
 
     #[test]
@@ -1360,7 +1363,7 @@ mod tests {
             MessageOrder::Preserve,
             "the shared rewrite defaults should preserve order"
         );
-        crate::rewrite::run(options, crate::source::SourceOptions::default())
+        super::run(options, crate::source::SourceOptions::default())
             .expect("rewrite should succeed");
 
         let output = std::fs::read(&output_path).expect("read output");
