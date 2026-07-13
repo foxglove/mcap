@@ -7,10 +7,9 @@ use crate::rewrite::{self, RewriteOptions};
 pub fn run(ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
     args.common.warn_deprecations();
     // `filter`-style rewrite with a preset: rechunk uncompressed, keeping metadata and
-    // attachments. Paths, chunk size, and `--no-crc` come from the shared args.
-    let options = RewriteOptions::from(&args.common)
-        .compression(None)
-        .order(args.order);
+    // attachments in their stored order. Paths, chunk size, and `--no-crc` come from the shared
+    // args. `decompress` doesn't reorder (use `sort` for that), so this only drops compression.
+    let options = RewriteOptions::from(&args.common).compression(None);
     rewrite::run(
         options,
         crate::source::SourceOptions::new(ctx.allow_remote_scan()),

@@ -37,9 +37,9 @@ pub(crate) struct RewriteOptions {
 /// and attachments are included by default (all rewrite commands keep them; `filter` opts out via
 /// `--exclude-*`), and output is chunked with zstd compression unless a command overrides those.
 ///
-/// Message order is *not* shared here — each command owns its `--order` (with its own default) and
-/// applies it via [`RewriteOptions::order`] or the `From` overrides, so this base uses `preserve`
-/// as a neutral placeholder.
+/// Message order defaults to `preserve`: `compress` and `decompress` keep the input's stored order,
+/// while `filter` and `sort` supply their own `--order` via their `From` overrides (defaulting to
+/// preserve and log_time respectively).
 impl From<&CommonRewriteArgs> for RewriteOptions {
     fn from(args: &CommonRewriteArgs) -> Self {
         Self {
@@ -108,11 +108,6 @@ impl From<&SortCommand> for RewriteOptions {
 impl RewriteOptions {
     pub(crate) fn compression(mut self, value: Option<mcap::Compression>) -> Self {
         self.compression = value;
-        self
-    }
-
-    pub(crate) fn order(mut self, order: MessageOrder) -> Self {
-        self.order = order;
         self
     }
 }

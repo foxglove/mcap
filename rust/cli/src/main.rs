@@ -478,7 +478,6 @@ mod tests {
                     no_crc: false,
                 },
                 compression: CompressionFormat::Zstd,
-                order: MessageOrder::Preserve,
             })
         );
     }
@@ -496,8 +495,6 @@ mod tests {
             "--compression",
             "lz4",
             "--no-crc",
-            "--order",
-            "log-time",
         ])
         .expect("compress with flags should parse");
         assert_eq!(
@@ -511,9 +508,16 @@ mod tests {
                     no_crc: true,
                 },
                 compression: CompressionFormat::Lz4,
-                order: MessageOrder::LogTime,
             })
         );
+    }
+
+    #[test]
+    fn rejects_compress_order_flag() {
+        // Reordering was removed from `compress`; only `sort` reorders now.
+        let err = Args::try_parse_from(["mcap", "compress", "in.mcap", "--order", "log_time"])
+            .expect_err("compress should no longer accept --order");
+        assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);
     }
 
     #[test]
@@ -537,7 +541,6 @@ mod tests {
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
                 },
-                order: MessageOrder::Preserve,
             })
         );
     }
@@ -553,8 +556,6 @@ mod tests {
             "--chunk-size",
             "2048",
             "--no-crc",
-            "--order",
-            "log-time",
         ])
         .expect("decompress with flags should parse");
         assert_eq!(
@@ -567,9 +568,16 @@ mod tests {
                     chunk_size: 2048,
                     no_crc: true,
                 },
-                order: MessageOrder::LogTime,
             })
         );
+    }
+
+    #[test]
+    fn rejects_decompress_order_flag() {
+        // Reordering was removed from `decompress`; only `sort` reorders now.
+        let err = Args::try_parse_from(["mcap", "decompress", "in.mcap", "--order", "log_time"])
+            .expect_err("decompress should no longer accept --order");
+        assert_eq!(err.kind(), clap::error::ErrorKind::UnknownArgument);
     }
 
     #[test]
@@ -668,9 +676,9 @@ mod tests {
 
     #[test]
     fn filter_order_defaults_to_preserve_and_parses_log_time() {
-        // Each rewrite command owns its `--order` (so its default shows in --help): filter defaults
-        // to preserve; sort defaults to log_time. The flag name and values are identical across
-        // commands.
+        // `filter` and `sort` are the reordering commands and share the `--order` flag (name and
+        // values). `filter` defaults to preserve; `sort` defaults to log_time. (`compress` and
+        // `decompress` don't accept `--order` at all.)
         let default = Args::try_parse_from(["mcap", "filter", "in.mcap"])
             .expect("filter should parse without --order");
         match default.command {

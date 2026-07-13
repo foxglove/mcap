@@ -162,20 +162,12 @@ pub struct CompressCommand {
     /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long = "compression", value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
-
-    /// Message order in the output: preserve (keep the input order), log_time, or topic
-    #[arg(long = "order", value_enum, default_value = "preserve")]
-    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct DecompressCommand {
     #[command(flatten)]
     pub common: CommonRewriteArgs,
-
-    /// Message order in the output: preserve (keep the input order), log_time, or topic
-    #[arg(long = "order", value_enum, default_value = "preserve")]
-    pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -357,7 +349,10 @@ impl CompressionFormat {
     }
 }
 
-/// Output message order for the rewrite commands (`filter`, `compress`, `decompress`, `sort`).
+/// Output message order for the rewrite commands that reorder messages (`filter` and `sort`).
+/// `compress` and `decompress` don't reorder — they preserve the input's stored order. To reorder
+/// and recompress in one pass, use `sort --compression=…`; to reorder while selecting a subset,
+/// use `filter --order=…`.
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MessageOrder {
     /// Keep the input's stored message order.
@@ -608,7 +603,8 @@ pub struct SortCommand {
     ///   channel ID), placing every channel in its own chunk(s), which speeds up single-topic
     ///   range reads
     ///
-    /// `sort` defaults to log_time; it accepts the same flag as the other rewrite commands.
+    /// `sort` defaults to log_time; `filter` accepts the same `--order` flag (defaulting to
+    /// preserve) to reorder while selecting a subset.
     #[arg(long = "order", value_enum, default_value = "log_time")]
     pub order: MessageOrder,
 }
