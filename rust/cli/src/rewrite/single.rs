@@ -195,76 +195,54 @@ fn filter_indexed<W: Write + Seek>(
             indexed_opts = indexed_opts.include_topics(included_topics.iter().cloned());
         }
 
-        match opts.order {
-            // `preserve` streams the input in its stored (file) order; `log_time` streams in the
-            // reader's log-time order. Both are memory-bounded: one chunk is resident at a time.
-            MessageOrder::Preserve | MessageOrder::LogTime => {
-                let read_order = match opts.order {
-                    MessageOrder::LogTime => mcap::sans_io::indexed_reader::ReadOrder::LogTime,
-                    _ => mcap::sans_io::indexed_reader::ReadOrder::File,
-                };
-                let mut reader = mcap::sans_io::IndexedReader::new_with_options(
-                    summary,
-                    indexed_opts.with_order(read_order),
-                )?;
-                while let Some(event) = reader.next_event() {
-                    match event? {
-                        mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                            common::service_chunk_request(&mut reader, input, offset, length)?;
-                        }
-                        mcap::sans_io::IndexedReadEvent::Message { header, data } => {
-                            let channel =
-                                summary.channels.get(&header.channel_id).ok_or_else(|| {
-                                    anyhow::anyhow!(
-                                        "message references unknown channel {}",
-                                        header.channel_id
-                                    )
-                                })?;
-                            writer.write(&mcap::Message {
-                                channel: channel.clone(),
-                                sequence: header.sequence,
-                                log_time: header.log_time,
-                                publish_time: header.publish_time,
-                                data: Cow::Borrowed(data),
-                            })?;
-                        }
+        // `preserve` reads in stored (file) order; `log_time` and `topic` read in the reader's
+        // log-time order. `preserve`/`log_time` stream straight to the writer (memory-bounded: one
+        // chunk resident at a time), while `topic` is not an index order, so its messages are
+        // buffered here and re-sorted before writing. Buffering the selected set in memory is a
+        // known follow-up.
+        let read_order = match opts.order {
+            MessageOrder::Preserve => mcap::sans_io::indexed_reader::ReadOrder::File,
+            MessageOrder::LogTime | MessageOrder::Topic => {
+                mcap::sans_io::indexed_reader::ReadOrder::LogTime
+            }
+        };
+        let buffer_for_ordering = matches!(opts.order, MessageOrder::Topic);
+        let mut reader = mcap::sans_io::IndexedReader::new_with_options(
+            summary,
+            indexed_opts.with_order(read_order),
+        )?;
+        let mut buffered_messages = Vec::<BufferedMessage>::new();
+        while let Some(event) = reader.next_event() {
+            match event? {
+                mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                    common::service_chunk_request(&mut reader, input, offset, length)?;
+                }
+                mcap::sans_io::IndexedReadEvent::Message { header, data } => {
+                    let channel = summary.channels.get(&header.channel_id).ok_or_else(|| {
+                        anyhow::anyhow!("message references unknown channel {}", header.channel_id)
+                    })?;
+                    if buffer_for_ordering {
+                        buffered_messages.push(BufferedMessage {
+                            channel: channel.clone(),
+                            sequence: header.sequence,
+                            log_time: header.log_time,
+                            publish_time: header.publish_time,
+                            data: data.to_vec(),
+                        });
+                    } else {
+                        writer.write(&mcap::Message {
+                            channel: channel.clone(),
+                            sequence: header.sequence,
+                            log_time: header.log_time,
+                            publish_time: header.publish_time,
+                            data: Cow::Borrowed(data),
+                        })?;
                     }
                 }
             }
-            // `topic` is not an index order, so messages are read in log-time order (for a stable
-            // tie-break), buffered, re-sorted, then written. This holds the selected message set in
-            // memory; making this ordering memory-bounded is a known follow-up.
-            MessageOrder::Topic => {
-                let mut reader = mcap::sans_io::IndexedReader::new_with_options(
-                    summary,
-                    indexed_opts.with_order(mcap::sans_io::indexed_reader::ReadOrder::LogTime),
-                )?;
-                let mut buffered = Vec::<BufferedMessage>::new();
-                while let Some(event) = reader.next_event() {
-                    match event? {
-                        mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                            common::service_chunk_request(&mut reader, input, offset, length)?;
-                        }
-                        mcap::sans_io::IndexedReadEvent::Message { header, data } => {
-                            let channel =
-                                summary.channels.get(&header.channel_id).ok_or_else(|| {
-                                    anyhow::anyhow!(
-                                        "message references unknown channel {}",
-                                        header.channel_id
-                                    )
-                                })?;
-                            buffered.push(BufferedMessage {
-                                channel: channel.clone(),
-                                sequence: header.sequence,
-                                log_time: header.log_time,
-                                publish_time: header.publish_time,
-                                data: data.to_vec(),
-                            });
-                        }
-                    }
-                }
-                write_ordered_buffer(writer, buffered, opts.order)?;
-            }
+        }
+        if buffer_for_ordering {
+            write_ordered_buffer(writer, buffered_messages, opts.order)?;
         }
     }
 
