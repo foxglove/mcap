@@ -37,6 +37,8 @@ pub(crate) static LIBRARY_IDENTIFIER: LazyLock<String> = LazyLock::new(|| {
     name = "mcap",
     bin_name = "mcap",
     version = VERSION.as_str(),
+    about = "A command line tool for inspecting and manipulating MCAP files.",
+    after_help = help_footer(),
 )]
 pub struct Args {
     #[arg(
@@ -626,6 +628,29 @@ pub(crate) fn parse_timestamp_or_nanos(value: &str) -> Result<u64> {
         .checked_mul(1_000_000_000)
         .and_then(|v| v.checked_add(nanos))
         .with_context(|| format!("timestamp is out of range: '{value}'"))
+}
+
+/// Footer shown at the bottom of the root `mcap --help`.
+///
+/// Built as a `StyledStr` so the heading uses clap's default section-header style
+/// (bold + underline), matching the generated `Commands:`/`Options:` headings.
+/// clap strips the embedded styling when color is disabled or the output isn't a terminal.
+fn help_footer() -> clap::builder::StyledStr {
+    use std::fmt::Write as _;
+
+    use clap::builder::styling::Style;
+
+    const HEADER: Style = Style::new().bold().underline();
+
+    let mut footer = clap::builder::StyledStr::new();
+    let _ = write!(
+        footer,
+        "{HEADER}Learn more:{HEADER:#}\n  \
+         Homepage       https://mcap.dev\n  \
+         Specification  https://mcap.dev/spec\n\n\
+         MCAP is an open source project by Foxglove (https://foxglove.dev)."
+    );
+    footer
 }
 
 #[cfg(test)]
