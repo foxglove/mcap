@@ -840,6 +840,7 @@ mod tests {
             args.command,
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
+                output: None,
                 output_file: None,
                 compression: CompressionFormat::Zstd,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
@@ -875,7 +876,9 @@ mod tests {
             args.command,
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
-                output_file: Some("out.mcap".into()),
+                // `-o` is the canonical `--output`; `--output-file` is the deprecated alias.
+                output: Some("out.mcap".into()),
+                output_file: None,
                 compression: CompressionFormat::None,
                 chunk_size: 2048,
                 no_crc: true,
@@ -884,6 +887,19 @@ mod tests {
                 coalesce_channels: CoalesceChannels::Force,
             })
         );
+    }
+
+    #[test]
+    fn parses_merge_deprecated_output_file_alias() {
+        // The deprecated `--output-file` parses into its own field; the handler resolves it and
+        // warns.
+        let args = Args::try_parse_from(["mcap", "merge", "a.mcap", "--output-file", "out.mcap"])
+            .expect("merge with --output-file should parse");
+        let Command::Merge(merge) = args.command else {
+            panic!("expected a merge command");
+        };
+        assert_eq!(merge.output, None);
+        assert_eq!(merge.output_file, Some("out.mcap".into()));
     }
 
     #[test]
