@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::LazyLock;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use clap::{ArgAction, Parser, Subcommand};
 use clap_complete::Shell;
 use log::warn;
@@ -37,8 +37,11 @@ pub(crate) static LIBRARY_IDENTIFIER: LazyLock<String> = LazyLock::new(|| {
     name = "mcap",
     bin_name = "mcap",
     version = VERSION.as_str(),
+    about = "A command line tool for inspecting and manipulating MCAP files.",
+    after_help = help_footer(),
 )]
 pub struct Args {
+    /// When to color log output on stderr
     #[arg(
         short,
         long,
@@ -48,7 +51,10 @@ pub struct Args {
     )]
     pub color: logsetup::Color,
 
-    /// Allow commands to download/scan remote inputs
+    /// Allow whole-file scans or downloads of remote inputs.
+    ///
+    /// Applies to http(s):// and object-store URLs (s3://, s3a://, gs://, az://, abfs://). Small
+    /// bounded indexed reads work without this flag.
     #[arg(long, default_value_t = false, global = true)]
     pub allow_remote_scan: bool,
 
@@ -62,45 +68,73 @@ pub struct Args {
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum Command {
-    /// Add records to an existing MCAP file
+    /// Add an attachment or metadata record to an existing MCAP file (modifies the file in place).
     Add(AddCommand),
-    /// Concatenate the messages in one or more MCAP files to stdout
+    /// Concatenate the messages in one or more MCAP files to stdout.
+    ///
+    /// By default prints one line per message (log time, topic, schema name, and a short byte
+    /// preview). Use --json to print one JSON object per message instead.
     Cat(CatCommand),
-    /// Generate shell completion scripts
+    /// Generate shell completion scripts.
     ///
     /// To load completions in the current shell session:
     ///   bash:       source <(mcap completion bash)
     ///   zsh:        source <(mcap completion zsh)
     ///   fish:       mcap completion fish | source
     ///   powershell: mcap completion powershell | Out-String | Invoke-Expression
-    #[command(verbatim_doc_comment)]
+    #[command(verbatim_doc_comment, about = "Generate shell completion scripts")]
     Completion(CompletionCommand),
-    /// Create a compressed copy of an MCAP file
+    /// Create a compressed copy of an MCAP file.
+    ///
+    /// Equivalent to running `mcap filter --compression=zstd`.
     Compress(CompressCommand),
-    /// Convert supported input files to MCAP
+    /// Convert supported input files to MCAP.
+    ///
+    /// Reads from an input path or URL and writes to an output path; does not use stdin/stdout.
+    ///
+    /// Supported inputs:
+    ///   .bag  ROS 1 bag
+    ///   .db3  ROS 2 SQLite db3
     #[command(
-        long_about = "Convert supported input files to MCAP.\n\nSupported inputs:\n  .bag  ROS 1 bag\n  .db3  ROS 2 SQLite db3"
+        verbatim_doc_comment,
+        about = "Convert supported files (ROS 1 .bag, ROS 2 .db3) to MCAP"
     )]
     Convert(ConvertCommand),
-    /// Create an uncompressed copy of an MCAP file
+    /// Create an uncompressed copy of an MCAP file.
+    ///
+    /// Equivalent to running `mcap filter --compression=none`.
     Decompress(DecompressCommand),
-    /// Check an MCAP file structure
+    /// Check an MCAP file structure.
+    ///
+    /// Prints diagnostics to stderr; exits non-zero if any structural errors are found.
     Doctor(DoctorCommand),
-    /// Compute byte usage statistics for MCAP records
+    /// Compute byte usage statistics for MCAP records.
     Du(DuCommand),
-    /// Copy filtered MCAP data to a new file
+    /// Copy filtered MCAP data to an output file or stdout.
+    ///
+    /// Copies messages (optionally filtered by topic and time range) plus metadata and
+    /// attachments, and can change compression, chunking, and message order. `compress`,
+    /// `decompress`, and `sort` are presets over this command.
     Filter(FilterCommand),
-    /// Get a record from an MCAP file
+    /// Extract an attachment or metadata record from an MCAP file.
     Get(GetCommand),
-    /// Report statistics about an MCAP file
+    /// Report statistics about an MCAP file.
     Info(InfoCommand),
-    /// List records of an MCAP file
+    /// List attachments, channels, chunks, metadata, or schemas in an MCAP file.
     List(ListCommand),
-    /// Merge MCAP files
+    /// Merge MCAP files.
+    ///
+    /// Performs a k-way merge of messages from all inputs into a single output, ordered by log time.
     Merge(MergeCommand),
-    /// Recover data from a potentially corrupt MCAP file
+    /// Recover data from a potentially corrupt MCAP file.
+    ///
+    /// Scans records sequentially, skipping corrupt records and stopping early on truncated or
+    /// undecodable data, then writes a valid MCAP with indexes and CRCs rebuilt. Diagnostics go to
+    /// stderr; exits with status 3 if any records were discarded or the scan stopped early.
     Recover(RecoverCommand),
-    /// Read an MCAP file and write messages sorted by log time
+    /// Rewrite an MCAP file with messages reordered.
+    ///
+    /// With default options, equivalent to `mcap filter --order=log_time`.
     Sort(SortCommand),
 }
 
@@ -116,7 +150,7 @@ pub struct CompletionCommand {
 /// (and their help text) live in one place.
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct CommonRewriteArgs {
-    /// Input MCAP file path. If omitted, reads from stdin.
+    /// Input MCAP file path or URL. If omitted, reads from stdin.
     pub file: Option<PathBuf>,
 
     /// Output file path. If omitted, writes to stdout.
@@ -127,7 +161,7 @@ pub struct CommonRewriteArgs {
     #[arg(long = "output-file", hide = true)]
     pub output_file: Option<PathBuf>,
 
-    /// Target uncompressed chunk size for output
+    /// Target uncompressed chunk size in bytes
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
@@ -158,10 +192,10 @@ pub struct CompressCommand {
     pub common: CommonRewriteArgs,
 
     /// Compression algorithm for output file: zstd, lz4, or none
-    #[arg(long = "compression", default_value = "zstd")]
-    pub compression: String,
+    #[arg(long = "compression", value_enum, default_value = "zstd")]
+    pub compression: CompressionFormat,
 
-    /// Message order in the output: preserve (keep the input order) or log_time
+    /// Message order in the output: preserve (keep the input order), log_time, or topic
     #[arg(long = "order", value_enum, default_value = "preserve")]
     pub order: MessageOrder,
 }
@@ -171,7 +205,7 @@ pub struct DecompressCommand {
     #[command(flatten)]
     pub common: CommonRewriteArgs,
 
-    /// Message order in the output: preserve (keep the input order) or log_time
+    /// Message order in the output: preserve (keep the input order), log_time, or topic
     #[arg(long = "order", value_enum, default_value = "preserve")]
     pub order: MessageOrder,
 }
@@ -185,14 +219,14 @@ pub struct AddCommand {
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct CatCommand {
-    /// One or more local paths to MCAP files. If omitted, reads from stdin.
+    /// One or more paths or URLs to MCAP files. If omitted, reads from stdin.
     pub files: Vec<PathBuf>,
 
-    /// Comma-separated list of topics to include
-    #[arg(long = "topics", default_value = "")]
+    /// Comma-separated list of topics to include (exact match). If empty (the default), all topics are included.
+    #[arg(long = "topics", default_value = "", hide_default_value = true)]
     pub topics: String,
 
-    /// Include messages at or after this time (seconds)
+    /// Include messages with log time at or after this time (seconds)
     #[arg(
         long = "start-secs",
         default_value_t = 0,
@@ -200,27 +234,28 @@ pub struct CatCommand {
     )]
     pub start_secs: u64,
 
-    /// Include messages at or after this time (nanoseconds)
+    /// Include messages with log time at or after this time (nanoseconds)
     #[arg(long = "start-nsecs", default_value_t = 0)]
     pub start_nsecs: u64,
 
-    /// Include messages before this time (seconds)
+    /// Include messages with log time before this time (seconds); 0 (the default) means no upper bound
     #[arg(long = "end-secs", default_value_t = 0, conflicts_with = "end_nsecs")]
     pub end_secs: u64,
 
-    /// Include messages before this time (nanoseconds)
+    /// Include messages with log time before this time (nanoseconds)
     #[arg(long = "end-nsecs", default_value_t = 0)]
     pub end_nsecs: u64,
 
-    /// Print messages as JSON. Supported message encodings: ros1, protobuf, and json.
+    /// Print messages as JSON, one object per message. Supported schema encodings: ros1msg, protobuf, and jsonschema (or schemaless channels with json message encoding); other encodings error.
     #[arg(long = "json", default_value_t = false, conflicts_with = "csv")]
     pub json: bool,
 
     /// Print a single topic's messages as CSV. Requires --topic.
     ///
     /// Columns are the flattened message fields (dot notation) plus log_time,
-    /// publish_time, and sequence. Supported message encodings: ros1, protobuf,
-    /// and json.
+    /// publish_time, and sequence. Supported schema encodings: ros1msg,
+    /// protobuf, and jsonschema (or schemaless channels with json message
+    /// encoding); other encodings error.
     #[arg(long = "csv", default_value_t = false, requires = "topic")]
     pub csv: bool,
 
@@ -231,22 +266,25 @@ pub struct CatCommand {
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum AddSubcommand {
-    /// Add an attachment to an MCAP file
+    /// Add an attachment to an MCAP file.
+    ///
+    /// Rewrites FILE in place. WARNING: interrupting this (for example a process kill or disk full)
+    /// can leave FILE corrupted.
     Attachment(AddAttachmentCommand),
-    /// Add metadata to an MCAP file
+    /// Add metadata to an MCAP file.
+    ///
+    /// Rewrites FILE in place. WARNING: interrupting this (for example a process kill or disk full)
+    /// can leave FILE corrupted.
     Metadata(AddMetadataCommand),
 }
 
-/// Add an attachment to an MCAP file.
-///
-/// WARNING: this command rewrites the MCAP file in place and can leave it
-/// corrupted if interrupted (for example process kill or disk full).
+/// Arguments for `add attachment`.
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct AddAttachmentCommand {
     /// Local path to the MCAP file
     pub file: PathBuf,
 
-    /// Filename of attachment to add
+    /// Path to the local file to attach
     #[arg(short = 'f', long = "file")]
     pub attachment_file: PathBuf,
 
@@ -267,10 +305,7 @@ pub struct AddAttachmentCommand {
     pub creation_time: Option<String>,
 }
 
-/// Add metadata to an MCAP file.
-///
-/// WARNING: this command rewrites the MCAP file in place and can leave it
-/// corrupted if interrupted (for example process kill or disk full).
+/// Arguments for `add metadata`.
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct AddMetadataCommand {
     /// Local path to the MCAP file
@@ -280,7 +315,7 @@ pub struct AddMetadataCommand {
     #[arg(short = 'n', long = "name")]
     pub name: String,
 
-    /// Key-value pair in key=value format
+    /// Key-value pair in key=value format (repeatable)
     #[arg(short = 'k', long = "key")]
     pub key_values: Vec<String>,
 }
@@ -294,33 +329,33 @@ pub struct GetCommand {
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum GetSubcommand {
-    /// Get an attachment by name or offset
+    /// Get an attachment by name.
     Attachment(GetAttachmentCommand),
-    /// Get metadata by name
+    /// Get metadata by name.
     Metadata(GetMetadataCommand),
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct GetAttachmentCommand {
-    /// Local path to the MCAP file
+    /// Path or URL to the MCAP file
     pub file: PathBuf,
 
     /// Name of attachment to extract
     #[arg(short = 'n', long = "name")]
     pub name: String,
 
-    /// Offset of attachment to extract
+    /// Byte offset of the attachment record (from `mcap list attachments`), used to disambiguate multiple attachments that share the same name
     #[arg(long = "offset")]
     pub offset: Option<u64>,
 
-    /// Location to write attachment bytes
+    /// Location to write attachment bytes. If omitted, writes to stdout (refuses if stdout is a terminal)
     #[arg(short = 'o', long = "output")]
     pub output: Option<PathBuf>,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct GetMetadataCommand {
-    /// Local path to the MCAP file
+    /// Path or URL to the MCAP file
     pub file: PathBuf,
 
     /// Name of metadata record to get
@@ -337,15 +372,15 @@ pub struct ListCommand {
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
 pub enum ListSubcommand {
-    /// List attachments in an MCAP file
+    /// List attachments in an MCAP file.
     Attachments(ListAttachmentsCommand),
-    /// List channels in an MCAP file
+    /// List channels in an MCAP file.
     Channels(ListChannelsCommand),
-    /// List chunks in an MCAP file
+    /// List chunks in an MCAP file.
     Chunks(ListChunksCommand),
-    /// List metadata in an MCAP file
+    /// List metadata in an MCAP file.
     Metadata(ListMetadataCommand),
-    /// List schemas in an MCAP file
+    /// List schemas in an MCAP file.
     Schemas(ListSchemasCommand),
 }
 
@@ -357,36 +392,43 @@ pub enum CompressionFormat {
 }
 
 impl CompressionFormat {
-    pub fn as_str(self) -> &'static str {
+    /// Convert to the library's compression enum, where `None` means uncompressed.
+    pub fn to_compression(self) -> Option<mcap::Compression> {
         match self {
-            CompressionFormat::Zstd => "zstd",
-            CompressionFormat::Lz4 => "lz4",
-            CompressionFormat::None => "none",
+            CompressionFormat::Zstd => Some(mcap::Compression::Zstd),
+            CompressionFormat::Lz4 => Some(mcap::Compression::Lz4),
+            CompressionFormat::None => None,
         }
     }
 }
 
-/// Output message order for the rewrite commands (`filter`, `compress`, `decompress`).
+/// Output message order for the rewrite commands (`filter`, `compress`, `decompress`, `sort`).
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum MessageOrder {
     /// Keep the input's stored message order.
     #[default]
     #[value(name = "preserve")]
     Preserve,
-    /// Sort messages by log time.
+    /// Sort messages by ascending log time.
     #[value(name = "log_time", alias = "log-time")]
     LogTime,
+    /// Group each channel's messages together (channels ordered by topic name, then channel ID),
+    /// placing every channel in its own chunk(s) with its messages in ascending log time. This lets
+    /// a single-topic reader fetch one contiguous byte range instead of scanning the whole file.
+    /// Buffers all selected messages in memory while reordering.
+    #[value(name = "topic")]
+    Topic,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct ConvertCommand {
-    /// Local path to the input file
+    /// Path or URL to the input file
     pub input: PathBuf,
 
     /// Local path for the destination MCAP file
     pub output: PathBuf,
 
-    /// Chunk compression algorithm for output MCAP
+    /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
@@ -398,30 +440,37 @@ pub struct ConvertCommand {
     #[arg(long = "no-crc", default_value_t = false)]
     pub no_crc: bool,
 
-    /// Write records outside of chunks
+    /// Write records outside of chunks (ignores --chunk-size and --compression)
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoalesceChannels {
+    /// Coalesce channels with matching topic, schema, encoding, and metadata
     Auto,
+    /// Like auto, but ignore metadata differences
     Force,
+    /// Do not coalesce channels
     None,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 #[command(arg_required_else_help = true)]
 pub struct MergeCommand {
-    /// One or more local paths to MCAP files
+    /// One or more paths or URLs to MCAP files
     #[arg(required = true)]
     pub files: Vec<PathBuf>,
 
     /// Output file path. If omitted, writes to stdout.
-    #[arg(short = 'o', long = "output-file")]
+    #[arg(short = 'o', long = "output")]
+    pub output: Option<PathBuf>,
+
+    /// Deprecated: use --output.
+    #[arg(long = "output-file", hide = true)]
     pub output_file: Option<PathBuf>,
 
-    /// Chunk compression algorithm for output MCAP
+    /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
@@ -433,7 +482,7 @@ pub struct MergeCommand {
     #[arg(long = "no-crc", default_value_t = false)]
     pub no_crc: bool,
 
-    /// Write records outside of chunks
+    /// Write records outside of chunks (ignores --chunk-size and --compression)
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 
@@ -443,21 +492,17 @@ pub struct MergeCommand {
     #[arg(long, default_value_t = false)]
     pub allow_duplicate_metadata: bool,
 
-    /// Channel coalescing behavior:
-    /// - auto: coalesce channels with matching topic, schema, encoding, and
-    ///   metadata
-    /// - force: same as auto but ignores metadata
-    /// - none: do not coalesce channels
+    /// Channel coalescing behavior.
     ///
-    /// Note: coalescing channels may produce non-monotonic or colliding
-    /// sequence values within a coalesced output channel.
+    /// Note: coalescing channels may produce non-monotonic or colliding sequence values within a
+    /// coalesced output channel.
     #[arg(long, value_enum, default_value = "auto")]
     pub coalesce_channels: CoalesceChannels,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct FileCommand {
-    /// Local path to the MCAP file
+    /// Path or URL to the MCAP file
     pub file: PathBuf,
 }
 
@@ -467,7 +512,7 @@ pub struct DuCommand {
     #[arg(long, default_value_t = false)]
     pub approximate: bool,
 
-    /// Local path to the MCAP file
+    /// Path or URL to the MCAP file
     pub file: PathBuf,
 }
 
@@ -476,23 +521,23 @@ pub struct FilterCommand {
     #[command(flatten)]
     pub common: CommonRewriteArgs,
 
-    /// Include topics matching this regex (repeatable)
+    /// Include only topics matching this regex, matched against the full topic name (repeatable; cannot be combined with --exclude-topic-regex)
     #[arg(short = 'y', long = "include-topic-regex")]
     pub include_topic_regex: Vec<String>,
 
-    /// Exclude topics matching this regex (repeatable)
+    /// Exclude topics matching this regex, matched against the full topic name (repeatable; cannot be combined with --include-topic-regex)
     #[arg(short = 'n', long = "exclude-topic-regex")]
     pub exclude_topic_regex: Vec<String>,
 
-    /// Include the last pre-start message for matching topics (repeatable)
+    /// For topics matching this regex, also include the most recent message before the start time for each channel (captures latched/initial state). No effect when the start time is unset or 0. Requires an indexed input (errors on non-indexed files). Repeatable.
     #[arg(short = 'l', long = "last-per-channel-topic-regex")]
     pub last_per_channel_topic_regex: Vec<String>,
 
-    /// Include messages at or after this time (nanos or RFC3339)
+    /// Include messages with log time at or after this time (nanoseconds since the Unix epoch, or RFC3339). If omitted, starts at the beginning.
     #[arg(short = 'S', long = "start")]
     pub start: Option<String>,
 
-    /// Include messages at or after this time (seconds)
+    /// Include messages with log time at or after this time (seconds)
     #[arg(
         short = 's',
         long = "start-secs",
@@ -501,15 +546,15 @@ pub struct FilterCommand {
     )]
     pub start_secs: u64,
 
-    /// Deprecated: include messages at or after this time (nanoseconds)
-    #[arg(long = "start-nsecs", default_value_t = 0)]
+    /// Deprecated: include messages with log time at or after this time (nanoseconds)
+    #[arg(long = "start-nsecs", default_value_t = 0, hide = true)]
     pub start_nsecs: u64,
 
-    /// Include messages before this time (nanos or RFC3339)
+    /// Include messages with log time before this time (nanoseconds since the Unix epoch, or RFC3339). If omitted, no upper bound.
     #[arg(short = 'E', long = "end")]
     pub end: Option<String>,
 
-    /// Include messages before this time (seconds)
+    /// Include messages with log time before this time (seconds); 0 (the default) means no upper bound
     #[arg(
         short = 'e',
         long = "end-secs",
@@ -518,8 +563,8 @@ pub struct FilterCommand {
     )]
     pub end_secs: u64,
 
-    /// Deprecated: include messages before this time (nanoseconds)
-    #[arg(long = "end-nsecs", default_value_t = 0)]
+    /// Deprecated: include messages with log time before this time (nanoseconds)
+    #[arg(long = "end-nsecs", default_value_t = 0, hide = true)]
     pub end_nsecs: u64,
 
     /// Exclude metadata records from the output (metadata is included by default)
@@ -538,7 +583,7 @@ pub struct FilterCommand {
     #[arg(long = "include-attachments", default_value_t = false, hide = true)]
     pub include_attachments: bool,
 
-    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none (default: zstd)
+    /// Compression algorithm for output file: zstd, lz4, or none (default: zstd)
     #[arg(long = "compression", value_enum)]
     pub compression: Option<CompressionFormat>,
 
@@ -546,39 +591,39 @@ pub struct FilterCommand {
     #[arg(long = "output-compression", value_enum, hide = true)]
     pub output_compression: Option<CompressionFormat>,
 
-    /// Write records outside of chunks
+    /// Write records outside of chunks (ignores --chunk-size and --compression)
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 
-    /// Message order in the output: preserve (keep the input order) or log_time
+    /// Message order in the output: preserve (keep the input order), log_time, or topic
     #[arg(long = "order", value_enum, default_value = "preserve")]
     pub order: MessageOrder,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct DoctorCommand {
-    /// Require that messages have a monotonic log time
+    /// Treat decreasing message log times as errors (non-zero exit) instead of warnings
     #[arg(long, default_value_t = false)]
     pub strict_message_order: bool,
 
-    /// Local path to the MCAP file
+    /// Path or URL to the MCAP file
     pub file: PathBuf,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct RecoverCommand {
-    /// Input MCAP file path. If omitted, reads from stdin.
+    /// Input MCAP file path or URL. If omitted, reads from stdin.
     pub file: Option<PathBuf>,
 
     /// Output MCAP file path. If omitted, writes to stdout.
     #[arg(short = 'o', long = "output")]
     pub output: Option<PathBuf>,
 
-    /// Target uncompressed chunk size for output MCAP
+    /// Target uncompressed chunk size in bytes
     #[arg(long = "chunk-size", default_value_t = mcap::WriteOptions::DEFAULT_CHUNK_SIZE)]
     pub chunk_size: u64,
 
-    /// Compression for the output file: preserve, none, zstd, or lz4.
+    /// Compression algorithm for output file: zstd, lz4, none, or preserve
     ///
     /// `preserve` (the default) keeps the input file's compression (uncompressed if the input is
     /// unchunked).
@@ -591,18 +636,15 @@ pub struct SortCommand {
     #[command(flatten)]
     pub common: CommonRewriteArgs,
 
-    /// Chunk compression algorithm for output MCAP: zstd, lz4, or none
+    /// Compression algorithm for output file: zstd, lz4, or none
     #[arg(long, value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
-    /// Write records outside of chunks
+    /// Write records outside of chunks (ignores --chunk-size and --compression)
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 
-    /// Message order in the output: preserve (keep the input order) or log_time.
-    ///
-    /// `sort` defaults to log_time; it accepts the same flag as the other rewrite commands so it
-    /// can be overridden (and future modes such as publish_time will apply here too).
+    /// Message order in the output (defaults to log_time for `sort`).
     #[arg(long = "order", value_enum, default_value = "log_time")]
     pub order: MessageOrder,
 }
@@ -613,18 +655,6 @@ pub type ListChannelsCommand = FileCommand;
 pub type ListChunksCommand = FileCommand;
 pub type ListMetadataCommand = FileCommand;
 pub type ListSchemasCommand = FileCommand;
-
-/// Parse a CLI-supplied output compression value, where `none` disables compression.
-pub(crate) fn parse_output_compression(value: &str) -> Result<Option<mcap::Compression>> {
-    match value {
-        "zstd" => Ok(Some(mcap::Compression::Zstd)),
-        "lz4" => Ok(Some(mcap::Compression::Lz4)),
-        "none" | "" => Ok(None),
-        _ => bail!(
-            "unrecognized compression format '{value}': valid options are 'lz4', 'zstd', or 'none'"
-        ),
-    }
-}
 
 /// Parse a CLI-supplied timestamp as either integer nanoseconds or an RFC3339 string.
 ///
@@ -647,6 +677,29 @@ pub(crate) fn parse_timestamp_or_nanos(value: &str) -> Result<u64> {
         .with_context(|| format!("timestamp is out of range: '{value}'"))
 }
 
+/// Footer shown at the bottom of the root `mcap --help`.
+///
+/// Built as a `StyledStr` so the heading uses clap's default section-header style
+/// (bold + underline), matching the generated `Commands:`/`Options:` headings.
+/// clap strips the embedded styling when color is disabled or the output isn't a terminal.
+fn help_footer() -> clap::builder::StyledStr {
+    use std::fmt::Write as _;
+
+    use clap::builder::styling::Style;
+
+    const HEADER: Style = Style::new().bold().underline();
+
+    let mut footer = clap::builder::StyledStr::new();
+    let _ = write!(
+        footer,
+        "{HEADER}Learn more:{HEADER:#}\n  \
+         Homepage       https://mcap.dev\n  \
+         Specification  https://mcap.dev/spec\n\n\
+         MCAP is an open source project by Foxglove (https://foxglove.dev)."
+    );
+    footer
+}
+
 #[cfg(test)]
 mod tests {
     use super::parse_timestamp_or_nanos;
@@ -657,33 +710,6 @@ mod tests {
         assert!(library.starts_with("mcap-cli/"));
         assert!(library.ends_with(mcap::LIBRARY_IDENTIFIER));
         assert!(library.contains(" mcap-rust/"));
-    }
-
-    #[test]
-    fn parse_output_compression_supports_known_values() {
-        assert!(matches!(
-            super::parse_output_compression("zstd").expect("zstd should parse"),
-            Some(mcap::Compression::Zstd)
-        ));
-        assert!(matches!(
-            super::parse_output_compression("lz4").expect("lz4 should parse"),
-            Some(mcap::Compression::Lz4)
-        ));
-        assert!(super::parse_output_compression("none")
-            .expect("none should parse")
-            .is_none());
-        assert!(super::parse_output_compression("")
-            .expect("empty should parse")
-            .is_none());
-    }
-
-    #[test]
-    fn parse_output_compression_rejects_unknown_values() {
-        let err =
-            super::parse_output_compression("snappy").expect_err("unknown compression should fail");
-        assert!(err
-            .to_string()
-            .contains("unrecognized compression format 'snappy'"));
     }
 
     #[test]

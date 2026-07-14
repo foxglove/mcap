@@ -84,10 +84,10 @@ mod tests {
     use super::dispatch;
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
-        CommonRewriteArgs, CompressCommand, DoctorCommand, DuCommand, GetAttachmentCommand,
-        GetMetadataCommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand,
-        ListChunksCommand, ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand,
-        MessageOrder, RecoverCommand, SortCommand,
+        CommonRewriteArgs, DoctorCommand, DuCommand, GetAttachmentCommand, GetMetadataCommand,
+        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MessageOrder, RecoverCommand,
+        SortCommand,
     };
     use crate::context::CommandContext;
 
@@ -249,26 +249,6 @@ mod tests {
     }
 
     #[test]
-    fn compress_rejects_invalid_compression() {
-        let err = dispatch(
-            &CommandContext::default(),
-            Command::Compress(CompressCommand {
-                common: CommonRewriteArgs {
-                    file: None,
-                    output: None,
-                    output_file: None,
-                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                    no_crc: false,
-                },
-                compression: "invalid".to_string(),
-                order: MessageOrder::Preserve,
-            }),
-        )
-        .expect_err("compress should reject invalid compression");
-        assert!(err.to_string().contains("unrecognized compression format"));
-    }
-
-    #[test]
     fn sort_requires_existing_file() {
         let err = dispatch(
             &CommandContext::default(),
@@ -286,9 +266,6 @@ mod tests {
             }),
         )
         .expect_err("sort should fail on missing input file");
-        assert!(
-            err.to_string().contains("couldn't open")
-                || err.to_string().contains("failed to canonicalize input")
-        );
+        assert!(err.to_string().contains("couldn't open"));
     }
 }

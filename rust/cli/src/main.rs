@@ -554,7 +554,7 @@ mod tests {
                     chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
                     no_crc: false,
                 },
-                compression: "zstd".to_string(),
+                compression: CompressionFormat::Zstd,
                 order: MessageOrder::Preserve,
             })
         );
@@ -587,10 +587,17 @@ mod tests {
                     chunk_size: 1024,
                     no_crc: true,
                 },
-                compression: "lz4".to_string(),
+                compression: CompressionFormat::Lz4,
                 order: MessageOrder::LogTime,
             })
         );
+    }
+
+    #[test]
+    fn rejects_compress_invalid_compression() {
+        let err = Args::try_parse_from(["mcap", "compress", "in.mcap", "--compression", "invalid"])
+            .expect_err("invalid compression should be rejected at parse time");
+        assert_eq!(err.kind(), clap::error::ErrorKind::InvalidValue);
     }
 
     #[test]
@@ -748,11 +755,15 @@ mod tests {
             other => panic!("expected filter command, got {other:?}"),
         }
 
-        for value in ["log_time", "log-time"] {
+        for (value, expected) in [
+            ("log_time", MessageOrder::LogTime),
+            ("log-time", MessageOrder::LogTime),
+            ("topic", MessageOrder::Topic),
+        ] {
             let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order", value])
                 .unwrap_or_else(|_| panic!("filter should parse --order {value}"));
             match args.command {
-                Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::LogTime),
+                Command::Filter(filter) => assert_eq!(filter.order, expected),
                 other => panic!("expected filter command, got {other:?}"),
             }
         }
@@ -878,8 +889,8 @@ mod tests {
                 },
                 compression: CompressionFormat::None,
                 no_chunks: true,
-                // `--order` stays a real flag on `sort`, so it can be overridden (and future
-                // modes like publish_time can be added) rather than being locked to log_time.
+                // `--order` is a real flag on `sort`, so it can be overridden rather than being
+                // locked to its log_time default.
                 order: MessageOrder::Preserve,
             })
         );
@@ -893,6 +904,7 @@ mod tests {
             args.command,
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
+                output: None,
                 output_file: None,
                 compression: CompressionFormat::Zstd,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
@@ -928,7 +940,9 @@ mod tests {
             args.command,
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
-                output_file: Some("out.mcap".into()),
+                // `-o` is the canonical `--output`; `--output-file` is the deprecated alias.
+                output: Some("out.mcap".into()),
+                output_file: None,
                 compression: CompressionFormat::None,
                 chunk_size: 2048,
                 no_crc: true,
@@ -937,6 +951,19 @@ mod tests {
                 coalesce_channels: CoalesceChannels::Force,
             })
         );
+    }
+
+    #[test]
+    fn parses_merge_deprecated_output_file_alias() {
+        // The deprecated `--output-file` parses into its own field; the handler resolves it and
+        // warns.
+        let args = Args::try_parse_from(["mcap", "merge", "a.mcap", "--output-file", "out.mcap"])
+            .expect("merge with --output-file should parse");
+        let Command::Merge(merge) = args.command else {
+            panic!("expected a merge command");
+        };
+        assert_eq!(merge.output, None);
+        assert_eq!(merge.output_file, Some("out.mcap".into()));
     }
 
     #[test]

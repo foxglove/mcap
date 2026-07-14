@@ -1,6 +1,6 @@
 # MCAP CLI
 
-A command line tool for inspecting, editing, and converting [MCAP](https://mcap.dev) files.
+A command line tool for inspecting and manipulating [MCAP](https://mcap.dev) files.
 
 ## Getting started
 
