@@ -97,6 +97,31 @@
   padding: 4rem 0;
 }
 
+.splitLayout {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+@media (min-width: 996px) {
+  .splitLayout {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .demoColumn {
+    flex: 1 1 45%;
+    min-width: 0;
+  }
+
+  .featuresColumn {
+    flex: 1 1 55%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+  }
+}
+
 .featureGrid {
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
@@ -114,12 +139,130 @@
   .featureGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  /* When shown beside the demo, the grid has less width, so use fewer
+     columns (2) and let the extra rows flow vertically. */
+  .featuresColumn .featureGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem;
+  }
 }
 
 .featureIcon {
   display: inline-block;
   width: 60px;
   height: auto;
+}
+
+.comparisonHeader {
+  margin-bottom: 2rem;
+}
+
+.comparisonHeader h2 {
+  margin-bottom: 4px;
+  font-weight: 800;
+}
+
+.comparisonSubhead {
+  line-height: 1.5;
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.comparisonTableWrapper {
+  overflow-x: auto;
+}
+
+.comparisonTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.comparisonTable th,
+.comparisonTable td {
+  padding: 0.75rem 1rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--ifm-table-border-color);
+}
+
+.comparisonTable thead th {
+  font-weight: 700;
+  border-bottom-width: 2px;
+}
+
+.comparisonTable tbody th {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.inlineCode {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.875em;
+  color: #c7254e;
+  background-color: #f9f2f4;
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+[data-theme="dark"] .inlineCode {
+  color: #f48fb1;
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.languageGrid {
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (min-width: 640px) {
+  .languageGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 996px) {
+  .languageGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.languageCard {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-family: inherit;
+  color: var(--ifm-font-color-base);
+  background-color: var(--ifm-card-background-color);
+  border: 1px solid var(--ifm-color-emphasis-200);
+  border-radius: var(--ifm-card-border-radius);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    color 0.15s ease;
+}
+
+.languageCard:hover {
+  color: var(--ifm-color-primary);
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 0 5px 0 rgb(0 0 0 / 0.1);
+}
+
+.languageCardSelected,
+.languageCardSelected:hover {
+  color: var(--ifm-color-primary);
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 0 0 1px var(--ifm-color-primary);
+}
+
+.languageCode {
+  margin-top: 1.5rem;
 }
 
 .logosHeader {

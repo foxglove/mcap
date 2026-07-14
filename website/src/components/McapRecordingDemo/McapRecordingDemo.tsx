@@ -149,6 +149,18 @@ export function McapRecordingDemo(): JSX.Element {
 
           <RecordingStats />
         </div>
+        <div className={styles.conversionCallout}>
+          <p className={styles.conversionCalloutLead}>
+            Already have ROS bag or ROS 2 .db3 data?
+          </p>
+          <p className={styles.conversionCalloutBody}>
+            Skip straight to{" "}
+            <Link to="/guides/cli#ros-bag-to-mcap-conversion">
+              converting existing recordings
+            </Link>{" "}
+            with the mcap CLI instead of writing files from scratch.
+          </p>
+        </div>
       </div>
     </section>
   );
