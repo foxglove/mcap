@@ -4,7 +4,9 @@ import Link from "@docusaurus/Link";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import CodeBlock from "@theme/CodeBlock";
 import Layout from "@theme/Layout";
-import React, { Suspense, useState } from "react";
+import TabItem from "@theme/TabItem";
+import Tabs from "@theme/Tabs";
+import React, { Suspense } from "react";
 
 import styles from "./index.module.css";
 import * as icons from "../icons/index.ts";
@@ -143,6 +145,7 @@ int main() {
 
   mcap::Message msg;
   msg.channelId = channel.id;
+  msg.sequence = 0;
   msg.logTime = 0;
   msg.publishTime = 0;
   std::string data = R"({"value": 1.0})";
@@ -199,29 +202,22 @@ func main() {
   {
     name: "Rust",
     language: "rust",
-    code: `use mcap::{Writer, Channel, Schema};
-use std::fs;
-use std::sync::Arc;
+    code: `use mcap::{records::MessageHeader, Writer};
+use std::{collections::BTreeMap, fs};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut out = fs::File::create("out.mcap")?;
-    let mut writer = Writer::new(&mut out)?;
-
-    let schema = Arc::new(Schema {
-        name: "ExampleMsg".to_string(),
-        encoding: "jsonschema".to_string(),
-        data: br#"{"type":"object","properties":{"value":{"type":"number"}}}"#.to_vec().into(),
-    });
-
-    let channel = Arc::new(Channel {
-        topic: "/example".to_string(),
-        message_encoding: "json".to_string(),
-        schema: Some(schema),
-        metadata: Default::default(),
-    });
-
-    writer.add_message(&channel, 0, 0, br#"{"value": 1.0}"#)?;
-    writer.finish()?;
+    let mut out = Writer::new(fs::File::create("out.mcap")?)?;
+    let schema_id = out.add_schema(
+        "ExampleMsg",
+        "jsonschema",
+        br#"{"type":"object","properties":{"value":{"type":"number"}}}"#,
+    )?;
+    let channel_id = out.add_channel(schema_id, "/example", "json", &BTreeMap::new())?;
+    out.write_to_known_channel(
+        &MessageHeader { channel_id, sequence: 0, log_time: 0, publish_time: 0 },
+        br#"{"value": 1.0}"#,
+    )?;
+    out.finish()?;
     Ok(())
 }`,
   },
@@ -230,8 +226,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     language: "ts",
     code: `import { McapWriter } from "@mcap/core";
 import { FileHandleWritable } from "@mcap/nodejs";
+import { open } from "node:fs/promises";
 
-const writer = new McapWriter({ writable: await FileHandleWritable.create("out.mcap") });
+const writable = new FileHandleWritable(await open("out.mcap", "w"));
+const writer = new McapWriter({ writable });
 await writer.start({ library: "example", profile: "" });
 
 const schemaId = await writer.registerSchema({
@@ -262,62 +260,77 @@ await writer.end();`,
   {
     name: "Swift",
     language: "swift",
-    code: `import MCAP
+    code: `import Foundation
+import MCAP
 
-let writer = try MCAPWriter(toFile: "out.mcap")
+final class FileWritable: IWritable {
+    private let handle: FileHandle
 
-let schemaId = try writer.addSchema(
+    init(path: String) throws {
+        FileManager.default.createFile(atPath: path, contents: nil)
+        handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+    }
+
+    func position() -> UInt64 {
+        handle.offsetInFile
+    }
+
+    func write(_ data: Data) async {
+        handle.write(data)
+    }
+
+    func close() throws {
+        try handle.close()
+    }
+}
+
+let sink = try FileWritable(path: "out.mcap")
+defer { try? sink.close() }
+
+let writer = MCAPWriter(sink)
+await writer.start(library: "example", profile: "")
+
+let schemaId = await writer.addSchema(
     name: "ExampleMsg",
     encoding: "jsonschema",
     data: Data(#"{"type":"object","properties":{"value":{"type":"number"}}}"#.utf8)
 )
 
-let channelId = try writer.addChannel(
-    schemaId: schemaId,
+let channelId = await writer.addChannel(
+    schemaID: schemaId,
     topic: "/example",
-    messageEncoding: "json"
+    messageEncoding: "json",
+    metadata: [:]
 )
 
-try writer.addMessage(
-    channelId: channelId,
-    logTime: 0,
-    publishTime: 0,
-    data: Data(#"{"value": 1.0}"#.utf8)
+await writer.addMessage(
+    Message(
+        channelID: channelId,
+        sequence: 0,
+        logTime: 0,
+        publishTime: 0,
+        data: Data(#"{"value": 1.0}"#.utf8)
+    )
 )
 
-try writer.close()`,
+await writer.end()`,
   },
 ];
 
 function LanguageExamplePicker(): JSX.Element {
-  const [selected, setSelected] = useState(LanguageExamples[0]!);
   return (
-    <>
-      <div className={styles.languageGrid} role="tablist">
-        {LanguageExamples.map((example) => {
-          const isSelected = selected.name === example.name;
-          return (
-            <button
-              key={example.name}
-              type="button"
-              role="tab"
-              aria-selected={isSelected}
-              className={`${styles.languageCard ?? ""} ${
-                isSelected ? (styles.languageCardSelected ?? "") : ""
-              }`}
-              onClick={() => {
-                setSelected(example);
-              }}
-            >
-              {example.name}
-            </button>
-          );
-        })}
-      </div>
-      <div className={styles.languageCode}>
-        <CodeBlock language={selected.language}>{selected.code}</CodeBlock>
-      </div>
-    </>
+    <Tabs>
+      {LanguageExamples.map((example, index) => (
+        <TabItem
+          key={example.name}
+          value={example.language}
+          label={example.name}
+          default={index === 0}
+        >
+          <CodeBlock language={example.language}>{example.code}</CodeBlock>
+        </TabItem>
+      ))}
+    </Tabs>
   );
 }
 
@@ -409,7 +422,7 @@ function ComparisonTable(): JSX.Element {
             <th scope="row">Default in ROS 2</th>
             <td>—</td>
             <td>Iron and earlier</td>
-            <td>Iron and later (current)</td>
+            <td>Jazzy and later (current)</td>
           </tr>
         </tbody>
         </table>

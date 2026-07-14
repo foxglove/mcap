@@ -211,60 +211,6 @@
   background-color: rgba(255, 255, 255, 0.08);
 }
 
-.languageGrid {
-  display: grid;
-  grid-template-columns: repeat(1, minmax(0, 1fr));
-  gap: 1rem;
-}
-
-@media (min-width: 640px) {
-  .languageGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 996px) {
-  .languageGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
-.languageCard {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1.5rem 1rem;
-  font-size: 1.125rem;
-  font-weight: 700;
-  font-family: inherit;
-  color: var(--ifm-font-color-base);
-  background-color: var(--ifm-card-background-color);
-  border: 1px solid var(--ifm-color-emphasis-200);
-  border-radius: var(--ifm-card-border-radius);
-  cursor: pointer;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease,
-    color 0.15s ease;
-}
-
-.languageCard:hover {
-  color: var(--ifm-color-primary);
-  border-color: var(--ifm-color-primary);
-  box-shadow: 0 0 5px 0 rgb(0 0 0 / 0.1);
-}
-
-.languageCardSelected,
-.languageCardSelected:hover {
-  color: var(--ifm-color-primary);
-  border-color: var(--ifm-color-primary);
-  box-shadow: 0 0 0 1px var(--ifm-color-primary);
-}
-
-.languageCode {
-  margin-top: 1.5rem;
-}
-
 .logosHeader {
   text-align: center;
   margin-bottom: 3rem;
