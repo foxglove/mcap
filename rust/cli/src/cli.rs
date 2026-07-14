@@ -83,13 +83,16 @@ pub enum Command {
     Completion(CompletionCommand),
     /// Create a compressed copy of an MCAP file.
     ///
-    /// Equivalent to running `mcap filter --compression=zstd` (pick another
-    /// algorithm with `--compression`).
+    /// Equivalent to running `mcap filter --compression=zstd`.
     Compress(CompressCommand),
     /// Convert supported input files to MCAP.
-    #[command(
-        long_about = "Convert supported input files to MCAP.\n\nReads from an input path or URL and writes to an output path; does not use stdin/stdout.\n\nSupported inputs:\n  .bag  ROS 1 bag\n  .db3  ROS 2 SQLite db3"
-    )]
+    ///
+    /// Reads from an input path or URL and writes to an output path; does not use stdin/stdout.
+    ///
+    /// Supported inputs:
+    ///   .bag  ROS 1 bag
+    ///   .db3  ROS 2 SQLite db3
+    #[command(verbatim_doc_comment, about = "Convert supported input files to MCAP")]
     Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file.
     ///
@@ -103,10 +106,9 @@ pub enum Command {
     Du(DuCommand),
     /// Copy filtered MCAP data to an output file or stdout.
     ///
-    /// The general-purpose rewrite command: copies selected records to a new
-    /// file, optionally selecting by topic and time range and changing
-    /// compression, chunking, and message order. `compress`, `decompress`, and
-    /// `sort` are presets over this command.
+    /// Copies messages (optionally filtered by topic and time range) plus metadata and
+    /// attachments, and can change compression, chunking, and message order. `compress`,
+    /// `decompress`, and `sort` are presets over this command.
     Filter(FilterCommand),
     /// Extract an attachment or metadata record from an MCAP file.
     Get(GetCommand),
