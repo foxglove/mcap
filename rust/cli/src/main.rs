@@ -178,6 +178,16 @@ mod tests {
     }
 
     #[test]
+    fn cat_rejects_csv_without_topic() {
+        let parse_err = Args::try_parse_from(["mcap", "cat", "demo.mcap", "--csv"])
+            .expect_err("--csv should require --topic");
+        assert_eq!(
+            parse_err.kind(),
+            clap::error::ErrorKind::MissingRequiredArgument
+        );
+    }
+
+    #[test]
     fn cat_rejects_csv_with_json() {
         let parse_err = Args::try_parse_from([
             "mcap",
@@ -193,11 +203,22 @@ mod tests {
     }
 
     #[test]
+    fn cat_rejects_topic_without_csv() {
+        let parse_err = Args::try_parse_from(["mcap", "cat", "demo.mcap", "--topic", "/tf"])
+            .expect_err("--topic should require --csv");
+        assert_eq!(
+            parse_err.kind(),
+            clap::error::ErrorKind::MissingRequiredArgument
+        );
+    }
+
+    #[test]
     fn cat_rejects_topic_with_topics() {
         let parse_err = Args::try_parse_from([
             "mcap",
             "cat",
             "demo.mcap",
+            "--csv",
             "--topic",
             "/tf",
             "--topics",

@@ -12,6 +12,8 @@ use crate::cli::CatCommand;
 use crate::context::CommandContext;
 use crate::{parse, render, source};
 
+use super::CommandOutcome;
+
 const MESSAGE_PREVIEW_LEN: usize = 10;
 
 // prost-reflect's default JSON serialization follows the canonical proto3 mapping, which omits
@@ -19,7 +21,7 @@ const MESSAGE_PREVIEW_LEN: usize = 10;
 const PROTOBUF_SERIALIZE_OPTIONS: SerializeOptions =
     SerializeOptions::new().skip_default_fields(false);
 
-pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
+pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<CommandOutcome> {
     let opts = CatOptions::from_args(&args)?;
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let stdout = std::io::stdout();
@@ -32,17 +34,22 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
             bail!("supply a file");
         }
         if cat_streaming(&mut writer, stdin.lock(), &opts, &mut csv_state)? {
-            return Ok(());
+            return Ok(CommandOutcome::Success);
         }
     } else {
         for file in args.files {
             if cat_file(&mut writer, &file, &opts, source_options, &mut csv_state)? {
-                return Ok(());
+                return Ok(CommandOutcome::Success);
             }
         }
     }
 
-    flush_or_ignore_broken_pipe(&mut writer)
+    flush_or_ignore_broken_pipe(&mut writer)?;
+    Ok(if csv_state.dropped_extra_columns {
+        CommandOutcome::Warnings
+    } else {
+        CommandOutcome::Success
+    })
 }
 
 fn cat_file(
@@ -717,7 +724,8 @@ fn write_message(
 #[derive(Debug, Default)]
 struct CsvState {
     header: Option<Vec<String>>,
-    warned_extra_columns: bool,
+    dropped_extra_columns: bool,
+    buffer: Vec<u8>,
 }
 
 fn write_csv_message(
@@ -730,45 +738,47 @@ fn write_csv_message(
     flatten_value("", &value, &mut fields);
 
     let csv_state = &mut *out.csv;
-    let mut csv_writer = csv::WriterBuilder::new().from_writer(&mut *writer);
-    let write_result: std::result::Result<(), csv::Error> = (|| {
-        if csv_state.header.is_none() {
-            let mut header = vec![
-                "log_time".to_string(),
-                "publish_time".to_string(),
-                "sequence".to_string(),
-            ];
-            header.extend(fields.keys().cloned());
-            csv_writer.write_record(&header)?;
-            csv_state.header = Some(header);
-        }
-        let header = csv_state.header.as_ref().expect("header set above");
-        let log_time = message.log_time.to_string();
-        let publish_time = message.publish_time.to_string();
-        let sequence = message.sequence.to_string();
-        let mut record: Vec<&str> = Vec::with_capacity(header.len());
-        record.push(&log_time);
-        record.push(&publish_time);
-        record.push(&sequence);
-        for column in &header[3..] {
-            record.push(fields.get(column).map(String::as_str).unwrap_or(""));
-        }
-        csv_writer.write_record(&record)
-    })();
-
-    match write_result {
-        Ok(()) => {}
-        Err(err) => match err.kind() {
-            csv::ErrorKind::Io(io_err) if io_err.kind() == io::ErrorKind::BrokenPipe => {
-                return Ok(true)
-            }
-            _ => return Err(err.into()),
-        },
+    let write_header = csv_state.header.is_none();
+    if write_header {
+        let mut header = vec![
+            "log_time".to_string(),
+            "publish_time".to_string(),
+            "sequence".to_string(),
+        ];
+        header.extend(fields.keys().cloned());
+        csv_state.header = Some(header);
+    }
+    let header = csv_state.header.as_ref().expect("header set above");
+    let log_time = message.log_time.to_string();
+    let publish_time = message.publish_time.to_string();
+    let sequence = message.sequence.to_string();
+    let mut record: Vec<&str> = Vec::with_capacity(header.len());
+    record.push(&log_time);
+    record.push(&publish_time);
+    record.push(&sequence);
+    for column in &header[3..] {
+        record.push(fields.get(column).map(String::as_str).unwrap_or(""));
     }
 
-    // A later message with more fields (e.g. a longer variable-length array) than
-    // the first-message header has its extra columns dropped; warn once.
-    if !csv_state.warned_extra_columns {
+    csv_state.buffer.clear();
+    let write_result: std::result::Result<(), csv::Error> = (|| {
+        let mut csv_writer = csv::WriterBuilder::new().from_writer(&mut csv_state.buffer);
+        if write_header {
+            csv_writer.write_record(header)?;
+        }
+        csv_writer.write_record(&record)?;
+        csv_writer.flush().map_err(csv::Error::from)
+    })();
+
+    if let Err(err) = write_result {
+        return Err(err.into());
+    }
+
+    if io_result_to_broken_pipe(writer.write_all(&csv_state.buffer))? {
+        return Ok(true);
+    }
+
+    if !csv_state.dropped_extra_columns {
         if let Some(header) = &csv_state.header {
             let known: BTreeSet<&str> = header[3..].iter().map(String::as_str).collect();
             if fields.keys().any(|key| !known.contains(key.as_str())) {
@@ -776,12 +786,12 @@ fn write_csv_message(
                     "CSV rows for topic {} have fields absent from the header derived from the first message; extra columns are dropped",
                     message.channel.topic
                 );
-                csv_state.warned_extra_columns = true;
+                csv_state.dropped_extra_columns = true;
             }
         }
     }
 
-    io_result_to_broken_pipe(csv_writer.flush())
+    Ok(false)
 }
 
 /// Flattens a decoded message into dot-notated scalar columns. Objects recurse
@@ -1649,6 +1659,37 @@ mod tests {
         format!("http://{addr}/demo.mcap")
     }
 
+    fn build_single_topic_json_mcap(topic: &str, messages: &[(u32, u64, &[u8])]) -> Vec<u8> {
+        let mut cursor = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(1024))
+                .create(&mut cursor)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("Example", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, topic, "json", &BTreeMap::new())
+                .expect("channel");
+            for (sequence, log_time, data) in messages {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id,
+                            sequence: *sequence,
+                            log_time: *log_time,
+                            publish_time: *log_time,
+                        },
+                        data,
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish");
+        }
+        cursor.into_inner()
+    }
+
     fn build_multi_topic_mcap() -> Vec<u8> {
         let mut cursor = Cursor::new(Vec::new());
         {
@@ -2308,6 +2349,81 @@ mod tests {
     }
 
     #[test]
+    fn cat_csv_applies_topic_and_time_filters() {
+        let mcap = build_multi_topic_mcap();
+        let opts = CatOptions {
+            topics: vec!["/camera".to_string()],
+            start: 20,
+            mode: OutputMode::Csv,
+            ..CatOptions::default()
+        };
+        let mut out = Vec::new();
+        let mut csv_state = CsvState::default();
+        let broken_pipe =
+            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        assert!(!broken_pipe);
+        assert!(!csv_state.dropped_extra_columns);
+        assert_eq!(
+            String::from_utf8(out).expect("valid csv output"),
+            "log_time,publish_time,sequence,camera\n30,30,3,2\n"
+        );
+    }
+
+    #[test]
+    fn cat_streaming_csv_matches_indexed_output() {
+        let mcap = build_multi_topic_mcap();
+        let opts = CatOptions {
+            topics: vec!["/radar".to_string()],
+            mode: OutputMode::Csv,
+            ..CatOptions::default()
+        };
+        let mut indexed_out = Vec::new();
+        let indexed_broken_pipe =
+            cat_mcap(&mut indexed_out, &mcap, &opts, &mut CsvState::default())
+                .expect("indexed csv cat should succeed");
+        assert!(!indexed_broken_pipe);
+
+        let mut streaming_out = Vec::new();
+        let streaming_broken_pipe = cat_streaming(
+            &mut streaming_out,
+            Cursor::new(mcap),
+            &opts,
+            &mut CsvState::default(),
+        )
+        .expect("streaming csv cat should succeed");
+        assert!(!streaming_broken_pipe);
+
+        assert_eq!(indexed_out, streaming_out);
+        assert_eq!(
+            String::from_utf8(indexed_out).expect("valid csv output"),
+            "log_time,publish_time,sequence,radar\n20,20,2,1\n"
+        );
+    }
+
+    #[test]
+    fn cat_csv_marks_extra_columns_as_dropped() {
+        let mcap = build_single_topic_json_mcap(
+            "/demo",
+            &[(1, 10, br#"{"a":1}"#), (2, 20, br#"{"a":2,"b":3}"#)],
+        );
+        let opts = CatOptions {
+            topics: vec!["/demo".to_string()],
+            mode: OutputMode::Csv,
+            ..CatOptions::default()
+        };
+        let mut out = Vec::new();
+        let mut csv_state = CsvState::default();
+        let broken_pipe =
+            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        assert!(!broken_pipe);
+        assert!(csv_state.dropped_extra_columns);
+        assert_eq!(
+            String::from_utf8(out).expect("valid csv output"),
+            "log_time,publish_time,sequence,a\n10,10,1,1\n20,20,2,2\n"
+        );
+    }
+
+    #[test]
     fn cat_json_wraps_jsonschema_messages() {
         let message = sample_message(Some("Example"), br#"{"value":1}"#.to_vec());
         let mut out = Vec::new();
@@ -2672,30 +2788,39 @@ mod tests {
         }
     }
 
-    fn write_csv(messages: &[(u64, &[u8])]) -> String {
+    fn write_csv_with_dropped_columns(messages: &[(u64, &[u8])]) -> (String, bool) {
         let opts = CatOptions {
             mode: OutputMode::Csv,
             ..CatOptions::default()
         };
         let mut csv_state = CsvState::default();
         let mut transcoders = JsonTranscoders::default();
-        let mut out = MessageWriter {
-            csv: &mut csv_state,
-            json: &mut transcoders,
-        };
         let mut buf = Vec::new();
-        for (log_time, data) in messages {
-            let message = sample_message(None, data.to_vec());
-            let broken_pipe = super::write_message(
-                &mut buf,
-                json_cat_message(&message, *log_time),
-                &opts,
-                &mut out,
-            )
-            .expect("csv message should write");
-            assert!(!broken_pipe);
+        {
+            let mut out = MessageWriter {
+                csv: &mut csv_state,
+                json: &mut transcoders,
+            };
+            for (log_time, data) in messages {
+                let message = sample_message(None, data.to_vec());
+                let broken_pipe = super::write_message(
+                    &mut buf,
+                    json_cat_message(&message, *log_time),
+                    &opts,
+                    &mut out,
+                )
+                .expect("csv message should write");
+                assert!(!broken_pipe);
+            }
         }
-        String::from_utf8(buf).expect("csv output should be utf8")
+        (
+            String::from_utf8(buf).expect("csv output should be utf8"),
+            csv_state.dropped_extra_columns,
+        )
+    }
+
+    fn write_csv(messages: &[(u64, &[u8])]) -> String {
+        write_csv_with_dropped_columns(messages).0
     }
 
     #[test]
@@ -2714,6 +2839,17 @@ mod tests {
             output,
             "log_time,publish_time,sequence,a,b\n10,43,1,1,2\n20,43,1,3,\n"
         );
+    }
+
+    #[test]
+    fn csv_marks_extra_columns_as_dropped() {
+        let (output, dropped_extra_columns) =
+            write_csv_with_dropped_columns(&[(10, br#"{"a":1}"#), (20, br#"{"a":2,"b":3}"#)]);
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,a\n10,43,1,1\n20,43,1,2\n"
+        );
+        assert!(dropped_extra_columns);
     }
 
     #[test]

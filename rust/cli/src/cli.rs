@@ -221,11 +221,11 @@ pub struct CatCommand {
     /// Columns are the flattened message fields (dot notation) plus log_time,
     /// publish_time, and sequence. Supported message encodings: ros1, protobuf,
     /// and json.
-    #[arg(long = "csv", default_value_t = false)]
+    #[arg(long = "csv", default_value_t = false, requires = "topic")]
     pub csv: bool,
 
-    /// Single topic to export as CSV. Required by --csv; ignored otherwise.
-    #[arg(long = "topic", conflicts_with = "topics")]
+    /// Single topic to export as CSV. Required by --csv.
+    #[arg(long = "topic", conflicts_with = "topics", requires = "csv")]
     pub topic: Option<String>,
 }
 
