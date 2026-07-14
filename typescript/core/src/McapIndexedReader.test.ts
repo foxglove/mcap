@@ -1357,4 +1357,144 @@ describe("McapIndexedReader", () => {
     const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
     await expect(collect(reader.readMessages())).resolves.toEqual([message1, message2]);
   });
+
+  describe("readMessageTimestamps", () => {
+    async function writeTwoTopicFile(): Promise<TempBuffer> {
+      const tempBuffer = new TempBuffer();
+      const writer = new McapWriter({ writable: tempBuffer });
+      await writer.start({ library: "", profile: "" });
+      const channelA = await writer.registerChannel({
+        topic: "a",
+        schemaId: 0,
+        messageEncoding: "json",
+        metadata: new Map(),
+      });
+      const channelB = await writer.registerChannel({
+        topic: "b",
+        schemaId: 0,
+        messageEncoding: "json",
+        metadata: new Map(),
+      });
+      for (const logTime of [10n, 20n, 30n, 40n]) {
+        await writer.addMessage({
+          channelId: channelA,
+          sequence: 0,
+          logTime,
+          publishTime: logTime,
+          data: new Uint8Array(),
+        });
+      }
+      for (const logTime of [15n, 25n]) {
+        await writer.addMessage({
+          channelId: channelB,
+          sequence: 0,
+          logTime,
+          publishTime: logTime,
+          data: new Uint8Array(),
+        });
+      }
+      await writer.end();
+      return tempBuffer;
+    }
+
+    it("yields all message log times in merged time order", async () => {
+      const reader = await McapIndexedReader.Initialize({ readable: await writeTwoTopicFile() });
+      await expect(collect(reader.readMessageTimestamps())).resolves.toEqual([
+        10n,
+        15n,
+        20n,
+        25n,
+        30n,
+        40n,
+      ]);
+    });
+
+    it("filters by topic", async () => {
+      const reader = await McapIndexedReader.Initialize({ readable: await writeTwoTopicFile() });
+      await expect(collect(reader.readMessageTimestamps({ topics: ["a"] }))).resolves.toEqual([
+        10n,
+        20n,
+        30n,
+        40n,
+      ]);
+      await expect(collect(reader.readMessageTimestamps({ topics: ["b"] }))).resolves.toEqual([
+        15n,
+        25n,
+      ]);
+    });
+
+    it("filters by time range", async () => {
+      const reader = await McapIndexedReader.Initialize({ readable: await writeTwoTopicFile() });
+      await expect(
+        collect(reader.readMessageTimestamps({ startTime: 15n, endTime: 30n })),
+      ).resolves.toEqual([15n, 20n, 25n, 30n]);
+    });
+
+    it("yields log times in reverse time order", async () => {
+      const reader = await McapIndexedReader.Initialize({ readable: await writeTwoTopicFile() });
+      await expect(collect(reader.readMessageTimestamps({ reverse: true }))).resolves.toEqual([
+        40n,
+        30n,
+        25n,
+        20n,
+        15n,
+        10n,
+      ]);
+    });
+
+    it("merges across out-of-order and overlapping chunks", async () => {
+      const channel: TypedMcapRecord = {
+        type: "Channel",
+        id: 1,
+        schemaId: 0,
+        topic: "a",
+        messageEncoding: "utf12",
+        metadata: new Map(),
+      };
+      const makeMessage = (logTime: bigint): TypedMcapRecords["Message"] => ({
+        type: "Message",
+        channelId: channel.id,
+        sequence: 0,
+        logTime,
+        publishTime: 0n,
+        data: new Uint8Array(),
+      });
+
+      // Two chunks with overlapping time ranges (1-4 and 2-3), written out of order, so the heap
+      // must interleave them rather than drain one chunk at a time.
+      const chunk1 = new ChunkBuilder({ useMessageIndex: true });
+      chunk1.addChannel(channel);
+      chunk1.addMessage(makeMessage(4n));
+      chunk1.addMessage(makeMessage(1n));
+
+      const chunk2 = new ChunkBuilder({ useMessageIndex: true });
+      chunk2.addChannel(channel);
+      chunk2.addMessage(makeMessage(3n));
+      chunk2.addMessage(makeMessage(2n));
+
+      const builder = new McapRecordBuilder();
+      builder.writeMagic();
+      builder.writeHeader({ profile: "", library: "" });
+      const chunkIndexes = [
+        writeChunkWithMessageIndexes(builder, chunk1),
+        writeChunkWithMessageIndexes(builder, chunk2),
+      ];
+      builder.writeDataEnd({ dataSectionCrc: 0 });
+      const summaryStart = BigInt(builder.length);
+      for (const index of chunkIndexes) {
+        builder.writeChunkIndex(index);
+      }
+      builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+      builder.writeMagic();
+
+      const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
+      await expect(collect(reader.readMessageTimestamps())).resolves.toEqual([1n, 2n, 3n, 4n]);
+      await expect(collect(reader.readMessageTimestamps({ reverse: true }))).resolves.toEqual([
+        4n,
+        3n,
+        2n,
+        1n,
+      ]);
+    });
+  });
 });
