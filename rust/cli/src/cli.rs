@@ -95,7 +95,10 @@ pub enum Command {
     /// Supported inputs:
     ///   .bag  ROS 1 bag
     ///   .db3  ROS 2 SQLite db3
-    #[command(verbatim_doc_comment, about = "Convert supported files (ROS 1 .bag, ROS 2 .db3) to MCAP")]
+    #[command(
+        verbatim_doc_comment,
+        about = "Convert supported files (ROS 1 .bag, ROS 2 .db3) to MCAP"
+    )]
     Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file.
     ///
