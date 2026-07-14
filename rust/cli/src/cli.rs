@@ -51,7 +51,7 @@ pub struct Args {
     )]
     pub color: logsetup::Color,
 
-    /// Allow whole-file scans or downloads of remote inputs (http(s):// and object-store URLs: s3://, s3a://, gs://, az://, abfs://). Small bounded indexed reads (summary and single-record range reads) work without this flag; larger indexed reads still require it.
+    /// Allow whole-file scans or downloads of remote inputs (http(s):// and object-store URLs: s3://, s3a://, gs://, az://, abfs://). Small bounded indexed reads work without this flag.
     #[arg(long, default_value_t = false, global = true)]
     pub allow_remote_scan: bool,
 
@@ -92,7 +92,7 @@ pub enum Command {
     /// Supported inputs:
     ///   .bag  ROS 1 bag
     ///   .db3  ROS 2 SQLite db3
-    #[command(verbatim_doc_comment, about = "Convert supported input files to MCAP")]
+    #[command(verbatim_doc_comment, about = "Convert supported files (ROS 1 .bag, ROS 2 .db3) to MCAP")]
     Convert(ConvertCommand),
     /// Create an uncompressed copy of an MCAP file.
     ///
@@ -421,7 +421,7 @@ pub struct ConvertCommand {
     #[arg(long = "no-crc", default_value_t = false)]
     pub no_crc: bool,
 
-    /// Write records outside of chunks
+    /// Write records outside of chunks (ignores --chunk-size and --compression)
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 }
@@ -463,7 +463,7 @@ pub struct MergeCommand {
     #[arg(long = "no-crc", default_value_t = false)]
     pub no_crc: bool,
 
-    /// Write records outside of chunks
+    /// Write records outside of chunks (ignores --chunk-size and --compression)
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 
@@ -572,7 +572,7 @@ pub struct FilterCommand {
     #[arg(long = "output-compression", value_enum, hide = true)]
     pub output_compression: Option<CompressionFormat>,
 
-    /// Write records outside of chunks
+    /// Write records outside of chunks (ignores --chunk-size and --compression)
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 
@@ -621,7 +621,7 @@ pub struct SortCommand {
     #[arg(long, value_enum, default_value = "zstd")]
     pub compression: CompressionFormat,
 
-    /// Write records outside of chunks
+    /// Write records outside of chunks (ignores --chunk-size and --compression)
     #[arg(long = "no-chunks", default_value_t = false)]
     pub no_chunks: bool,
 
