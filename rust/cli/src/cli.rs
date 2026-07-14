@@ -51,7 +51,10 @@ pub struct Args {
     )]
     pub color: logsetup::Color,
 
-    /// Allow whole-file scans or downloads of remote inputs (http(s):// and object-store URLs: s3://, s3a://, gs://, az://, abfs://). Small bounded indexed reads work without this flag.
+    /// Allow whole-file scans or downloads of remote inputs.
+    ///
+    /// Applies to http(s):// and object-store URLs (s3://, s3a://, gs://, az://, abfs://). Small
+    /// bounded indexed reads work without this flag.
     #[arg(long, default_value_t = false, global = true)]
     pub allow_remote_scan: bool,
 
