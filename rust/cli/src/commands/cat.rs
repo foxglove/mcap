@@ -46,11 +46,13 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<CommandOutcome> {
     }
 
     flush_or_ignore_broken_pipe(&mut writer)?;
-    Ok(if csv_state.dropped_extra_columns {
-        CommandOutcome::Warnings
-    } else {
-        CommandOutcome::Success
-    })
+    Ok(
+        if csv_state.dropped_extra_columns || csv_state.colliding_columns {
+            CommandOutcome::Warnings
+        } else {
+            CommandOutcome::Success
+        },
+    )
 }
 
 fn cat_file(
@@ -736,7 +738,13 @@ fn write_message(
 #[derive(Debug, Default)]
 struct CsvState {
     header: Option<Vec<String>>,
+    /// Payload column names in the header, cached when the header is first built so
+    /// the per-row extra-column check does not rebuild the set on every message.
+    known_columns: HashSet<String>,
     dropped_extra_columns: bool,
+    /// Set when a message flattens to duplicate column names (e.g. `{"a.b":1,"a":{"b":2}}`),
+    /// which silently drops a value. Drives the same exit-3 warning path as dropped columns.
+    colliding_columns: bool,
     buffer: Vec<u8>,
 }
 
@@ -751,9 +759,17 @@ fn write_csv_message(
 
     // Build a lookup for filling row cells and detecting extra columns. Keys keep
     // their first occurrence's value, matching the deduplicated header order below.
+    // A key seen more than once means two payload fields flattened to the same
+    // column, which drops a value (data loss reported below).
     let mut field_values: HashMap<&str, &str> = HashMap::with_capacity(fields.len());
+    let mut colliding_columns = false;
     for (key, value) in &fields {
-        field_values.entry(key.as_str()).or_insert(value.as_str());
+        match field_values.entry(key.as_str()) {
+            std::collections::hash_map::Entry::Occupied(_) => colliding_columns = true,
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                slot.insert(value.as_str());
+            }
+        }
     }
 
     let csv_state = &mut *out.csv;
@@ -772,6 +788,9 @@ fn write_csv_message(
                 header.push(key.clone());
             }
         }
+        // Cache the payload column names so per-row extra-column detection reuses
+        // this set instead of rebuilding it on every message.
+        csv_state.known_columns = header[3..].iter().cloned().collect();
         csv_state.header = Some(header);
     }
     let header = csv_state.header.as_ref().expect("header set above");
@@ -799,17 +818,24 @@ fn write_csv_message(
         return Ok(true);
     }
 
-    if !csv_state.dropped_extra_columns {
-        if let Some(header) = &csv_state.header {
-            let known: BTreeSet<&str> = header[3..].iter().map(String::as_str).collect();
-            if field_values.keys().any(|key| !known.contains(key)) {
-                warn!(
-                    "CSV rows for topic {} have fields absent from the header derived from the first message; extra columns are dropped",
-                    message.channel.topic
-                );
-                csv_state.dropped_extra_columns = true;
-            }
-        }
+    if !csv_state.dropped_extra_columns
+        && field_values
+            .keys()
+            .any(|key| !csv_state.known_columns.contains(*key))
+    {
+        warn!(
+            "CSV rows for topic {} have fields absent from the header derived from the first message; extra columns are dropped",
+            message.channel.topic
+        );
+        csv_state.dropped_extra_columns = true;
+    }
+
+    if !csv_state.colliding_columns && colliding_columns {
+        warn!(
+            "CSV rows for topic {} flatten to colliding column names; duplicate columns are dropped",
+            message.channel.topic
+        );
+        csv_state.colliding_columns = true;
     }
 
     Ok(false)
@@ -2473,6 +2499,25 @@ mod tests {
             header,
             "log_time,publish_time,sequence,arr.0,arr.1,arr.2,arr.3,arr.4,arr.5,arr.6,arr.7,arr.8,arr.9,arr.10,arr.11"
         );
+    }
+
+    #[test]
+    fn cat_csv_marks_colliding_columns_as_dropped() {
+        // Both `a.b` and `a` -> `b` flatten to the column `a.b`, so one value is dropped.
+        let mcap = build_single_topic_json_mcap("/demo", &[(1, 10, br#"{"a.b":1,"a":{"b":2}}"#)]);
+        let opts = CatOptions {
+            topics: vec!["/demo".to_string()],
+            mode: OutputMode::Csv,
+            ..CatOptions::default()
+        };
+        let mut out = Vec::new();
+        let mut csv_state = CsvState::default();
+        let broken_pipe =
+            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        assert!(!broken_pipe);
+        assert!(csv_state.colliding_columns);
+        let output = String::from_utf8(out).expect("valid csv output");
+        assert_eq!(output, "log_time,publish_time,sequence,a.b\n10,10,1,2\n");
     }
 
     #[test]
