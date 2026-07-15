@@ -785,7 +785,7 @@ impl JsonTranscoders {
                 Ok(Cow::Owned(json))
             }
             encoding => bail!(
-                "JSON output only supported for the ros1, protobuf, and json message encodings; found: {encoding}"
+                "JSON output only supported for ros1, protobuf, and json message encodings; found: {encoding}"
             ),
         }
     }
