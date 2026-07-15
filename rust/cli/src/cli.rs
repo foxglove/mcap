@@ -73,7 +73,7 @@ pub enum Command {
     /// Concatenate the messages in one or more MCAP files to stdout.
     ///
     /// By default prints one line per message (log time, topic, schema name, and a short byte
-    /// preview). Use `--format=json` to print one JSON object per line.
+    /// preview). Use `--format=ndjson` to print one JSON object per message instead.
     Cat(CatCommand),
     /// Generate shell completion scripts.
     ///
@@ -222,11 +222,11 @@ pub struct AddCommand {
 /// Selected with `--format`, matching clispec.dev (`--output` is already used for file output).
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CatFormat {
-    /// Human-readable one-line preview.
+    /// One line per message (log time, topic, schema name, and a short byte preview).
     #[default]
     Text,
-    /// One JSON object per message.
-    Json,
+    /// One JSON object per message (supports message encodings ros1msg, protobuf, and json).
+    Ndjson,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -259,13 +259,10 @@ pub struct CatCommand {
     pub end_nsecs: u64,
 
     /// Output format.
-    ///
-    /// `json` supports schema encodings ros1msg, protobuf, and jsonschema (or schemaless channels
-    /// with json message encoding); other encodings error.
     #[arg(long = "format", value_enum, default_value_t = CatFormat::Text)]
     pub format: CatFormat,
 
-    /// Deprecated: use --format=json.
+    /// Deprecated: use --format=ndjson.
     #[arg(
         long = "json",
         action = ArgAction::SetTrue,
@@ -279,13 +276,13 @@ impl CatCommand {
     /// Warns about deprecated flags that were supplied.
     pub(crate) fn warn_deprecations(&self) {
         if self.json {
-            warn!("--json is deprecated; use --format=json instead");
+            warn!("--json is deprecated; use --format=ndjson instead");
         }
     }
 
-    /// Whether to emit JSON (`--format=json` or the deprecated `--json` alias).
+    /// Whether to emit JSON (`--format=ndjson` or the deprecated `--json` alias).
     pub(crate) fn json_output(&self) -> bool {
-        self.json || matches!(self.format, CatFormat::Json)
+        self.json || matches!(self.format, CatFormat::Ndjson)
     }
 }
 
