@@ -149,6 +149,26 @@ Echo messages for a specific topic to stdout as newline-delimited JSON (one obje
     {"topic":"/tf","sequence":21,"log_time":"2017-03-22T02:26:20.185428613Z","publish_time":"2017-03-22T02:26:20.185428613Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.197612248,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
     {"topic":"/tf","sequence":22,"log_time":"2017-03-22T02:26:20.196638030Z","publish_time":"2017-03-22T02:26:20.196638030Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.207699065,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
 
+### Timestamp formatting
+
+The global `--time-format` flag controls how `cat`, `info`, `list chunks`, and `list attachments` render timestamps. It accepts:
+
+| Value            | Aliases | Output                                                                       |
+| ---------------- | ------- | ---------------------------------------------------------------------------- |
+| `auto` (default) |         | RFC3339 UTC for real wall-clock times, decimal seconds otherwise (see below) |
+| `rfc3339`        | `rfc`   | RFC3339 UTC, e.g. `2017-03-22T02:26:20.103843113Z`                           |
+| `seconds`        | `secs`  | decimal seconds, e.g. `1490149580.103843113`                                 |
+| `nanoseconds`    | `nsecs` | integer nanoseconds, e.g. `1490149580103843113`                              |
+
+```bash
+mcap cat demo.mcap --time-format=seconds
+mcap info demo.mcap --time-format=nanoseconds
+```
+
+Under `auto`, timestamps at or after `2000-01-01T00:00:00Z` render as RFC3339 dates, while smaller values (typical of relative or monotonic recordings that start near zero) render as decimal seconds — so a real recording shows `2017-03-22T02:26:20.103843113Z` while a relative one shows `1.000000000` instead of a misleading `1970` date. This choice is made **once per command** from the recording's start time and applied to every timestamp, so a file whose clock jumps across the cutoff (for example when GPS time is acquired mid-recording) still renders uniformly. To force real dates regardless of the cutoff, use `--time-format=rfc3339`.
+
+For scripting, pass `--time-format=seconds` or `--time-format=nanoseconds` to get a stable numeric column. In `--format=ndjson`, `log_time` and `publish_time` are always emitted as quoted JSON strings (never bare numbers) to avoid floating-point and large-integer precision loss.
+
 ### Remote file support
 
 The `mcap` CLI can read files over **HTTP(S)** and from object stores: **Amazon S3** (`s3://`, `s3a://`), **Google Cloud Storage** (`gs://`), and **Azure Blob Storage** (`az://`, `azure://`, `adl://`, `abfs://`, `abfss://`):
