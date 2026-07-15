@@ -73,7 +73,8 @@ pub enum Command {
     /// Concatenate the messages in one or more MCAP files to stdout.
     ///
     /// By default prints one line per message (log time, topic, schema name, and a short byte
-    /// preview). Use `--format=ndjson` to print one JSON object per message instead.
+    /// preview). Use `--format=ndjson` to print one JSON object per message instead. Use
+    /// `--format=csv` to export a single topic (selected via `--topics`) as CSV.
     Cat(CatCommand),
     /// Generate shell completion scripts.
     ///

@@ -57,6 +57,41 @@ fn build_mcap_with_options(use_chunks: bool, message_log_times: &[u64]) -> Vec<u
     buffer
 }
 
+/// Build a single-topic, `json`-encoded MCAP with caller-supplied JSON payloads.
+///
+/// Lets a test control each message's exact shape so it can produce both
+/// stable-shape and variable-shape inputs for CSV export.
+fn build_single_topic_json_mcap(topic: &str, messages: &[(u32, u64, &[u8])]) -> Vec<u8> {
+    let mut buffer = Vec::new();
+    {
+        let mut writer = mcap::WriteOptions::new()
+            .chunk_size(Some(1024))
+            .create(Cursor::new(&mut buffer))
+            .expect("create writer");
+        let schema_id = writer
+            .add_schema("Example", "jsonschema", br#"{"type":"object"}"#)
+            .expect("add schema");
+        let channel_id = writer
+            .add_channel(schema_id, topic, "json", &BTreeMap::new())
+            .expect("add channel");
+        for (sequence, log_time, data) in messages {
+            writer
+                .write_to_known_channel(
+                    &MessageHeader {
+                        channel_id,
+                        sequence: *sequence,
+                        log_time: *log_time,
+                        publish_time: *log_time,
+                    },
+                    data,
+                )
+                .expect("write message");
+        }
+        writer.finish().expect("finish writer");
+    }
+    buffer
+}
+
 /// Run the `mcap` binary with `args` and capture its output.
 fn mcap(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_mcap"))
@@ -187,6 +222,67 @@ fn stdin_pipe_cat() {
     let output = mcap_with_stdin(&["cat"], &build_mcap(3));
     assert!(output.status.success());
     assert!(stdout(&output).contains("/example"));
+}
+
+#[test]
+fn cat_csv_stable_shape_exits_zero() {
+    let dir = TempDir::new().unwrap();
+    let path = write_temp(
+        &dir,
+        "stable.mcap",
+        &build_single_topic_json_mcap(
+            "/example",
+            &[(1, 10, br#"{"a":1,"b":2}"#), (2, 20, br#"{"a":3,"b":4}"#)],
+        ),
+    );
+    let output = mcap(&[
+        "cat",
+        path_str(&path),
+        "--format=csv",
+        "--topics",
+        "/example",
+    ]);
+    assert!(
+        output.status.success(),
+        "stable-shape csv cat should exit 0; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        stdout(&output),
+        "log_time,publish_time,sequence,a,b\n10,10,1,1,2\n20,20,2,3,4\n"
+    );
+}
+
+#[test]
+fn cat_csv_dropped_columns_exits_three() {
+    let dir = TempDir::new().unwrap();
+    let path = write_temp(
+        &dir,
+        "variable.mcap",
+        &build_single_topic_json_mcap(
+            "/example",
+            &[(1, 10, br#"{"a":1}"#), (2, 20, br#"{"a":2,"b":3}"#)],
+        ),
+    );
+    let output = mcap(&[
+        "cat",
+        path_str(&path),
+        "--format=csv",
+        "--topics",
+        "/example",
+    ]);
+    // A later message with extra fields is data-loss: exit 3 with a warning, but stdout
+    // is still valid CSV using the first message's header.
+    assert_eq!(output.status.code(), Some(3));
+    assert_eq!(
+        stdout(&output),
+        "log_time,publish_time,sequence,a\n10,10,1,1\n20,20,2,2\n"
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("extra columns are dropped"),
+        "stderr should warn about dropped columns; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]

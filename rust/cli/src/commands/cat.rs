@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{self, IsTerminal as _, Write as _};
 use std::sync::Arc;
 
@@ -728,6 +728,11 @@ fn write_message(
 /// for schemaless JSON, permissive JSON schema, maps, or variable-length arrays.
 /// Later fields absent from the first row are therefore dropped and reported as a
 /// warning rather than requiring a full pre-scan of every message.
+///
+/// The header is derived from the first *emitted* message, and which message is
+/// first depends on read order (log-time order for indexed reads vs. file order
+/// for streaming/non-indexed reads). For variable-shape data the derived column
+/// set can therefore differ across input sources.
 #[derive(Debug, Default)]
 struct CsvState {
     header: Option<Vec<String>>,
@@ -741,8 +746,15 @@ fn write_csv_message(
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<bool> {
     let value = out.json.decode_value(message.channel, message.data)?;
-    let mut fields = std::collections::BTreeMap::<String, String>::new();
+    let mut fields: Vec<(String, String)> = Vec::new();
     flatten_value("", &value, &mut fields);
+
+    // Build a lookup for filling row cells and detecting extra columns. Keys keep
+    // their first occurrence's value, matching the deduplicated header order below.
+    let mut field_values: HashMap<&str, &str> = HashMap::with_capacity(fields.len());
+    for (key, value) in &fields {
+        field_values.entry(key.as_str()).or_insert(value.as_str());
+    }
 
     let csv_state = &mut *out.csv;
     let write_header = csv_state.header.is_none();
@@ -752,7 +764,14 @@ fn write_csv_message(
             "publish_time".to_string(),
             "sequence".to_string(),
         ];
-        header.extend(fields.keys().cloned());
+        // Dedupe in first-occurrence order with a HashSet to stay O(n): arrays can
+        // contribute thousands of columns, so a linear scan per key would be O(n^2).
+        let mut seen: HashSet<&str> = HashSet::new();
+        for (key, _) in &fields {
+            if seen.insert(key.as_str()) {
+                header.push(key.clone());
+            }
+        }
         csv_state.header = Some(header);
     }
     let header = csv_state.header.as_ref().expect("header set above");
@@ -764,22 +783,17 @@ fn write_csv_message(
     record.push(&publish_time);
     record.push(&sequence);
     for column in &header[3..] {
-        record.push(fields.get(column).map(String::as_str).unwrap_or(""));
+        record.push(field_values.get(column.as_str()).copied().unwrap_or(""));
     }
 
     csv_state.buffer.clear();
-    let write_result: std::result::Result<(), csv::Error> = (|| {
-        let mut csv_writer = csv::WriterBuilder::new().from_writer(&mut csv_state.buffer);
-        if write_header {
-            csv_writer.write_record(header)?;
-        }
-        csv_writer.write_record(&record)?;
-        csv_writer.flush().map_err(csv::Error::from)
-    })();
-
-    if let Err(err) = write_result {
-        return Err(err.into());
+    let mut csv_writer = csv::WriterBuilder::new().from_writer(&mut csv_state.buffer);
+    if write_header {
+        csv_writer.write_record(header)?;
     }
+    csv_writer.write_record(&record)?;
+    csv_writer.flush().map_err(csv::Error::from)?;
+    drop(csv_writer);
 
     if io_result_to_broken_pipe(writer.write_all(&csv_state.buffer))? {
         return Ok(true);
@@ -788,7 +802,7 @@ fn write_csv_message(
     if !csv_state.dropped_extra_columns {
         if let Some(header) = &csv_state.header {
             let known: BTreeSet<&str> = header[3..].iter().map(String::as_str).collect();
-            if fields.keys().any(|key| !known.contains(key.as_str())) {
+            if field_values.keys().any(|key| !known.contains(key)) {
                 warn!(
                     "CSV rows for topic {} have fields absent from the header derived from the first message; extra columns are dropped",
                     message.channel.topic
@@ -801,14 +815,14 @@ fn write_csv_message(
     Ok(false)
 }
 
-/// Flattens a decoded message into dot-notated scalar columns. Objects recurse
-/// with `parent.child`, arrays with `parent.0`, `parent.1`, and scalars become
-/// strings (null -> empty).
-fn flatten_value(
-    prefix: &str,
-    value: &serde_json::Value,
-    out: &mut std::collections::BTreeMap<String, String>,
-) {
+/// Flattens a decoded message into dot-notated scalar columns, appending
+/// `(column, value)` pairs in traversal order. Objects recurse with
+/// `parent.child` (serde_json's default alphabetical key order), arrays with
+/// `parent.0`, `parent.1`, … in ascending index order, and scalars become
+/// strings (null -> empty). Preserving traversal order keeps array columns
+/// sorted numerically (`foo.9`, `foo.10`, `foo.11`) instead of
+/// lexicographically.
+fn flatten_value(prefix: &str, value: &serde_json::Value, out: &mut Vec<(String, String)>) {
     use serde_json::Value;
     let child_key = |segment: &str| {
         if prefix.is_empty() {
@@ -829,16 +843,16 @@ fn flatten_value(
             }
         }
         Value::Null => {
-            out.insert(prefix.to_string(), String::new());
+            out.push((prefix.to_string(), String::new()));
         }
         Value::Bool(value) => {
-            out.insert(prefix.to_string(), value.to_string());
+            out.push((prefix.to_string(), value.to_string()));
         }
         Value::Number(value) => {
-            out.insert(prefix.to_string(), value.to_string());
+            out.push((prefix.to_string(), value.to_string()));
         }
         Value::String(value) => {
-            out.insert(prefix.to_string(), value.clone());
+            out.push((prefix.to_string(), value.clone()));
         }
     }
 }
@@ -965,13 +979,13 @@ impl JsonTranscoders {
                 Ok(Cow::Owned(json))
             }
             encoding => bail!(
-                "JSON output only supported for ros1, protobuf, and json message encodings; found: {encoding}"
+                "decoded output only supported for ros1, protobuf, and json message encodings; found: {encoding}"
             ),
         }
     }
 
     /// Decodes a message into a `serde_json::Value` by reusing the JSON encoder,
-    /// so CSV output supports the same encodings as `--json`.
+    /// so CSV output supports the same encodings as `--format=ndjson`.
     fn decode_value(
         &mut self,
         channel: &mcap::Channel<'_>,
@@ -2438,6 +2452,30 @@ mod tests {
     }
 
     #[test]
+    fn cat_csv_orders_array_columns_numerically() {
+        // An array of >=11 elements exposes lexicographic vs numeric ordering:
+        // "arr.10" sorts before "arr.2" lexicographically.
+        let payload = br#"{"arr":[0,1,2,3,4,5,6,7,8,9,10,11]}"#;
+        let mcap = build_single_topic_json_mcap("/example", &[(1, 10, payload)]);
+        let opts = CatOptions {
+            topics: vec!["/example".to_string()],
+            mode: OutputMode::Csv,
+            ..CatOptions::default()
+        };
+        let mut out = Vec::new();
+        let mut csv_state = CsvState::default();
+        let broken_pipe =
+            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        assert!(!broken_pipe);
+        let output = String::from_utf8(out).expect("valid csv output");
+        let header = output.lines().next().expect("csv header line");
+        assert_eq!(
+            header,
+            "log_time,publish_time,sequence,arr.0,arr.1,arr.2,arr.3,arr.4,arr.5,arr.6,arr.7,arr.8,arr.9,arr.10,arr.11"
+        );
+    }
+
+    #[test]
     fn from_args_csv_uses_single_topic_column_selector() {
         let opts = CatOptions::from_args(&cat_command(CatFormat::Csv, "/tf"))
             .expect("--format=csv with one topic should build options");
@@ -2852,22 +2890,20 @@ mod tests {
             "name": "a",
             "missing": null,
         });
-        let mut fields = std::collections::BTreeMap::new();
+        let mut fields = Vec::new();
         super::flatten_value("", &value, &mut fields);
+        let lookup: std::collections::HashMap<&str, &str> = fields
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect();
 
-        assert_eq!(
-            fields.get("pose.position.x").map(String::as_str),
-            Some("1.5")
-        );
-        assert_eq!(
-            fields.get("pose.position.y").map(String::as_str),
-            Some("-2")
-        );
-        assert_eq!(fields.get("ranges.0").map(String::as_str), Some("10"));
-        assert_eq!(fields.get("ranges.1").map(String::as_str), Some("20"));
-        assert_eq!(fields.get("ok").map(String::as_str), Some("true"));
-        assert_eq!(fields.get("name").map(String::as_str), Some("a"));
-        assert_eq!(fields.get("missing").map(String::as_str), Some(""));
+        assert_eq!(lookup.get("pose.position.x").copied(), Some("1.5"));
+        assert_eq!(lookup.get("pose.position.y").copied(), Some("-2"));
+        assert_eq!(lookup.get("ranges.0").copied(), Some("10"));
+        assert_eq!(lookup.get("ranges.1").copied(), Some("20"));
+        assert_eq!(lookup.get("ok").copied(), Some("true"));
+        assert_eq!(lookup.get("name").copied(), Some("a"));
+        assert_eq!(lookup.get("missing").copied(), Some(""));
     }
 
     fn json_cat_message<'a>(
