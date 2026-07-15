@@ -3,7 +3,7 @@ use std::fmt::Write as _;
 
 use anyhow::Result;
 
-use crate::cli::InfoCommand;
+use crate::cli::{InfoCommand, TimeFormat};
 use crate::context::CommandContext;
 use crate::{parse, render, source};
 
@@ -12,12 +12,13 @@ pub fn run(ctx: &CommandContext, args: InfoCommand) -> Result<()> {
         &args.file,
         source::SourceOptions::new(ctx.allow_remote_scan()).scan_data_without_statistics(true),
     )?;
-    print!("{}", render_info(&parsed));
+    print!("{}", render_info(&parsed, ctx.time_format()));
     Ok(())
 }
 
-fn render_info(parsed: &parse::ParsedMcap) -> String {
+fn render_info(parsed: &parse::ParsedMcap, time_format: TimeFormat) -> String {
     let mut out = String::new();
+    let times = render::TimeRenderer::new(time_format);
 
     if let Some(header) = &parsed.header {
         let _ = writeln!(&mut out, "library:     {}", header.library);
@@ -37,16 +38,14 @@ fn render_info(parsed: &parse::ParsedMcap) -> String {
         let (duration_ns, signed_duration) = format_duration(message_start_time, message_end_time);
         duration_seconds = duration_ns / 1e9;
         let _ = writeln!(&mut out, "duration:    {signed_duration}");
+        // Prime from the summary start so start/end share one auto sub-format.
+        times.prime(message_start_time);
         let _ = writeln!(
             &mut out,
             "start:       {}",
-            render::formatted_time(message_start_time)
+            times.format(message_start_time)
         );
-        let _ = writeln!(
-            &mut out,
-            "end:         {}",
-            render::formatted_time(message_end_time)
-        );
+        let _ = writeln!(&mut out, "end:         {}", times.format(message_end_time));
     }
 
     if !parsed.chunk_indexes.is_empty() {
@@ -384,6 +383,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{count_chunk_overlaps, format_duration, render_channel_summary_rows, render_info};
+    use crate::cli::TimeFormat;
     use crate::parse::{ParsedMcap, ParsedSchema};
     use mcap::records::{self, AttachmentIndex, ChunkIndex, Header, MetadataIndex, Statistics};
 
@@ -471,14 +471,58 @@ mod tests {
             uncompressed_size: 3_000_000,
         });
 
-        let rendered = render_info(&parsed);
+        let rendered = render_info(&parsed, TimeFormat::Auto);
         assert!(rendered.contains(&format!("library:     {}", mcap::LIBRARY_IDENTIFIER)));
         assert!(rendered.contains("profile:     demo"));
         assert!(rendered.contains("messages:    2"));
+        assert!(rendered.contains("start:       1.000000000"));
+        assert!(rendered.contains("end:         2.500000000"));
+        assert!(!rendered.contains("start:       1.000000000 ("));
         assert!(rendered.contains("zstd: [1/1 chunks] [3.00 MB/1.50 MB (50.00%)] [1.00 MB/s]"));
         assert!(rendered.contains("max uncompressed size: 3.00 MB"));
         assert!(rendered.contains("channels:"));
         assert!(rendered.contains("/demo"));
+    }
+
+    #[test]
+    fn info_render_primes_auto_latch_from_message_start_time() {
+        let parsed = ParsedMcap {
+            statistics: Some(Statistics {
+                message_count: 2,
+                message_start_time: 1_490_149_580_103_843_113,
+                // End is below the wall-clock cutoff; auto must stay latched on RFC3339.
+                message_end_time: 1_000_000_000,
+                ..Statistics::default()
+            }),
+            ..ParsedMcap::default()
+        };
+
+        let rendered = render_info(&parsed, TimeFormat::Auto);
+        assert!(rendered.contains("start:       2017-03-22T02:26:20.103843113Z\n"));
+        assert!(rendered.contains("end:         1970-01-01T00:00:01Z\n"));
+        assert!(!rendered.contains("Z ("));
+    }
+
+    #[test]
+    fn info_render_honors_explicit_time_formats() {
+        let parsed = ParsedMcap {
+            statistics: Some(Statistics {
+                message_count: 1,
+                message_start_time: 1_490_149_580_103_843_113,
+                message_end_time: 1_490_149_580_103_843_113,
+                ..Statistics::default()
+            }),
+            ..ParsedMcap::default()
+        };
+
+        let nanos = render_info(&parsed, TimeFormat::Nanoseconds);
+        assert!(nanos.contains("start:       1490149580103843113"));
+
+        let secs = render_info(&parsed, TimeFormat::Seconds);
+        assert!(secs.contains("start:       1490149580.103843113"));
+
+        let rfc = render_info(&parsed, TimeFormat::Rfc3339);
+        assert!(rfc.contains("start:       2017-03-22T02:26:20.103843113Z"));
     }
 
     #[test]
@@ -503,7 +547,7 @@ mod tests {
         );
         parsed.channel_message_counts.insert(7, 1);
 
-        let rendered = render_info(&parsed);
+        let rendered = render_info(&parsed, TimeFormat::Auto);
         assert!(rendered.contains("messages:    1"));
         assert!(rendered.contains("duration:    0ns"));
         assert!(rendered.contains("1 msgs"));
@@ -524,7 +568,7 @@ mod tests {
             ..ParsedMcap::default()
         };
 
-        let rendered = render_info(&parsed);
+        let rendered = render_info(&parsed, TimeFormat::Auto);
         assert!(rendered.contains("messages:    0"));
         assert!(rendered.contains("channels:    0"));
         assert!(rendered.contains("attachments: 0"));
@@ -559,7 +603,7 @@ mod tests {
             name: "demo".to_string(),
         });
 
-        let rendered = render_info(&parsed);
+        let rendered = render_info(&parsed, TimeFormat::Auto);
         assert!(rendered.contains("channels:    1"));
         assert!(rendered.contains("attachments: 1"));
         assert!(rendered.contains("metadata:    1"));

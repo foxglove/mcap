@@ -7,7 +7,7 @@ use anyhow::{bail, Context as _, Result};
 use mcap::sans_io::indexed_reader::ReadOrder;
 use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor, SerializeOptions};
 
-use crate::cli::CatCommand;
+use crate::cli::{CatCommand, TimeFormat};
 use crate::context::CommandContext;
 use crate::{parse, render, source};
 
@@ -20,7 +20,7 @@ const PROTOBUF_SERIALIZE_OPTIONS: SerializeOptions =
 
 pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
     args.warn_deprecations();
-    let opts = CatOptions::from_args(&args)?;
+    let opts = CatOptions::from_args(&args, ctx.time_format())?;
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let stdout = std::io::stdout();
     let mut writer = std::io::BufWriter::new(stdout.lock());
@@ -75,10 +75,11 @@ struct CatOptions {
     start: u64,
     end: Option<u64>,
     json: bool,
+    times: render::TimeRenderer,
 }
 
 impl CatOptions {
-    fn from_args(args: &CatCommand) -> Result<Self> {
+    fn from_args(args: &CatCommand, time_format: TimeFormat) -> Result<Self> {
         let topics = args
             .topics
             .split(',')
@@ -104,6 +105,7 @@ impl CatOptions {
             start,
             end: (end != 0).then_some(end),
             json: args.json_output(),
+            times: render::TimeRenderer::new(time_format),
         })
     }
 
@@ -636,15 +638,7 @@ fn write_message(
     json_transcoders: &mut JsonTranscoders,
 ) -> Result<bool> {
     if opts.json {
-        write_json_message(
-            writer,
-            message.channel,
-            message.sequence,
-            message.log_time,
-            message.publish_time,
-            message.data,
-            json_transcoders,
-        )
+        write_json_message(writer, &opts.times, message, json_transcoders)
     } else {
         let schema_name = message
             .channel
@@ -654,6 +648,7 @@ fn write_message(
             .unwrap_or("no schema");
         write_message_fields(
             writer,
+            &opts.times,
             message.log_time,
             &message.channel.topic,
             schema_name,
@@ -665,6 +660,7 @@ fn write_message(
 
 fn write_message_fields(
     writer: &mut impl std::io::Write,
+    times: &render::TimeRenderer,
     log_time: u64,
     topic: &str,
     schema_name: &str,
@@ -672,7 +668,7 @@ fn write_message_fields(
     max_preview_bytes: usize,
 ) -> Result<bool> {
     let result: io::Result<()> = (|| {
-        render::write_raw_time(writer, log_time)?;
+        times.write(writer, log_time)?;
         write!(writer, " {} [{}] ", topic, schema_name)?;
         write_payload_preview(writer, data, max_preview_bytes)?;
         writeln!(writer)
@@ -682,25 +678,24 @@ fn write_message_fields(
 
 fn write_json_message(
     writer: &mut impl std::io::Write,
-    channel: &mcap::Channel<'_>,
-    sequence: u32,
-    log_time: u64,
-    publish_time: u64,
-    data: &[u8],
+    times: &render::TimeRenderer,
+    message: CatMessage<'_, '_, '_>,
     json_transcoders: &mut JsonTranscoders,
 ) -> Result<bool> {
-    let encoded_data = json_transcoders.encode(channel, data)?;
+    let encoded_data = json_transcoders.encode(message.channel, message.data)?;
     // Escaping keeps JSON valid for topics containing quotes or backslashes.
-    let topic = serde_json::to_string(&channel.topic).context("failed to encode topic")?;
+    let topic = serde_json::to_string(&message.channel.topic).context("failed to encode topic")?;
+    // Timestamps are always JSON strings (never bare numbers) to avoid float/int precision loss.
+    let log_time = serde_json::to_string(&times.format(message.log_time))
+        .context("failed to encode log_time")?;
+    let publish_time = serde_json::to_string(&times.format(message.publish_time))
+        .context("failed to encode publish_time")?;
+    let sequence = message.sequence;
     let result: io::Result<()> = (|| {
         write!(
             writer,
-            "{{\"topic\":{topic},\"sequence\":{sequence},\"log_time\":"
+            "{{\"topic\":{topic},\"sequence\":{sequence},\"log_time\":{log_time},\"publish_time\":{publish_time},\"data\":"
         )?;
-        writer.write_all(render::decimal_time(log_time).as_bytes())?;
-        write!(writer, ",\"publish_time\":")?;
-        writer.write_all(render::decimal_time(publish_time).as_bytes())?;
-        writer.write_all(b",\"data\":")?;
         writer.write_all(encoded_data.as_ref())?;
         writer.write_all(b"}\n")
     })();
@@ -1165,14 +1160,17 @@ mod tests {
 
     use super::{
         cat_indexed, cat_mcap, cat_streaming, needs_in_chunk_definitions, parse_ros1_field_type,
-        planned_chunk_reads, write_payload_preview, write_ros1_float, write_signed_decimal_time,
-        CatOptions, JsonTranscoders, Ros1MessageDef, MESSAGE_PREVIEW_LEN,
+        planned_chunk_reads, write_message_fields, write_payload_preview, write_ros1_float,
+        write_signed_decimal_time, CatOptions, JsonTranscoders, Ros1MessageDef,
+        MESSAGE_PREVIEW_LEN,
     };
+    use crate::cli::TimeFormat;
+    use crate::render;
 
     const NO_MESSAGE_INDEX_LOG_TIME_LINES: &[&str] = &[
-        "0 /demo [Example] [1]",
-        "1 /demo [Example] [3]",
-        "2 /demo [Example] [2]",
+        "0.000000000 /demo [Example] [1]",
+        "0.000000001 /demo [Example] [3]",
+        "0.000000002 /demo [Example] [2]",
     ];
 
     fn sample_message(schema_name: Option<&str>, data: Vec<u8>) -> mcap::Message<'static> {
@@ -1207,6 +1205,7 @@ mod tests {
 
     fn message_line_string(message: &mcap::Message<'_>, max_preview_bytes: usize) -> String {
         let mut out = Vec::new();
+        let times = render::TimeRenderer::default();
         let schema_name = message
             .channel
             .schema
@@ -1215,6 +1214,7 @@ mod tests {
             .unwrap_or("no schema");
         let broken_pipe = super::write_message_fields(
             &mut out,
+            &times,
             message.log_time,
             &message.channel.topic,
             schema_name,
@@ -1522,7 +1522,7 @@ mod tests {
         let message = sample_message(Some("Example"), vec![1, 2, 3]);
         assert_eq!(
             message_line_string(&message, 10),
-            "42 /demo [Example] [1 2 3]"
+            "0.000000042 /demo [Example] [1 2 3]"
         );
     }
 
@@ -1531,7 +1531,7 @@ mod tests {
         let message = sample_message(None, vec![1, 2, 3]);
         assert_eq!(
             message_line_string(&message, 10),
-            "42 /demo [no schema] [1 2 3]"
+            "0.000000042 /demo [no schema] [1 2 3]"
         );
     }
 
@@ -1550,8 +1550,8 @@ mod tests {
         .expect("remote cat should scan unchunked messages with opt-in");
         assert!(!broken_pipe);
         let output = String::from_utf8(out).expect("cat output should be utf8");
-        assert!(output.contains("30 /demo [Example] [1]"));
-        assert!(output.contains("10 /demo [Example] [2]"));
+        assert!(output.contains("0.000000030 /demo [Example] [1]"));
+        assert!(output.contains("0.000000010 /demo [Example] [2]"));
     }
 
     #[test]
@@ -1748,7 +1748,10 @@ mod tests {
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(
             lines,
-            vec!["10 /demo [Example] [2]", "30 /demo [Example] [1]"]
+            vec![
+                "0.000000010 /demo [Example] [2]",
+                "0.000000030 /demo [Example] [1]"
+            ]
         );
     }
 
@@ -1796,7 +1799,10 @@ mod tests {
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(
             lines,
-            vec!["30 /demo [Example] [1]", "10 /demo [Example] [2]"]
+            vec![
+                "0.000000030 /demo [Example] [1]",
+                "0.000000010 /demo [Example] [2]"
+            ]
         );
     }
 
@@ -2038,6 +2044,7 @@ mod tests {
             start: 20,
             end: None,
             json: false,
+            ..CatOptions::default()
         };
         let mut out = Vec::new();
         let broken_pipe = cat_mcap(&mut out, &mcap, &opts).expect("cat should succeed");
@@ -2047,7 +2054,7 @@ mod tests {
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(
             lines,
-            vec![r#"30 /camera [Example] [123 34 99 97 109 101 114 97 34 58]..."#]
+            vec![r#"0.000000030 /camera [Example] [123 34 99 97 109 101 114 97 34 58]..."#]
         );
     }
 
@@ -2067,17 +2074,16 @@ mod tests {
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(
             lines,
-            vec![r#"20 /radar [Example] [123 34 114 97 100 97 114 34 58 49]..."#]
+            vec![r#"0.000000020 /radar [Example] [123 34 114 97 100 97 114 34 58 49]..."#]
         );
     }
 
-    #[test]
-    fn cat_json_passes_json_message_with_schema() {
-        let message = sample_message(Some("Example"), br#"{"value":1}"#.to_vec());
+    fn write_json_line(message: &mcap::Message<'_>, time_format: TimeFormat) -> String {
         let mut out = Vec::new();
         let mut transcoders = JsonTranscoders::default();
         let opts = CatOptions {
             json: true,
+            times: render::TimeRenderer::new(time_format),
             ..CatOptions::default()
         };
         let cat_message = super::CatMessage {
@@ -2090,10 +2096,15 @@ mod tests {
         let broken_pipe = super::write_message(&mut out, cat_message, &opts, &mut transcoders)
             .expect("json message should write");
         assert!(!broken_pipe);
+        String::from_utf8(out).expect("valid utf8 output")
+    }
 
+    #[test]
+    fn cat_json_passes_json_message_with_schema() {
+        let message = sample_message(Some("Example"), br#"{"value":1}"#.to_vec());
         assert_eq!(
-            String::from_utf8(out).expect("valid utf8 output"),
-            r#"{"topic":"/demo","sequence":1,"log_time":0.000000042,"publish_time":0.000000043,"data":{"value":1}}"#
+            write_json_line(&message, TimeFormat::Auto),
+            r#"{"topic":"/demo","sequence":1,"log_time":"0.000000042","publish_time":"0.000000043","data":{"value":1}}"#
                 .to_string()
                 + "\n"
         );
@@ -2102,29 +2113,63 @@ mod tests {
     #[test]
     fn cat_json_passes_schemaless_json_messages() {
         let message = sample_message(None, br#"{"value":1}"#.to_vec());
-        let mut out = Vec::new();
-        let mut transcoders = JsonTranscoders::default();
-        let opts = CatOptions {
-            json: true,
-            ..CatOptions::default()
-        };
-        let cat_message = super::CatMessage {
-            channel: &message.channel,
-            sequence: message.sequence,
-            log_time: message.log_time,
-            publish_time: message.publish_time,
-            data: message.data.as_ref(),
-        };
-        let broken_pipe = super::write_message(&mut out, cat_message, &opts, &mut transcoders)
-            .expect("schemaless json message should write");
-        assert!(!broken_pipe);
-
         assert_eq!(
-            String::from_utf8(out).expect("valid utf8 output"),
-            r#"{"topic":"/demo","sequence":1,"log_time":0.000000042,"publish_time":0.000000043,"data":{"value":1}}"#
+            write_json_line(&message, TimeFormat::Auto),
+            r#"{"topic":"/demo","sequence":1,"log_time":"0.000000042","publish_time":"0.000000043","data":{"value":1}}"#
                 .to_string()
                 + "\n"
         );
+    }
+
+    #[test]
+    fn cat_json_emits_quoted_timestamps_for_each_time_format() {
+        let mut message = sample_message(Some("Example"), br#"{"value":1}"#.to_vec());
+        message.log_time = 1_490_149_580_103_843_113;
+        message.publish_time = 1_490_149_580_103_843_113;
+
+        assert!(write_json_line(&message, TimeFormat::Auto).contains(
+            r#""log_time":"2017-03-22T02:26:20.103843113Z","publish_time":"2017-03-22T02:26:20.103843113Z""#
+        ));
+        assert!(write_json_line(&message, TimeFormat::Rfc3339).contains(
+            r#""log_time":"2017-03-22T02:26:20.103843113Z","publish_time":"2017-03-22T02:26:20.103843113Z""#
+        ));
+        assert!(write_json_line(&message, TimeFormat::Seconds).contains(
+            r#""log_time":"1490149580.103843113","publish_time":"1490149580.103843113""#
+        ));
+        assert!(write_json_line(&message, TimeFormat::Nanoseconds)
+            .contains(r#""log_time":"1490149580103843113","publish_time":"1490149580103843113""#));
+    }
+
+    #[test]
+    fn cat_json_rfc3339_honors_pre_cutoff_timestamps() {
+        let mut message = sample_message(Some("Example"), br#"{"value":1}"#.to_vec());
+        message.log_time = 1_000_000_000;
+        message.publish_time = 1_000_000_000;
+        assert!(write_json_line(&message, TimeFormat::Rfc3339).contains(
+            r#""log_time":"1970-01-01T00:00:01Z","publish_time":"1970-01-01T00:00:01Z""#
+        ));
+    }
+
+    #[test]
+    fn cat_text_auto_latches_on_first_message_log_time() {
+        let times = render::TimeRenderer::new(TimeFormat::Auto);
+        // First rendered timestamp is pre-cutoff → decimal for the whole run.
+        let mut out = Vec::new();
+        write_message_fields(&mut out, &times, 1_000_000_000, "/a", "S", b"x", 10).expect("write");
+        write_message_fields(
+            &mut out,
+            &times,
+            1_490_149_580_103_843_113,
+            "/b",
+            "S",
+            b"y",
+            10,
+        )
+        .expect("write");
+        let output = String::from_utf8(out).expect("utf8");
+        let lines: Vec<&str> = output.lines().collect();
+        assert!(lines[0].starts_with("1.000000000 "));
+        assert!(lines[1].starts_with("1490149580.103843113 "));
     }
 
     #[test]

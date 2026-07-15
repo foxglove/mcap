@@ -58,6 +58,15 @@ pub struct Args {
     #[arg(long, default_value_t = false, global = true)]
     pub allow_remote_scan: bool,
 
+    /// How to render timestamps in command output
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = TimeFormat::Auto,
+        global = true
+    )]
+    pub time_format: TimeFormat,
+
     #[command(subcommand)]
     pub command: Command,
 
@@ -422,6 +431,27 @@ impl CompressionFormat {
             CompressionFormat::None => None,
         }
     }
+}
+
+/// Timestamp rendering policy for CLI output (`info`, `cat`, `list`, …).
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TimeFormat {
+    /// RFC3339 when timestamps look like wall-clock times, else decimal seconds.
+    ///
+    /// The RFC3339-vs-decimal choice is latched once per command invocation (see
+    /// [`crate::render::TimeRenderer`]).
+    #[default]
+    #[value(name = "auto")]
+    Auto,
+    /// Always render as an RFC3339 UTC timestamp.
+    #[value(name = "rfc3339", alias = "rfc")]
+    Rfc3339,
+    /// Decimal seconds with 9 fractional digits.
+    #[value(name = "seconds", alias = "secs")]
+    Seconds,
+    /// Integer nanoseconds.
+    #[value(name = "nanoseconds", alias = "nsecs")]
+    Nanoseconds,
 }
 
 /// Output message order for the rewrite commands (`filter`, `compress`, `decompress`, `sort`).

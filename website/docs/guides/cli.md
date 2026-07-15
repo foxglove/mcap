@@ -59,11 +59,12 @@ Run `mcap --help` for detailed usage information, or `mcap <command> --help` for
       help        Print this message or the help of the given subcommand(s)
 
     Options:
-      -c, --color <COLOR>      [default: auto] [possible values: auto, always, never]
-          --allow-remote-scan  Allow commands to download/scan remote inputs
-      -v, --verbose...         Verbosity (-v, -vv, -vvv, etc.)
-      -h, --help               Print help
-      -V, --version            Print version
+      -c, --color <COLOR>                [default: auto] [possible values: auto, always, never]
+          --allow-remote-scan            Allow commands to download/scan remote inputs
+          --time-format <TIME_FORMAT>    [default: auto] [possible values: auto, rfc3339, seconds, nanoseconds]
+      -v, --verbose...                   Verbosity (-v, -vv, -vvv, etc.)
+      -h, --help                         Print help
+      -V, --version                      Print version
 
     Learn more:
       Homepage       https://mcap.dev
@@ -110,8 +111,8 @@ Report summary statistics on an MCAP file:
     profile:     ros1
     messages:    1606
     duration:    7.780758504s
-    start:       2017-03-22T02:26:20.103843113Z (1490149580.103843113)
-    end:         2017-03-22T02:26:27.884601617Z (1490149587.884601617)
+    start:       2017-03-22T02:26:20.103843113Z
+    end:         2017-03-22T02:26:27.884601617Z
     compression:
     	zstd: [14/14 chunks] [124.89 MB/61.46 MB (50.79%)] [7.90 MB/s]
     chunks:
@@ -137,16 +138,16 @@ Report summary statistics on an MCAP file:
 Echo messages for a specific topic to stdout as newline-delimited JSON (one object per message):
 
     $ mcap cat demo.mcap --topics /tf --format=ndjson | head -n 10
-    {"topic":"/tf","sequence":2,"log_time":1490149580.103843113,"publish_time":1490149580.103843113,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.117017840,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
-    {"topic":"/tf","sequence":3,"log_time":1490149580.113944947,"publish_time":1490149580.113944947,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.127078895,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
-    {"topic":"/tf","sequence":8,"log_time":1490149580.124028613,"publish_time":1490149580.124028613,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.137141823,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
-    {"topic":"/tf","sequence":10,"log_time":1490149580.134219155,"publish_time":1490149580.134219155,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.147199242,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
-    {"topic":"/tf","sequence":11,"log_time":1490149580.144292780,"publish_time":1490149580.144292780,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.157286100,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
-    {"topic":"/tf","sequence":12,"log_time":1490149580.154895238,"publish_time":1490149580.154895238,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.167376974,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
-    {"topic":"/tf","sequence":15,"log_time":1490149580.165152280,"publish_time":1490149580.165152280,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.177463023,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
-    {"topic":"/tf","sequence":20,"log_time":1490149580.175192697,"publish_time":1490149580.175192697,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.187523449,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
-    {"topic":"/tf","sequence":21,"log_time":1490149580.185428613,"publish_time":1490149580.185428613,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.197612248,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
-    {"topic":"/tf","sequence":22,"log_time":1490149580.196638030,"publish_time":1490149580.196638030,"data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.207699065,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":2,"log_time":"2017-03-22T02:26:20.103843113Z","publish_time":"2017-03-22T02:26:20.103843113Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.117017840,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":3,"log_time":"2017-03-22T02:26:20.113944947Z","publish_time":"2017-03-22T02:26:20.113944947Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.127078895,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":8,"log_time":"2017-03-22T02:26:20.124028613Z","publish_time":"2017-03-22T02:26:20.124028613Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.137141823,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":10,"log_time":"2017-03-22T02:26:20.134219155Z","publish_time":"2017-03-22T02:26:20.134219155Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.147199242,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":11,"log_time":"2017-03-22T02:26:20.144292780Z","publish_time":"2017-03-22T02:26:20.144292780Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.157286100,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":12,"log_time":"2017-03-22T02:26:20.154895238Z","publish_time":"2017-03-22T02:26:20.154895238Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.167376974,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":15,"log_time":"2017-03-22T02:26:20.165152280Z","publish_time":"2017-03-22T02:26:20.165152280Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.177463023,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":20,"log_time":"2017-03-22T02:26:20.175192697Z","publish_time":"2017-03-22T02:26:20.175192697Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.187523449,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":21,"log_time":"2017-03-22T02:26:20.185428613Z","publish_time":"2017-03-22T02:26:20.185428613Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.197612248,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
+    {"topic":"/tf","sequence":22,"log_time":"2017-03-22T02:26:20.196638030Z","publish_time":"2017-03-22T02:26:20.196638030Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.207699065,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
 
 ### Remote file support
 
@@ -159,8 +160,8 @@ The `mcap` CLI can read files over **HTTP(S)** and from object stores: **Amazon 
     profile:     ros1
     messages:    1606
     duration:    7.780758504s
-    start:       2017-03-22T02:26:20.103843113Z (1490149580.103843113)
-    end:         2017-03-22T02:26:27.884601617Z (1490149587.884601617)
+    start:       2017-03-22T02:26:20.103843113Z
+    end:         2017-03-22T02:26:27.884601617Z
     compression:
     	zstd: [14/14 chunks] [124.89 MB/61.46 MB (50.79%)] [7.90 MB/s]
     chunks:
@@ -206,8 +207,8 @@ AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
 `mcap list chunks` prints the chunk index: each chunk's byte offset and length, message time range, compression, compressed/uncompressed sizes and ratio, and the size of its message index.
 
     $ mcap list chunks recording.mcap
-    offset  length  start       end         compression  compressed size  uncompressed size  compression ratio  message index length
-    60      312     1000000002  3000000004  zstd         259              436                0.594037           78
+    offset  length  start        end          compression  compressed size  uncompressed size  compression ratio  message index length
+    60      312     1.000000002  3.000000004  zstd         259              436                0.594037           78
 
 #### Recovering data from a corrupt file
 

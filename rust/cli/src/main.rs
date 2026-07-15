@@ -17,7 +17,12 @@ use context::CommandContext;
 fn run() -> Result<CommandOutcome> {
     let args = cli::Args::parse();
     logsetup::init_logger(args.verbose, args.color)?;
-    let ctx = CommandContext::new(args.verbose, args.color, args.allow_remote_scan);
+    let ctx = CommandContext::new(
+        args.verbose,
+        args.color,
+        args.allow_remote_scan,
+        args.time_format,
+    );
 
     commands::dispatch(&ctx, args.command)
 }
@@ -46,7 +51,7 @@ mod tests {
         DuCommand, FilterCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand,
         GetSubcommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand,
         ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand,
-        MessageOrder, RecoverCommand, SortCommand,
+        MessageOrder, RecoverCommand, SortCommand, TimeFormat,
     };
 
     #[test]
@@ -224,6 +229,34 @@ mod tests {
         let args = Args::try_parse_from(["mcap", "info", "--allow-remote-scan", "demo.mcap"])
             .expect("allow remote scan should parse after subcommand");
         assert!(args.allow_remote_scan);
+    }
+
+    #[test]
+    fn parses_global_time_format_flag() {
+        let args = Args::try_parse_from(["mcap", "--time-format", "nsecs", "info", "demo.mcap"])
+            .expect("time format should parse before subcommand");
+        assert_eq!(args.time_format, TimeFormat::Nanoseconds);
+
+        let args = Args::try_parse_from(["mcap", "cat", "--time-format=rfc", "demo.mcap"])
+            .expect("time format should parse after subcommand");
+        assert_eq!(args.time_format, TimeFormat::Rfc3339);
+
+        let args = Args::try_parse_from(["mcap", "info", "demo.mcap"]).expect("default parse");
+        assert_eq!(args.time_format, TimeFormat::Auto);
+
+        for (value, expected) in [
+            ("auto", TimeFormat::Auto),
+            ("rfc3339", TimeFormat::Rfc3339),
+            ("rfc", TimeFormat::Rfc3339),
+            ("seconds", TimeFormat::Seconds),
+            ("secs", TimeFormat::Seconds),
+            ("nanoseconds", TimeFormat::Nanoseconds),
+            ("nsecs", TimeFormat::Nanoseconds),
+        ] {
+            let args = Args::try_parse_from(["mcap", "--time-format", value, "info", "demo.mcap"])
+                .unwrap_or_else(|_| panic!("time format {value} should parse"));
+            assert_eq!(args.time_format, expected);
+        }
     }
 
     #[test]
