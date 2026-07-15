@@ -94,38 +94,56 @@
 }
 
 .section {
-  padding: 4rem 0;
+  padding: 3.5rem 0;
 }
 
-.splitLayout {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
+.featuresSection {
+  padding-bottom: 1.5rem;
 }
 
-@media (min-width: 996px) {
-  .splitLayout {
-    flex-direction: row;
-    align-items: stretch;
-  }
+.demoSection {
+  padding-top: 1.5rem;
+  padding-bottom: 3rem;
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, #0c4471 5%, white) 0%,
+    color-mix(in srgb, #0c4471 9%, white) 100%
+  );
+}
 
-  .demoColumn {
-    flex: 1 1 45%;
-    min-width: 0;
-  }
+[data-theme="dark"] .demoSection {
+  background: linear-gradient(180deg, #242526 0%, #1b1c1d 100%);
+}
 
-  .featuresColumn {
-    flex: 1 1 55%;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-  }
+.codeSection {
+  background: color-mix(in srgb, #0c4471 4%, white);
+}
+
+[data-theme="dark"] .codeSection {
+  background: #242526;
+}
+
+.sectionHeader {
+  margin-bottom: 1.75rem;
+}
+
+.sectionHeader h2 {
+  margin-bottom: 4px;
+  font-weight: 800;
+}
+
+.sectionSubhead {
+  line-height: 1.5;
+  margin-top: 8px;
+  margin-bottom: 0;
+  max-width: 40rem;
+  color: var(--ifm-color-emphasis-700);
 }
 
 .featureGrid {
   display: grid;
   grid-template-columns: repeat(1, minmax(0, 1fr));
-  gap: 2rem 3rem;
+  gap: 1.75rem 2.5rem;
   text-align: center;
 }
 
@@ -139,85 +157,124 @@
   .featureGrid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
 
-  /* When shown beside the demo, the grid has less width, so use fewer
-     columns (2) and let the extra rows flow vertically. */
-  .featuresColumn .featureGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 2rem;
-  }
+.featureGrid > * {
+  padding: 1.25rem 1rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, #0c4471 3.5%, white);
+  border: 1px solid color-mix(in srgb, #0c4471 8%, transparent);
+}
+
+[data-theme="dark"] .featureGrid > * {
+  background: color-mix(in srgb, white 4%, #242526);
+  border-color: color-mix(in srgb, white 8%, transparent);
+}
+
+.featureGrid h3 {
+  margin-bottom: 0.5rem;
+}
+
+.featureGrid p {
+  margin-bottom: 0;
+  color: var(--ifm-color-emphasis-700);
+  line-height: 1.55;
 }
 
 .featureIcon {
   display: inline-block;
-  width: 60px;
+  width: 56px;
   height: auto;
+  margin-bottom: 0.35rem;
 }
 
-.comparisonHeader {
-  margin-bottom: 2rem;
+.demoSplit {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
 }
 
-.comparisonHeader h2 {
-  margin-bottom: 4px;
+@media (min-width: 996px) {
+  .demoSplit {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 2rem;
+  }
+
+  .demoColumn {
+    flex: 1 1 58%;
+    min-width: 0;
+  }
+
+  .conversionColumn {
+    flex: 1 1 42%;
+    min-width: 0;
+  }
+}
+
+.demoColumn :global(section) {
+  height: 100%;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #0c4471 10%, transparent);
+  box-shadow: 0 1px 2px rgb(12 68 113 / 0.04);
+  overflow: hidden;
+}
+
+[data-theme="dark"] .demoColumn :global(section) {
+  border-color: color-mix(in srgb, white 10%, transparent);
+  box-shadow: none;
+}
+
+.conversionColumn {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.85rem;
+  padding: 2rem 1.75rem;
+  border-radius: 12px;
+  background: white;
+  border: 1px solid color-mix(in srgb, #0c4471 10%, transparent);
+  box-shadow: 0 1px 2px rgb(12 68 113 / 0.04);
+}
+
+[data-theme="dark"] .conversionColumn {
+  background: #242526;
+  border-color: color-mix(in srgb, white 10%, transparent);
+  box-shadow: none;
+}
+
+.conversionColumn h2 {
+  margin: 0;
   font-weight: 800;
+  font-size: 1.5rem;
+  line-height: 1.25;
 }
 
-.comparisonSubhead {
-  line-height: 1.5;
-  margin-top: 8px;
-  margin-bottom: 0;
+.conversionColumn p {
+  line-height: 1.6;
+  margin: 0;
+  color: var(--ifm-color-emphasis-800);
 }
 
-.comparisonTableWrapper {
-  overflow-x: auto;
-}
-
-.comparisonTable {
-  width: 100%;
-  border-collapse: collapse;
+.foxgloveCredit {
+  margin-top: 0.5rem !important;
+  padding-top: 1rem;
+  border-top: 1px solid color-mix(in srgb, #0c4471 12%, transparent);
   font-size: 0.95rem;
+  color: var(--ifm-color-emphasis-700) !important;
 }
 
-.comparisonTable th,
-.comparisonTable td {
-  padding: 0.75rem 1rem;
-  text-align: left;
-  vertical-align: top;
-  border-bottom: 1px solid var(--ifm-table-border-color);
-}
-
-.comparisonTable thead th {
-  font-weight: 700;
-  border-bottom-width: 2px;
-}
-
-.comparisonTable tbody th {
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.inlineCode {
-  font-family: var(--ifm-font-family-monospace);
-  font-size: 0.875em;
-  color: #c7254e;
-  background-color: #f9f2f4;
-  border-radius: 4px;
-  padding: 0.1em 0.35em;
-}
-
-[data-theme="dark"] .inlineCode {
-  color: #f48fb1;
-  background-color: rgba(255, 255, 255, 0.08);
+[data-theme="dark"] .foxgloveCredit {
+  border-top-color: color-mix(in srgb, white 12%, transparent);
 }
 
 .logosHeader {
   text-align: center;
-  margin-bottom: 3rem;
+  margin-bottom: 2rem;
 }
 
 .logosSection {
-  padding: 4rem 2rem;
+  padding: 3rem 2rem;
 }
 
 .logosSection a {
@@ -229,7 +286,7 @@
 }
 
 [data-theme="light"] .logosSection {
-  background-color: rgba(148, 101, 222, 0.06);
+  background-color: color-mix(in srgb, #0c4471 6%, white);
 }
 
 [data-theme="dark"] .logosSection {
@@ -240,23 +297,31 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  align-items: center;
+  gap: 0.5rem 1rem;
 }
 
 .logoLink {
-  min-width: 200px;
+  min-width: 160px;
   max-width: 50%;
+  opacity: 0.9;
+  transition: opacity 0.15s ease;
+}
+
+.logoLink:hover {
+  opacity: 1;
 }
 
 .logoIcon {
   width: 100%;
-  max-height: 50px;
-  margin: 2rem 1rem;
+  max-height: 44px;
+  margin: 1.25rem 0.75rem;
   padding: 0.1rem;
 }
 
 @media (max-width: 640px) {
   .logoIcon {
-    margin: 1rem;
+    margin: 0.75rem;
   }
 }
 

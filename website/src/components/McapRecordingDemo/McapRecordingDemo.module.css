@@ -38,21 +38,6 @@
   margin-bottom: 0;
 }
 
-.conversionCallout {
-  margin-top: 1.25rem;
-}
-
-.conversionCalloutLead {
-  line-height: 1.5;
-  margin: 0 0 4px;
-  font-weight: 600;
-}
-
-.conversionCalloutBody {
-  line-height: 1.5;
-  margin: 0;
-}
-
 .sensors {
   display: flex;
   gap: 4px 16px;
