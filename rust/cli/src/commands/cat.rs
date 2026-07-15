@@ -685,17 +685,18 @@ fn write_json_message(
     let encoded_data = json_transcoders.encode(message.channel, message.data)?;
     // Escaping keeps JSON valid for topics containing quotes or backslashes.
     let topic = serde_json::to_string(&message.channel.topic).context("failed to encode topic")?;
-    // Timestamps are always JSON strings (never bare numbers) to avoid float/int precision loss.
-    let log_time = serde_json::to_string(&times.format(message.log_time))
-        .context("failed to encode log_time")?;
-    let publish_time = serde_json::to_string(&times.format(message.publish_time))
-        .context("failed to encode publish_time")?;
     let sequence = message.sequence;
+    // Timestamps are always JSON strings (never bare numbers) to avoid float/int precision loss;
+    // `write_json` emits them straight into the writer (see `TimeRenderer::write_json`).
     let result: io::Result<()> = (|| {
         write!(
             writer,
-            "{{\"topic\":{topic},\"sequence\":{sequence},\"log_time\":{log_time},\"publish_time\":{publish_time},\"data\":"
+            "{{\"topic\":{topic},\"sequence\":{sequence},\"log_time\":"
         )?;
+        times.write_json(writer, message.log_time)?;
+        writer.write_all(b",\"publish_time\":")?;
+        times.write_json(writer, message.publish_time)?;
+        writer.write_all(b",\"data\":")?;
         writer.write_all(encoded_data.as_ref())?;
         writer.write_all(b"}\n")
     })();

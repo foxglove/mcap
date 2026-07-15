@@ -68,8 +68,31 @@ impl TimeRenderer {
         }
     }
 
+    /// Write the timestamp directly into `writer`.
+    ///
+    /// The numeric variants format straight into the writer to avoid a per-timestamp heap
+    /// allocation on the hot `cat` streaming path; only RFC3339 needs an intermediate `String`
+    /// (chrono builds one internally).
     pub fn write(&self, writer: &mut impl std::io::Write, t: u64) -> std::io::Result<()> {
-        write!(writer, "{}", self.format(t))
+        match self.resolved_kind(t) {
+            ResolvedTimeKind::Nanoseconds => write!(writer, "{t}"),
+            ResolvedTimeKind::Seconds => {
+                write!(writer, "{}.{:09}", t / 1_000_000_000, t % 1_000_000_000)
+            }
+            ResolvedTimeKind::Rfc3339 => writer.write_all(format_rfc3339(t).as_bytes()),
+        }
+    }
+
+    /// Write the timestamp as a quoted JSON string directly into `writer`.
+    ///
+    /// Every `TimeFormat` renders to JSON-safe ASCII (digits plus `.`, `-`, `:`, `T`, `Z`), so no
+    /// escaping is required and we can skip the `format()` + `serde_json::to_string` intermediates.
+    /// Timestamps are always strings (never bare numbers) to avoid float / `>2^53` integer precision
+    /// loss in JSON consumers.
+    pub fn write_json(&self, writer: &mut impl std::io::Write, t: u64) -> std::io::Result<()> {
+        writer.write_all(b"\"")?;
+        self.write(writer, t)?;
+        writer.write_all(b"\"")
     }
 
     fn resolved_kind(&self, t: u64) -> ResolvedTimeKind {
