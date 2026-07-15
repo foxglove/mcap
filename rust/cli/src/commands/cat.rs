@@ -733,9 +733,8 @@ struct JsonTranscoders {
 
 impl JsonTranscoders {
     fn encode<'a>(&mut self, channel: &mcap::Channel<'_>, data: &'a [u8]) -> Result<Cow<'a, [u8]>> {
-        // Dispatch on the message encoding: it is how the data is framed on the wire, and (for
-        // ros1/protobuf) implies the schema encoding used to decode it. `json` messages are already
-        // JSON, whether or not they carry a jsonschema schema.
+        // Dispatch on message encoding: for ros1/protobuf it implies the schema encoding needed to
+        // decode; json messages are already JSON, with or without a jsonschema.
         match channel.message_encoding.as_str() {
             "json" => Ok(Cow::Borrowed(data)),
             "protobuf" => {
