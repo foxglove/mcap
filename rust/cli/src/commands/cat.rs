@@ -102,7 +102,7 @@ impl CatOptions {
             topics,
             start,
             end: (end != 0).then_some(end),
-            json: args.json,
+            json: args.json_output(),
         })
     }
 
