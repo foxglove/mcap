@@ -41,12 +41,12 @@ mod tests {
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        CoalesceChannels, Command, CommonRewriteArgs, CompletionCommand, CompressCommand,
-        CompressionFormat, ConvertCommand, DecompressCommand, DoctorCommand, DuCommand,
-        FilterCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand,
-        InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, MessageOrder,
-        RecoverCommand, SortCommand,
+        CatFormat, CoalesceChannels, Command, CommonRewriteArgs, CompletionCommand,
+        CompressCommand, CompressionFormat, ConvertCommand, DecompressCommand, DoctorCommand,
+        DuCommand, FilterCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand,
+        GetSubcommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand,
+        ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand,
+        MessageOrder, RecoverCommand, SortCommand,
     };
 
     #[test]
@@ -73,6 +73,7 @@ mod tests {
                 start_nsecs: 0,
                 end_secs: 0,
                 end_nsecs: 0,
+                format: CatFormat::Text,
                 json: false,
                 csv: false,
                 topic: None,
@@ -92,6 +93,7 @@ mod tests {
                 start_nsecs: 0,
                 end_secs: 0,
                 end_nsecs: 0,
+                format: CatFormat::Text,
                 json: false,
                 csv: false,
                 topic: None,
@@ -111,7 +113,7 @@ mod tests {
             "10",
             "--end-nsecs",
             "20000000000",
-            "--json",
+            "--format=ndjson",
         ])
         .expect("cat should parse");
         assert_eq!(
@@ -123,11 +125,44 @@ mod tests {
                 start_nsecs: 0,
                 end_secs: 0,
                 end_nsecs: 20_000_000_000,
+                format: CatFormat::Ndjson,
+                json: false,
+                csv: false,
+                topic: None,
+            })
+        );
+        assert!(matches!(args.command, Command::Cat(ref c) if c.json_output()));
+    }
+
+    #[test]
+    fn parses_cat_deprecated_json_alias() {
+        // `--json` is retained as a hidden deprecated alias for `--format=ndjson`.
+        let args = Args::try_parse_from(["mcap", "cat", "demo.mcap", "--json"])
+            .expect("deprecated --json should still parse");
+        assert_eq!(
+            args.command,
+            Command::Cat(CatCommand {
+                files: vec!["demo.mcap".into()],
+                topics: String::new(),
+                start_secs: 0,
+                start_nsecs: 0,
+                end_secs: 0,
+                end_nsecs: 0,
+                format: CatFormat::Text,
                 json: true,
                 csv: false,
                 topic: None,
             })
         );
+        assert!(matches!(args.command, Command::Cat(ref c) if c.json_output()));
+    }
+
+    #[test]
+    fn cat_rejects_format_with_json_alias() {
+        let parse_err =
+            Args::try_parse_from(["mcap", "cat", "demo.mcap", "--format=ndjson", "--json"])
+                .expect_err("--format and --json should conflict");
+        assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
     }
 
     #[test]
@@ -170,6 +205,7 @@ mod tests {
                 start_nsecs: 0,
                 end_secs: 0,
                 end_nsecs: 0,
+                format: CatFormat::Text,
                 json: false,
                 csv: true,
                 topic: Some("/tf".to_string()),
