@@ -733,16 +733,15 @@ struct JsonTranscoders {
 
 impl JsonTranscoders {
     fn encode<'a>(&mut self, channel: &mcap::Channel<'_>, data: &'a [u8]) -> Result<Cow<'a, [u8]>> {
-        let Some(schema) = channel.schema.as_ref() else {
-            return encode_schemaless_json(&channel.message_encoding, data);
-        };
-        if schema.encoding.is_empty() {
-            return encode_schemaless_json(&channel.message_encoding, data);
-        }
-
-        match schema.encoding.as_str() {
-            "jsonschema" => Ok(Cow::Borrowed(data)),
+        // Dispatch on the message encoding: it is how the data is framed on the wire, and (for
+        // ros1/protobuf) implies the schema encoding used to decode it. `json` messages are already
+        // JSON, whether or not they carry a jsonschema schema.
+        match channel.message_encoding.as_str() {
+            "json" => Ok(Cow::Borrowed(data)),
             "protobuf" => {
+                let schema = channel.schema.as_ref().with_context(|| {
+                    format!("protobuf message on {} has no schema to decode", channel.topic)
+                })?;
                 let descriptor = match self.protobuf_descriptors.get(&schema.id) {
                     Some(descriptor) => descriptor.clone(),
                     None => {
@@ -764,7 +763,10 @@ impl JsonTranscoders {
                     .context("failed to marshal message")?;
                 Ok(Cow::Owned(serializer.into_inner()))
             }
-            "ros1msg" => {
+            "ros1" => {
+                let schema = channel.schema.as_ref().with_context(|| {
+                    format!("ros1 message on {} has no schema to decode", channel.topic)
+                })?;
                 let transcoder = match self.ros1_transcoders.get(&schema.id) {
                     Some(transcoder) => transcoder,
                     None => {
@@ -784,18 +786,9 @@ impl JsonTranscoders {
                 Ok(Cow::Owned(json))
             }
             encoding => bail!(
-                "JSON output only supported for ros1msg, protobuf, and jsonschema schemas. Found: {encoding}"
+                "JSON output only supported for the ros1, protobuf, and json message encodings; found: {encoding}"
             ),
         }
-    }
-}
-
-fn encode_schemaless_json<'a>(message_encoding: &str, data: &'a [u8]) -> Result<Cow<'a, [u8]>> {
-    match message_encoding {
-        "json" => Ok(Cow::Borrowed(data)),
-        encoding => bail!(
-            "for schema-less channels, JSON output is only supported with 'json' message encoding. found: {encoding}"
-        ),
     }
 }
 
@@ -2132,6 +2125,26 @@ mod tests {
             r#"{"topic":"/demo","sequence":1,"log_time":0.000000042,"publish_time":0.000000043,"data":{"value":1}}"#
                 .to_string()
                 + "\n"
+        );
+    }
+
+    #[test]
+    fn cat_json_rejects_unsupported_message_encoding() {
+        let channel = mcap::Channel {
+            id: 1,
+            topic: "/imu".to_string(),
+            schema: None,
+            message_encoding: "cdr".to_string(),
+            metadata: BTreeMap::new(),
+        };
+        let mut transcoders = JsonTranscoders::default();
+        let err = transcoders
+            .encode(&channel, b"\x00")
+            .expect_err("cdr message encoding should not be supported");
+        assert!(
+            err.to_string()
+                .contains("ros1, protobuf, and json message encodings"),
+            "error should name the supported message encodings: {err}"
         );
     }
 
