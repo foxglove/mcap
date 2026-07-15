@@ -348,83 +348,83 @@ function ComparisonTable(): JSX.Element {
       </header>
       <div className={styles.comparisonTableWrapper}>
         <table className={styles.comparisonTable}>
-        <thead>
-          <tr>
-            <th scope="col" />
-            <th scope="col">
-              rosbag1 (<code className={styles.inlineCode}>.bag</code>)
-            </th>
-            <th scope="col">
-              rosbag2 default (SQLite{" "}
-              <code className={styles.inlineCode}>.db3</code>)
-            </th>
-            <th scope="col">MCAP</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row">Serialization agnostic</th>
-            <td>No — ROS1 serialization only</td>
-            <td>Yes</td>
-            <td>Yes — ROS 1/2, Protobuf, JSON, FlatBuffers, custom</td>
-          </tr>
-          <tr>
-            <th scope="row">Self-describing (schemas embedded)</th>
-            <td>Yes</td>
-            <td>
-              Not by default (
-              <Link to="https://github.com/ros2/rosbag2/issues/782">
-                ros2/rosbag2#782
-              </Link>
-              )
-            </td>
-            <td>Yes</td>
-          </tr>
-          <tr>
-            <th scope="row">Append-only / write-optimized</th>
-            <td>Partial</td>
-            <td>No — index updated per row insert</td>
-            <td>Yes — chunked, streaming-safe</td>
-          </tr>
-          <tr>
-            <th scope="row">Chunk-level compression</th>
-            <td>No</td>
-            <td>No (message-level only)</td>
-            <td>LZ4 or Zstandard</td>
-          </tr>
-          <tr>
-            <th scope="row">Corruption resilience</th>
-            <td>Partial (chunk-recoverable, no checksums)</td>
-            <td>Depends on journal mode</td>
-            <td>
-              Chunk CRCs +{" "}
-              <code className={styles.inlineCode}>mcap recover</code>
-            </td>
-          </tr>
-          <tr>
-            <th scope="row">Efficient remote / random-access reads</th>
-            <td>Index-based</td>
-            <td>
-              Full DB load required in browser (
-              <code className={styles.inlineCode}>sql.js</code>)
-            </td>
-            <td>Indexed reads over HTTP range, S3, GCS, Azure</td>
-          </tr>
-          <tr>
-            <th scope="row">Standards-track friendly</th>
-            <td>Yes</td>
-            <td>
-              Difficult — SQLite has no independent second implementation
-            </td>
-            <td>Yes — open spec, multiple implementations</td>
-          </tr>
-          <tr>
-            <th scope="row">Default in ROS 2</th>
-            <td>—</td>
-            <td>Iron and earlier</td>
-            <td>Jazzy and later (current)</td>
-          </tr>
-        </tbody>
+          <thead>
+            <tr>
+              <th scope="col" />
+              <th scope="col">
+                rosbag1 (<code className={styles.inlineCode}>.bag</code>)
+              </th>
+              <th scope="col">
+                rosbag2 default (SQLite{" "}
+                <code className={styles.inlineCode}>.db3</code>)
+              </th>
+              <th scope="col">MCAP</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Serialization agnostic</th>
+              <td>No — ROS1 serialization only</td>
+              <td>Yes</td>
+              <td>Yes — ROS 1/2, Protobuf, JSON, FlatBuffers, custom</td>
+            </tr>
+            <tr>
+              <th scope="row">Self-describing (schemas embedded)</th>
+              <td>Yes</td>
+              <td>
+                Not by default (
+                <Link to="https://github.com/ros2/rosbag2/issues/782">
+                  ros2/rosbag2#782
+                </Link>
+                )
+              </td>
+              <td>Yes</td>
+            </tr>
+            <tr>
+              <th scope="row">Append-only / write-optimized</th>
+              <td>Partial</td>
+              <td>No — index updated per row insert</td>
+              <td>Yes — chunked, streaming-safe</td>
+            </tr>
+            <tr>
+              <th scope="row">Chunk-level compression</th>
+              <td>No</td>
+              <td>No (message-level only)</td>
+              <td>LZ4 or Zstandard</td>
+            </tr>
+            <tr>
+              <th scope="row">Corruption resilience</th>
+              <td>Partial (chunk-recoverable, no checksums)</td>
+              <td>Depends on journal mode</td>
+              <td>
+                Chunk CRCs +{" "}
+                <code className={styles.inlineCode}>mcap recover</code>
+              </td>
+            </tr>
+            <tr>
+              <th scope="row">Efficient remote / random-access reads</th>
+              <td>Index-based</td>
+              <td>
+                Full DB load required in browser (
+                <code className={styles.inlineCode}>sql.js</code>)
+              </td>
+              <td>Indexed reads over HTTP range, S3, GCS, Azure</td>
+            </tr>
+            <tr>
+              <th scope="row">Standards-track friendly</th>
+              <td>Yes</td>
+              <td>
+                Difficult — SQLite has no independent second implementation
+              </td>
+              <td>Yes — open spec, multiple implementations</td>
+            </tr>
+            <tr>
+              <th scope="row">Default in ROS 2</th>
+              <td>—</td>
+              <td>Iron and earlier</td>
+              <td>Jazzy and later (current)</td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </>
