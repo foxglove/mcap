@@ -280,7 +280,7 @@ impl CatCommand {
         }
     }
 
-    /// Whether to emit JSON (`--format=ndjson` or the deprecated `--json` alias).
+    /// Whether to emit JSON (`--format=ndjson`).
     pub(crate) fn json_output(&self) -> bool {
         self.json || matches!(self.format, CatFormat::Ndjson)
     }

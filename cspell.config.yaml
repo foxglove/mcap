@@ -87,6 +87,7 @@ words:
   - nanos
   - nanosec
   - ndarray
+  - ndjson
   - noenv
   - Norlab
   - nsec
