@@ -2072,7 +2072,7 @@ mod tests {
     }
 
     #[test]
-    fn cat_json_wraps_jsonschema_messages() {
+    fn cat_json_passes_json_message_with_schema() {
         let message = sample_message(Some("Example"), br#"{"value":1}"#.to_vec());
         let mut out = Vec::new();
         let mut transcoders = JsonTranscoders::default();
@@ -2124,6 +2124,32 @@ mod tests {
             r#"{"topic":"/demo","sequence":1,"log_time":0.000000042,"publish_time":0.000000043,"data":{"value":1}}"#
                 .to_string()
                 + "\n"
+        );
+    }
+
+    #[test]
+    fn cat_json_transcodes_ros1_message() {
+        // Dispatch keys on the "ros1" message encoding; the ros1msg schema builds the transcoder.
+        let channel = mcap::Channel {
+            id: 1,
+            topic: "/demo".to_string(),
+            schema: Some(Arc::new(mcap::Schema {
+                id: 1,
+                name: "demo/Example".to_string(),
+                encoding: "ros1msg".to_string(),
+                data: Cow::Owned(b"int32 value\n".to_vec()),
+            })),
+            message_encoding: "ros1".to_string(),
+            metadata: BTreeMap::new(),
+        };
+        let mut transcoders = JsonTranscoders::default();
+        let data = 42i32.to_le_bytes();
+        let encoded = transcoders
+            .encode(&channel, &data)
+            .expect("ros1 message should transcode");
+        assert_eq!(
+            String::from_utf8(encoded.into_owned()).expect("valid utf8"),
+            r#"{"value":42}"#
         );
     }
 
