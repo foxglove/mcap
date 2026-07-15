@@ -73,8 +73,7 @@ pub enum Command {
     /// Concatenate the messages in one or more MCAP files to stdout.
     ///
     /// By default prints one line per message (log time, topic, schema name, and a short byte
-    /// preview). Use `--format=json` (or the `--json` alias) to print one JSON object per message
-    /// instead.
+    /// preview). Use `--format=json` to print one JSON object per line.
     Cat(CatCommand),
     /// Generate shell completion scripts.
     ///
@@ -220,14 +219,13 @@ pub struct AddCommand {
 
 /// Output format for `mcap cat`.
 ///
-/// Selected with `--format`. (`-o`/`--output` is reserved for destination paths elsewhere in the
-/// CLI, matching the [CLI Spec](https://clispec.dev/) guidance to use `--format` in that case.)
+/// Selected with `--format`, matching the CLI Spec (`--output` is already used for file output).
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CatFormat {
     /// One line per message (log time, topic, schema name, and a short byte preview).
     #[default]
     Text,
-    /// One JSON object per message.
+    /// Newline-delimited JSON, one object per message.
     Json,
 }
 
@@ -260,10 +258,10 @@ pub struct CatCommand {
     #[arg(long = "end-nsecs", default_value_t = 0)]
     pub end_nsecs: u64,
 
-    /// Output format: `text` (default) or `json` (one JSON object per message).
+    /// Output format: `text` (default) or `json` (one JSON object per line).
     ///
-    /// JSON supports schema encodings ros1msg, protobuf, and jsonschema (or schemaless channels with
-    /// json message encoding); other encodings error.
+    /// `json` supports schema encodings ros1msg, protobuf, and jsonschema (or schemaless channels
+    /// with json message encoding); other encodings error.
     #[arg(long = "format", value_enum, default_value_t = CatFormat::Text)]
     pub format: CatFormat,
 
