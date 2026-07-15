@@ -167,15 +167,6 @@ const config = {
               },
             ],
           },
-          {
-            title: "Enterprise",
-            items: [
-              {
-                label: "Foxglove",
-                href: "https://foxglove.dev/",
-              },
-            ],
-          },
         ],
         copyright: `Copyright &copy; <a href="https://foxglove.dev" style="color: inherit">Foxglove</a>`,
       },
