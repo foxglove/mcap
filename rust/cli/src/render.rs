@@ -68,13 +68,38 @@ impl TimeRenderer {
         }
     }
 
-    /// Write the timestamp directly into `writer`.
+    /// Write the timestamp directly into `writer` for human-facing (text/table) output.
     ///
     /// The numeric variants format straight into the writer to avoid a per-timestamp heap
     /// allocation on the hot `cat` streaming path; only RFC3339 needs an intermediate `String`
     /// (chrono builds one internally).
     pub fn write(&self, writer: &mut impl std::io::Write, t: u64) -> std::io::Result<()> {
-        match self.resolved_kind(t) {
+        self.write_kind(writer, t, self.resolved_kind(t))
+    }
+
+    /// Write the timestamp as a quoted JSON string directly into `writer`, for machine-facing
+    /// output (`cat --format=ndjson`, and CSV once it lands).
+    ///
+    /// Under `auto`, machine output always uses RFC3339 (see [`Self::resolved_json_kind`]): the
+    /// field shape must be predictable for a downstream parser, so it does not flip at the y2k
+    /// cutoff the way human-facing `auto` does. Explicit `--time-format` values are honored as-is.
+    ///
+    /// Every `TimeFormat` renders to JSON-safe ASCII (digits plus `.`, `-`, `:`, `T`, `Z`), so no
+    /// escaping is required and we can skip the `serde_json::to_string` intermediate. Timestamps are
+    /// always strings (never bare numbers) to avoid float / `>2^53` integer precision loss in JSON.
+    pub fn write_json(&self, writer: &mut impl std::io::Write, t: u64) -> std::io::Result<()> {
+        writer.write_all(b"\"")?;
+        self.write_kind(writer, t, self.resolved_json_kind())?;
+        writer.write_all(b"\"")
+    }
+
+    fn write_kind(
+        &self,
+        writer: &mut impl std::io::Write,
+        t: u64,
+        kind: ResolvedTimeKind,
+    ) -> std::io::Result<()> {
+        match kind {
             ResolvedTimeKind::Nanoseconds => write!(writer, "{t}"),
             ResolvedTimeKind::Seconds => {
                 write!(writer, "{}.{:09}", t / 1_000_000_000, t % 1_000_000_000)
@@ -83,18 +108,8 @@ impl TimeRenderer {
         }
     }
 
-    /// Write the timestamp as a quoted JSON string directly into `writer`.
-    ///
-    /// Every `TimeFormat` renders to JSON-safe ASCII (digits plus `.`, `-`, `:`, `T`, `Z`), so no
-    /// escaping is required and we can skip the `format()` + `serde_json::to_string` intermediates.
-    /// Timestamps are always strings (never bare numbers) to avoid float / `>2^53` integer precision
-    /// loss in JSON consumers.
-    pub fn write_json(&self, writer: &mut impl std::io::Write, t: u64) -> std::io::Result<()> {
-        writer.write_all(b"\"")?;
-        self.write(writer, t)?;
-        writer.write_all(b"\"")
-    }
-
+    /// Resolve the format for human-facing (text/table) output. Under `auto`, the RFC3339-vs-decimal
+    /// choice is latched once (see the type docs) using the y2k cutoff.
     fn resolved_kind(&self, t: u64) -> ResolvedTimeKind {
         match self.format {
             TimeFormat::Nanoseconds => ResolvedTimeKind::Nanoseconds,
@@ -115,6 +130,17 @@ impl TimeRenderer {
                     ResolvedTimeKind::Seconds
                 }
             }
+        }
+    }
+
+    /// Resolve the format for machine-facing (JSON/CSV) output. Unlike [`Self::resolved_kind`],
+    /// `auto` always maps to RFC3339 (no y2k cutoff, no latch) so the emitted field has a single,
+    /// predictable shape regardless of the data; explicit formats map through unchanged.
+    fn resolved_json_kind(&self) -> ResolvedTimeKind {
+        match self.format {
+            TimeFormat::Nanoseconds => ResolvedTimeKind::Nanoseconds,
+            TimeFormat::Seconds => ResolvedTimeKind::Seconds,
+            TimeFormat::Rfc3339 | TimeFormat::Auto => ResolvedTimeKind::Rfc3339,
         }
     }
 }
@@ -315,6 +341,44 @@ mod tests {
         assert_eq!(
             String::from_utf8(out).expect("time output should be utf8"),
             "1234567890"
+        );
+    }
+
+    fn json_string(times: &TimeRenderer, t: u64) -> String {
+        let mut out = Vec::new();
+        times
+            .write_json(&mut out, t)
+            .expect("should write json time");
+        String::from_utf8(out).expect("json time output should be utf8")
+    }
+
+    #[test]
+    fn json_auto_is_always_rfc3339_even_below_cutoff() {
+        // Machine output must have a predictable shape, so `auto` does not apply the y2k cutoff the
+        // way the text path does: a pre-cutoff value is RFC3339 in JSON but decimal seconds in text.
+        let times = TimeRenderer::new(TimeFormat::Auto);
+        assert_eq!(
+            json_string(&times, PRE_CUTOFF_NS),
+            "\"1970-01-01T00:00:01Z\""
+        );
+        assert_eq!(json_string(&times, DEMO_NS), format!("\"{DEMO_RFC3339}\""));
+        // The text path for the same renderer/value still honors the cutoff.
+        assert_eq!(times.format(PRE_CUTOFF_NS), "1.000000000");
+    }
+
+    #[test]
+    fn json_explicit_formats_are_quoted_and_honored() {
+        assert_eq!(
+            json_string(&TimeRenderer::new(TimeFormat::Seconds), DEMO_NS),
+            format!("\"{DEMO_SECONDS}\"")
+        );
+        assert_eq!(
+            json_string(&TimeRenderer::new(TimeFormat::Nanoseconds), DEMO_NS),
+            format!("\"{DEMO_NANOS}\"")
+        );
+        assert_eq!(
+            json_string(&TimeRenderer::new(TimeFormat::Rfc3339), PRE_CUTOFF_NS),
+            "\"1970-01-01T00:00:01Z\""
         );
     }
 

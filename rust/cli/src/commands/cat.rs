@@ -2105,7 +2105,7 @@ mod tests {
         let message = sample_message(Some("Example"), br#"{"value":1}"#.to_vec());
         assert_eq!(
             write_json_line(&message, TimeFormat::Auto),
-            r#"{"topic":"/demo","sequence":1,"log_time":"0.000000042","publish_time":"0.000000043","data":{"value":1}}"#
+            r#"{"topic":"/demo","sequence":1,"log_time":"1970-01-01T00:00:00.000000042Z","publish_time":"1970-01-01T00:00:00.000000043Z","data":{"value":1}}"#
                 .to_string()
                 + "\n"
         );
@@ -2116,7 +2116,7 @@ mod tests {
         let message = sample_message(None, br#"{"value":1}"#.to_vec());
         assert_eq!(
             write_json_line(&message, TimeFormat::Auto),
-            r#"{"topic":"/demo","sequence":1,"log_time":"0.000000042","publish_time":"0.000000043","data":{"value":1}}"#
+            r#"{"topic":"/demo","sequence":1,"log_time":"1970-01-01T00:00:00.000000042Z","publish_time":"1970-01-01T00:00:00.000000043Z","data":{"value":1}}"#
                 .to_string()
                 + "\n"
         );
@@ -2139,6 +2139,18 @@ mod tests {
         ));
         assert!(write_json_line(&message, TimeFormat::Nanoseconds)
             .contains(r#""log_time":"1490149580103843113","publish_time":"1490149580103843113""#));
+    }
+
+    #[test]
+    fn cat_json_auto_uses_rfc3339_below_cutoff() {
+        // Machine output: `auto` is always RFC3339, even for pre-y2k times (which the human-facing
+        // text path would render as decimal seconds). Shape must be predictable for parsers.
+        let mut message = sample_message(Some("Example"), br#"{"value":1}"#.to_vec());
+        message.log_time = 1_000_000_000;
+        message.publish_time = 1_000_000_000;
+        assert!(write_json_line(&message, TimeFormat::Auto).contains(
+            r#""log_time":"1970-01-01T00:00:01Z","publish_time":"1970-01-01T00:00:01Z""#
+        ));
     }
 
     #[test]
