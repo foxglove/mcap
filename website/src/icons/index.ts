@@ -1,7 +1,5 @@
 import ArmyWoman1 from "./army-woman-1.svg";
 import ChatTranslate from "./chat-translate.svg";
-import AescapeLight from "./companies/aescape-dark.svg";
-import AescapeDark from "./companies/aescape-light.svg";
 import AndurilLight from "./companies/anduril-color.svg";
 import AndurilDark from "./companies/anduril-white.svg";
 import ApexLight from "./companies/apex-color.svg";
@@ -80,11 +78,6 @@ const Logos = [
     href: "https://www.saronic.com/",
     LightModeLogo: SaronicLight,
     DarkModeLogo: SaronicDark,
-  },
-  {
-    href: "https://www.aescape.com/",
-    LightModeLogo: AescapeLight,
-    DarkModeLogo: AescapeDark,
   },
 ];
 

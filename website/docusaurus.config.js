@@ -168,7 +168,7 @@ const config = {
             ],
           },
           {
-            title: "Enterprise",
+            title: "Vendors",
             items: [
               {
                 label: "Foxglove",

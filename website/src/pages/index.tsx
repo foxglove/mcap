@@ -2,7 +2,10 @@
 import BrowserOnly from "@docusaurus/BrowserOnly";
 import Link from "@docusaurus/Link";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
+import CodeBlock from "@theme/CodeBlock";
 import Layout from "@theme/Layout";
+import TabItem from "@theme/TabItem";
+import Tabs from "@theme/Tabs";
 import React, { Suspense } from "react";
 
 import styles from "./index.module.css";
@@ -89,10 +92,252 @@ function Feature({ title, Icon, description }: FeatureItem) {
   );
 }
 
+const LanguageExamples: {
+  name: string;
+  language: string;
+  code: string;
+}[] = [
+  {
+    name: "Python",
+    language: "python",
+    code: `from mcap.writer import Writer
+
+with open("out.mcap", "wb") as f:
+    writer = Writer(f)
+    writer.start()
+
+    schema_id = writer.register_schema(
+        name="ExampleMsg",
+        encoding="jsonschema",
+        data=b'{"type":"object","properties":{"value":{"type":"number"}}}',
+    )
+    channel_id = writer.register_channel(
+        schema_id=schema_id,
+        topic="/example",
+        message_encoding="json",
+    )
+
+    writer.add_message(
+        channel_id,
+        log_time=0,
+        data=b'{"value": 1.0}',
+        publish_time=0,
+    )
+
+    writer.finish()`,
+  },
+  {
+    name: "C++",
+    language: "cpp",
+    code: `#include <mcap/writer.hpp>
+
+int main() {
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions options("");
+  writer.open("out.mcap", options);
+
+  mcap::Schema schema("ExampleMsg", "jsonschema",
+                       R"({"type":"object","properties":{"value":{"type":"number"}}})");
+  writer.addSchema(schema);
+
+  mcap::Channel channel("/example", "json", schema.id);
+  writer.addChannel(channel);
+
+  mcap::Message msg;
+  msg.channelId = channel.id;
+  msg.sequence = 0;
+  msg.logTime = 0;
+  msg.publishTime = 0;
+  std::string data = R"({"value": 1.0})";
+  msg.data = reinterpret_cast<const std::byte*>(data.data());
+  msg.dataSize = data.size();
+  writer.write(msg);
+
+  writer.close();
+}`,
+  },
+  {
+    name: "Go",
+    language: "go",
+    code: `package main
+
+import (
+    "os"
+    "github.com/foxglove/mcap/go/mcap"
+)
+
+func main() {
+    f, _ := os.Create("out.mcap")
+    defer f.Close()
+
+    writer, _ := mcap.NewWriter(f, &mcap.WriterOptions{})
+    writer.WriteHeader(&mcap.Header{})
+
+    schema := &mcap.Schema{
+        ID:       1,
+        Name:     "ExampleMsg",
+        Encoding: "jsonschema",
+        Data:     []byte(\`{"type":"object","properties":{"value":{"type":"number"}}}\`),
+    }
+    writer.WriteSchema(schema)
+
+    channel := &mcap.Channel{
+        ID:              1,
+        SchemaID:        1,
+        Topic:           "/example",
+        MessageEncoding: "json",
+    }
+    writer.WriteChannel(channel)
+
+    writer.WriteMessage(&mcap.Message{
+        ChannelID:   1,
+        LogTime:     0,
+        PublishTime: 0,
+        Data:        []byte(\`{"value": 1.0}\`),
+    })
+
+    writer.Close()
+}`,
+  },
+  {
+    name: "Rust",
+    language: "rust",
+    code: `use mcap::{records::MessageHeader, Writer};
+use std::{collections::BTreeMap, fs};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut out = Writer::new(fs::File::create("out.mcap")?)?;
+    let schema_id = out.add_schema(
+        "ExampleMsg",
+        "jsonschema",
+        br#"{"type":"object","properties":{"value":{"type":"number"}}}"#,
+    )?;
+    let channel_id = out.add_channel(schema_id, "/example", "json", &BTreeMap::new())?;
+    out.write_to_known_channel(
+        &MessageHeader { channel_id, sequence: 0, log_time: 0, publish_time: 0 },
+        br#"{"value": 1.0}"#,
+    )?;
+    out.finish()?;
+    Ok(())
+}`,
+  },
+  {
+    name: "TypeScript",
+    language: "ts",
+    code: `import { McapWriter } from "@mcap/core";
+import { FileHandleWritable } from "@mcap/nodejs";
+import { open } from "node:fs/promises";
+
+const writable = new FileHandleWritable(await open("out.mcap", "w"));
+const writer = new McapWriter({ writable });
+await writer.start({ library: "example", profile: "" });
+
+const schemaId = await writer.registerSchema({
+  name: "ExampleMsg",
+  encoding: "jsonschema",
+  data: new TextEncoder().encode(
+    JSON.stringify({ type: "object", properties: { value: { type: "number" } } }),
+  ),
+});
+
+const channelId = await writer.registerChannel({
+  topic: "/example",
+  schemaId,
+  messageEncoding: "json",
+  metadata: new Map(),
+});
+
+await writer.addMessage({
+  channelId,
+  sequence: 0,
+  logTime: 0n,
+  publishTime: 0n,
+  data: new TextEncoder().encode(JSON.stringify({ value: 1.0 })),
+});
+
+await writer.end();`,
+  },
+  {
+    name: "Swift",
+    language: "swift",
+    code: `import Foundation
+import MCAP
+
+final class FileWritable: IWritable {
+    private let handle: FileHandle
+
+    init(path: String) throws {
+        FileManager.default.createFile(atPath: path, contents: nil)
+        handle = try FileHandle(forWritingTo: URL(fileURLWithPath: path))
+    }
+
+    func position() -> UInt64 {
+        handle.offsetInFile
+    }
+
+    func write(_ data: Data) async {
+        handle.write(data)
+    }
+
+    func close() throws {
+        try handle.close()
+    }
+}
+
+let sink = try FileWritable(path: "out.mcap")
+defer { try? sink.close() }
+
+let writer = MCAPWriter(sink)
+await writer.start(library: "example", profile: "")
+
+let schemaId = await writer.addSchema(
+    name: "ExampleMsg",
+    encoding: "jsonschema",
+    data: Data(#"{"type":"object","properties":{"value":{"type":"number"}}}"#.utf8)
+)
+
+let channelId = await writer.addChannel(
+    schemaID: schemaId,
+    topic: "/example",
+    messageEncoding: "json",
+    metadata: [:]
+)
+
+await writer.addMessage(
+    Message(
+        channelID: channelId,
+        sequence: 0,
+        logTime: 0,
+        publishTime: 0,
+        data: Data(#"{"value": 1.0}"#.utf8)
+    )
+)
+
+await writer.end()`,
+  },
+];
+
+function LanguageExamplePicker(): JSX.Element {
+  return (
+    <Tabs>
+      {LanguageExamples.map((example, index) => (
+        <TabItem
+          key={example.name}
+          value={example.language}
+          label={example.name}
+          default={index === 0}
+        >
+          <CodeBlock language={example.language}>{example.code}</CodeBlock>
+        </TabItem>
+      ))}
+    </Tabs>
+  );
+}
+
 export default function Home(): JSX.Element {
   const { siteConfig } = useDocusaurusContext();
   const blurb =
-    'MCAP (pronounced "em-cap") is an open source container file format for multimodal log data. ' +
+    'MCAP (pronounced "em-cap") is an open source container file format for logging and storing multimodal data. ' +
     "It supports multiple channels of timestamped pre-serialized data, and is ideal for use in pub/sub " +
     "or robotics applications.";
 
@@ -117,16 +362,54 @@ export default function Home(): JSX.Element {
             <Link className={styles.heroButtonSecondary} to="/reference">
               API Reference
             </Link>
+            <Link
+              className={styles.heroButtonSecondary}
+              to="https://github.com/foxglove/mcap"
+            >
+              View on GitHub
+            </Link>
           </div>
         </div>
       </header>
 
-      <div className={styles.section}>
+      <div
+        className={`${styles.section ?? ""} ${styles.featuresSection ?? ""}`}
+      >
         <div className="container">
           <div className={styles.featureGrid}>
             {FeatureList.map((props, idx) => (
               <Feature key={idx} {...props} />
             ))}
+          </div>
+        </div>
+      </div>
+
+      <div className={`${styles.section ?? ""} ${styles.demoSection ?? ""}`}>
+        <div className="container">
+          <div className={styles.demoSplit}>
+            <div className={styles.demoColumn}>
+              <BrowserOnly>
+                {() => (
+                  <Suspense fallback={""}>
+                    <McapRecordingDemo />
+                  </Suspense>
+                )}
+              </BrowserOnly>
+            </div>
+            <aside className={styles.conversionColumn}>
+              <h2>Already have ROS bag or ROS 2 .db3 data?</h2>
+              <p>
+                Skip straight to{" "}
+                <Link to="/guides/cli#ros-bag-to-mcap-conversion">
+                  converting existing recordings
+                </Link>{" "}
+                with the mcap CLI instead of writing files from scratch.
+              </p>
+              <p className={styles.foxgloveCredit}>
+                MCAP is an open source project by{" "}
+                <Link to="https://foxglove.dev">Foxglove</Link>.
+              </p>
+            </aside>
           </div>
         </div>
       </div>
@@ -157,13 +440,18 @@ export default function Home(): JSX.Element {
         </div>
       </div>
 
-      <BrowserOnly>
-        {() => (
-          <Suspense fallback={""}>
-            <McapRecordingDemo />
-          </Suspense>
-        )}
-      </BrowserOnly>
+      <div className={`${styles.section ?? ""} ${styles.codeSection ?? ""}`}>
+        <div className="container">
+          <header className={styles.sectionHeader}>
+            <h2>Write your first MCAP file</h2>
+            <p className={styles.sectionSubhead}>
+              MCAP libraries are available in six languages. Pick one to see a
+              minimal end-to-end example.
+            </p>
+          </header>
+          <LanguageExamplePicker />
+        </div>
+      </div>
     </Layout>
   );
 }

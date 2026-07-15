@@ -95,7 +95,7 @@ Convert a ROS 2 db3 file to mcap:
 
 <!-- cspell: enable -->
 
-The `mcap` CLI dispatches on the input file extension (`.bag` for ROS 1, `.db3` for ROS 2) and reads ROS 2 `.db3` files using the message definitions embedded in the file. ROS 2 Iron and later embed message definitions when recording, so these files convert without a sourced workspace.
+The `mcap` CLI dispatches on the input file extension (`.bag` for ROS 1, `.db3` for ROS 2) and reads ROS 2 `.db3` files using the message definitions embedded in the file. ROS 2 Jazzy and later embed message definitions when recording, so these files convert without a sourced workspace.
 
 Bags recorded before ROS 2 Iron do not contain embedded message definitions and cannot be converted directly. Use the [`ros2 bag convert`](https://github.com/ros2/rosbag2#converting-bags-merge-split-etc-) utility instead (with the original ROS 2 workspace sourced) to convert between `.db3` and MCAP.
 
