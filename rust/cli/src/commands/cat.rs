@@ -19,6 +19,7 @@ const PROTOBUF_SERIALIZE_OPTIONS: SerializeOptions =
     SerializeOptions::new().skip_default_fields(false);
 
 pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
+    args.warn_deprecations();
     let opts = CatOptions::from_args(&args)?;
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let stdout = std::io::stdout();
@@ -102,7 +103,7 @@ impl CatOptions {
             topics,
             start,
             end: (end != 0).then_some(end),
-            json: args.json,
+            json: args.json_output(),
         })
     }
 
@@ -732,16 +733,14 @@ struct JsonTranscoders {
 
 impl JsonTranscoders {
     fn encode<'a>(&mut self, channel: &mcap::Channel<'_>, data: &'a [u8]) -> Result<Cow<'a, [u8]>> {
-        let Some(schema) = channel.schema.as_ref() else {
-            return encode_schemaless_json(&channel.message_encoding, data);
-        };
-        if schema.encoding.is_empty() {
-            return encode_schemaless_json(&channel.message_encoding, data);
-        }
-
-        match schema.encoding.as_str() {
-            "jsonschema" => Ok(Cow::Borrowed(data)),
+        // Dispatch on message encoding: for ros1/protobuf it implies the schema encoding needed to
+        // decode; json messages are already JSON, with or without a jsonschema.
+        match channel.message_encoding.as_str() {
+            "json" => Ok(Cow::Borrowed(data)),
             "protobuf" => {
+                let schema = channel.schema.as_ref().with_context(|| {
+                    format!("protobuf message on {} has no schema to decode", channel.topic)
+                })?;
                 let descriptor = match self.protobuf_descriptors.get(&schema.id) {
                     Some(descriptor) => descriptor.clone(),
                     None => {
@@ -763,7 +762,10 @@ impl JsonTranscoders {
                     .context("failed to marshal message")?;
                 Ok(Cow::Owned(serializer.into_inner()))
             }
-            "ros1msg" => {
+            "ros1" => {
+                let schema = channel.schema.as_ref().with_context(|| {
+                    format!("ros1 message on {} has no schema to decode", channel.topic)
+                })?;
                 let transcoder = match self.ros1_transcoders.get(&schema.id) {
                     Some(transcoder) => transcoder,
                     None => {
@@ -783,18 +785,9 @@ impl JsonTranscoders {
                 Ok(Cow::Owned(json))
             }
             encoding => bail!(
-                "JSON output only supported for ros1msg, protobuf, and jsonschema schemas. Found: {encoding}"
+                "JSON output only supported for ros1, protobuf, and json message encodings; found: {encoding}"
             ),
         }
-    }
-}
-
-fn encode_schemaless_json<'a>(message_encoding: &str, data: &'a [u8]) -> Result<Cow<'a, [u8]>> {
-    match message_encoding {
-        "json" => Ok(Cow::Borrowed(data)),
-        encoding => bail!(
-            "for schema-less channels, JSON output is only supported with 'json' message encoding. found: {encoding}"
-        ),
     }
 }
 
@@ -2079,7 +2072,7 @@ mod tests {
     }
 
     #[test]
-    fn cat_json_wraps_jsonschema_messages() {
+    fn cat_json_passes_json_message_with_schema() {
         let message = sample_message(Some("Example"), br#"{"value":1}"#.to_vec());
         let mut out = Vec::new();
         let mut transcoders = JsonTranscoders::default();
@@ -2131,6 +2124,52 @@ mod tests {
             r#"{"topic":"/demo","sequence":1,"log_time":0.000000042,"publish_time":0.000000043,"data":{"value":1}}"#
                 .to_string()
                 + "\n"
+        );
+    }
+
+    #[test]
+    fn cat_json_transcodes_ros1_message() {
+        // Dispatch keys on the "ros1" message encoding; the ros1msg schema builds the transcoder.
+        let channel = mcap::Channel {
+            id: 1,
+            topic: "/demo".to_string(),
+            schema: Some(Arc::new(mcap::Schema {
+                id: 1,
+                name: "demo/Example".to_string(),
+                encoding: "ros1msg".to_string(),
+                data: Cow::Owned(b"int32 value\n".to_vec()),
+            })),
+            message_encoding: "ros1".to_string(),
+            metadata: BTreeMap::new(),
+        };
+        let mut transcoders = JsonTranscoders::default();
+        let data = 42i32.to_le_bytes();
+        let encoded = transcoders
+            .encode(&channel, &data)
+            .expect("ros1 message should transcode");
+        assert_eq!(
+            String::from_utf8(encoded.into_owned()).expect("valid utf8"),
+            r#"{"value":42}"#
+        );
+    }
+
+    #[test]
+    fn cat_json_rejects_unsupported_message_encoding() {
+        let channel = mcap::Channel {
+            id: 1,
+            topic: "/imu".to_string(),
+            schema: None,
+            message_encoding: "cdr".to_string(),
+            metadata: BTreeMap::new(),
+        };
+        let mut transcoders = JsonTranscoders::default();
+        let err = transcoders
+            .encode(&channel, b"\x00")
+            .expect_err("cdr message encoding should not be supported");
+        assert!(
+            err.to_string()
+                .contains("ros1, protobuf, and json message encodings"),
+            "error should name the supported message encodings: {err}"
         );
     }
 

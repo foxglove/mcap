@@ -73,7 +73,7 @@ pub enum Command {
     /// Concatenate the messages in one or more MCAP files to stdout.
     ///
     /// By default prints one line per message (log time, topic, schema name, and a short byte
-    /// preview). Use --json to print one JSON object per message instead.
+    /// preview). Use `--format=ndjson` to print one JSON object per message instead.
     Cat(CatCommand),
     /// Generate shell completion scripts.
     ///
@@ -217,6 +217,18 @@ pub struct AddCommand {
     pub command: AddSubcommand,
 }
 
+/// Output format for `mcap cat`.
+///
+/// Selected with `--format` (per clispec.dev; `--output` is already used for file output).
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CatFormat {
+    /// One line per message (log time, topic, schema name, and a short byte preview).
+    #[default]
+    Text,
+    /// One JSON object per message (supports ros1, protobuf, and json message encodings).
+    Ndjson,
+}
+
 #[derive(clap::Args, Debug, PartialEq, Eq)]
 pub struct CatCommand {
     /// One or more paths or URLs to MCAP files. If omitted, reads from stdin.
@@ -246,9 +258,32 @@ pub struct CatCommand {
     #[arg(long = "end-nsecs", default_value_t = 0)]
     pub end_nsecs: u64,
 
-    /// Print messages as JSON, one object per message. Supported schema encodings: ros1msg, protobuf, and jsonschema (or schemaless channels with json message encoding); other encodings error.
-    #[arg(long = "json", default_value_t = false)]
+    /// Output format.
+    #[arg(long = "format", value_enum, default_value_t = CatFormat::Text)]
+    pub format: CatFormat,
+
+    /// Deprecated: use --format=ndjson.
+    #[arg(
+        long = "json",
+        action = ArgAction::SetTrue,
+        conflicts_with = "format",
+        hide = true
+    )]
     pub json: bool,
+}
+
+impl CatCommand {
+    /// Warns about deprecated flags that were supplied.
+    pub(crate) fn warn_deprecations(&self) {
+        if self.json {
+            warn!("--json is deprecated; use --format=ndjson instead");
+        }
+    }
+
+    /// Whether to emit JSON.
+    pub(crate) fn json_output(&self) -> bool {
+        self.json || matches!(self.format, CatFormat::Ndjson)
+    }
 }
 
 #[derive(Subcommand, Debug, PartialEq, Eq)]
