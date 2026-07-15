@@ -8,7 +8,7 @@ use log::warn;
 use mcap::sans_io::indexed_reader::ReadOrder;
 use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor, SerializeOptions};
 
-use crate::cli::CatCommand;
+use crate::cli::{CatCommand, CatFormat};
 use crate::context::CommandContext;
 use crate::{parse, render, source};
 
@@ -94,7 +94,7 @@ struct CatOptions {
 
 impl CatOptions {
     fn from_args(args: &CatCommand) -> Result<Self> {
-        let mode = if args.csv {
+        let mode = if matches!(args.format, CatFormat::Csv) {
             OutputMode::Csv
         } else if args.json_output() {
             OutputMode::Json
@@ -109,9 +109,15 @@ impl CatOptions {
                 .topic
                 .as_deref()
                 .filter(|topic| !topic.is_empty())
-                .context("--csv requires --topic <TOPIC>")?;
+                .context("--format=csv requires --topic <TOPIC>")?;
             vec![topic.to_string()]
         } else {
+            // --topic only selects CSV columns; reject it for the other output modes rather than
+            // silently ignoring it.
+            anyhow::ensure!(
+                args.topic.is_none(),
+                "--topic is only valid with --format=csv"
+            );
             args.topics
                 .split(',')
                 .filter(|topic| !topic.is_empty())
@@ -1359,6 +1365,22 @@ mod tests {
         CatOptions, CsvState, JsonTranscoders, MessageWriter, OutputMode, Ros1MessageDef,
         MESSAGE_PREVIEW_LEN,
     };
+    use crate::cli::{CatCommand, CatFormat};
+
+    /// Builds a `CatCommand` with default (empty) selectors for exercising `CatOptions::from_args`.
+    fn cat_command(format: CatFormat, topic: Option<&str>) -> CatCommand {
+        CatCommand {
+            files: Vec::new(),
+            topics: String::new(),
+            start_secs: 0,
+            start_nsecs: 0,
+            end_secs: 0,
+            end_nsecs: 0,
+            format,
+            json: false,
+            topic: topic.map(str::to_string),
+        }
+    }
 
     const NO_MESSAGE_INDEX_LOG_TIME_LINES: &[&str] = &[
         "0 /demo [Example] [1]",
@@ -2417,6 +2439,25 @@ mod tests {
         assert_eq!(
             String::from_utf8(out).expect("valid csv output"),
             "log_time,publish_time,sequence,a\n10,10,1,1\n20,20,2,2\n"
+        );
+    }
+
+    #[test]
+    fn from_args_csv_uses_single_topic_column_selector() {
+        let opts = CatOptions::from_args(&cat_command(CatFormat::Csv, Some("/tf")))
+            .expect("--format=csv --topic should build options");
+        assert_eq!(opts.mode, OutputMode::Csv);
+        assert_eq!(opts.topics, vec!["/tf".to_string()]);
+    }
+
+    #[test]
+    fn from_args_rejects_topic_without_csv() {
+        let err = CatOptions::from_args(&cat_command(CatFormat::Text, Some("/tf")))
+            .expect_err("--topic without --format=csv should error");
+        assert!(
+            err.to_string()
+                .contains("--topic is only valid with --format=csv"),
+            "unexpected error: {err}"
         );
     }
 

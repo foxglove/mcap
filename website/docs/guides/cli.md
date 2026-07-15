@@ -150,14 +150,14 @@ Echo messages for a specific topic to stdout as newline-delimited JSON (one obje
 
 ### CSV output
 
-Export a single topic to CSV with `--csv --topic <TOPIC>`. Message fields are
-decoded (same encodings as `--json`: `ros1msg`, `protobuf`, and `json`) and
-flattened into columns using dot notation (`pose.position.x`); array elements use
-an index suffix (`ranges.0`, `ranges.1`). Each row is prefixed with `log_time`,
-`publish_time`, and `sequence` columns. The column header is derived from the
-first message, so `--csv` requires exactly one topic:
+Export a single topic to CSV with `--format=csv --topic <TOPIC>`. Message fields
+are decoded (same encodings as `--format=ndjson`: `ros1`, `protobuf`, and `json`)
+and flattened into columns using dot notation (`pose.position.x`); array elements
+use an index suffix (`ranges.0`, `ranges.1`). Each row is prefixed with
+`log_time`, `publish_time`, and `sequence` columns. The column header is derived
+from the first message, so `--format=csv` requires exactly one topic:
 
-    $ mcap cat demo.mcap --csv --topic /chatter
+    $ mcap cat demo.mcap --format=csv --topic /chatter
     log_time,publish_time,sequence,data
     42,42,0,hello world
     43,43,1,hello again

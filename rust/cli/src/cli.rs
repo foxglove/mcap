@@ -227,6 +227,8 @@ pub enum CatFormat {
     Text,
     /// One JSON object per message (supports ros1, protobuf, and json message encodings).
     Ndjson,
+    /// CSV rows for a single topic (supports ros1, protobuf, and json message encodings). Requires --topic.
+    Csv,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -266,26 +268,21 @@ pub struct CatCommand {
     #[arg(
         long = "json",
         action = ArgAction::SetTrue,
-        conflicts_with_all = ["format", "csv"],
+        conflicts_with = "format",
         hide = true
     )]
     pub json: bool,
 
-    /// Print a single topic's messages as CSV. Requires --topic.
+    /// Single topic to export as CSV. Required by (and only valid with) --format=csv.
     ///
-    /// Columns are the flattened message fields (dot notation) plus log_time,
-    /// publish_time, and sequence. Supported message encodings: ros1,
+    /// The CSV columns are the flattened message fields (dot notation) plus
+    /// log_time, publish_time, and sequence. Supported message encodings: ros1,
     /// protobuf, and json; other encodings error.
     #[arg(
-        long = "csv",
-        default_value_t = false,
-        requires = "topic",
-        conflicts_with = "format"
+        long = "topic",
+        conflicts_with = "topics",
+        required_if_eq("format", "csv")
     )]
-    pub csv: bool,
-
-    /// Single topic to export as CSV. Required by --csv.
-    #[arg(long = "topic", conflicts_with = "topics", requires = "csv")]
     pub topic: Option<String>,
 }
 
