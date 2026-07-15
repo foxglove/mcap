@@ -222,7 +222,7 @@ pub struct AddCommand {
 /// Selected with `--format`, matching clispec.dev (`--output` is already used for file output).
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CatFormat {
-    /// One line per message (log time, topic, schema name, and a short byte preview).
+    /// Human-readable one-line preview.
     #[default]
     Text,
     /// One JSON object per message.
@@ -258,7 +258,7 @@ pub struct CatCommand {
     #[arg(long = "end-nsecs", default_value_t = 0)]
     pub end_nsecs: u64,
 
-    /// Output format: `text` (default) or `json` (one JSON object per line).
+    /// Output format.
     ///
     /// `json` supports schema encodings ros1msg, protobuf, and jsonschema (or schemaless channels
     /// with json message encoding); other encodings error.
