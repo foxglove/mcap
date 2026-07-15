@@ -118,6 +118,9 @@ export default function Home(): JSX.Element {
               API Reference
             </Link>
           </div>
+          <p className={styles.heroAttribution}>
+            A <Link href="https://foxglove.dev/home">Foxglove</Link> project
+          </p>
         </div>
       </header>
 
