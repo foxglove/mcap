@@ -219,7 +219,7 @@ pub struct AddCommand {
 
 /// Output format for `mcap cat`.
 ///
-/// Selected with `--format`, matching the CLI Spec (`--output` is already used for file output).
+/// Selected with `--format`, matching clispec.dev (`--output` is already used for file output).
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CatFormat {
     /// One line per message (log time, topic, schema name, and a short byte preview).
