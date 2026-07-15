@@ -225,7 +225,7 @@ pub enum CatFormat {
     /// One line per message (log time, topic, schema name, and a short byte preview).
     #[default]
     Text,
-    /// Newline-delimited JSON, one object per message.
+    /// One JSON object per message.
     Json,
 }
 
