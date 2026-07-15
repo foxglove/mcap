@@ -265,13 +265,25 @@ pub struct CatCommand {
     #[arg(long = "format", value_enum, default_value_t = CatFormat::Text)]
     pub format: CatFormat,
 
-    /// Alias for `--format=json`.
-    #[arg(long = "json", action = ArgAction::SetTrue, conflicts_with = "format")]
+    /// Deprecated: use --format=json.
+    #[arg(
+        long = "json",
+        action = ArgAction::SetTrue,
+        conflicts_with = "format",
+        hide = true
+    )]
     pub json: bool,
 }
 
 impl CatCommand {
-    /// Whether to emit JSON (`--format=json` or the `--json` alias).
+    /// Warns about deprecated flags that were supplied.
+    pub(crate) fn warn_deprecations(&self) {
+        if self.json {
+            warn!("--json is deprecated; use --format=json instead");
+        }
+    }
+
+    /// Whether to emit JSON (`--format=json` or the deprecated `--json` alias).
     pub(crate) fn json_output(&self) -> bool {
         self.json || matches!(self.format, CatFormat::Json)
     }

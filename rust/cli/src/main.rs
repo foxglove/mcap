@@ -109,7 +109,7 @@ mod tests {
             "10",
             "--end-nsecs",
             "20000000000",
-            "--json",
+            "--format=json",
         ])
         .expect("cat should parse");
         assert_eq!(
@@ -121,8 +121,8 @@ mod tests {
                 start_nsecs: 0,
                 end_secs: 0,
                 end_nsecs: 20_000_000_000,
-                format: CatFormat::Text,
-                json: true,
+                format: CatFormat::Json,
+                json: false,
             })
         );
         assert!(matches!(args.command, Command::Cat(ref c) if c.json_output()));
@@ -149,11 +149,49 @@ mod tests {
     }
 
     #[test]
+    fn parses_cat_deprecated_json_alias() {
+        // `--json` is retained as a hidden deprecated alias for `--format=json`.
+        let args = Args::try_parse_from(["mcap", "cat", "demo.mcap", "--json"])
+            .expect("deprecated --json should still parse");
+        assert_eq!(
+            args.command,
+            Command::Cat(CatCommand {
+                files: vec!["demo.mcap".into()],
+                topics: String::new(),
+                start_secs: 0,
+                start_nsecs: 0,
+                end_secs: 0,
+                end_nsecs: 0,
+                format: CatFormat::Text,
+                json: true,
+            })
+        );
+        assert!(matches!(args.command, Command::Cat(ref c) if c.json_output()));
+    }
+
+    #[test]
     fn cat_rejects_format_with_json_alias() {
         let parse_err =
             Args::try_parse_from(["mcap", "cat", "demo.mcap", "--format=json", "--json"])
                 .expect_err("--format and --json should conflict");
         assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn cat_help_hides_deprecated_json_alias() {
+        let mut help = Vec::new();
+        let mut command = <Args as clap::CommandFactory>::command();
+        command
+            .find_subcommand_mut("cat")
+            .expect("cat subcommand")
+            .write_long_help(&mut help)
+            .expect("write help");
+        let help = String::from_utf8(help).expect("utf8 help");
+        assert!(help.contains("--format"));
+        assert!(
+            !help.contains("--json"),
+            "deprecated --json should be hidden from help:\n{help}"
+        );
     }
 
     #[test]

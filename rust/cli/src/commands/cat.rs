@@ -19,6 +19,7 @@ const PROTOBUF_SERIALIZE_OPTIONS: SerializeOptions =
     SerializeOptions::new().skip_default_fields(false);
 
 pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<()> {
+    args.warn_deprecations();
     let opts = CatOptions::from_args(&args)?;
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let stdout = std::io::stdout();
