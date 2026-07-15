@@ -754,8 +754,12 @@ fn write_csv_message(
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<bool> {
     let value = out.json.decode_value(message.channel, message.data)?;
+    // Objects flatten to their bare field names, but a top-level scalar or array has
+    // no field name, which would yield an empty or bare-numeric column. Name the
+    // payload `data` in that case, mirroring how `--format=ndjson` labels it.
+    let root_prefix = if value.is_object() { "" } else { "data" };
     let mut fields: Vec<(String, String)> = Vec::new();
-    flatten_value("", &value, &mut fields);
+    flatten_value(root_prefix, &value, &mut fields);
 
     // Build a lookup for filling row cells and detecting extra columns. Keys keep
     // their first occurrence's value, matching the deduplicated header order below.
@@ -2518,6 +2522,43 @@ mod tests {
         assert!(csv_state.colliding_columns);
         let output = String::from_utf8(out).expect("valid csv output");
         assert_eq!(output, "log_time,publish_time,sequence,a.b\n10,10,1,2\n");
+    }
+
+    #[test]
+    fn cat_csv_names_top_level_scalar_column_data() {
+        let mcap = build_single_topic_json_mcap("/demo", &[(1, 10, b"42")]);
+        let opts = CatOptions {
+            topics: vec!["/demo".to_string()],
+            mode: OutputMode::Csv,
+            ..CatOptions::default()
+        };
+        let mut out = Vec::new();
+        let mut csv_state = CsvState::default();
+        let broken_pipe =
+            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        assert!(!broken_pipe);
+        let output = String::from_utf8(out).expect("valid csv output");
+        assert_eq!(output, "log_time,publish_time,sequence,data\n10,10,1,42\n");
+    }
+
+    #[test]
+    fn cat_csv_names_top_level_array_columns_data() {
+        let mcap = build_single_topic_json_mcap("/demo", &[(1, 10, b"[10,20]")]);
+        let opts = CatOptions {
+            topics: vec!["/demo".to_string()],
+            mode: OutputMode::Csv,
+            ..CatOptions::default()
+        };
+        let mut out = Vec::new();
+        let mut csv_state = CsvState::default();
+        let broken_pipe =
+            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        assert!(!broken_pipe);
+        let output = String::from_utf8(out).expect("valid csv output");
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,data.0,data.1\n10,10,1,10,20\n"
+        );
     }
 
     #[test]
