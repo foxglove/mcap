@@ -225,7 +225,7 @@ pub enum CatFormat {
     /// One line per message (log time, topic, schema name, and a short byte preview).
     #[default]
     Text,
-    /// One JSON object per message (supports message encodings ros1, protobuf, and json).
+    /// One JSON object per message (supports the ros1, protobuf, and json message encodings).
     Ndjson,
 }
 
