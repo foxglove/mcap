@@ -227,7 +227,7 @@ pub enum CatFormat {
     Text,
     /// One JSON object per message (supports ros1, protobuf, and json message encodings).
     Ndjson,
-    /// CSV rows for a single topic (supports ros1, protobuf, and json message encodings). Requires --topic.
+    /// CSV rows for a single topic (supports ros1, protobuf, and json message encodings). Requires exactly one --topics value.
     Csv,
 }
 
@@ -237,7 +237,15 @@ pub struct CatCommand {
     pub files: Vec<PathBuf>,
 
     /// Comma-separated list of topics to include (exact match). If empty (the default), all topics are included.
-    #[arg(long = "topics", default_value = "", hide_default_value = true)]
+    ///
+    /// `--format=csv` uses this to pick the single topic whose fields become the CSV columns, so it
+    /// requires exactly one topic. `--topic` is accepted as a hidden singular alias.
+    #[arg(
+        long = "topics",
+        alias = "topic",
+        default_value = "",
+        hide_default_value = true
+    )]
     pub topics: String,
 
     /// Include messages with log time at or after this time (seconds)
@@ -272,18 +280,6 @@ pub struct CatCommand {
         hide = true
     )]
     pub json: bool,
-
-    /// Single topic to export as CSV. Required by (and only valid with) --format=csv.
-    ///
-    /// The CSV columns are the flattened message fields (dot notation) plus
-    /// log_time, publish_time, and sequence. Supported message encodings: ros1,
-    /// protobuf, and json; other encodings error.
-    #[arg(
-        long = "topic",
-        conflicts_with = "topics",
-        required_if_eq("format", "csv")
-    )]
-    pub topic: Option<String>,
 }
 
 impl CatCommand {

@@ -102,28 +102,24 @@ impl CatOptions {
             OutputMode::Fields
         };
 
-        // In CSV mode a single topic selects the columns, so require --topic and
-        // reuse the existing topic-filtering machinery via the internal vec.
-        let topics = if mode == OutputMode::Csv {
-            let topic = args
-                .topic
-                .as_deref()
-                .filter(|topic| !topic.is_empty())
-                .context("--format=csv requires --topic <TOPIC>")?;
-            vec![topic.to_string()]
-        } else {
-            // --topic only selects CSV columns; reject it for the other output modes rather than
-            // silently ignoring it.
-            anyhow::ensure!(
-                args.topic.is_none(),
-                "--topic is only valid with --format=csv"
-            );
-            args.topics
-                .split(',')
-                .filter(|topic| !topic.is_empty())
-                .map(str::to_string)
-                .collect()
-        };
+        let topics: Vec<String> = args
+            .topics
+            .split(',')
+            .filter(|topic| !topic.is_empty())
+            .map(str::to_string)
+            .collect();
+
+        // CSV columns are derived from a single topic's fields, so require exactly one topic
+        // (supplied via --topics or its --topic alias).
+        if mode == OutputMode::Csv {
+            match topics.len() {
+                1 => {}
+                0 => bail!("--format=csv requires exactly one topic (--topics <TOPIC>)"),
+                n => bail!(
+                    "--format=csv supports only one topic, but {n} were supplied via --topics"
+                ),
+            }
+        }
         let mut start = args.start_nsecs;
         if args.start_secs > 0 {
             start = args
@@ -1368,17 +1364,16 @@ mod tests {
     use crate::cli::{CatCommand, CatFormat};
 
     /// Builds a `CatCommand` with default (empty) selectors for exercising `CatOptions::from_args`.
-    fn cat_command(format: CatFormat, topic: Option<&str>) -> CatCommand {
+    fn cat_command(format: CatFormat, topics: &str) -> CatCommand {
         CatCommand {
             files: Vec::new(),
-            topics: String::new(),
+            topics: topics.to_string(),
             start_secs: 0,
             start_nsecs: 0,
             end_secs: 0,
             end_nsecs: 0,
             format,
             json: false,
-            topic: topic.map(str::to_string),
         }
     }
 
@@ -2444,21 +2439,37 @@ mod tests {
 
     #[test]
     fn from_args_csv_uses_single_topic_column_selector() {
-        let opts = CatOptions::from_args(&cat_command(CatFormat::Csv, Some("/tf")))
-            .expect("--format=csv --topic should build options");
+        let opts = CatOptions::from_args(&cat_command(CatFormat::Csv, "/tf"))
+            .expect("--format=csv with one topic should build options");
         assert_eq!(opts.mode, OutputMode::Csv);
         assert_eq!(opts.topics, vec!["/tf".to_string()]);
     }
 
     #[test]
-    fn from_args_rejects_topic_without_csv() {
-        let err = CatOptions::from_args(&cat_command(CatFormat::Text, Some("/tf")))
-            .expect_err("--topic without --format=csv should error");
+    fn from_args_rejects_csv_without_topic() {
+        let err = CatOptions::from_args(&cat_command(CatFormat::Csv, ""))
+            .expect_err("--format=csv without a topic should error");
         assert!(
-            err.to_string()
-                .contains("--topic is only valid with --format=csv"),
+            err.to_string().contains("requires exactly one topic"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn from_args_rejects_csv_with_multiple_topics() {
+        let err = CatOptions::from_args(&cat_command(CatFormat::Csv, "/tf,/odom"))
+            .expect_err("--format=csv with multiple topics should error");
+        assert!(
+            err.to_string().contains("supports only one topic"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn from_args_non_csv_allows_multiple_topics() {
+        let opts = CatOptions::from_args(&cat_command(CatFormat::Text, "/tf,/odom"))
+            .expect("multiple topics should be allowed for text output");
+        assert_eq!(opts.topics, vec!["/tf".to_string(), "/odom".to_string()]);
     }
 
     #[test]

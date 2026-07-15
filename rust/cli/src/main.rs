@@ -75,7 +75,6 @@ mod tests {
                 end_nsecs: 0,
                 format: CatFormat::Text,
                 json: false,
-                topic: None,
             })
         );
     }
@@ -94,7 +93,6 @@ mod tests {
                 end_nsecs: 0,
                 format: CatFormat::Text,
                 json: false,
-                topic: None,
             })
         );
     }
@@ -125,7 +123,6 @@ mod tests {
                 end_nsecs: 20_000_000_000,
                 format: CatFormat::Ndjson,
                 json: false,
-                topic: None,
             })
         );
         assert!(matches!(args.command, Command::Cat(ref c) if c.json_output()));
@@ -147,7 +144,6 @@ mod tests {
                 end_nsecs: 0,
                 format: CatFormat::Text,
                 json: true,
-                topic: None,
             })
         );
         assert!(matches!(args.command, Command::Cat(ref c) if c.json_output()));
@@ -189,33 +185,38 @@ mod tests {
     }
 
     #[test]
-    fn parses_cat_csv_with_topic() {
-        let args =
-            Args::try_parse_from(["mcap", "cat", "demo.mcap", "--format=csv", "--topic", "/tf"])
-                .expect("cat --format=csv --topic should parse");
+    fn parses_cat_csv_with_topics() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "cat",
+            "demo.mcap",
+            "--format=csv",
+            "--topics",
+            "/tf",
+        ])
+        .expect("cat --format=csv --topics should parse");
         assert_eq!(
             args.command,
             Command::Cat(CatCommand {
                 files: vec!["demo.mcap".into()],
-                topics: String::new(),
+                topics: "/tf".to_string(),
                 start_secs: 0,
                 start_nsecs: 0,
                 end_secs: 0,
                 end_nsecs: 0,
                 format: CatFormat::Csv,
                 json: false,
-                topic: Some("/tf".to_string()),
             })
         );
     }
 
     #[test]
-    fn cat_rejects_csv_without_topic() {
-        let parse_err = Args::try_parse_from(["mcap", "cat", "demo.mcap", "--format=csv"])
-            .expect_err("--format=csv should require --topic");
-        assert_eq!(
-            parse_err.kind(),
-            clap::error::ErrorKind::MissingRequiredArgument
+    fn cat_topic_is_a_hidden_alias_for_topics() {
+        let args = Args::try_parse_from(["mcap", "cat", "demo.mcap", "--topic", "/tf"])
+            .expect("--topic should parse as an alias for --topics");
+        assert!(
+            matches!(args.command, Command::Cat(ref c) if c.topics == "/tf"),
+            "--topic should populate the topics field"
         );
     }
 
@@ -227,26 +228,10 @@ mod tests {
             "demo.mcap",
             "--format=csv",
             "--json",
-            "--topic",
+            "--topics",
             "/tf",
         ])
         .expect_err("--format=csv and --json should conflict");
-        assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
-    }
-
-    #[test]
-    fn cat_rejects_topic_with_topics() {
-        let parse_err = Args::try_parse_from([
-            "mcap",
-            "cat",
-            "demo.mcap",
-            "--format=csv",
-            "--topic",
-            "/tf",
-            "--topics",
-            "/odom",
-        ])
-        .expect_err("--topic and --topics should conflict");
         assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
     }
 
