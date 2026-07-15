@@ -158,10 +158,6 @@ const config = {
                 href: "https://foxglove.dev/chat",
               },
               {
-                label: "Stack Overflow",
-                href: "https://stackoverflow.com/questions/tagged/mcap",
-              },
-              {
                 label: "Robotics Stack Exchange",
                 href: "https://robotics.stackexchange.com/questions/tagged/mcap",
               },
