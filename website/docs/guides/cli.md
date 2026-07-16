@@ -153,28 +153,24 @@ Echo messages for a specific topic to stdout as newline-delimited JSON (one obje
 
 The global `--time-format` flag controls how `cat`, `info`, `list chunks`, and `list attachments` render timestamps. It accepts:
 
-| Value            | Aliases | Output                                                                                                           |
-| ---------------- | ------- | ---------------------------------------------------------------------------------------------------------------- |
-| `auto` (default) |         | RFC3339 UTC for real wall-clock times, decimal seconds otherwise; machine formats always use RFC3339 (see below) |
-| `rfc3339`        | `rfc`   | RFC3339 UTC, e.g. `2017-03-22T02:26:20.103843113Z`                                                               |
-| `seconds`        | `secs`  | decimal seconds, e.g. `1490149580.103843113`                                                                     |
-| `nanoseconds`    | `nsecs` | integer nanoseconds, e.g. `1490149580103843113`                                                                  |
+| Value            | Aliases | Output                                                                                                          |
+| ---------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| `auto` (default) |         | RFC3339 UTC for real wall-clock times, decimal seconds otherwise; ndjson output always uses RFC3339 (see below) |
+| `rfc3339`        | `rfc`   | RFC3339 UTC, e.g. `2017-03-22T02:26:20.103843113Z`                                                              |
+| `seconds`        | `secs`  | decimal seconds, e.g. `1490149580.103843113`                                                                    |
+| `nanoseconds`    | `nsecs` | integer nanoseconds, e.g. `1490149580103843113`                                                                 |
 
-```bash
-mcap cat demo.mcap --time-format=seconds
-mcap info demo.mcap --time-format=nanoseconds
-```
+    $ mcap cat demo.mcap --time-format=seconds
+    $ mcap info demo.mcap --time-format=nanoseconds
 
 Under `auto`, human-facing output (the default `cat` text, `info`, and `list` tables) renders timestamps at or after `2000-01-01T00:00:00Z` as RFC3339 dates, and smaller values (typical of relative or monotonic recordings that start near zero) as decimal seconds — so a real recording shows `2017-03-22T02:26:20.103843113Z` while a relative one shows `1.000000000` instead of a misleading `1970` date. This choice is made **once per command** from the recording's start time and applied to every timestamp, so a file whose clock jumps across the cutoff (for example when GPS time is acquired mid-recording) still renders uniformly. To force real dates regardless of the cutoff, use `--time-format=rfc3339`.
 
-Machine-facing output (`cat --format=ndjson`) is different: under `auto` it **always** uses RFC3339, with no cutoff, so the field has a single predictable shape a parser can rely on. `log_time` and `publish_time` are always emitted as quoted JSON strings (never bare numbers) to avoid floating-point and large-integer precision loss; tools like pandas (`datetime64[ns]`), Apache Arrow, and DuckDB (`TIMESTAMP_NS`) parse them back without loss. Because there is no cutoff, a relative recording renders as `1970`-relative timestamps, which still round-trip exactly:
+Machine-facing output (`cat --format=ndjson`) is different: under `auto` it **always** uses RFC3339, with no cutoff, so the field has a single predictable shape a parser can rely on. `log_time` and `publish_time` are always emitted as quoted JSON strings (never bare numbers) to avoid floating-point and large-integer precision loss, so a nanosecond-aware parser (pandas, Apache Arrow, DuckDB, …) can read them back without loss. Because there is no cutoff, a relative recording renders as `1970`-relative timestamps, which still round-trip exactly:
 
-```
-$ mcap cat relative.mcap --format=ndjson | head -n 1
-{"topic":"/imu","sequence":1,"log_time":"1970-01-01T00:00:01.000000000Z","publish_time":"1970-01-01T00:00:01.000000000Z","data":{}}
-```
+    $ mcap cat relative.mcap --format=ndjson | head -n 1
+    {"topic":"/data","sequence":1,"log_time":"1970-01-01T00:00:01.000000000Z","publish_time":"1970-01-01T00:00:01.000000000Z","data":{"value":1}}
 
-For a numeric column instead, pass `--time-format=seconds` or `--time-format=nanoseconds`; these stay quoted strings too, so full-precision nanoseconds survive as `BigInt`-parseable text rather than lossy JSON numbers. Explicit `--time-format` values are always honored as-is, in every command.
+For a numeric column instead, use `--time-format=nanoseconds` (integer nanoseconds, parseable as a JavaScript `BigInt`) or `--time-format=seconds` (a fixed-point decimal string); both stay quoted strings, so full precision survives rather than being lost to JSON numbers. Explicit `--time-format` values are always honored as-is, in every command.
 
 `--time-format` only changes how timestamps are **displayed**; it does not alter the nanosecond values stored in files, and the rewrite commands (`filter`, `compress`, `decompress`, `merge`, `convert`, `recover`, `sort`) ignore it.
 
