@@ -447,10 +447,10 @@ pub enum TimeFormat {
     #[value(name = "rfc3339", alias = "iso8601")]
     Rfc3339,
     /// Decimal seconds with 9 fractional digits.
-    #[value(name = "seconds", alias = "secs")]
+    #[value(name = "seconds")]
     Seconds,
     /// Integer nanoseconds.
-    #[value(name = "nanoseconds", alias = "nsecs")]
+    #[value(name = "nanoseconds")]
     Nanoseconds,
 }
 

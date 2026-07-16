@@ -157,8 +157,8 @@ The global `--time-format` flag controls how `cat`, `info`, `list chunks`, and `
 | ---------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
 | `auto` (default) |           | RFC3339 UTC for real wall-clock times, decimal seconds otherwise; ndjson output always uses RFC3339 (see below) |
 | `rfc3339`        | `iso8601` | RFC3339 UTC, e.g. `2017-03-22T02:26:20.103843113Z`                                                              |
-| `seconds`        | `secs`    | decimal seconds, e.g. `1490149580.103843113`                                                                    |
-| `nanoseconds`    | `nsecs`   | integer nanoseconds, e.g. `1490149580103843113`                                                                 |
+| `seconds`        |           | decimal seconds, e.g. `1490149580.103843113`                                                                    |
+| `nanoseconds`    |           | integer nanoseconds, e.g. `1490149580103843113`                                                                 |
 
     $ mcap cat demo.mcap --time-format=seconds
     $ mcap info demo.mcap --time-format=nanoseconds

@@ -233,8 +233,9 @@ mod tests {
 
     #[test]
     fn parses_global_time_format_flag() {
-        let args = Args::try_parse_from(["mcap", "--time-format", "nsecs", "info", "demo.mcap"])
-            .expect("time format should parse before subcommand");
+        let args =
+            Args::try_parse_from(["mcap", "--time-format", "nanoseconds", "info", "demo.mcap"])
+                .expect("time format should parse before subcommand");
         assert_eq!(args.time_format, TimeFormat::Nanoseconds);
 
         let args = Args::try_parse_from(["mcap", "cat", "--time-format=iso8601", "demo.mcap"])
@@ -249,9 +250,7 @@ mod tests {
             ("rfc3339", TimeFormat::Rfc3339),
             ("iso8601", TimeFormat::Rfc3339),
             ("seconds", TimeFormat::Seconds),
-            ("secs", TimeFormat::Seconds),
             ("nanoseconds", TimeFormat::Nanoseconds),
-            ("nsecs", TimeFormat::Nanoseconds),
         ] {
             let args = Args::try_parse_from(["mcap", "--time-format", value, "info", "demo.mcap"])
                 .unwrap_or_else(|_| panic!("time format {value} should parse"));
