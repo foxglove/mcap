@@ -130,8 +130,8 @@ mod tests {
             TimeFormat::Auto,
         );
         assert_eq!(rows[1][2], "2017-03-22T02:26:20.103843113Z");
-        assert_eq!(rows[2][2], "1970-01-01T00:00:01Z");
-        assert_eq!(rows[2][3], "1970-01-01T00:00:02Z");
+        assert_eq!(rows[2][2], "1970-01-01T00:00:01.000000000Z");
+        assert_eq!(rows[2][3], "1970-01-01T00:00:02.000000000Z");
     }
 
     #[test]

@@ -499,7 +499,7 @@ mod tests {
 
         let rendered = render_info(&parsed, TimeFormat::Auto);
         assert!(rendered.contains("start:       2017-03-22T02:26:20.103843113Z\n"));
-        assert!(rendered.contains("end:         1970-01-01T00:00:01Z\n"));
+        assert!(rendered.contains("end:         1970-01-01T00:00:01.000000000Z\n"));
         assert!(!rendered.contains("Z ("));
     }
 

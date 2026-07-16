@@ -160,27 +160,12 @@ fn format_rfc3339(t: u64) -> String {
     let seconds = (t / 1_000_000_000) as i64;
     let nanos = (t % 1_000_000_000) as u32;
     match chrono::DateTime::from_timestamp(seconds, nanos) {
-        Some(dt) => format_rfc3339_trimmed(dt),
+        // Always emit 9 fractional digits: a fixed width keeps lexicographic order equal to
+        // chronological order (trimming trailing zeros would sort a whole second after a
+        // sub-second value in the same second, since '.' < 'Z') and keeps table columns uniform.
+        Some(dt) => dt.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
         // Every `u64` nanosecond timestamp fits chrono's range; keep a defensive fallback.
         None => format_decimal_seconds(t),
-    }
-}
-
-fn format_rfc3339_trimmed(dt: chrono::DateTime<chrono::Utc>) -> String {
-    let rendered = dt.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
-    let Some(without_z) = rendered.strip_suffix('Z') else {
-        return rendered;
-    };
-
-    let Some((prefix, fractional)) = without_z.split_once('.') else {
-        return rendered;
-    };
-
-    let trimmed = fractional.trim_end_matches('0');
-    if trimmed.is_empty() {
-        format!("{prefix}Z")
-    } else {
-        format!("{prefix}.{trimmed}Z")
     }
 }
 
@@ -291,10 +276,13 @@ mod tests {
         let times = TimeRenderer::new(TimeFormat::Rfc3339);
         assert_eq!(times.format(DEMO_NS), DEMO_RFC3339);
         // Pre-cutoff values are still rendered as the true UTC instant (no decimal fallback).
-        assert_eq!(times.format(PRE_CUTOFF_NS), "1970-01-01T00:00:01Z");
+        assert_eq!(
+            times.format(PRE_CUTOFF_NS),
+            "1970-01-01T00:00:01.000000000Z"
+        );
         assert_eq!(
             times.format(WALL_CLOCK_CUTOFF_NANOS),
-            "2000-01-01T00:00:00Z"
+            "2000-01-01T00:00:00.000000000Z"
         );
     }
 
@@ -314,7 +302,7 @@ mod tests {
         let post = TimeRenderer::new(TimeFormat::Auto);
         post.prime(DEMO_NS);
         assert_eq!(post.format(DEMO_NS), DEMO_RFC3339);
-        assert_eq!(post.format(PRE_CUTOFF_NS), "1970-01-01T00:00:01Z");
+        assert_eq!(post.format(PRE_CUTOFF_NS), "1970-01-01T00:00:01.000000000Z");
 
         // Start before the cutoff → every timestamp (including post-cutoff) is decimal seconds.
         let pre = TimeRenderer::new(TimeFormat::Auto);
@@ -359,7 +347,7 @@ mod tests {
         let times = TimeRenderer::new(TimeFormat::Auto);
         assert_eq!(
             json_string(&times, PRE_CUTOFF_NS),
-            "\"1970-01-01T00:00:01Z\""
+            "\"1970-01-01T00:00:01.000000000Z\""
         );
         assert_eq!(json_string(&times, DEMO_NS), format!("\"{DEMO_RFC3339}\""));
         // The text path for the same renderer/value still honors the cutoff.
@@ -378,7 +366,7 @@ mod tests {
         );
         assert_eq!(
             json_string(&TimeRenderer::new(TimeFormat::Rfc3339), PRE_CUTOFF_NS),
-            "\"1970-01-01T00:00:01Z\""
+            "\"1970-01-01T00:00:01.000000000Z\""
         );
     }
 

@@ -2149,7 +2149,7 @@ mod tests {
         message.log_time = 1_000_000_000;
         message.publish_time = 1_000_000_000;
         assert!(write_json_line(&message, TimeFormat::Auto).contains(
-            r#""log_time":"1970-01-01T00:00:01Z","publish_time":"1970-01-01T00:00:01Z""#
+            r#""log_time":"1970-01-01T00:00:01.000000000Z","publish_time":"1970-01-01T00:00:01.000000000Z""#
         ));
     }
 

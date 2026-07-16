@@ -171,7 +171,7 @@ Machine-facing output (`cat --format=ndjson`) is different: under `auto` it **al
 
 ```
 $ mcap cat relative.mcap --format=ndjson | head -n 1
-{"topic":"/imu","sequence":1,"log_time":"1970-01-01T00:00:01Z","publish_time":"1970-01-01T00:00:01Z","data":{}}
+{"topic":"/imu","sequence":1,"log_time":"1970-01-01T00:00:01.000000000Z","publish_time":"1970-01-01T00:00:01.000000000Z","data":{}}
 ```
 
 For a numeric column instead, pass `--time-format=seconds` or `--time-format=nanoseconds`; these stay quoted strings too, so full-precision nanoseconds survive as `BigInt`-parseable text rather than lossy JSON numbers. Explicit `--time-format` values are always honored as-is, in every command.
