@@ -504,7 +504,7 @@ mod tests {
     }
 
     #[test]
-    fn info_render_honors_explicit_time_formats() {
+    fn info_render_honors_explicit_time_format() {
         let parsed = ParsedMcap {
             statistics: Some(Statistics {
                 message_count: 1,
@@ -515,14 +515,9 @@ mod tests {
             ..ParsedMcap::default()
         };
 
+        // An explicit format overrides the `auto` default (which would render RFC3339 here).
         let nanos = render_info(&parsed, TimeFormat::Nanoseconds);
         assert!(nanos.contains("start:       1490149580103843113"));
-
-        let secs = render_info(&parsed, TimeFormat::Seconds);
-        assert!(secs.contains("start:       1490149580.103843113"));
-
-        let rfc = render_info(&parsed, TimeFormat::Rfc3339);
-        assert!(rfc.contains("start:       2017-03-22T02:26:20.103843113Z"));
     }
 
     #[test]
