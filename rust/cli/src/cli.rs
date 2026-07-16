@@ -443,7 +443,7 @@ pub enum TimeFormat {
     #[default]
     #[value(name = "auto")]
     Auto,
-    /// Always render as an RFC3339 UTC timestamp [alias: iso8601]
+    /// RFC3339 UTC timestamp [alias: iso8601]
     #[value(name = "rfc3339", alias = "iso8601")]
     Rfc3339,
     /// Decimal seconds with 9 fractional digits [alias: s]
