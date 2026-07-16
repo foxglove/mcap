@@ -237,7 +237,7 @@ mod tests {
             .expect("time format should parse before subcommand");
         assert_eq!(args.time_format, TimeFormat::Nanoseconds);
 
-        let args = Args::try_parse_from(["mcap", "cat", "--time-format=rfc", "demo.mcap"])
+        let args = Args::try_parse_from(["mcap", "cat", "--time-format=iso8601", "demo.mcap"])
             .expect("time format should parse after subcommand");
         assert_eq!(args.time_format, TimeFormat::Rfc3339);
 
@@ -247,7 +247,7 @@ mod tests {
         for (value, expected) in [
             ("auto", TimeFormat::Auto),
             ("rfc3339", TimeFormat::Rfc3339),
-            ("rfc", TimeFormat::Rfc3339),
+            ("iso8601", TimeFormat::Rfc3339),
             ("seconds", TimeFormat::Seconds),
             ("secs", TimeFormat::Seconds),
             ("nanoseconds", TimeFormat::Nanoseconds),

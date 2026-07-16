@@ -153,12 +153,12 @@ Echo messages for a specific topic to stdout as newline-delimited JSON (one obje
 
 The global `--time-format` flag controls how `cat`, `info`, `list chunks`, and `list attachments` render timestamps. It accepts:
 
-| Value            | Aliases | Output                                                                                                          |
-| ---------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
-| `auto` (default) |         | RFC3339 UTC for real wall-clock times, decimal seconds otherwise; ndjson output always uses RFC3339 (see below) |
-| `rfc3339`        | `rfc`   | RFC3339 UTC, e.g. `2017-03-22T02:26:20.103843113Z`                                                              |
-| `seconds`        | `secs`  | decimal seconds, e.g. `1490149580.103843113`                                                                    |
-| `nanoseconds`    | `nsecs` | integer nanoseconds, e.g. `1490149580103843113`                                                                 |
+| Value            | Aliases   | Output                                                                                                          |
+| ---------------- | --------- | --------------------------------------------------------------------------------------------------------------- |
+| `auto` (default) |           | RFC3339 UTC for real wall-clock times, decimal seconds otherwise; ndjson output always uses RFC3339 (see below) |
+| `rfc3339`        | `iso8601` | RFC3339 UTC, e.g. `2017-03-22T02:26:20.103843113Z`                                                              |
+| `seconds`        | `secs`    | decimal seconds, e.g. `1490149580.103843113`                                                                    |
+| `nanoseconds`    | `nsecs`   | integer nanoseconds, e.g. `1490149580103843113`                                                                 |
 
     $ mcap cat demo.mcap --time-format=seconds
     $ mcap info demo.mcap --time-format=nanoseconds
