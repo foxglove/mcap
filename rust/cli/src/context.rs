@@ -3,8 +3,8 @@ use crate::logsetup::Color;
 
 /// Global CLI execution context shared across command handlers.
 ///
-/// This scaffold stores global options that upcoming command implementations
-/// will consume as real command behavior lands.
+/// Holds the global options (verbosity, color, `allow_remote_scan`, `time_format`) threaded into
+/// every handler.
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct CommandContext {
