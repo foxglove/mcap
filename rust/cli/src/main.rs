@@ -250,7 +250,15 @@ mod tests {
             ("rfc3339", TimeFormat::Rfc3339),
             ("iso8601", TimeFormat::Rfc3339),
             ("seconds", TimeFormat::Seconds),
+            ("s", TimeFormat::Seconds),
+            ("sec", TimeFormat::Seconds),
+            ("secs", TimeFormat::Seconds),
             ("nanoseconds", TimeFormat::Nanoseconds),
+            ("ns", TimeFormat::Nanoseconds),
+            ("nano", TimeFormat::Nanoseconds),
+            ("nanos", TimeFormat::Nanoseconds),
+            ("nsec", TimeFormat::Nanoseconds),
+            ("nsecs", TimeFormat::Nanoseconds),
         ] {
             let args = Args::try_parse_from(["mcap", "--time-format", value, "info", "demo.mcap"])
                 .unwrap_or_else(|_| panic!("time format {value} should parse"));
