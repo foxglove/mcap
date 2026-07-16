@@ -40,6 +40,10 @@ Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://
 
 Results go to stdout; diagnostics and warnings go to stderr. Use the `render` helpers for tabular output so column alignment and byte/time formatting stay consistent.
 
+### Help text
+
+The `mcap --help` output is reproduced by hand in `../../website/docs/guides/cli.md`. When you change a top-level command or a global flag, regenerate that block from the built binary's `--help` so the docs stay in sync.
+
 ### Testing
 
 Most tests live inline in each module under `#[cfg(test)]`. Argument-parsing behavior is covered in `cli.rs`/`main.rs`, and dispatch/handler behavior in the relevant command module. For MCAP inputs, build fixtures in-memory with `mcap::Writer` rather than committing files. Committed binary fixtures are used where the input can't be synthesized that way — notably the `convert` tests, which load real ROS bag/db3 files from `testdata/` (resolved via `CARGO_MANIFEST_DIR`).
