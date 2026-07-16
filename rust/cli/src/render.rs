@@ -78,7 +78,7 @@ impl TimeRenderer {
     }
 
     /// Write the timestamp as a quoted JSON string directly into `writer`, for machine-facing
-    /// output (`cat --format=ndjson`, and CSV once it lands).
+    /// output (`cat --format=ndjson`).
     ///
     /// Under `auto`, machine output always uses RFC3339 (see [`Self::resolved_json_kind`]): the
     /// field shape must be predictable for a downstream parser, so it does not flip at the y2k
@@ -133,7 +133,7 @@ impl TimeRenderer {
         }
     }
 
-    /// Resolve the format for machine-facing (JSON/CSV) output. Unlike [`Self::resolved_kind`],
+    /// Resolve the format for machine-facing (JSON) output. Unlike [`Self::resolved_kind`],
     /// `auto` always maps to RFC3339 (no y2k cutoff, no latch) so the emitted field has a single,
     /// predictable shape regardless of the data; explicit formats map through unchanged.
     fn resolved_json_kind(&self) -> ResolvedTimeKind {
