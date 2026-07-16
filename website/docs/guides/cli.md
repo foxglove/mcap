@@ -176,7 +176,7 @@ $ mcap cat relative.mcap --format=ndjson | head -n 1
 
 For a numeric column instead, pass `--time-format=seconds` or `--time-format=nanoseconds`; these stay quoted strings too, so full-precision nanoseconds survive as `BigInt`-parseable text rather than lossy JSON numbers. Explicit `--time-format` values are always honored as-is, in every command.
 
-`--time-format` only changes how timestamps are **displayed**; it does not alter the nanosecond values stored in files, and the rewrite commands (`filter`, `merge`, `convert`, `recover`, `sort`) ignore it.
+`--time-format` only changes how timestamps are **displayed**; it does not alter the nanosecond values stored in files, and the rewrite commands (`filter`, `compress`, `decompress`, `merge`, `convert`, `recover`, `sort`) ignore it.
 
 ### Remote file support
 
