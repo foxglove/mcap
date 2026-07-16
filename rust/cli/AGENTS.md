@@ -18,7 +18,7 @@ A few modules carry more than their name implies:
 | `cli.rs`     | clap `Args`/`Command` definitions, plus shared value parsers — reuse these for new args instead of rolling your own.                                                   |
 | `source.rs`  | Input abstraction over local files (memory-mapped) and remote object stores. Owns summary/index range reads, remote materialization, and `--allow-remote-scan` gating. |
 | `parse.rs`   | `ParsedMcap` plus summary-first / linear-scan parsing and the exact-record parsers used by remote range reads.                                                         |
-| `context.rs` | `CommandContext`, the global options (verbosity, color, `allow_remote_scan`) threaded into every handler.                                                              |
+| `context.rs` | `CommandContext`, the global options (verbosity, color, `allow_remote_scan`, `time_format`) threaded into every handler.                                               |
 | `build.rs`   | Resolves commit sha (git rev-parse or export-subst) into `GIT_SHORT_SHA` env var.                                                                                      |
 
 ## Conventions
@@ -39,6 +39,10 @@ Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://
 ### Output and logging
 
 Results go to stdout; diagnostics and warnings go to stderr. Use the `render` helpers for tabular output so column alignment and byte/time formatting stay consistent.
+
+### Help text
+
+The `mcap --help` output is reproduced by hand in `../../website/docs/guides/cli.md`. When you change a top-level command or a global flag, regenerate that block from the built binary's `--help` so the docs stay in sync.
 
 ### Testing
 

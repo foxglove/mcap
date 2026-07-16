@@ -1,15 +1,17 @@
+use crate::cli::TimeFormat;
 use crate::logsetup::Color;
 
 /// Global CLI execution context shared across command handlers.
 ///
-/// This scaffold stores global options that upcoming command implementations
-/// will consume as real command behavior lands.
+/// Holds the global options (verbosity, color, `allow_remote_scan`, `time_format`) threaded into
+/// every handler.
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct CommandContext {
     verbose: u8,
     color: Color,
     allow_remote_scan: bool,
+    time_format: TimeFormat,
 }
 
 impl Default for CommandContext {
@@ -18,17 +20,24 @@ impl Default for CommandContext {
             verbose: 0,
             color: Color::Auto,
             allow_remote_scan: false,
+            time_format: TimeFormat::Auto,
         }
     }
 }
 
 #[allow(dead_code)]
 impl CommandContext {
-    pub fn new(verbose: u8, color: Color, allow_remote_scan: bool) -> Self {
+    pub fn new(
+        verbose: u8,
+        color: Color,
+        allow_remote_scan: bool,
+        time_format: TimeFormat,
+    ) -> Self {
         Self {
             verbose,
             color,
             allow_remote_scan,
+            time_format,
         }
     }
 
@@ -42,5 +51,9 @@ impl CommandContext {
 
     pub fn allow_remote_scan(&self) -> bool {
         self.allow_remote_scan
+    }
+
+    pub fn time_format(&self) -> TimeFormat {
+        self.time_format
     }
 }

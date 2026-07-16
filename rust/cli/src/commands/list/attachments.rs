@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::cli::ListAttachmentsCommand;
+use crate::cli::{ListAttachmentsCommand, TimeFormat};
 use crate::context::CommandContext;
 use crate::{parse, render, source};
 
@@ -20,11 +20,19 @@ pub fn run(ctx: &CommandContext, args: ListAttachmentsCommand) -> Result<()> {
             }
         };
     indexes.sort_by_key(|index| index.offset);
-    render::print_table(&render_attachment_rows(&indexes));
+    render::print_table(&render_attachment_rows(&indexes, ctx.time_format()));
     Ok(())
 }
 
-fn render_attachment_rows(indexes: &[mcap::records::AttachmentIndex]) -> Vec<Vec<String>> {
+fn render_attachment_rows(
+    indexes: &[mcap::records::AttachmentIndex],
+    time_format: TimeFormat,
+) -> Vec<Vec<String>> {
+    let times = render::TimeRenderer::new(time_format);
+    if let Some(first) = indexes.first() {
+        times.prime(first.log_time);
+    }
+
     let mut rows = vec![vec![
         "name".to_string(),
         "media type".to_string(),
@@ -38,8 +46,8 @@ fn render_attachment_rows(indexes: &[mcap::records::AttachmentIndex]) -> Vec<Vec
         rows.push(vec![
             index.name.clone(),
             index.media_type.clone(),
-            render::raw_time(index.log_time),
-            render::raw_time(index.create_time),
+            times.format(index.log_time),
+            times.format(index.create_time),
             index.data_size.to_string(),
             index.offset.to_string(),
         ]);
@@ -50,19 +58,23 @@ fn render_attachment_rows(indexes: &[mcap::records::AttachmentIndex]) -> Vec<Vec
 #[cfg(test)]
 mod tests {
     use super::render_attachment_rows;
+    use crate::cli::TimeFormat;
     use mcap::records::AttachmentIndex;
 
     #[test]
     fn render_rows_includes_attachment_data() {
-        let rows = render_attachment_rows(&[AttachmentIndex {
-            offset: 22,
-            length: 10,
-            log_time: 2,
-            create_time: 3,
-            data_size: 44,
-            name: "demo.bin".to_string(),
-            media_type: "application/octet-stream".to_string(),
-        }]);
+        let rows = render_attachment_rows(
+            &[AttachmentIndex {
+                offset: 22,
+                length: 10,
+                log_time: 2,
+                create_time: 3,
+                data_size: 44,
+                name: "demo.bin".to_string(),
+                media_type: "application/octet-stream".to_string(),
+            }],
+            TimeFormat::Auto,
+        );
 
         assert_eq!(
             rows[0],
@@ -76,6 +88,55 @@ mod tests {
             ]
         );
         assert_eq!(rows[1][0], "demo.bin");
+        assert_eq!(rows[1][2], "0.000000002");
+        assert_eq!(rows[1][3], "0.000000003");
         assert_eq!(rows[1][5], "22");
+    }
+
+    #[test]
+    fn render_rows_primes_auto_from_first_attachment_log_time() {
+        let rows = render_attachment_rows(
+            &[
+                AttachmentIndex {
+                    offset: 1,
+                    length: 1,
+                    log_time: 1_490_149_580_103_843_113,
+                    create_time: 1_490_149_580_103_843_113,
+                    data_size: 1,
+                    name: "a.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                },
+                AttachmentIndex {
+                    offset: 2,
+                    length: 1,
+                    log_time: 1_000_000_000,
+                    create_time: 2_000_000_000,
+                    data_size: 1,
+                    name: "b.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                },
+            ],
+            TimeFormat::Auto,
+        );
+        assert_eq!(rows[1][2], "2017-03-22T02:26:20.103843113Z");
+        assert_eq!(rows[2][2], "1970-01-01T00:00:01.000000000Z");
+        assert_eq!(rows[2][3], "1970-01-01T00:00:02.000000000Z");
+    }
+
+    #[test]
+    fn render_rows_honors_seconds_format() {
+        let rows = render_attachment_rows(
+            &[AttachmentIndex {
+                offset: 1,
+                length: 1,
+                log_time: 1_490_149_580_103_843_113,
+                create_time: 1_490_149_580_103_843_113,
+                data_size: 1,
+                name: "a.bin".to_string(),
+                media_type: "application/octet-stream".to_string(),
+            }],
+            TimeFormat::Seconds,
+        );
+        assert_eq!(rows[1][2], "1490149580.103843113");
     }
 }
