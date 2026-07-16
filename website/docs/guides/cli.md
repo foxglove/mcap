@@ -79,7 +79,7 @@ Options:
 
           Possible values:
           - auto:        RFC3339 for timestamps after 2000-01-01, else decimal seconds
-          - rfc3339:     Always render as an RFC3339 UTC timestamp [alias: iso8601]
+          - rfc3339:     RFC3339 UTC timestamp [alias: iso8601]
           - seconds:     Decimal seconds with 9 fractional digits [alias: s]
           - nanoseconds: Integer nanoseconds [alias: ns]
 
