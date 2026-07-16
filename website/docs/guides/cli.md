@@ -233,7 +233,7 @@ AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
 
     $ mcap list chunks recording.mcap
     offset  length  start        end          compression  compressed size  uncompressed size  compression ratio  message index length
-    60      312     1.000000002  3.000000004  zstd         259              436                0.594037           78
+    60      312     2.534221109  4.712889376  zstd         259              436                0.594037           78
 
 #### Recovering data from a corrupt file
 
