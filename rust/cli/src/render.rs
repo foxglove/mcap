@@ -68,6 +68,18 @@ impl TimeRenderer {
         }
     }
 
+    /// Machine-facing timestamp string, matching [`Self::write_json`]'s content but without the
+    /// surrounding JSON quotes. Used by tabular machine output (`cat --format=csv`), where the CSV
+    /// writer supplies its own quoting. Like `write_json`, `auto` always resolves to RFC3339 (no
+    /// y2k cutoff, no latch) so the column has a single predictable shape.
+    pub fn format_machine(&self, t: u64) -> String {
+        match self.resolved_json_kind() {
+            ResolvedTimeKind::Nanoseconds => t.to_string(),
+            ResolvedTimeKind::Seconds => format_decimal_seconds(t),
+            ResolvedTimeKind::Rfc3339 => format_rfc3339(t),
+        }
+    }
+
     /// Write the timestamp directly into `writer` for human-facing (text/table) output.
     ///
     /// The numeric variants format straight into the writer to avoid a per-timestamp heap

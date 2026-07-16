@@ -697,7 +697,7 @@ fn write_message(
 ) -> Result<bool> {
     match opts.mode {
         OutputMode::Json => write_json_message(writer, &opts.times, message, out.json),
-        OutputMode::Csv => write_csv_message(writer, message, out),
+        OutputMode::Csv => write_csv_message(writer, &opts.times, message, out),
         OutputMode::Fields => {
             let schema_name = message
                 .channel
@@ -745,6 +745,7 @@ struct CsvState {
 
 fn write_csv_message(
     writer: &mut impl std::io::Write,
+    times: &render::TimeRenderer,
     message: CatMessage<'_, '_, '_>,
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<bool> {
@@ -793,8 +794,11 @@ fn write_csv_message(
         csv_state.header = Some(header);
     }
     let header = csv_state.header.as_ref().expect("header set above");
-    let log_time = message.log_time.to_string();
-    let publish_time = message.publish_time.to_string();
+    // Follow the ndjson pattern: render log_time/publish_time with the shared time formatter so
+    // CSV honors --time-format (auto -> RFC3339, like the machine-facing JSON output). The CSV
+    // writer applies its own quoting, so use the unquoted machine string.
+    let log_time = times.format_machine(message.log_time);
+    let publish_time = times.format_machine(message.publish_time);
     let sequence = message.sequence.to_string();
     let mut record: Vec<&str> = Vec::with_capacity(header.len());
     record.push(&log_time);
@@ -2429,7 +2433,7 @@ mod tests {
         assert!(!csv_state.dropped_extra_columns);
         assert_eq!(
             String::from_utf8(out).expect("valid csv output"),
-            "log_time,publish_time,sequence,camera\n30,30,3,2\n"
+            "log_time,publish_time,sequence,camera\n1970-01-01T00:00:00.000000030Z,1970-01-01T00:00:00.000000030Z,3,2\n"
         );
     }
 
@@ -2460,7 +2464,7 @@ mod tests {
         assert_eq!(indexed_out, streaming_out);
         assert_eq!(
             String::from_utf8(indexed_out).expect("valid csv output"),
-            "log_time,publish_time,sequence,radar\n20,20,2,1\n"
+            "log_time,publish_time,sequence,radar\n1970-01-01T00:00:00.000000020Z,1970-01-01T00:00:00.000000020Z,2,1\n"
         );
     }
 
@@ -2483,7 +2487,7 @@ mod tests {
         assert!(csv_state.dropped_extra_columns);
         assert_eq!(
             String::from_utf8(out).expect("valid csv output"),
-            "log_time,publish_time,sequence,a\n10,10,1,1\n20,20,2,2\n"
+            "log_time,publish_time,sequence,a\n1970-01-01T00:00:00.000000010Z,1970-01-01T00:00:00.000000010Z,1,1\n1970-01-01T00:00:00.000000020Z,1970-01-01T00:00:00.000000020Z,2,2\n"
         );
     }
 
@@ -2527,7 +2531,10 @@ mod tests {
         assert!(!broken_pipe);
         assert!(csv_state.colliding_columns);
         let output = String::from_utf8(out).expect("valid csv output");
-        assert_eq!(output, "log_time,publish_time,sequence,a.b\n10,10,1,2\n");
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,a.b\n1970-01-01T00:00:00.000000010Z,1970-01-01T00:00:00.000000010Z,1,2\n"
+        );
     }
 
     #[test]
@@ -2544,7 +2551,10 @@ mod tests {
             cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
         assert!(!broken_pipe);
         let output = String::from_utf8(out).expect("valid csv output");
-        assert_eq!(output, "log_time,publish_time,sequence,data\n10,10,1,42\n");
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,data\n1970-01-01T00:00:00.000000010Z,1970-01-01T00:00:00.000000010Z,1,42\n"
+        );
     }
 
     #[test]
@@ -2563,7 +2573,43 @@ mod tests {
         let output = String::from_utf8(out).expect("valid csv output");
         assert_eq!(
             output,
-            "log_time,publish_time,sequence,data.0,data.1\n10,10,1,10,20\n"
+            "log_time,publish_time,sequence,data.0,data.1\n1970-01-01T00:00:00.000000010Z,1970-01-01T00:00:00.000000010Z,1,10,20\n"
+        );
+    }
+
+    #[test]
+    fn cat_csv_honors_time_format() {
+        // CSV timestamps follow the ndjson pattern: machine-facing rendering where `auto` always
+        // resolves to RFC3339, and explicit --time-format values are honored as-is.
+        let mcap =
+            build_single_topic_json_mcap("/demo", &[(1, 1_490_149_580_103_843_113, br#"{"a":1}"#)]);
+        let render_csv = |format: TimeFormat| {
+            let opts = CatOptions {
+                topics: vec!["/demo".to_string()],
+                mode: OutputMode::Csv,
+                times: render::TimeRenderer::new(format),
+                ..CatOptions::default()
+            };
+            let mut out = Vec::new();
+            cat_mcap(&mut out, &mcap, &opts, &mut CsvState::default())
+                .expect("csv cat should succeed");
+            String::from_utf8(out).expect("valid csv output")
+        };
+        assert_eq!(
+            render_csv(TimeFormat::Auto),
+            "log_time,publish_time,sequence,a\n2017-03-22T02:26:20.103843113Z,2017-03-22T02:26:20.103843113Z,1,1\n"
+        );
+        assert_eq!(
+            render_csv(TimeFormat::Rfc3339),
+            "log_time,publish_time,sequence,a\n2017-03-22T02:26:20.103843113Z,2017-03-22T02:26:20.103843113Z,1,1\n"
+        );
+        assert_eq!(
+            render_csv(TimeFormat::Seconds),
+            "log_time,publish_time,sequence,a\n1490149580.103843113,1490149580.103843113,1,1\n"
+        );
+        assert_eq!(
+            render_csv(TimeFormat::Nanoseconds),
+            "log_time,publish_time,sequence,a\n1490149580103843113,1490149580103843113,1,1\n"
         );
     }
 
@@ -3046,8 +3092,12 @@ mod tests {
     }
 
     fn write_csv_with_dropped_columns(messages: &[(u64, &[u8])]) -> (String, bool) {
+        // These tests exercise CSV structure (escaping, flattening, dropped columns), not
+        // timestamp rendering, so pin nanoseconds to keep the expected rows compact. Timestamp
+        // formatting is covered by `cat_csv_honors_time_format`.
         let opts = CatOptions {
             mode: OutputMode::Csv,
+            times: render::TimeRenderer::new(TimeFormat::Nanoseconds),
             ..CatOptions::default()
         };
         let mut csv_state = CsvState::default();

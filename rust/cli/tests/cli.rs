@@ -249,7 +249,7 @@ fn cat_csv_stable_shape_exits_zero() {
     );
     assert_eq!(
         stdout(&output),
-        "log_time,publish_time,sequence,a,b\n10,10,1,1,2\n20,20,2,3,4\n"
+        "log_time,publish_time,sequence,a,b\n1970-01-01T00:00:00.000000010Z,1970-01-01T00:00:00.000000010Z,1,1,2\n1970-01-01T00:00:00.000000020Z,1970-01-01T00:00:00.000000020Z,2,3,4\n"
     );
 }
 
@@ -276,12 +276,36 @@ fn cat_csv_dropped_columns_exits_three() {
     assert_eq!(output.status.code(), Some(3));
     assert_eq!(
         stdout(&output),
-        "log_time,publish_time,sequence,a\n10,10,1,1\n20,20,2,2\n"
+        "log_time,publish_time,sequence,a\n1970-01-01T00:00:00.000000010Z,1970-01-01T00:00:00.000000010Z,1,1\n1970-01-01T00:00:00.000000020Z,1970-01-01T00:00:00.000000020Z,2,2\n"
     );
     assert!(
         String::from_utf8_lossy(&output.stderr).contains("extra columns are dropped"),
         "stderr should warn about dropped columns; stderr: {}",
         String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn cat_csv_honors_global_time_format() {
+    let dir = TempDir::new().unwrap();
+    let path = write_temp(
+        &dir,
+        "stable.mcap",
+        &build_single_topic_json_mcap("/example", &[(1, 10, br#"{"a":1}"#)]),
+    );
+    // The global --time-format flag flows through to CSV like it does for ndjson.
+    let output = mcap(&[
+        "cat",
+        path_str(&path),
+        "--format=csv",
+        "--topics",
+        "/example",
+        "--time-format=nanoseconds",
+    ]);
+    assert!(output.status.success());
+    assert_eq!(
+        stdout(&output),
+        "log_time,publish_time,sequence,a\n10,10,1,1\n"
     );
 }
 

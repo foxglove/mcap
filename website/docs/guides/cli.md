@@ -226,13 +226,23 @@ use an index suffix (`ranges.0`, `ranges.1`). Each row is prefixed with
 `log_time`, `publish_time`, and `sequence` columns. The column header is derived
 from the first message, so `--format=csv` requires exactly one topic:
 
-    $ mcap cat demo.mcap --format=csv --topics /chatter
-    log_time,publish_time,sequence,data
-    42,42,0,hello world
-    43,43,1,hello again
+```
+$ mcap cat demo.mcap --format=csv --topics /chatter
+log_time,publish_time,sequence,data
+1970-01-01T00:00:00.000000042Z,1970-01-01T00:00:00.000000042Z,0,hello world
+1970-01-01T00:00:00.000000043Z,1970-01-01T00:00:00.000000043Z,1,hello again
+```
 
-The `log_time` column is epoch nanoseconds, which maps directly onto tabular
-ingest tools that expect an integer-nanosecond timestamp column.
+Like `--format=ndjson`, the `log_time` and `publish_time` columns honor the global
+[`--time-format`](#timestamp-formatting) flag and default to RFC3339. Use
+`--time-format=nanoseconds` for an integer-nanosecond column (the most precise,
+`int64`-friendly form for tabular ingest) or `--time-format=seconds` for
+fixed-point decimal seconds.
+
+If the header derived from the first message is missing fields that appear in
+later messages (for example variable-length arrays or schemaless JSON with
+differing keys), those extra columns are dropped and `mcap` exits with a warning
+status.
 
 ### Remote file support
 
