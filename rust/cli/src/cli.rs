@@ -436,7 +436,7 @@ impl CompressionFormat {
 /// Timestamp rendering policy for CLI output (`info`, `cat`, `list`, …).
 #[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum TimeFormat {
-    /// RFC3339 when timestamps look like wall-clock times, else decimal seconds.
+    /// RFC3339 for timestamps after 2000-01-01, else decimal seconds
     ///
     /// The RFC3339-vs-decimal choice is latched once per command invocation (see
     /// [`crate::render::TimeRenderer`]).
