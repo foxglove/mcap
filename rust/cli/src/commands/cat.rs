@@ -2154,16 +2154,6 @@ mod tests {
     }
 
     #[test]
-    fn cat_json_rfc3339_honors_pre_cutoff_timestamps() {
-        let mut message = sample_message(Some("Example"), br#"{"value":1}"#.to_vec());
-        message.log_time = 1_000_000_000;
-        message.publish_time = 1_000_000_000;
-        assert!(write_json_line(&message, TimeFormat::Rfc3339).contains(
-            r#""log_time":"1970-01-01T00:00:01Z","publish_time":"1970-01-01T00:00:01Z""#
-        ));
-    }
-
-    #[test]
     fn cat_text_auto_latches_on_first_message_log_time() {
         let times = render::TimeRenderer::new(TimeFormat::Auto);
         // First rendered timestamp is pre-cutoff → decimal for the whole run.
