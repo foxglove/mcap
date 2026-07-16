@@ -14,7 +14,7 @@ Download binaries for your platform from [the latest GitHub release](https://git
 
 Then, mark it executable:
 
-```sh
+```
 $ chmod +x mcap
 ```
 
@@ -24,7 +24,7 @@ If required, move the binary onto your path.
 
 To install using [Homebrew](https://brew.sh) on macOS or Linux, run:
 
-```sh
+```
 $ brew install mcap
 ```
 
@@ -38,7 +38,7 @@ $ brew install mcap
 
 Run `mcap --help` for detailed usage information, or `mcap <command> --help` for the options of a specific command.
 
-```sh
+```
 $ mcap --help
 A command line tool for inspecting and manipulating MCAP files.
 
@@ -105,7 +105,7 @@ MCAP is an open source project by Foxglove (https://foxglove.dev).
 
 Generate a shell completion script with `mcap completion <shell>` (supports `bash`, `zsh`, `fish`, `elvish`, and `powershell`). For example, to enable completions in the current `bash` session:
 
-```sh
+```
 $ source <(mcap completion bash)
 ```
 
@@ -115,7 +115,7 @@ Convert a ROS 1 bag file to mcap:
 
 <!-- cspell: disable -->
 
-```sh
+```
 $ mcap convert demo.bag demo.mcap
 ```
 
@@ -125,7 +125,7 @@ Convert a ROS 2 db3 file to mcap:
 
 <!-- cspell: disable -->
 
-```sh
+```
 $ mcap convert demo.db3 demo.mcap
 ```
 
@@ -141,7 +141,7 @@ Report summary statistics on an MCAP file:
 
 <!-- cspell: disable -->
 
-```sh
+```
 $ mcap info demo.mcap
 library:     mcap-cli/0.3.0 mcap-rust/0.25.0
 profile:     ros1
@@ -174,7 +174,7 @@ metadata:    0
 
 Echo messages for a specific topic to stdout as newline-delimited JSON (one object per message):
 
-```sh
+```
 $ mcap cat demo.mcap --topics /tf --format=ndjson | head -n 10
 {"topic":"/tf","sequence":2,"log_time":"2017-03-22T02:26:20.103843113Z","publish_time":"2017-03-22T02:26:20.103843113Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.117017840,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
 {"topic":"/tf","sequence":3,"log_time":"2017-03-22T02:26:20.113944947Z","publish_time":"2017-03-22T02:26:20.113944947Z","data":{"transforms":[{"header":{"seq":0,"stamp":1490149580.127078895,"frame_id":"base_link"},"child_frame_id":"radar","transform":{"translation":{"x":3.835,"y":0,"z":0},"rotation":{"x":0,"y":0,"z":0,"w":1}}}]}}
@@ -199,7 +199,7 @@ The global `--time-format` flag controls how `cat`, `info`, `list chunks`, and `
 | `seconds`        | `s`, `sec`, `secs`                     | decimal seconds, e.g. `1490149580.103843113`                                                                    |
 | `nanoseconds`    | `ns`, `nano`, `nanos`, `nsec`, `nsecs` | integer nanoseconds, e.g. `1490149580103843113`                                                                 |
 
-```sh
+```
 $ mcap cat demo.mcap --time-format=seconds
 $ mcap info demo.mcap --time-format=nanoseconds
 ```
@@ -208,7 +208,7 @@ Under `auto`, human-facing output (the default `cat` text, `info`, and `list` ta
 
 Machine-facing output (`cat --format=ndjson`) is different: under `auto` it **always** uses RFC3339, with no cutoff, so the field has a single predictable shape a parser can rely on. `log_time` and `publish_time` are always emitted as quoted JSON strings (never bare numbers) to avoid floating-point and large-integer precision loss, so a nanosecond-aware parser (pandas, Apache Arrow, DuckDB, …) can read them back without loss. Because there is no cutoff, a relative recording renders as `1970`-relative timestamps, which still round-trip exactly:
 
-```sh
+```
 $ mcap cat relative.mcap --format=ndjson | head -n 1
 {"topic":"/data","sequence":1,"log_time":"1970-01-01T00:00:01.000000000Z","publish_time":"1970-01-01T00:00:01.000000000Z","data":{"value":1}}
 ```
@@ -223,7 +223,7 @@ The `mcap` CLI can read files over **HTTP(S)** and from object stores: **Amazon 
 
 <!-- cspell: disable -->
 
-```sh
+```
 $ mcap info gs://your-remote-bucket/demo.mcap
 library:     mcap-cli/0.3.0 mcap-rust/0.25.0
 profile:     ros1
@@ -258,7 +258,7 @@ Indexed reads use the summary index at the end of the file to fetch only the byt
 
 Some operations must read or download the entire remote file: commands that rewrite a file (`filter`, `merge`, `convert`, `recover`) and any command that falls back to a linear scan (for example a remote file with no summary section, a server that does not support range requests, or `cat` reading message payloads). These require the `--allow-remote-scan` flag to opt in to the larger transfer:
 
-```sh
+```
 mcap filter --allow-remote-scan gs://your-remote-bucket/demo.mcap -o filtered.mcap -y /tf
 ```
 
@@ -266,7 +266,7 @@ mcap filter --allow-remote-scan gs://your-remote-bucket/demo.mcap -o filtered.mc
 
 Credentials are read from the standard environment variables for each backend (`AWS_*` for S3, `GOOGLE_*` for GCS, and `AZURE_*` for Azure Blob Storage). When reading from S3 you must also specify the region of the bucket:
 
-```sh
+```
 AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
 ```
 
@@ -276,7 +276,7 @@ AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
 
 `mcap list chunks` prints the chunk index: each chunk's byte offset and length, message time range, compression, compressed/uncompressed sizes and ratio, and the size of its message index.
 
-```sh
+```
 $ mcap list chunks recording.mcap
 offset  length  start        end          compression  compressed size  uncompressed size  compression ratio  message index length
 60      312     2.534221109  4.712889376  zstd         259              436                0.594037           78
@@ -286,7 +286,7 @@ offset  length  start        end          compression  compressed size  uncompre
 
 `mcap recover` reads a potentially corrupt or truncated MCAP file and writes a valid, readable copy, rebuilding the chunk indexes and summary section.
 
-```sh
+```
 $ mcap recover damaged.mcap -o recovered.mcap
 ```
 
