@@ -531,7 +531,8 @@ void McapWriter::addChannel(Channel& channel) {
   ++statistics_.channelCount;
 }
 
-Status McapWriter::write(const Message& message) {
+Status McapWriter::write(const Message& message, const ByteSpan* payload,
+                          std::size_t payloadCount) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -570,10 +571,13 @@ Status McapWriter::write(const Message& message) {
   }
 
   // Before writing a message that would overflow the current chunk, close it.
+  static const uint64_t emptyMessageRecordSize = getRecordSize(Message{});
   auto* chunkWriter = getChunkWriter();
   if (chunkWriter != nullptr && /* Chunked? */
       uncompressedSize_ != 0 && /* Current chunk is not empty/new? */
-      9 + getRecordSize(message) + uncompressedSize_ >= chunkSize_ /* Overflowing? */) {
+      9 + emptyMessageRecordSize + internal::ByteSpanArraySize(payload, payloadCount) +
+          uncompressedSize_ >=
+        chunkSize_ /* Overflowing? */) {
     auto& fileOutput = *output_;
     writeChunk(fileOutput, *chunkWriter);
   }
@@ -582,7 +586,7 @@ Status McapWriter::write(const Message& message) {
   const uint64_t messageOffset = uncompressedSize_;
 
   // Write the message
-  uncompressedSize_ += write(output, message);
+  uncompressedSize_ += write(output, message, payload, payloadCount);
 
   // Update message statistics
   if (!options_.noSummary) {
@@ -617,6 +621,11 @@ Status McapWriter::write(const Message& message) {
   }
 
   return StatusCode::Success;
+}
+
+Status McapWriter::write(const Message& message) {
+  const ByteSpan payload{message.data, message.dataSize};
+  return write(message, &payload, 1);
 }
 
 Status McapWriter::write(Attachment& attachment) {
@@ -913,7 +922,15 @@ uint64_t McapWriter::getRecordSize(const Message& message) {
 }
 
 uint64_t McapWriter::write(IWritable& output, const Message& message) {
-  const uint64_t recordSize = getRecordSize(message);
+  const ByteSpan payload{message.data, message.dataSize};
+  return write(output, message, &payload, 1);
+}
+
+uint64_t McapWriter::write(IWritable& output, const Message& message, const ByteSpan* payload,
+                            std::size_t payloadCount) {
+  static const uint64_t emptyMessageRecordSize = getRecordSize(Message{});
+  const uint64_t recordSize =
+    emptyMessageRecordSize + internal::ByteSpanArraySize(payload, payloadCount);
 
   write(output, OpCode::Message);
   write(output, recordSize);
@@ -921,7 +938,9 @@ uint64_t McapWriter::write(IWritable& output, const Message& message) {
   write(output, message.sequence);
   write(output, message.logTime);
   write(output, message.publishTime);
-  write(output, message.data, message.dataSize);
+  for (std::size_t i = 0; i < payloadCount; ++i) {
+    write(output, payload[i].data, payload[i].size);
+  }
 
   return 9 + recordSize;
 }

@@ -178,6 +178,14 @@ using SchemaPtr = std::shared_ptr<Schema>;
 using ChannelPtr = std::shared_ptr<Channel>;
 
 /**
+ * @brief A non-owning pointer and size describing a region of memory.
+ */
+struct MCAP_PUBLIC ByteSpan {
+  const std::byte* data;
+  std::size_t size;
+};
+
+/**
  * @brief A single Message published to a Channel.
  */
 struct MCAP_PUBLIC Message {
