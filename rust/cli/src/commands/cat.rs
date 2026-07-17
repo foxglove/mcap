@@ -30,7 +30,12 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<CommandOutcome> {
     let opts = CatOptions::from_args(&args, ctx.time_format())?;
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let stdout = std::io::stdout();
-    let mut writer = std::io::BufWriter::new(stdout.lock());
+    let stdout = stdout.lock();
+    // CSV uses csv::Writer's own buffer; text/ndjson wrap stdout in a BufWriter.
+    let mut sink = match opts.mode {
+        OutputMode::Csv => OutputSink::Csv(Box::new(csv::Writer::from_writer(stdout))),
+        _ => OutputSink::Plain(std::io::BufWriter::new(stdout)),
+    };
     let mut csv_state = CsvState::default();
 
     if args.files.is_empty() {
@@ -38,18 +43,18 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<CommandOutcome> {
         if stdin.is_terminal() {
             bail!("supply a file");
         }
-        if cat_streaming(&mut writer, stdin.lock(), &opts, &mut csv_state)? {
+        if cat_streaming(&mut sink, stdin.lock(), &opts, &mut csv_state)? {
             return Ok(CommandOutcome::Success);
         }
     } else {
         for file in args.files {
-            if cat_file(&mut writer, &file, &opts, source_options, &mut csv_state)? {
+            if cat_file(&mut sink, &file, &opts, source_options, &mut csv_state)? {
                 return Ok(CommandOutcome::Success);
             }
         }
     }
 
-    flush_or_ignore_broken_pipe(&mut writer)?;
+    flush_or_ignore_broken_pipe(&mut sink)?;
     // In CSV mode a run that wrote no rows either targeted a topic that doesn't exist (typically a
     // typo — an error) or one that exists but had no messages in range (just a warning).
     if matches!(opts.mode, OutputMode::Csv) && csv_state.header.is_none() {
@@ -64,7 +69,7 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<CommandOutcome> {
 }
 
 fn cat_file(
-    writer: &mut impl std::io::Write,
+    sink: &mut OutputSink<impl std::io::Write>,
     file: &std::path::Path,
     opts: &CatOptions,
     source_options: source::SourceOptions,
@@ -76,14 +81,14 @@ fn cat_file(
             csv: csv_state,
             json: &mut json_transcoders,
         };
-        match cat_remote_indexed(writer, file, &remote, opts, source_options, &mut out)? {
+        match cat_remote_indexed(sink, file, &remote, opts, source_options, &mut out)? {
             RemoteCatResult::BrokenPipe => return Ok(true),
             RemoteCatResult::Done => return Ok(false),
             RemoteCatResult::NeedsFullScan => {}
         }
     }
     let mcap = source::load_path(file, source_options)?;
-    cat_mcap(writer, &mcap, opts, csv_state)
+    cat_mcap(sink, &mcap, opts, csv_state)
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -164,7 +169,7 @@ impl CatOptions {
 }
 
 fn cat_mcap(
-    writer: &mut impl std::io::Write,
+    sink: &mut OutputSink<impl std::io::Write>,
     mcap: &[u8],
     opts: &CatOptions,
     csv_state: &mut CsvState,
@@ -174,14 +179,14 @@ fn cat_mcap(
         csv: csv_state,
         json: &mut json_transcoders,
     };
-    if let Some(broken_pipe) = cat_indexed(writer, mcap, opts, &mut out)? {
+    if let Some(broken_pipe) = cat_indexed(sink, mcap, opts, &mut out)? {
         return Ok(broken_pipe);
     }
-    cat_linear(writer, mcap, opts, &mut out)
+    cat_linear(sink, mcap, opts, &mut out)
 }
 
 fn cat_indexed(
-    writer: &mut impl std::io::Write,
+    sink: &mut OutputSink<impl std::io::Write>,
     mcap: &[u8],
     opts: &CatOptions,
     out: &mut MessageWriter<'_, '_>,
@@ -280,7 +285,7 @@ fn cat_indexed(
                     publish_time: header.publish_time,
                     data,
                 };
-                if write_message(writer, message, opts, out)? {
+                if write_message(sink, message, opts, out)? {
                     return Ok(Some(true));
                 }
             }
@@ -298,7 +303,7 @@ enum RemoteCatResult {
 }
 
 fn cat_remote_indexed(
-    writer: &mut impl std::io::Write,
+    sink: &mut OutputSink<impl std::io::Write>,
     file: &std::path::Path,
     remote: &source::RemoteMcap,
     opts: &CatOptions,
@@ -458,7 +463,7 @@ fn cat_remote_indexed(
                     publish_time: header.publish_time,
                     data,
                 };
-                if write_message(writer, message, opts, out)? {
+                if write_message(sink, message, opts, out)? {
                     return Ok(RemoteCatResult::BrokenPipe);
                 }
             }
@@ -555,7 +560,7 @@ fn planned_chunk_reads<'a>(
 }
 
 fn cat_linear(
-    writer: &mut impl std::io::Write,
+    sink: &mut OutputSink<impl std::io::Write>,
     mcap: &[u8],
     opts: &CatOptions,
     out: &mut MessageWriter<'_, '_>,
@@ -580,7 +585,7 @@ fn cat_linear(
             mcap::sans_io::LinearReadEvent::Record { data, opcode } => {
                 let record = mcap::parse_record(opcode, data)?;
                 if handle_linear_record(
-                    writer,
+                    sink,
                     record,
                     opts,
                     &mut schemas,
@@ -598,7 +603,7 @@ fn cat_linear(
 }
 
 fn cat_streaming(
-    writer: &mut impl std::io::Write,
+    sink: &mut OutputSink<impl std::io::Write>,
     mut source: impl std::io::Read,
     opts: &CatOptions,
     csv_state: &mut CsvState,
@@ -624,7 +629,7 @@ fn cat_streaming(
             mcap::sans_io::LinearReadEvent::Record { data, opcode } => {
                 let record = mcap::parse_record(opcode, data)?;
                 if handle_linear_record(
-                    writer,
+                    sink,
                     record,
                     opts,
                     &mut schemas,
@@ -642,7 +647,7 @@ fn cat_streaming(
 }
 
 fn handle_linear_record(
-    writer: &mut impl std::io::Write,
+    sink: &mut OutputSink<impl std::io::Write>,
     record: mcap::records::Record<'_>,
     opts: &CatOptions,
     schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
@@ -688,7 +693,7 @@ fn handle_linear_record(
                 publish_time: header.publish_time,
                 data: data.as_ref(),
             };
-            return write_message(writer, message, opts, out);
+            return write_message(sink, message, opts, out);
         }
         _ => {}
     }
@@ -729,6 +734,29 @@ struct CatMessage<'a, 'schema, 'data> {
     data: &'data [u8],
 }
 
+/// Destination for `cat` output. Text and ndjson wrap the underlying sink in a `BufWriter`; CSV
+/// uses `csv::Writer`, which is already buffered.
+enum OutputSink<W: std::io::Write> {
+    Plain(std::io::BufWriter<W>),
+    Csv(Box<csv::Writer<W>>),
+}
+
+impl<W: std::io::Write> OutputSink<W> {
+    fn plain(&mut self) -> &mut std::io::BufWriter<W> {
+        match self {
+            Self::Plain(writer) => writer,
+            Self::Csv(_) => unreachable!("plain output requested with CSV sink"),
+        }
+    }
+
+    fn csv(&mut self) -> &mut csv::Writer<W> {
+        match self {
+            Self::Csv(writer) => writer,
+            Self::Plain(_) => unreachable!("CSV output requested with plain sink"),
+        }
+    }
+}
+
 /// Bundles the per-invocation output state threaded through the read paths: the
 /// JSON transcoders (cached per file) and, in CSV mode, the derived header.
 struct MessageWriter<'csv, 'json> {
@@ -737,14 +765,14 @@ struct MessageWriter<'csv, 'json> {
 }
 
 fn write_message(
-    writer: &mut impl std::io::Write,
+    sink: &mut OutputSink<impl std::io::Write>,
     message: CatMessage<'_, '_, '_>,
     opts: &CatOptions,
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<bool> {
     match opts.mode {
-        OutputMode::Json => write_json_message(writer, &opts.times, message, out.json),
-        OutputMode::Csv => write_csv_message(writer, &opts.times, message, out),
+        OutputMode::Json => write_json_message(sink.plain(), &opts.times, message, out.json),
+        OutputMode::Csv => write_csv_message(sink.csv(), &opts.times, message, out),
         OutputMode::Fields => {
             let schema_name = message
                 .channel
@@ -753,7 +781,7 @@ fn write_message(
                 .map(|schema| schema.name.as_str())
                 .unwrap_or("no schema");
             write_message_fields(
-                writer,
+                sink.plain(),
                 &opts.times,
                 message.log_time,
                 &message.channel.topic,
@@ -787,7 +815,6 @@ struct CsvState {
     /// an error) apart from a present-but-empty one (which just prints a warning) when `--format=csv`
     /// produces no rows.
     seen_topics: BTreeSet<String>,
-    buffer: Vec<u8>,
 }
 
 impl CsvState {
@@ -803,7 +830,7 @@ impl CsvState {
 }
 
 fn write_csv_message(
-    writer: &mut impl std::io::Write,
+    csv_writer: &mut csv::Writer<impl std::io::Write>,
     times: &render::TimeRenderer,
     message: CatMessage<'_, '_, '_>,
     out: &mut MessageWriter<'_, '_>,
@@ -868,16 +895,10 @@ fn write_csv_message(
         record.push(field_values.get(column.as_str()).copied().unwrap_or(""));
     }
 
-    csv_state.buffer.clear();
-    let mut csv_writer = csv::WriterBuilder::new().from_writer(&mut csv_state.buffer);
-    if write_header {
-        csv_writer.write_record(header)?;
+    if write_header && csv_result_to_broken_pipe(csv_writer.write_record(header))? {
+        return Ok(true);
     }
-    csv_writer.write_record(&record)?;
-    csv_writer.flush()?;
-    drop(csv_writer);
-
-    if io_result_to_broken_pipe(writer.write_all(&csv_state.buffer))? {
+    if csv_result_to_broken_pipe(csv_writer.write_record(&record))? {
         return Ok(true);
     }
 
@@ -999,8 +1020,26 @@ fn io_result_to_broken_pipe(result: io::Result<()>) -> Result<bool> {
     }
 }
 
-fn flush_or_ignore_broken_pipe(writer: &mut impl std::io::Write) -> Result<()> {
-    if let Err(err) = writer.flush() {
+fn csv_result_to_broken_pipe(result: csv::Result<()>) -> Result<bool> {
+    match result {
+        Ok(()) => Ok(false),
+        Err(err) => {
+            if let csv::ErrorKind::Io(io_err) = err.kind() {
+                if io_err.kind() == io::ErrorKind::BrokenPipe {
+                    return Ok(true);
+                }
+            }
+            Err(err.into())
+        }
+    }
+}
+
+fn flush_or_ignore_broken_pipe(sink: &mut OutputSink<impl std::io::Write>) -> Result<()> {
+    let result = match sink {
+        OutputSink::Plain(writer) => writer.flush(),
+        OutputSink::Csv(writer) => writer.flush(),
+    };
+    if let Err(err) = result {
         if err.kind() == io::ErrorKind::BrokenPipe {
             return Ok(());
         }
@@ -1460,13 +1499,43 @@ mod tests {
     };
 
     use super::{
-        cat_indexed, cat_mcap, cat_streaming, needs_in_chunk_definitions, parse_ros1_field_type,
-        planned_chunk_reads, write_message_fields, write_payload_preview, write_ros1_float,
-        write_signed_decimal_time, CatOptions, CsvState, JsonTranscoders, MessageWriter,
-        OutputMode, Ros1MessageDef, MESSAGE_PREVIEW_LEN,
+        cat_indexed, cat_mcap, cat_streaming, flush_or_ignore_broken_pipe,
+        needs_in_chunk_definitions, parse_ros1_field_type, planned_chunk_reads,
+        write_message_fields, write_payload_preview, write_ros1_float, write_signed_decimal_time,
+        CatOptions, CsvState, JsonTranscoders, MessageWriter, OutputMode, OutputSink,
+        Ros1MessageDef, MESSAGE_PREVIEW_LEN,
     };
     use crate::cli::{CatCommand, CatFormat, TimeFormat};
     use crate::render;
+    use std::io::BufWriter;
+
+    /// Runs `f` with a buffered plain sink and returns flushed stdout bytes.
+    fn capture_plain<T>(
+        f: impl FnOnce(&mut OutputSink<&mut Vec<u8>>) -> anyhow::Result<T>,
+    ) -> anyhow::Result<(T, Vec<u8>)> {
+        let mut out = Vec::new();
+        let value = {
+            let mut sink = OutputSink::Plain(BufWriter::new(&mut out));
+            let value = f(&mut sink)?;
+            flush_or_ignore_broken_pipe(&mut sink)?;
+            value
+        };
+        Ok((value, out))
+    }
+
+    /// Runs `f` with a `csv::Writer` sink and returns flushed stdout bytes.
+    fn capture_csv<T>(
+        f: impl FnOnce(&mut OutputSink<&mut Vec<u8>>) -> anyhow::Result<T>,
+    ) -> anyhow::Result<(T, Vec<u8>)> {
+        let mut out = Vec::new();
+        let value = {
+            let mut sink = OutputSink::Csv(Box::new(csv::Writer::from_writer(&mut out)));
+            let value = f(&mut sink)?;
+            flush_or_ignore_broken_pipe(&mut sink)?;
+            value
+        };
+        Ok((value, out))
+    }
 
     /// Builds a `CatCommand` with default (empty) selectors for exercising `CatOptions::from_args`.
     fn cat_command(format: CatFormat, topics: &str) -> CatCommand {
@@ -1886,14 +1955,15 @@ mod tests {
         let body: &'static [u8] =
             Box::leak(build_out_of_order_linear_mcap_without_summary().into_boxed_slice());
         let url = serve_http(body);
-        let mut out = Vec::new();
-        let broken_pipe = super::cat_file(
-            &mut out,
-            Path::new(&url),
-            &CatOptions::default(),
-            crate::source::SourceOptions::new(true),
-            &mut CsvState::default(),
-        )
+        let (broken_pipe, out) = capture_plain(|sink| {
+            super::cat_file(
+                sink,
+                Path::new(&url),
+                &CatOptions::default(),
+                crate::source::SourceOptions::new(true),
+                &mut CsvState::default(),
+            )
+        })
         .expect("remote cat should scan unchunked messages with opt-in");
         assert!(!broken_pipe);
         let output = String::from_utf8(out).expect("cat output should be utf8");
@@ -1906,14 +1976,15 @@ mod tests {
         let body: &'static [u8] =
             Box::leak(build_out_of_order_chunked_mcap_without_message_indexes().into_boxed_slice());
         let url = serve_http(body);
-        let mut out = Vec::new();
-        let broken_pipe = super::cat_file(
-            &mut out,
-            Path::new(&url),
-            &CatOptions::default(),
-            crate::source::SourceOptions::new(true),
-            &mut CsvState::default(),
-        )
+        let (broken_pipe, out) = capture_plain(|sink| {
+            super::cat_file(
+                sink,
+                Path::new(&url),
+                &CatOptions::default(),
+                crate::source::SourceOptions::new(true),
+                &mut CsvState::default(),
+            )
+        })
         .expect("remote cat should use chunk indexes with opt-in");
         assert!(!broken_pipe);
 
@@ -1931,14 +2002,15 @@ mod tests {
         }
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let url = serve_http(body) + "?token=secret";
-        let mut out = Vec::new();
-        let err = super::cat_file(
-            &mut out,
-            Path::new(&url),
-            &CatOptions::default(),
-            crate::source::SourceOptions::default(),
-            &mut CsvState::default(),
-        )
+        let err = capture_plain(|sink| {
+            super::cat_file(
+                sink,
+                Path::new(&url),
+                &CatOptions::default(),
+                crate::source::SourceOptions::default(),
+                &mut CsvState::default(),
+            )
+        })
         .expect_err("remote cat without chunk indexes should require opt-in");
         let message = err.to_string();
         assert!(message.contains("--allow-remote-scan"));
@@ -1950,14 +2022,15 @@ mod tests {
     fn remote_cat_requires_allow_remote_scan_before_chunk_reads() {
         let body: &'static [u8] = Box::leak(build_multi_topic_mcap().into_boxed_slice());
         let url = serve_http(body);
-        let mut out = Vec::new();
-        let err = super::cat_file(
-            &mut out,
-            Path::new(&url),
-            &CatOptions::default(),
-            crate::source::SourceOptions::default(),
-            &mut CsvState::default(),
-        )
+        let err = capture_plain(|sink| {
+            super::cat_file(
+                sink,
+                Path::new(&url),
+                &CatOptions::default(),
+                crate::source::SourceOptions::default(),
+                &mut CsvState::default(),
+            )
+        })
         .expect_err("remote cat should require opt-in before reading chunks");
         assert!(err.to_string().contains("remote cat would read"));
         assert!(err.to_string().contains("--allow-remote-scan"));
@@ -2089,13 +2162,9 @@ mod tests {
     #[test]
     fn cat_prefers_log_time_order_when_index_available() {
         let mcap = build_out_of_order_chunked_mcap();
-        let mut out = Vec::new();
-        let broken_pipe = cat_mcap(
-            &mut out,
-            &mcap,
-            &CatOptions::default(),
-            &mut CsvState::default(),
-        )
+        let (broken_pipe, out) = capture_plain(|sink| {
+            cat_mcap(sink, &mcap, &CatOptions::default(), &mut CsvState::default())
+        })
         .expect("cat should succeed");
         assert!(!broken_pipe);
 
@@ -2126,17 +2195,18 @@ mod tests {
             "complete summaries do not need an up-front chunk definition scan"
         );
 
-        let mut indexed_out = Vec::new();
         let mut json_transcoders = JsonTranscoders::default();
-        let indexed_result = cat_indexed(
-            &mut indexed_out,
-            &mcap,
-            &CatOptions::default(),
-            &mut MessageWriter {
-                csv: &mut CsvState::default(),
-                json: &mut json_transcoders,
-            },
-        )
+        let (indexed_result, indexed_out) = capture_plain(|sink| {
+            cat_indexed(
+                sink,
+                &mcap,
+                &CatOptions::default(),
+                &mut MessageWriter {
+                    csv: &mut CsvState::default(),
+                    json: &mut json_transcoders,
+                },
+            )
+        })
         .expect("indexed cat should succeed");
         assert_eq!(indexed_result, Some(false));
 
@@ -2148,13 +2218,9 @@ mod tests {
     #[test]
     fn cat_falls_back_to_linear_order_without_index() {
         let mcap = build_out_of_order_linear_mcap_without_summary();
-        let mut out = Vec::new();
-        let broken_pipe = cat_mcap(
-            &mut out,
-            &mcap,
-            &CatOptions::default(),
-            &mut CsvState::default(),
-        )
+        let (broken_pipe, out) = capture_plain(|sink| {
+            cat_mcap(sink, &mcap, &CatOptions::default(), &mut CsvState::default())
+        })
         .expect("cat should succeed");
         assert!(!broken_pipe);
 
@@ -2176,30 +2242,27 @@ mod tests {
         let expected = message_lines_from_stream(mcap);
         assert_eq!(expected.len(), 1);
 
-        let mut indexed_out = Vec::new();
         let mut json_transcoders = JsonTranscoders::default();
-        let indexed_result = cat_indexed(
-            &mut indexed_out,
-            mcap,
-            &CatOptions::default(),
-            &mut MessageWriter {
-                csv: &mut CsvState::default(),
-                json: &mut json_transcoders,
-            },
-        )
+        let (indexed_result, indexed_out) = capture_plain(|sink| {
+            cat_indexed(
+                sink,
+                mcap,
+                &CatOptions::default(),
+                &mut MessageWriter {
+                    csv: &mut CsvState::default(),
+                    json: &mut json_transcoders,
+                },
+            )
+        })
         .expect("indexed cat should succeed");
         assert_eq!(indexed_result, Some(false));
         let indexed_output = String::from_utf8(indexed_out).expect("valid utf8 output");
         let indexed_lines: Vec<&str> = indexed_output.lines().collect();
         assert_eq!(indexed_lines, expected);
 
-        let mut out = Vec::new();
-        let broken_pipe = cat_mcap(
-            &mut out,
-            mcap,
-            &CatOptions::default(),
-            &mut CsvState::default(),
-        )
+        let (broken_pipe, out) = capture_plain(|sink| {
+            cat_mcap(sink, mcap, &CatOptions::default(), &mut CsvState::default())
+        })
         .expect("cat should succeed through indexed chunk scan");
         assert!(!broken_pipe);
 
@@ -2224,17 +2287,18 @@ mod tests {
             .iter()
             .all(|chunk| !chunk.message_index_offsets.is_empty()));
 
-        let mut out = Vec::new();
         let mut json_transcoders = JsonTranscoders::default();
-        let indexed_result = cat_indexed(
-            &mut out,
-            mcap,
-            &CatOptions::default(),
-            &mut MessageWriter {
-                csv: &mut CsvState::default(),
-                json: &mut json_transcoders,
-            },
-        )
+        let (indexed_result, out) = capture_plain(|sink| {
+            cat_indexed(
+                sink,
+                mcap,
+                &CatOptions::default(),
+                &mut MessageWriter {
+                    csv: &mut CsvState::default(),
+                    json: &mut json_transcoders,
+                },
+            )
+        })
         .expect("indexed cat should succeed");
         assert_eq!(indexed_result, Some(false));
 
@@ -2254,28 +2318,25 @@ mod tests {
         let expected = message_lines_from_stream(mcap);
         assert_eq!(expected.len(), 1);
 
-        let mut indexed_out = Vec::new();
         let mut json_transcoders = JsonTranscoders::default();
-        let indexed_result = cat_indexed(
-            &mut indexed_out,
-            mcap,
-            &CatOptions::default(),
-            &mut MessageWriter {
-                csv: &mut CsvState::default(),
-                json: &mut json_transcoders,
-            },
-        )
+        let (indexed_result, indexed_out) = capture_plain(|sink| {
+            cat_indexed(
+                sink,
+                mcap,
+                &CatOptions::default(),
+                &mut MessageWriter {
+                    csv: &mut CsvState::default(),
+                    json: &mut json_transcoders,
+                },
+            )
+        })
         .expect("indexed planner should fall back");
         assert_eq!(indexed_result, None);
         assert!(indexed_out.is_empty());
 
-        let mut out = Vec::new();
-        let broken_pipe = cat_mcap(
-            &mut out,
-            mcap,
-            &CatOptions::default(),
-            &mut CsvState::default(),
-        )
+        let (broken_pipe, out) = capture_plain(|sink| {
+            cat_mcap(sink, mcap, &CatOptions::default(), &mut CsvState::default())
+        })
         .expect("cat should succeed through linear fallback");
         assert!(!broken_pipe);
 
@@ -2348,17 +2409,18 @@ mod tests {
             start: 15,
             ..CatOptions::default()
         };
-        let mut out = Vec::new();
         let mut json_transcoders = JsonTranscoders::default();
-        let indexed_result = cat_indexed(
-            &mut out,
-            &mcap,
-            &opts,
-            &mut MessageWriter {
-                csv: &mut CsvState::default(),
-                json: &mut json_transcoders,
-            },
-        )
+        let (indexed_result, out) = capture_plain(|sink| {
+            cat_indexed(
+                sink,
+                &mcap,
+                &opts,
+                &mut MessageWriter {
+                    csv: &mut CsvState::default(),
+                    json: &mut json_transcoders,
+                },
+            )
+        })
         .expect("indexed cat should resolve chunk-local channel");
         assert_eq!(indexed_result, Some(false));
 
@@ -2392,20 +2454,21 @@ mod tests {
         assert!(needs_in_chunk_definitions(&summary));
 
         // Matching topic keeps the chunk-local channel's message.
-        let mut matched = Vec::new();
         let mut json_transcoders = JsonTranscoders::default();
-        let result = cat_indexed(
-            &mut matched,
-            mcap,
-            &CatOptions {
-                topics: vec!["example".to_string()],
-                ..CatOptions::default()
-            },
-            &mut MessageWriter {
-                csv: &mut CsvState::default(),
-                json: &mut json_transcoders,
-            },
-        )
+        let (result, matched) = capture_plain(|sink| {
+            cat_indexed(
+                sink,
+                mcap,
+                &CatOptions {
+                    topics: vec!["example".to_string()],
+                    ..CatOptions::default()
+                },
+                &mut MessageWriter {
+                    csv: &mut CsvState::default(),
+                    json: &mut json_transcoders,
+                },
+            )
+        })
         .expect("indexed cat should succeed");
         assert_eq!(result, Some(false));
         let matched = String::from_utf8(matched).expect("valid utf8 output");
@@ -2413,20 +2476,21 @@ mod tests {
 
         // Non-matching topic drops the message via the per-message check (not silently via
         // reader-level filtering), and the indexed path still completes without a linear fallback.
-        let mut filtered = Vec::new();
         let mut json_transcoders = JsonTranscoders::default();
-        let result = cat_indexed(
-            &mut filtered,
-            mcap,
-            &CatOptions {
-                topics: vec!["nope".to_string()],
-                ..CatOptions::default()
-            },
-            &mut MessageWriter {
-                csv: &mut CsvState::default(),
-                json: &mut json_transcoders,
-            },
-        )
+        let (result, filtered) = capture_plain(|sink| {
+            cat_indexed(
+                sink,
+                mcap,
+                &CatOptions {
+                    topics: vec!["nope".to_string()],
+                    ..CatOptions::default()
+                },
+                &mut MessageWriter {
+                    csv: &mut CsvState::default(),
+                    json: &mut json_transcoders,
+                },
+            )
+        })
         .expect("indexed cat should succeed");
         assert_eq!(result, Some(false));
         assert!(filtered.is_empty());
@@ -2442,9 +2506,10 @@ mod tests {
             mode: OutputMode::Fields,
             ..CatOptions::default()
         };
-        let mut out = Vec::new();
-        let broken_pipe =
-            cat_mcap(&mut out, &mcap, &opts, &mut CsvState::default()).expect("cat should succeed");
+        let (broken_pipe, out) = capture_plain(|sink| {
+            cat_mcap(sink, &mcap, &opts, &mut CsvState::default())
+        })
+        .expect("cat should succeed");
         assert!(!broken_pipe);
 
         let output = String::from_utf8(out).expect("valid utf8 output");
@@ -2462,10 +2527,10 @@ mod tests {
             topics: vec!["/radar".to_string()],
             ..CatOptions::default()
         };
-        let mut out = Vec::new();
-        let broken_pipe =
-            cat_streaming(&mut out, Cursor::new(mcap), &opts, &mut CsvState::default())
-                .expect("streaming cat should succeed");
+        let (broken_pipe, out) = capture_plain(|sink| {
+            cat_streaming(sink, Cursor::new(mcap), &opts, &mut CsvState::default())
+        })
+        .expect("streaming cat should succeed");
         assert!(!broken_pipe);
 
         let output = String::from_utf8(out).expect("valid utf8 output");
@@ -2485,10 +2550,9 @@ mod tests {
             mode: OutputMode::Csv,
             ..CatOptions::default()
         };
-        let mut out = Vec::new();
         let mut csv_state = CsvState::default();
-        let broken_pipe =
-            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        let (broken_pipe, out) = capture_csv(|sink| cat_mcap(sink, &mcap, &opts, &mut csv_state))
+            .expect("csv cat should succeed");
         assert!(!broken_pipe);
         assert!(!csv_state.dropped_extra_columns);
         assert_eq!(
@@ -2505,19 +2569,14 @@ mod tests {
             mode: OutputMode::Csv,
             ..CatOptions::default()
         };
-        let mut indexed_out = Vec::new();
-        let indexed_broken_pipe =
-            cat_mcap(&mut indexed_out, &mcap, &opts, &mut CsvState::default())
+        let (indexed_broken_pipe, indexed_out) =
+            capture_csv(|sink| cat_mcap(sink, &mcap, &opts, &mut CsvState::default()))
                 .expect("indexed csv cat should succeed");
         assert!(!indexed_broken_pipe);
 
-        let mut streaming_out = Vec::new();
-        let streaming_broken_pipe = cat_streaming(
-            &mut streaming_out,
-            Cursor::new(mcap),
-            &opts,
-            &mut CsvState::default(),
-        )
+        let (streaming_broken_pipe, streaming_out) = capture_csv(|sink| {
+            cat_streaming(sink, Cursor::new(mcap), &opts, &mut CsvState::default())
+        })
         .expect("streaming csv cat should succeed");
         assert!(!streaming_broken_pipe);
 
@@ -2539,10 +2598,9 @@ mod tests {
             mode: OutputMode::Csv,
             ..CatOptions::default()
         };
-        let mut out = Vec::new();
         let mut csv_state = CsvState::default();
-        let broken_pipe =
-            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        let (broken_pipe, out) = capture_csv(|sink| cat_mcap(sink, &mcap, &opts, &mut csv_state))
+            .expect("csv cat should succeed");
         assert!(!broken_pipe);
         assert!(csv_state.dropped_extra_columns);
         assert_eq!(
@@ -2562,10 +2620,9 @@ mod tests {
             mode: OutputMode::Csv,
             ..CatOptions::default()
         };
-        let mut out = Vec::new();
         let mut csv_state = CsvState::default();
-        let broken_pipe =
-            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        let (broken_pipe, out) = capture_csv(|sink| cat_mcap(sink, &mcap, &opts, &mut csv_state))
+            .expect("csv cat should succeed");
         assert!(!broken_pipe);
         let output = String::from_utf8(out).expect("valid csv output");
         let header = output.lines().next().expect("csv header line");
@@ -2584,10 +2641,9 @@ mod tests {
             mode: OutputMode::Csv,
             ..CatOptions::default()
         };
-        let mut out = Vec::new();
         let mut csv_state = CsvState::default();
-        let broken_pipe =
-            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        let (broken_pipe, out) = capture_csv(|sink| cat_mcap(sink, &mcap, &opts, &mut csv_state))
+            .expect("csv cat should succeed");
         assert!(!broken_pipe);
         assert!(csv_state.colliding_columns);
         let output = String::from_utf8(out).expect("valid csv output");
@@ -2607,10 +2663,9 @@ mod tests {
             mode: OutputMode::Csv,
             ..CatOptions::default()
         };
-        let mut out = Vec::new();
         let mut csv_state = CsvState::default();
-        let broken_pipe =
-            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        let (broken_pipe, out) = capture_csv(|sink| cat_mcap(sink, &mcap, &opts, &mut csv_state))
+            .expect("csv cat should succeed");
         assert!(!broken_pipe);
         assert!(csv_state.colliding_columns);
         assert_eq!(
@@ -2627,10 +2682,9 @@ mod tests {
             mode: OutputMode::Csv,
             ..CatOptions::default()
         };
-        let mut out = Vec::new();
         let mut csv_state = CsvState::default();
-        let broken_pipe =
-            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        let (broken_pipe, out) = capture_csv(|sink| cat_mcap(sink, &mcap, &opts, &mut csv_state))
+            .expect("csv cat should succeed");
         assert!(!broken_pipe);
         let output = String::from_utf8(out).expect("valid csv output");
         assert_eq!(
@@ -2647,10 +2701,9 @@ mod tests {
             mode: OutputMode::Csv,
             ..CatOptions::default()
         };
-        let mut out = Vec::new();
         let mut csv_state = CsvState::default();
-        let broken_pipe =
-            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        let (broken_pipe, out) = capture_csv(|sink| cat_mcap(sink, &mcap, &opts, &mut csv_state))
+            .expect("csv cat should succeed");
         assert!(!broken_pipe);
         let output = String::from_utf8(out).expect("valid csv output");
         assert_eq!(
@@ -2678,26 +2731,27 @@ mod tests {
         let mut data = Vec::new();
         data.extend_from_slice(&42i32.to_le_bytes());
         data.extend_from_slice(&7i32.to_le_bytes());
-        let mut out = Vec::new();
         let mut transcoders = JsonTranscoders::default();
-        let broken_pipe = super::write_message(
-            &mut out,
-            super::CatMessage {
-                channel: &channel,
-                sequence: 1,
-                log_time: 10,
-                publish_time: 10,
-                data: &data,
-            },
-            &CatOptions {
-                mode: OutputMode::Csv,
-                ..CatOptions::default()
-            },
-            &mut MessageWriter {
-                csv: &mut CsvState::default(),
-                json: &mut transcoders,
-            },
-        )
+        let (broken_pipe, out) = capture_csv(|sink| {
+            super::write_message(
+                sink,
+                super::CatMessage {
+                    channel: &channel,
+                    sequence: 1,
+                    log_time: 10,
+                    publish_time: 10,
+                    data: &data,
+                },
+                &CatOptions {
+                    mode: OutputMode::Csv,
+                    ..CatOptions::default()
+                },
+                &mut MessageWriter {
+                    csv: &mut CsvState::default(),
+                    json: &mut transcoders,
+                },
+            )
+        })
         .expect("ros1 csv message should write");
         assert!(!broken_pipe);
         assert_eq!(
@@ -2791,8 +2845,7 @@ mod tests {
         };
         let mut csv_state = CsvState::default();
         let mut transcoders = JsonTranscoders::default();
-        let mut buf = Vec::new();
-        {
+        let (_, buf) = capture_csv(|sink| {
             let mut out = MessageWriter {
                 csv: &mut csv_state,
                 json: &mut transcoders,
@@ -2800,7 +2853,7 @@ mod tests {
             for (log_time, data) in messages {
                 let message = sample_message(None, data.to_vec());
                 let broken_pipe = super::write_message(
-                    &mut buf,
+                    sink,
                     json_cat_message(&message, *log_time),
                     &opts,
                     &mut out,
@@ -2808,7 +2861,9 @@ mod tests {
                 .expect("csv message should write");
                 assert!(!broken_pipe);
             }
-        }
+            Ok(())
+        })
+        .expect("csv write should succeed");
         String::from_utf8(buf).expect("csv output should be utf8")
     }
 
@@ -2849,7 +2904,6 @@ mod tests {
     }
 
     fn write_json_line(message: &mcap::Message<'_>, time_format: TimeFormat) -> String {
-        let mut out = Vec::new();
         let mut transcoders = JsonTranscoders::default();
         let opts = CatOptions {
             mode: OutputMode::Json,
@@ -2863,15 +2917,17 @@ mod tests {
             publish_time: message.publish_time,
             data: message.data.as_ref(),
         };
-        let broken_pipe = super::write_message(
-            &mut out,
-            cat_message,
-            &opts,
-            &mut MessageWriter {
-                csv: &mut CsvState::default(),
-                json: &mut transcoders,
-            },
-        )
+        let (broken_pipe, out) = capture_plain(|sink| {
+            super::write_message(
+                sink,
+                cat_message,
+                &opts,
+                &mut MessageWriter {
+                    csv: &mut CsvState::default(),
+                    json: &mut transcoders,
+                },
+            )
+        })
         .expect("json message should write");
         assert!(!broken_pipe);
         String::from_utf8(out).expect("valid utf8 output")
