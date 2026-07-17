@@ -738,6 +738,7 @@ struct CatMessage<'a, 'schema, 'data> {
 /// uses `csv::Writer`, which is already buffered.
 enum OutputSink<W: std::io::Write> {
     Plain(std::io::BufWriter<W>),
+    /// Boxed so the enum stays compact: `csv::Writer` is much larger than `BufWriter`.
     Csv(Box<csv::Writer<W>>),
 }
 
@@ -2163,7 +2164,12 @@ mod tests {
     fn cat_prefers_log_time_order_when_index_available() {
         let mcap = build_out_of_order_chunked_mcap();
         let (broken_pipe, out) = capture_plain(|sink| {
-            cat_mcap(sink, &mcap, &CatOptions::default(), &mut CsvState::default())
+            cat_mcap(
+                sink,
+                &mcap,
+                &CatOptions::default(),
+                &mut CsvState::default(),
+            )
         })
         .expect("cat should succeed");
         assert!(!broken_pipe);
@@ -2219,7 +2225,12 @@ mod tests {
     fn cat_falls_back_to_linear_order_without_index() {
         let mcap = build_out_of_order_linear_mcap_without_summary();
         let (broken_pipe, out) = capture_plain(|sink| {
-            cat_mcap(sink, &mcap, &CatOptions::default(), &mut CsvState::default())
+            cat_mcap(
+                sink,
+                &mcap,
+                &CatOptions::default(),
+                &mut CsvState::default(),
+            )
         })
         .expect("cat should succeed");
         assert!(!broken_pipe);
@@ -2506,10 +2517,9 @@ mod tests {
             mode: OutputMode::Fields,
             ..CatOptions::default()
         };
-        let (broken_pipe, out) = capture_plain(|sink| {
-            cat_mcap(sink, &mcap, &opts, &mut CsvState::default())
-        })
-        .expect("cat should succeed");
+        let (broken_pipe, out) =
+            capture_plain(|sink| cat_mcap(sink, &mcap, &opts, &mut CsvState::default()))
+                .expect("cat should succeed");
         assert!(!broken_pipe);
 
         let output = String::from_utf8(out).expect("valid utf8 output");
