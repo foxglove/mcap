@@ -101,6 +101,7 @@ words:
   - protobuf
   - protoc
   - protos
+  - px4
   - pyulog
   - Quickstart
   - robocar
@@ -126,6 +127,7 @@ words:
   - ulog
   - unchunked
   - unindexed
+  - uorb
   - uv
   - vcpkg
   - velodyne
