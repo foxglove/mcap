@@ -257,3 +257,34 @@ The `ros2` profile describes how to create MCAP files for [ROS 2](https://docs.r
 #### Schema
 
 - `encoding`: MUST be either `ros2msg` or `ros2idl`
+
+## Field encodings
+
+The [Field](./index.md#field-op0x10) record's `encoding` field describes how to interpret a field's value. Fields let messages carry additional named, typed values (via [Message Fields](./index.md#message-fields-op0x11) records) beyond the `log_time` and `publish_time` fields built into every [Message](./index.md#message-op0x05) record — both extra timestamps and arbitrary per-message metadata.
+
+A field's `encoding` (logical type) is paired with its `length` (physical wire width). The scalar encodings below use Rust-style, width-explicit names and align with the corresponding scalar types in the broader data ecosystem (e.g. Apache Arrow). Values are little-endian, matching the rest of MCAP.
+
+| `encoding`         | `length`        | Description                                                                                                                                 |
+| ------------------ | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bool`             | `1`             | `0` = false, `1` = true.                                                                                                                    |
+| `int8` … `int64`   | `1`/`2`/`4`/`8` | Signed two's-complement integer (`int8`, `int16`, `int32`, `int64`).                                                                        |
+| `uint8` … `uint64` | `1`/`2`/`4`/`8` | Unsigned integer (`uint8`, `uint16`, `uint32`, `uint64`).                                                                                   |
+| `float16`          | `2`             | IEEE 754 half-precision (binary16).                                                                                                         |
+| `float32`          | `4`             | IEEE 754 single-precision.                                                                                                                  |
+| `float64`          | `8`             | IEEE 754 double-precision.                                                                                                                  |
+| `timestamp`        | `8`             | `uint64` nanoseconds since a user-understood epoch, matching `log_time`.                                                                    |
+| `string`           | variable        | UTF-8 bytes.                                                                                                                                |
+| `bytes`            | variable        | Arbitrary bytes. May hold a value of a [well-known message encoding](#message-encodings) (e.g. `json`, `protobuf`) for structured metadata. |
+
+This list is intentionally limited to scalars; composite/structured data belongs in the message payload (described by the channel's schema), not in fields. Additional encodings may be registered here in the future. Because the `length` byte fully describes the wire width, readers can always skip a field whose `encoding` they do not recognize.
+
+Only fixed-width 64-bit orderable encodings (`timestamp`, `uint64`, `int64`, `float64`) may be indexed (i.e. used with [Field Index](./index.md#field-index-op0x12) and [Field Chunk Index](./index.md#field-chunk-index-op0x13) records). As with `log_time`, a field is indexed if and only if those records are present; indexing is an optional, per-field choice made by the writer.
+
+### Recommended field names
+
+Names are free-form, but the following conventions are recommended for interoperability:
+
+- `publish_time` (`timestamp`): Time at which the message was published by the originating node. Prefer this field, with index records written, when a seekable publish time is required, since the built-in `publish_time` field of the Message record is not indexable.
+- `sensor_time` (`timestamp`): Time at which the underlying sensor measurement was captured.
+
+Unlike `log_time`, field timestamps are not required to be monotonic; readers seeking by a non-monotonic field may need to scan overlapping chunks (see the [Field Chunk Index](./index.md#field-chunk-index-op0x13) record).

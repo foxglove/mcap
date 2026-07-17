@@ -9,6 +9,7 @@ sidebar_position: 1
 [message_encodings]: ./registry.md#well-known-message-encodings
 [schema_encodings]: ./registry.md#well-known-schema-encodings
 [profiles]: ./registry.md#well-known-profiles
+[field_encodings]: ./registry.md#field-encodings
 [feature_explanations]: ./notes.md#feature-explanations
 
 ## Overview
@@ -60,9 +61,13 @@ The following records are allowed to appear in the data section:
 - [Schema](#schema-op0x03)
 - [Channel](#channel-op0x04)
 - [Message](#message-op0x05)
+- [Field](#field-op0x10)
+- [Message Fields](#message-fields-op0x11)
 - [Attachment](#attachment-op0x09)
+- [Attachment Fields](#attachment-fields-op0x14)
 - [Chunk](#chunk-op0x06)
 - [Message Index](#message-index-op0x07)
+- [Field Index](#field-index-op0x12)
 - [Metadata](#metadata-op0x0c)
 - [Data End](#data-end-op0x0f)
 
@@ -82,7 +87,9 @@ The following records are allowed to appear in the summary section:
 
 - [Schema](#schema-op0x03)
 - [Channel](#channel-op0x04)
+- [Field](#field-op0x10)
 - [Chunk Index](#chunk-index-op0x08)
+- [Field Chunk Index](#field-chunk-index-op0x13)
 - [Attachment Index](#attachment-index-op0x0a)
 - [Metadata Index](#metadata-index-op0x0d)
 - [Statistics](#statistics-op0x0b)
@@ -173,17 +180,21 @@ A message record encodes a single timestamped message on a channel.
 
 The message encoding and schema must match that of the Channel record corresponding to the message's channel ID.
 
-| Bytes | Name         | Type      | Description                                                                                                                                                                                                                               |
-| ----- | ------------ | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2     | channel_id   | uint16    | Channel ID                                                                                                                                                                                                                                |
-| 4     | sequence     | uint32    | Optional message counter to detect message gaps. If your middleware publisher provides a sequence number you can use that, or you can assign a sequence number in the recorder, or set to zero if this is not relevant for your workflow. |
-| 8     | log_time     | Timestamp | Time at which the message was recorded.                                                                                                                                                                                                   |
-| 8     | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time.                                                                                                                                                   |
-| N     | data         | Bytes     | Message data, to be decoded according to the schema of the channel.                                                                                                                                                                       |
+| Bytes | Name         | Type      | Description                                                                                                                                                                                                                                       |
+| ----- | ------------ | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2     | channel_id   | uint16    | Channel ID                                                                                                                                                                                                                                        |
+| 4     | sequence     | uint32    | Optional message counter to detect message gaps. If your middleware publisher provides a sequence number you can use that, or you can assign a sequence number in the recorder, or set to zero if this is not relevant for your workflow.         |
+| 8     | log_time     | Timestamp | Time at which the message was recorded.                                                                                                                                                                                                           |
+| 8     | publish_time | Timestamp | Time at which the message was published. If not available, must be set to the log time. The reserved value `0xFFFFFFFFFFFFFFFF` is a [field sentinel](#field-sentinel) indicating that a [Message Fields](#message-fields-op0x11) record follows. |
+| N     | data         | Bytes     | Message data, to be decoded according to the schema of the channel.                                                                                                                                                                               |
+
+A message may carry additional named, typed values (such as extra timestamps or per-message metadata) by following it with a [Message Fields](#message-fields-op0x11) record. The Message record itself is never extended, so readers that predate the Message Fields record continue to read `log_time` and `publish_time` unchanged.
+
+When a Message Fields record is present, the writer MUST set the message's `publish_time` to the [field sentinel](#field-sentinel) `0xFFFFFFFFFFFFFFFF`. The message's true publish time, if any, is then carried as a `publish_time` field within the Message Fields record; if no such field is present, the publish time is unavailable and readers should fall back to `log_time`.
 
 ### Chunk (op=0x06)
 
-A Chunk contains a batch of records. Readers should expect Schema, Channel, and Message records to be present in chunks, but future spec changes may include others. Private records may also be included. The batch of records contained in a chunk may be compressed or uncompressed.
+A Chunk contains a batch of records. Readers should expect Schema, Channel, and Message records to be present in chunks, but future spec changes may include others. Chunks may also contain [Field](#field-op0x10) and [Message Fields](#message-fields-op0x11) records. Private records may also be included. The batch of records contained in a chunk may be compressed or uncompressed.
 
 All messages in the chunk must reference channels recorded earlier in the file (in a previous chunk, earlier in the current chunk, or earlier in the data section).
 
@@ -237,14 +248,16 @@ Attachment records contain auxiliary artifacts such as text, core dumps, calibra
 
 Attachment records must not appear within a chunk.
 
-| Bytes | Name        | Type                         | Description                                                                                                              |
-| ----- | ----------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 8     | log_time    | Timestamp                    | Time at which the attachment was recorded.                                                                               |
-| 8     | create_time | Timestamp                    | Time at which the attachment was created. If not available, must be set to zero.                                         |
-| 4 + N | name        | String                       | Name of the attachment, e.g "scene1.jpg".                                                                                |
-| 4 + N | media_type  | String                       | [Media type](https://en.wikipedia.org/wiki/Media_type) (e.g "text/plain").                                               |
-| 8 + N | data        | uint64 length-prefixed Bytes | Attachment data.                                                                                                         |
-| 4     | crc         | uint32                       | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed. |
+| Bytes | Name        | Type                         | Description                                                                                                                                                                                                                                       |
+| ----- | ----------- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8     | log_time    | Timestamp                    | Time at which the attachment was recorded.                                                                                                                                                                                                        |
+| 8     | create_time | Timestamp                    | Time at which the attachment was created. If not available, must be set to zero. The reserved value `0xFFFFFFFFFFFFFFFF` is a [field sentinel](#field-sentinel) indicating that an [Attachment Fields](#attachment-fields-op0x14) record follows. |
+| 4 + N | name        | String                       | Name of the attachment, e.g "scene1.jpg".                                                                                                                                                                                                         |
+| 4 + N | media_type  | String                       | [Media type](https://en.wikipedia.org/wiki/Media_type) (e.g "text/plain").                                                                                                                                                                        |
+| 8 + N | data        | uint64 length-prefixed Bytes | Attachment data.                                                                                                                                                                                                                                  |
+| 4     | crc         | uint32                       | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed.                                                                                                                          |
+
+An attachment may carry additional named, typed values by following it with an [Attachment Fields](#attachment-fields-op0x14) record. When one is present, the writer MUST set the attachment's `create_time` to the [field sentinel](#field-sentinel) `0xFFFFFFFFFFFFFFFF`; the true create time, if any, is then carried as a `create_time` field within the Attachment Fields record.
 
 ### Metadata (op=0x0C)
 
@@ -293,17 +306,20 @@ A metadata index record contains the location of a metadata record within the fi
 
 A Statistics record contains summary information about the recorded data. The statistics record is optional, but the file should contain at most one.
 
-| Bytes | Name                   | Type                  | Description                                                                                                             |
-| ----- | ---------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| 8     | message_count          | uint64                | Number of Message records in the file.                                                                                  |
-| 2     | schema_count           | uint16                | Number of unique schema IDs in the file, not including zero.                                                            |
-| 4     | channel_count          | uint32                | Number of unique channel IDs in the file.                                                                               |
-| 4     | attachment_count       | uint32                | Number of Attachment records in the file.                                                                               |
-| 4     | metadata_count         | uint32                | Number of Metadata records in the file.                                                                                 |
-| 4     | chunk_count            | uint32                | Number of Chunk records in the file.                                                                                    |
-| 8     | message_start_time     | Timestamp             | Earliest message log_time in the file. Zero if the file has no messages.                                                |
-| 8     | message_end_time       | Timestamp             | Latest message log_time in the file. Zero if the file has no messages.                                                  |
-| 4 + N | channel_message_counts | `Map<uint16, uint64>` | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available. |
+| Bytes | Name                   | Type                                 | Description                                                                                                                                                                                                                                                           |
+| ----- | ---------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 8     | message_count          | uint64                               | Number of Message records in the file.                                                                                                                                                                                                                                |
+| 2     | schema_count           | uint16                               | Number of unique schema IDs in the file, not including zero.                                                                                                                                                                                                          |
+| 4     | channel_count          | uint32                               | Number of unique channel IDs in the file.                                                                                                                                                                                                                             |
+| 4     | attachment_count       | uint32                               | Number of Attachment records in the file.                                                                                                                                                                                                                             |
+| 4     | metadata_count         | uint32                               | Number of Metadata records in the file.                                                                                                                                                                                                                               |
+| 4     | chunk_count            | uint32                               | Number of Chunk records in the file.                                                                                                                                                                                                                                  |
+| 8     | message_start_time     | Timestamp                            | Earliest message log_time in the file. Zero if the file has no messages.                                                                                                                                                                                              |
+| 8     | message_end_time       | Timestamp                            | Latest message log_time in the file. Zero if the file has no messages.                                                                                                                                                                                                |
+| 4 + N | channel_message_counts | `Map<uint16, uint64>`                | Mapping from channel ID to total message count for the channel. An empty map indicates this statistic is not available.                                                                                                                                               |
+| 4 + N | field_value_bounds     | `Map<uint16, Tuple<uint64, uint64>>` | Optional. Mapping from indexed field ID to the (minimum, maximum) value of that field across all messages in the file. Each bound is the field's 8-byte value, interpreted according to the field's encoding. An empty map indicates this statistic is not available. |
+
+The `field_value_bounds` field is an optional backward-compatible extension appended after `channel_message_counts`. Readers that predate the Field record read the preceding fields and ignore the trailing bytes. Writers that do not index any fields may omit the field entirely. Only fields with a fixed-width 64-bit orderable encoding may appear here (see [Field](#field-op0x10)).
 
 When using a Statistics record with a non-empty channel_message_counts, the Summary Data section MUST contain a copy of all Channel records. The Channel records MUST occur prior to the statistics record.
 
@@ -318,6 +334,103 @@ A Summary Offset record contains the location of records within the summary sect
 | 1     | group_opcode | uint8  | The opcode of all records in the group.                                  |
 | 8     | group_start  | uint64 | Byte offset from the start of the file of the first record in the group. |
 | 8     | group_length | uint64 | Total byte length of all records in the group.                           |
+
+### Field (op=0x10)
+
+A Field record declares a named, typed value that messages may carry in addition to the fields built into the [Message](#message-op0x05) record. Fields are used both for additional timestamps (e.g. an indexable `publish_time`) and for arbitrary per-message metadata (e.g. middleware attributes carried out of band from the message payload).
+
+Fields are uniquely identified within a file by their field ID. A Field record must occur at least once in the file prior to any [Message Fields](#message-fields-op0x11), [Field Index](#field-index-op0x12), or [Field Chunk Index](#field-chunk-index-op0x13) record referring to its ID. Any two Field records sharing a common ID must be identical.
+
+| Bytes | Name     | Type   | Description                                                                                                                                                        |
+| ----- | -------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2     | id       | uint16 | A unique identifier for this field within the file. Must not be zero.                                                                                              |
+| 4 + N | name     | String | A human-readable name for the field, e.g. `publish_time`, `sensor_time`, `attachment`.                                                                             |
+| 4 + N | encoding | String | The value encoding. One of the [well-known field encodings][field_encodings] (e.g. `timestamp`, `uint32`, `float64`, `string`, `bytes`).                           |
+| 1     | length   | uint8  | The wire length of the value. If the high bit (`0x80`) is set, the value is variable-length (see below); otherwise the low 7 bits are a fixed byte length (0–127). |
+
+The `length` byte is the physical descriptor used to parse a value; the `encoding` is the logical descriptor used to interpret it. A reader can therefore skip a field whose `encoding` it does not recognize, as long as it has the Field record (which gives the length). For well-known encodings, `length` must be consistent with the encoding (e.g. `timestamp` and `uint64` must use `length = 8`).
+
+A field may be _indexed_ for fast seeking by writing [Field Index](#field-index-op0x12) and [Field Chunk Index](#field-chunk-index-op0x13) records for it, exactly as `log_time` is indexed by [Message Index](#message-index-op0x07) and [Chunk Index](#chunk-index-op0x08) records. There is no flag in the Field record itself: as with `log_time`, a field is indexed if and only if those index records are present. Indexing is therefore an optional, per-field choice made by the writer. Only fields with a fixed-width 64-bit orderable encoding (`timestamp`, `uint64`, `int64`, `float64`; i.e. `length == 8`) may be indexed.
+
+Field records may be duplicated in the summary section. A Field record with an id of zero is invalid and should be ignored by readers. Readers that do not support fields will skip this record.
+
+### Message Fields (op=0x11)
+
+A Message Fields record provides additional named, typed values for a single [Message](#message-op0x05) record.
+
+It MUST appear immediately after the Message record it annotates, with no intervening records, in the same record stream (the data section or within the same chunk), and that Message's `publish_time` MUST be set to the [field sentinel](#field-sentinel). At most one Message Fields record may be associated with a given Message.
+
+> Because this record uses a new opcode, readers that predate it skip it and continue reading the `log_time` and `publish_time` of the preceding Message unchanged. This makes message fields a backward-compatible addition: existing readers and writers are unaffected, and only readers that wish to access the additional values need to be updated. Messages that carry no fields incur no overhead.
+
+| Bytes | Name       | Type                               | Description                                                                          |
+| ----- | ---------- | ---------------------------------- | ------------------------------------------------------------------------------------ |
+| 2     | channel_id | uint16                             | Channel ID. Must match the `channel_id` of the immediately preceding Message record. |
+| 4 + N | fields     | Array of field entries (see below) | The field values carried by this message.                                            |
+
+Each entry in `fields` is serialized as:
+
+    <uint16 field_id><value>
+
+`field_id` must be registered by a Field record and must not appear more than once within the record. `value` is serialized according to that field's `length`:
+
+- **Fixed-width** (`length` high bit clear): exactly `length & 0x7F` bytes, little-endian for numeric encodings.
+- **Variable-length** (`length` high bit set): a `uint32` byte length followed by that many bytes.
+
+A Message Fields record that is not immediately preceded by a Message record (with the [field sentinel](#field-sentinel) set), or whose `channel_id` does not match the preceding Message, is invalid and should be ignored by readers.
+
+### Field Index (op=0x12)
+
+A Field Index record allows readers to locate individual Message records within a chunk by the value of an indexed field, analogous to the [Message Index](#message-index-op0x07) record for `log_time`.
+
+A sequence of Field Index records may occur immediately after a chunk, interleaved with that chunk's Message Index records. At most one Field Index record exists per (channel, field ID) combination for which messages in the chunk carry that field. A field is indexed if and only if these records are present; only fields with a fixed-width 64-bit orderable encoding may be indexed.
+
+| Bytes | Name       | Type                           | Description                                                                                                                                                                                                   |
+| ----- | ---------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2     | channel_id | uint16                         | Channel ID.                                                                                                                                                                                                   |
+| 2     | field_id   | uint16                         | The field ID being indexed. Must be registered by a Field record with a fixed-width 64-bit orderable encoding.                                                                                                |
+| 4 + N | records    | `Array<Tuple<uint64, uint64>>` | Array of (field value, offset) pairs. The value is the field's 8-byte value, interpreted per its encoding. Offset is the position of the Message record relative to the start of the uncompressed chunk data. |
+
+After seeking to a Message via its offset, the message's fields can be read from the Message Fields record that immediately follows it.
+
+Messages outside of chunks cannot be indexed.
+
+### Field Chunk Index (op=0x13)
+
+A Field Chunk Index record describes the range of an indexed field's value within a chunk and locates that chunk's Field Index records, analogous to the [Chunk Index](#chunk-index-op0x08) record for `log_time`. Readers use it to prune chunks when seeking by a field value.
+
+One Field Chunk Index record exists for every (chunk, indexed field ID) combination that is indexed.
+
+| Bytes | Name                  | Type                  | Description                                                                                                                                                                                      |
+| ----- | --------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 2     | field_id              | uint16                | The indexed field ID. Must be registered by a Field record with a fixed-width 64-bit orderable encoding.                                                                                         |
+| 8     | chunk_start_offset    | uint64                | Offset to the Chunk record from the start of the file. Matches the `chunk_start_offset` of the corresponding [Chunk Index](#chunk-index-op0x08) record.                                          |
+| 8     | min_value             | uint64                | Minimum value of this field among messages in the chunk, interpreted per its encoding. Zero if no messages in the chunk carry it.                                                                |
+| 8     | max_value             | uint64                | Maximum value of this field among messages in the chunk, interpreted per its encoding. Zero if no messages in the chunk carry it.                                                                |
+| 4 + N | message_index_offsets | `Map<uint16, uint64>` | Mapping from channel ID to the offset of the Field Index record for this field ID and channel, from the start of the file. An empty map indicates no field indexing is available for this chunk. |
+| 8     | message_index_length  | uint64                | Total length in bytes of the Field Index records for this field ID after the chunk.                                                                                                              |
+
+> Fields such as `publish_time` are not necessarily monotonic across a recording. When they are not, the `[min_value, max_value]` ranges of adjacent chunks may overlap, reducing the effectiveness of chunk pruning compared to `log_time`.
+
+### Attachment Fields (op=0x14)
+
+An Attachment Fields record provides additional named, typed values for a single [Attachment](#attachment-op0x09) record, using the same [Field](#field-op0x10) declarations as messages.
+
+It MUST appear immediately after the Attachment record it annotates, with no intervening records, and that Attachment's `create_time` MUST be set to the [field sentinel](#field-sentinel). At most one Attachment Fields record may be associated with a given Attachment. Attachment fields are not indexed.
+
+| Bytes | Name   | Type                                                                  | Description                                  |
+| ----- | ------ | --------------------------------------------------------------------- | -------------------------------------------- |
+| 4 + N | fields | Array of field entries (see [Message Fields](#message-fields-op0x11)) | The field values carried by this attachment. |
+
+### Field sentinel
+
+The reserved [Timestamp](#timestamp) value `0xFFFFFFFFFFFFFFFF` (2<sup>64</sup> − 1) is used as a _field sentinel_ in exactly two places: the [Message](#message-op0x05) `publish_time` field and the [Attachment](#attachment-op0x09) `create_time` field. It is never a valid time value in those fields.
+
+A writer MUST set the sentinel whenever (and only when) it writes a [Message Fields](#message-fields-op0x11) or [Attachment Fields](#attachment-fields-op0x14) record for the preceding record. This serves two purposes:
+
+1. **In-band signal.** A reader only needs to look for a following fields record when the sentinel is set, rather than inspecting every record.
+2. **Integrity check.** Existing writers preserve `publish_time`/`create_time` but may drop records with unknown opcodes when round-tripping a file. Therefore, if a reader encounters the sentinel **without** a following fields record, the fields were most likely lost in a round-trip through a writer that predates this feature. Readers SHOULD emit a warning in this case. Conversely, a fields record whose preceding record does not have the sentinel set is invalid.
+
+Readers that predate this feature will interpret the sentinel as a literal timestamp (approximately the year 2554).
 
 ## Serialization
 
