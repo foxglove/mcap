@@ -249,9 +249,10 @@ flatten to the same column name; or a payload field is named like a metadata
 column (`log_time`, `publish_time`, `sequence`). In each case the affected column
 is dropped while the rest of the row is still written.
 
-A topic that matches no messages (absent, or excluded by the time range) produces
-no output — not even a header row — since the columns can't be known without a
-message, matching `text` and `ndjson`.
+Requesting a topic that isn't present in the file is an error. A topic that exists
+but has no messages in the selected time range prints a warning and produces no
+output (not even a header row, since the columns can't be known without a
+message).
 
 ### Remote file support
 

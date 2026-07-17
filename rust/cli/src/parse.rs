@@ -98,6 +98,17 @@ pub(crate) fn summary_section_has_chunk_indexes(mcap: &[u8]) -> Result<bool> {
         .is_some_and(|summary| !summary.chunk_indexes.is_empty()))
 }
 
+/// The set of channel topics declared in the summary section, or `None` if the file has no summary.
+///
+/// Bounded: reads only the summary (channels/schemas), never messages. Includes channels that have
+/// zero messages, so callers can tell an absent topic apart from a present-but-empty one.
+pub(crate) fn summary_channel_topics(
+    mcap: &[u8],
+) -> Result<Option<std::collections::BTreeSet<String>>> {
+    Ok(parse_mcap_from_summary(mcap, None)?
+        .map(|summary| summary.channels.into_values().map(|c| c.topic).collect()))
+}
+
 pub(crate) fn parsed_mcap_from_summary_section(
     header: Option<records::Header>,
     summary: &[u8],

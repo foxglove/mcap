@@ -50,6 +50,16 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<CommandOutcome> {
     }
 
     flush_or_ignore_broken_pipe(&mut writer)?;
+    // In CSV mode a run that wrote no rows either targeted a topic that doesn't exist (typically a
+    // typo — an error) or one that exists but had no messages in range (just a warning).
+    if matches!(opts.mode, OutputMode::Csv) && csv_state.header.is_none() {
+        let topic = opts.topics.first().map(String::as_str).unwrap_or_default();
+        if csv_state.seen_topics.contains(topic) {
+            warn!("topic '{topic}' has no messages to export");
+        } else {
+            bail!("topic '{topic}' not found; --format=csv requires an existing topic");
+        }
+    }
     Ok(csv_state.outcome())
 }
 
@@ -159,6 +169,14 @@ fn cat_mcap(
     opts: &CatOptions,
     csv_state: &mut CsvState,
 ) -> Result<bool> {
+    // Record the file's channel topics (from the summary) so an absent CSV topic can be reported as
+    // an error rather than silently producing an empty file. Summaryless files skip this; there a
+    // topic with no messages is indistinguishable from an absent one without a full scan.
+    if matches!(opts.mode, OutputMode::Csv) {
+        if let Some(topics) = parse::summary_channel_topics(mcap)? {
+            csv_state.seen_topics.extend(topics);
+        }
+    }
     let mut json_transcoders = JsonTranscoders::default();
     let mut out = MessageWriter {
         csv: csv_state,
@@ -286,6 +304,14 @@ fn cat_remote_indexed(
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<RemoteCatResult> {
     let summary = remote.summary();
+    if matches!(opts.mode, OutputMode::Csv) {
+        out.csv.seen_topics.extend(
+            summary
+                .channels
+                .values()
+                .map(|channel| channel.topic.clone()),
+        );
+    }
     if summary.chunk_indexes.is_empty() {
         if !source_options.allow_remote_scan {
             bail!(
@@ -615,6 +641,9 @@ fn handle_linear_record(
             schemas.insert(schema.id, schema);
         }
         mcap::records::Record::Channel(channel) => {
+            if matches!(opts.mode, OutputMode::Csv) {
+                out.csv.seen_topics.insert(channel.topic.clone());
+            }
             if channel.schema_id == 0 || schemas.contains_key(&channel.schema_id) {
                 let resolved = build_channel(&channel, schemas)?;
                 channels.insert(channel.id, resolved);
@@ -734,6 +763,10 @@ struct CsvState {
     /// payload field named like a metadata column), which drops one value. Drives the same exit-3
     /// warning path as dropped columns.
     colliding_columns: bool,
+    /// Topics observed as channels in the input(s). Used to tell an absent topic (a typo, which is
+    /// an error) apart from a present-but-empty one (which just prints a warning) when `--format=csv`
+    /// produces no rows.
+    seen_topics: BTreeSet<String>,
     buffer: Vec<u8>,
 }
 

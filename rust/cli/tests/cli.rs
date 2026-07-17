@@ -258,6 +258,57 @@ fn exit_code_3_on_cat_csv_dropped_columns() {
 }
 
 #[test]
+fn exit_code_1_on_cat_csv_unknown_topic() {
+    let dir = TempDir::new().unwrap();
+    let path = write_temp(
+        &dir,
+        "one_topic.mcap",
+        &build_single_topic_json_mcap("/example", &[(1, 10, br#"{"a":1}"#)]),
+    );
+    // A topic that isn't in the file is almost always a typo, so it's a hard error rather than a
+    // silently empty export.
+    let output = mcap(&["cat", path_str(&path), "--format=csv", "--topics", "/nope"]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(stdout(&output).is_empty(), "stdout: {}", stdout(&output));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("topic '/nope' not found"),
+        "stderr should report the unknown topic; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn cat_csv_warns_when_existing_topic_has_no_messages() {
+    let dir = TempDir::new().unwrap();
+    let path = write_temp(
+        &dir,
+        "one_topic.mcap",
+        &build_single_topic_json_mcap("/example", &[(1, 10, br#"{"a":1}"#)]),
+    );
+    // The topic exists but the time range excludes its only message: warn, but exit 0.
+    let output = mcap(&[
+        "cat",
+        path_str(&path),
+        "--format=csv",
+        "--topics",
+        "/example",
+        "--start-secs",
+        "9999",
+    ]);
+    assert!(
+        output.status.success(),
+        "an existing but empty topic should exit 0; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(stdout(&output).is_empty(), "stdout: {}", stdout(&output));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("has no messages to export"),
+        "stderr should warn about the empty topic; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn exit_code_doctor_non_strict_allows_out_of_order_top_level_messages() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(
