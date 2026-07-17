@@ -46,13 +46,7 @@ pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<CommandOutcome> {
     }
 
     flush_or_ignore_broken_pipe(&mut writer)?;
-    Ok(
-        if csv_state.dropped_extra_columns || csv_state.colliding_columns {
-            CommandOutcome::Warnings
-        } else {
-            CommandOutcome::Success
-        },
-    )
+    Ok(csv_state.outcome())
 }
 
 fn cat_file(
@@ -736,6 +730,18 @@ struct CsvState {
     /// which silently drops a value. Drives the same exit-3 warning path as dropped columns.
     colliding_columns: bool,
     buffer: Vec<u8>,
+}
+
+impl CsvState {
+    /// Whether any columns were dropped (missing from the first-message header, or lost to a
+    /// name collision), which the CLI reports as an exit-3 warning.
+    fn outcome(&self) -> CommandOutcome {
+        if self.dropped_extra_columns || self.colliding_columns {
+            CommandOutcome::Warnings
+        } else {
+            CommandOutcome::Success
+        }
+    }
 }
 
 fn write_csv_message(

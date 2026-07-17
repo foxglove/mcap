@@ -61,11 +61,7 @@ impl TimeRenderer {
     }
 
     pub fn format(&self, t: u64) -> String {
-        match self.resolved_kind(t) {
-            ResolvedTimeKind::Nanoseconds => t.to_string(),
-            ResolvedTimeKind::Seconds => format_decimal_seconds(t),
-            ResolvedTimeKind::Rfc3339 => format_rfc3339(t),
-        }
+        self.format_kind(t, self.resolved_kind(t))
     }
 
     /// Machine-facing timestamp string, matching [`Self::write_json`]'s content but without the
@@ -73,7 +69,11 @@ impl TimeRenderer {
     /// writer supplies its own quoting. Like `write_json`, `auto` always resolves to RFC3339 (no
     /// y2k cutoff, no latch) so the column has a single predictable shape.
     pub fn format_machine(&self, t: u64) -> String {
-        match self.resolved_json_kind() {
+        self.format_kind(t, self.resolved_json_kind())
+    }
+
+    fn format_kind(&self, t: u64, kind: ResolvedTimeKind) -> String {
+        match kind {
             ResolvedTimeKind::Nanoseconds => t.to_string(),
             ResolvedTimeKind::Seconds => format_decimal_seconds(t),
             ResolvedTimeKind::Rfc3339 => format_rfc3339(t),

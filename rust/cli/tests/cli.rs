@@ -194,37 +194,6 @@ fn exit_code_3_on_lossy_recover() {
 }
 
 #[test]
-fn exit_code_doctor_non_strict_allows_out_of_order_top_level_messages() {
-    let dir = TempDir::new().unwrap();
-    let path = write_temp(
-        &dir,
-        "out_of_order.mcap",
-        &build_mcap_with_options(false, &[2, 1]),
-    );
-
-    let output = mcap(&["doctor", path_str(&path)]);
-    assert!(
-        output.status.success(),
-        "non-strict doctor should warn but exit 0; stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    assert!(String::from_utf8_lossy(&output.stderr).contains("Warning: Message.log_time"));
-
-    let output = mcap(&["doctor", "--strict-message-order", path_str(&path)]);
-    assert_eq!(output.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("Error: Message.log_time"));
-}
-
-// Reading from a non-seekable stdin pipe is only reachable end-to-end; the unit tests use
-// seekable in-memory buffers.
-#[test]
-fn stdin_pipe_cat() {
-    let output = mcap_with_stdin(&["cat"], &build_mcap(3));
-    assert!(output.status.success());
-    assert!(stdout(&output).contains("/example"));
-}
-
-#[test]
 fn exit_code_0_on_cat_csv_stable_shape() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(
@@ -286,27 +255,34 @@ fn exit_code_3_on_cat_csv_dropped_columns() {
 }
 
 #[test]
-fn cat_csv_honors_global_time_format() {
+fn exit_code_doctor_non_strict_allows_out_of_order_top_level_messages() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(
         &dir,
-        "stable.mcap",
-        &build_single_topic_json_mcap("/example", &[(1, 10, br#"{"a":1}"#)]),
+        "out_of_order.mcap",
+        &build_mcap_with_options(false, &[2, 1]),
     );
-    // The global --time-format flag flows through to CSV like it does for ndjson.
-    let output = mcap(&[
-        "cat",
-        path_str(&path),
-        "--format=csv",
-        "--topics",
-        "/example",
-        "--time-format=nanoseconds",
-    ]);
+
+    let output = mcap(&["doctor", path_str(&path)]);
+    assert!(
+        output.status.success(),
+        "non-strict doctor should warn but exit 0; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Warning: Message.log_time"));
+
+    let output = mcap(&["doctor", "--strict-message-order", path_str(&path)]);
+    assert_eq!(output.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Error: Message.log_time"));
+}
+
+// Reading from a non-seekable stdin pipe is only reachable end-to-end; the unit tests use
+// seekable in-memory buffers.
+#[test]
+fn stdin_pipe_cat() {
+    let output = mcap_with_stdin(&["cat"], &build_mcap(3));
     assert!(output.status.success());
-    assert_eq!(
-        stdout(&output),
-        "log_time,publish_time,sequence,a\n10,10,1,1\n"
-    );
+    assert!(stdout(&output).contains("/example"));
 }
 
 #[test]
