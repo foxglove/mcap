@@ -429,6 +429,38 @@ fn completion_survives_closed_downstream_pipe() {
     );
 }
 
+// Same closed-pipe pattern for CSV: write_record / final flush must treat BrokenPipe as success
+// (e.g. `mcap cat --format=csv … | head`), not exit 1 via csv::Error.
+#[cfg(unix)]
+#[test]
+fn cat_csv_survives_closed_downstream_pipe() {
+    let dir = TempDir::new().unwrap();
+    // Enough rows to fill csv::Writer's ~8 KiB buffer so EPIPE can surface mid-write, not only
+    // on the final flush.
+    let path = write_temp(&dir, "pipe.mcap", &build_mcap(500));
+    let (read_end, write_end) = UnixStream::pair().expect("failed to create pipe");
+    drop(read_end);
+
+    let output = Command::new(env!("CARGO_BIN_EXE_mcap"))
+        .args([
+            "cat",
+            path_str(&path),
+            "--format=csv",
+            "--topics",
+            "/example",
+        ])
+        .stdout(Stdio::from(OwnedFd::from(write_end)))
+        .output()
+        .expect("failed to run mcap cat --format=csv");
+
+    assert!(
+        output.status.success(),
+        "csv cat should exit successfully after a downstream pipe closes; status: {:?}; stderr: {}",
+        output.status.code(),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 #[test]
 fn help_lists_commands() {
     let output = mcap(&["--help"]);
