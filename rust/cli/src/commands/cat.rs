@@ -16,6 +16,10 @@ use super::CommandOutcome;
 
 const MESSAGE_PREVIEW_LEN: usize = 10;
 
+/// The fixed leading CSV columns holding message metadata. A payload field that flattens to one of
+/// these names would produce a duplicate header, so it is treated as a colliding column instead.
+const CSV_PREFIX_COLUMNS: [&str; 3] = ["log_time", "publish_time", "sequence"];
+
 // prost-reflect's default JSON serialization follows the canonical proto3 mapping, which omits
 // fields at their default value. Emit them instead so default-valued fields stay visible (#1642).
 const PROTOBUF_SERIALIZE_OPTIONS: SerializeOptions =
@@ -726,8 +730,9 @@ struct CsvState {
     /// the per-row extra-column check does not rebuild the set on every message.
     known_columns: HashSet<String>,
     dropped_extra_columns: bool,
-    /// Set when a message flattens to duplicate column names (e.g. `{"a.b":1,"a":{"b":2}}`),
-    /// which silently drops a value. Drives the same exit-3 warning path as dropped columns.
+    /// Set when a message flattens to duplicate column names (e.g. `{"a.b":1,"a":{"b":2}}`, or a
+    /// payload field named like a metadata column), which drops one value. Drives the same exit-3
+    /// warning path as dropped columns.
     colliding_columns: bool,
     buffer: Vec<u8>,
 }
@@ -765,6 +770,12 @@ fn write_csv_message(
     let mut field_values: HashMap<&str, &str> = HashMap::with_capacity(fields.len());
     let mut colliding_columns = false;
     for (key, value) in &fields {
+        // A payload field named like a metadata column can't get a distinct header, so it is
+        // dropped rather than emitted as a duplicate column (reported as data loss below).
+        if CSV_PREFIX_COLUMNS.contains(&key.as_str()) {
+            colliding_columns = true;
+            continue;
+        }
         match field_values.entry(key.as_str()) {
             std::collections::hash_map::Entry::Occupied(_) => colliding_columns = true,
             std::collections::hash_map::Entry::Vacant(slot) => {
@@ -776,14 +787,11 @@ fn write_csv_message(
     let csv_state = &mut *out.csv;
     let write_header = csv_state.header.is_none();
     if write_header {
-        let mut header = vec![
-            "log_time".to_string(),
-            "publish_time".to_string(),
-            "sequence".to_string(),
-        ];
-        // Dedupe in first-occurrence order with a HashSet to stay O(n): arrays can
-        // contribute thousands of columns, so a linear scan per key would be O(n^2).
-        let mut seen: HashSet<&str> = HashSet::new();
+        let mut header: Vec<String> = CSV_PREFIX_COLUMNS.iter().map(|s| s.to_string()).collect();
+        // Seed with the metadata columns so payload fields sharing their names are skipped, then
+        // dedupe in first-occurrence order with a HashSet to stay O(n): arrays can contribute
+        // thousands of columns, so a linear scan per key would be O(n^2).
+        let mut seen: HashSet<&str> = CSV_PREFIX_COLUMNS.into_iter().collect();
         for (key, _) in &fields {
             if seen.insert(key.as_str()) {
                 header.push(key.clone());
@@ -2537,6 +2545,28 @@ mod tests {
     }
 
     #[test]
+    fn cat_csv_drops_payload_fields_named_like_metadata_columns() {
+        // A payload field named `sequence` would duplicate the metadata header; it is dropped
+        // (keeping headers unique) and flagged as a collision so the run exits with a warning.
+        let mcap = build_single_topic_json_mcap("/demo", &[(1, 10, br#"{"sequence":99,"x":1}"#)]);
+        let opts = CatOptions {
+            topics: vec!["/demo".to_string()],
+            mode: OutputMode::Csv,
+            ..CatOptions::default()
+        };
+        let mut out = Vec::new();
+        let mut csv_state = CsvState::default();
+        let broken_pipe =
+            cat_mcap(&mut out, &mcap, &opts, &mut csv_state).expect("csv cat should succeed");
+        assert!(!broken_pipe);
+        assert!(csv_state.colliding_columns);
+        assert_eq!(
+            String::from_utf8(out).expect("valid csv output"),
+            "log_time,publish_time,sequence,x\n1970-01-01T00:00:00.000000010Z,1970-01-01T00:00:00.000000010Z,1,1\n"
+        );
+    }
+
+    #[test]
     fn cat_csv_names_top_level_scalar_column_data() {
         let mcap = build_single_topic_json_mcap("/demo", &[(1, 10, b"42")]);
         let opts = CatOptions {
@@ -2573,6 +2603,53 @@ mod tests {
         assert_eq!(
             output,
             "log_time,publish_time,sequence,data.0,data.1\n1970-01-01T00:00:00.000000010Z,1970-01-01T00:00:00.000000010Z,1,10,20\n"
+        );
+    }
+
+    #[test]
+    fn cat_csv_flattens_ros1_message() {
+        // CSV reuses the ndjson transcoding path, so a ros1msg-encoded message decodes and
+        // flattens into columns just like a json message.
+        let channel = mcap::Channel {
+            id: 1,
+            topic: "/demo".to_string(),
+            schema: Some(Arc::new(mcap::Schema {
+                id: 1,
+                name: "demo/Example".to_string(),
+                encoding: "ros1msg".to_string(),
+                data: Cow::Owned(b"int32 value\nint32 count\n".to_vec()),
+            })),
+            message_encoding: "ros1".to_string(),
+            metadata: BTreeMap::new(),
+        };
+        let mut data = Vec::new();
+        data.extend_from_slice(&42i32.to_le_bytes());
+        data.extend_from_slice(&7i32.to_le_bytes());
+        let mut out = Vec::new();
+        let mut transcoders = JsonTranscoders::default();
+        let broken_pipe = super::write_message(
+            &mut out,
+            super::CatMessage {
+                channel: &channel,
+                sequence: 1,
+                log_time: 10,
+                publish_time: 10,
+                data: &data,
+            },
+            &CatOptions {
+                mode: OutputMode::Csv,
+                ..CatOptions::default()
+            },
+            &mut MessageWriter {
+                csv: &mut CsvState::default(),
+                json: &mut transcoders,
+            },
+        )
+        .expect("ros1 csv message should write");
+        assert!(!broken_pipe);
+        assert_eq!(
+            String::from_utf8(out).expect("valid csv output"),
+            "log_time,publish_time,sequence,count,value\n1970-01-01T00:00:00.000000010Z,1970-01-01T00:00:00.000000010Z,1,7,42\n"
         );
     }
 

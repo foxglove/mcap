@@ -206,7 +206,7 @@ $ mcap info demo.mcap --time-format=nanoseconds
 
 Under `auto`, human-facing output (the default `cat` text, `info`, and `list` tables) renders timestamps at or after `2000-01-01T00:00:00Z` as RFC3339 dates, and smaller values (typical of relative or monotonic recordings that start near zero) as decimal seconds — so a real recording shows `2017-03-22T02:26:20.103843113Z` while a relative one shows `1.000000000` instead of a misleading `1970` date. This choice is made **once per command** from the recording's start time and applied to every timestamp, so a file whose clock jumps across the cutoff (for example when GPS time is acquired mid-recording) still renders uniformly. To force real dates regardless of the cutoff, use `--time-format=rfc3339`.
 
-Machine-facing output (`cat --format=ndjson`) is different: under `auto` it **always** uses RFC3339, with no cutoff, so the field has a single predictable shape a parser can rely on. `log_time` and `publish_time` are always emitted as quoted JSON strings (never bare numbers) to avoid floating-point and large-integer precision loss, so a nanosecond-aware parser (pandas, Apache Arrow, DuckDB, …) can read them back without loss. Because there is no cutoff, a relative recording renders as `1970`-relative timestamps, which still round-trip exactly:
+Machine-facing output (`cat --format=ndjson`, and the `log_time`/`publish_time` columns of `--format=csv`) is different: under `auto` it **always** uses RFC3339, with no cutoff, so the field has a single predictable shape a parser can rely on. In ndjson, `log_time` and `publish_time` are always emitted as quoted JSON strings (never bare numbers) to avoid floating-point and large-integer precision loss, so a nanosecond-aware parser (pandas, Apache Arrow, DuckDB, …) can read them back without loss. Because there is no cutoff, a relative recording renders as `1970`-relative timestamps, which still round-trip exactly:
 
 ```
 $ mcap cat relative.mcap --format=ndjson | head -n 1
@@ -221,10 +221,12 @@ For a numeric column instead, use `--time-format=nanoseconds` (integer nanosecon
 
 Export a single topic to CSV with `--format=csv --topics <TOPIC>`. Message fields
 are decoded (same encodings as `--format=ndjson`: `ros1`, `protobuf`, and `json`)
-and flattened into columns using dot notation (`pose.position.x`); array elements
-use an index suffix (`ranges.0`, `ranges.1`). Each row is prefixed with
-`log_time`, `publish_time`, and `sequence` columns. The column header is derived
-from the first message, so `--format=csv` requires exactly one topic:
+and flattened into columns: nested object fields use dot notation
+(`pose.position.x`, in alphabetical order) and array elements use an index suffix
+(`ranges.0`, `ranges.1`). Each row is prefixed with `log_time`, `publish_time`,
+and `sequence` columns. The column set is taken from the first message (to keep
+reading bounded-memory, without pre-scanning the file), and `--format=csv`
+requires exactly one topic:
 
 ```
 $ mcap cat demo.mcap --format=csv --topics /chatter
@@ -235,14 +237,21 @@ log_time,publish_time,sequence,data
 
 Like `--format=ndjson`, the `log_time` and `publish_time` columns honor the global
 [`--time-format`](#timestamp-formatting) flag and default to RFC3339. Use
-`--time-format=nanoseconds` for an integer-nanosecond column (the most precise,
-`int64`-friendly form for tabular ingest) or `--time-format=seconds` for
-fixed-point decimal seconds.
+`--time-format=nanoseconds` for an integer-nanosecond column (the most precise
+form for tabular ingest) or `--time-format=seconds` for fixed-point decimal
+seconds.
 
-If the header derived from the first message is missing fields that appear in
-later messages (for example variable-length arrays or schemaless JSON with
-differing keys), those extra columns are dropped and `mcap` exits with a warning
-status.
+Because the column set comes from the first message, `mcap` reports data loss by
+printing a warning to stderr and exiting with code `3` (the same warning status as
+a lossy `recover`) when: a later message has fields not in that header (for
+example variable-length arrays or schemaless JSON with differing keys); two fields
+flatten to the same column name; or a payload field is named like a metadata
+column (`log_time`, `publish_time`, `sequence`). In each case the affected column
+is dropped while the rest of the row is still written.
+
+A topic that matches no messages (absent, or excluded by the time range) produces
+no output — not even a header row — since the columns can't be known without a
+message, matching `text` and `ndjson`.
 
 ### Remote file support
 

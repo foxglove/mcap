@@ -249,7 +249,7 @@ pub struct CatCommand {
     /// Comma-separated list of topics to include (exact match). If empty (the default), all topics are included.
     ///
     /// `--format=csv` uses this to pick the single topic whose fields become the CSV columns, so it
-    /// requires exactly one topic. `--topic` is accepted as a hidden singular alias.
+    /// requires exactly one topic. `--topic` is accepted as a singular alias.
     #[arg(
         long = "topics",
         alias = "topic",
