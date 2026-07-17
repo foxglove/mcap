@@ -45,6 +45,8 @@ words:
   - bfbs
   - bytearray
   - callerid
+  - capnp
+  - capnproto
   - cbor
   - clippy
   - cmake
