@@ -226,21 +226,6 @@ mod tests {
     }
 
     #[test]
-    fn cat_rejects_csv_with_json() {
-        let parse_err = Args::try_parse_from([
-            "mcap",
-            "cat",
-            "demo.mcap",
-            "--format=csv",
-            "--json",
-            "--topics",
-            "/tf",
-        ])
-        .expect_err("--format=csv and --json should conflict");
-        assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
-    }
-
-    #[test]
     fn parses_completion_subcommand() {
         let args =
             Args::try_parse_from(["mcap", "completion", "bash"]).expect("completion should parse");

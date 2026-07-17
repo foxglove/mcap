@@ -383,6 +383,24 @@ mod tests {
     }
 
     #[test]
+    fn format_machine_is_write_json_content_without_quotes() {
+        // The tabular (`cat --format=csv`) path uses this: same resolution as `write_json`
+        // (`auto` is always RFC3339, no cutoff), but unquoted for the CSV writer.
+        assert_eq!(
+            TimeRenderer::new(TimeFormat::Auto).format_machine(PRE_CUTOFF_NS),
+            "1970-01-01T00:00:01.000000000Z"
+        );
+        assert_eq!(
+            TimeRenderer::new(TimeFormat::Seconds).format_machine(DEMO_NS),
+            DEMO_SECONDS
+        );
+        assert_eq!(
+            TimeRenderer::new(TimeFormat::Nanoseconds).format_machine(DEMO_NS),
+            DEMO_NANOS
+        );
+    }
+
+    #[test]
     fn table_formatter_omits_trailing_whitespace() {
         let rows = vec![
             vec!["col1".to_string(), "col2".to_string()],

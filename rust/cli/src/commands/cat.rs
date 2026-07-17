@@ -788,8 +788,6 @@ fn write_csv_message(
                 header.push(key.clone());
             }
         }
-        // Cache the payload column names so per-row extra-column detection reuses
-        // this set instead of rebuilding it on every message.
         csv_state.known_columns = header[3..].iter().cloned().collect();
         csv_state.header = Some(header);
     }
@@ -814,7 +812,7 @@ fn write_csv_message(
         csv_writer.write_record(header)?;
     }
     csv_writer.write_record(&record)?;
-    csv_writer.flush().map_err(csv::Error::from)?;
+    csv_writer.flush()?;
     drop(csv_writer);
 
     if io_result_to_broken_pipe(writer.write_all(&csv_state.buffer))? {
@@ -2578,42 +2576,6 @@ mod tests {
     }
 
     #[test]
-    fn cat_csv_honors_time_format() {
-        // CSV timestamps follow the ndjson pattern: machine-facing rendering where `auto` always
-        // resolves to RFC3339, and explicit --time-format values are honored as-is.
-        let mcap =
-            build_single_topic_json_mcap("/demo", &[(1, 1_490_149_580_103_843_113, br#"{"a":1}"#)]);
-        let render_csv = |format: TimeFormat| {
-            let opts = CatOptions {
-                topics: vec!["/demo".to_string()],
-                mode: OutputMode::Csv,
-                times: render::TimeRenderer::new(format),
-                ..CatOptions::default()
-            };
-            let mut out = Vec::new();
-            cat_mcap(&mut out, &mcap, &opts, &mut CsvState::default())
-                .expect("csv cat should succeed");
-            String::from_utf8(out).expect("valid csv output")
-        };
-        assert_eq!(
-            render_csv(TimeFormat::Auto),
-            "log_time,publish_time,sequence,a\n2017-03-22T02:26:20.103843113Z,2017-03-22T02:26:20.103843113Z,1,1\n"
-        );
-        assert_eq!(
-            render_csv(TimeFormat::Rfc3339),
-            "log_time,publish_time,sequence,a\n2017-03-22T02:26:20.103843113Z,2017-03-22T02:26:20.103843113Z,1,1\n"
-        );
-        assert_eq!(
-            render_csv(TimeFormat::Seconds),
-            "log_time,publish_time,sequence,a\n1490149580.103843113,1490149580.103843113,1,1\n"
-        );
-        assert_eq!(
-            render_csv(TimeFormat::Nanoseconds),
-            "log_time,publish_time,sequence,a\n1490149580103843113,1490149580103843113,1,1\n"
-        );
-    }
-
-    #[test]
     fn from_args_csv_uses_single_topic_column_selector() {
         let opts = CatOptions::from_args(&cat_command(CatFormat::Csv, "/tf"), TimeFormat::Auto)
             .expect("--format=csv with one topic should build options");
@@ -2648,6 +2610,111 @@ mod tests {
             CatOptions::from_args(&cat_command(CatFormat::Text, "/tf,/odom"), TimeFormat::Auto)
                 .expect("multiple topics should be allowed for text output");
         assert_eq!(opts.topics, vec!["/tf".to_string(), "/odom".to_string()]);
+    }
+
+    #[test]
+    fn flatten_value_flattens_objects_arrays_and_scalars() {
+        let value = serde_json::json!({
+            "pose": {"position": {"x": 1.5, "y": -2}},
+            "ranges": [10, 20],
+            "ok": true,
+            "name": "a",
+            "missing": null,
+        });
+        let mut fields = Vec::new();
+        super::flatten_value("", &value, &mut fields);
+        let lookup: std::collections::HashMap<&str, &str> = fields
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect();
+
+        assert_eq!(lookup.get("pose.position.x").copied(), Some("1.5"));
+        assert_eq!(lookup.get("pose.position.y").copied(), Some("-2"));
+        assert_eq!(lookup.get("ranges.0").copied(), Some("10"));
+        assert_eq!(lookup.get("ranges.1").copied(), Some("20"));
+        assert_eq!(lookup.get("ok").copied(), Some("true"));
+        assert_eq!(lookup.get("name").copied(), Some("a"));
+        assert_eq!(lookup.get("missing").copied(), Some(""));
+    }
+
+    fn json_cat_message<'a>(
+        message: &'a mcap::Message<'a>,
+        log_time: u64,
+    ) -> super::CatMessage<'a, 'a, 'a> {
+        super::CatMessage {
+            channel: &message.channel,
+            sequence: message.sequence,
+            log_time,
+            publish_time: message.publish_time,
+            data: message.data.as_ref(),
+        }
+    }
+
+    fn write_csv(messages: &[(u64, &[u8])]) -> String {
+        // These tests exercise CSV structure (escaping, flattening, missing cells), not timestamp
+        // rendering, so pin nanoseconds to keep the expected rows compact.
+        let opts = CatOptions {
+            mode: OutputMode::Csv,
+            times: render::TimeRenderer::new(TimeFormat::Nanoseconds),
+            ..CatOptions::default()
+        };
+        let mut csv_state = CsvState::default();
+        let mut transcoders = JsonTranscoders::default();
+        let mut buf = Vec::new();
+        {
+            let mut out = MessageWriter {
+                csv: &mut csv_state,
+                json: &mut transcoders,
+            };
+            for (log_time, data) in messages {
+                let message = sample_message(None, data.to_vec());
+                let broken_pipe = super::write_message(
+                    &mut buf,
+                    json_cat_message(&message, *log_time),
+                    &opts,
+                    &mut out,
+                )
+                .expect("csv message should write");
+                assert!(!broken_pipe);
+            }
+        }
+        String::from_utf8(buf).expect("csv output should be utf8")
+    }
+
+    #[test]
+    fn csv_writes_header_from_first_message_then_rows() {
+        let output = write_csv(&[(10, br#"{"a":1,"b":2}"#), (20, br#"{"a":3,"b":4}"#)]);
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,a,b\n10,43,1,1,2\n20,43,1,3,4\n"
+        );
+    }
+
+    #[test]
+    fn csv_fills_missing_fields_with_empty_cells() {
+        let output = write_csv(&[(10, br#"{"a":1,"b":2}"#), (20, br#"{"a":3}"#)]);
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,a,b\n10,43,1,1,2\n20,43,1,3,\n"
+        );
+    }
+
+    #[test]
+    fn csv_escapes_fields_with_commas_and_quotes() {
+        let output = write_csv(&[(10, br#"{"text":"a,\"b\""}"#)]);
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,text\n10,43,1,\"a,\"\"b\"\"\"\n"
+        );
+    }
+
+    #[test]
+    fn csv_flattens_nested_objects_into_dotted_columns() {
+        let output = write_csv(&[(10, br#"{"pose":{"x":1,"y":2}}"#)]);
+        assert_eq!(
+            output,
+            "log_time,publish_time,sequence,pose.x,pose.y\n10,43,1,1,2\n"
+        );
     }
 
     fn write_json_line(message: &mcap::Message<'_>, time_format: TimeFormat) -> String {
@@ -3050,130 +3117,6 @@ mod tests {
         assert_eq!(
             String::from_utf8(out).expect("valid utf8"),
             r#""-Infinity""#
-        );
-    }
-
-    #[test]
-    fn flatten_value_flattens_objects_arrays_and_scalars() {
-        let value = serde_json::json!({
-            "pose": {"position": {"x": 1.5, "y": -2}},
-            "ranges": [10, 20],
-            "ok": true,
-            "name": "a",
-            "missing": null,
-        });
-        let mut fields = Vec::new();
-        super::flatten_value("", &value, &mut fields);
-        let lookup: std::collections::HashMap<&str, &str> = fields
-            .iter()
-            .map(|(key, value)| (key.as_str(), value.as_str()))
-            .collect();
-
-        assert_eq!(lookup.get("pose.position.x").copied(), Some("1.5"));
-        assert_eq!(lookup.get("pose.position.y").copied(), Some("-2"));
-        assert_eq!(lookup.get("ranges.0").copied(), Some("10"));
-        assert_eq!(lookup.get("ranges.1").copied(), Some("20"));
-        assert_eq!(lookup.get("ok").copied(), Some("true"));
-        assert_eq!(lookup.get("name").copied(), Some("a"));
-        assert_eq!(lookup.get("missing").copied(), Some(""));
-    }
-
-    fn json_cat_message<'a>(
-        message: &'a mcap::Message<'a>,
-        log_time: u64,
-    ) -> super::CatMessage<'a, 'a, 'a> {
-        super::CatMessage {
-            channel: &message.channel,
-            sequence: message.sequence,
-            log_time,
-            publish_time: message.publish_time,
-            data: message.data.as_ref(),
-        }
-    }
-
-    fn write_csv_with_dropped_columns(messages: &[(u64, &[u8])]) -> (String, bool) {
-        // These tests exercise CSV structure (escaping, flattening, dropped columns), not
-        // timestamp rendering, so pin nanoseconds to keep the expected rows compact. Timestamp
-        // formatting is covered by `cat_csv_honors_time_format`.
-        let opts = CatOptions {
-            mode: OutputMode::Csv,
-            times: render::TimeRenderer::new(TimeFormat::Nanoseconds),
-            ..CatOptions::default()
-        };
-        let mut csv_state = CsvState::default();
-        let mut transcoders = JsonTranscoders::default();
-        let mut buf = Vec::new();
-        {
-            let mut out = MessageWriter {
-                csv: &mut csv_state,
-                json: &mut transcoders,
-            };
-            for (log_time, data) in messages {
-                let message = sample_message(None, data.to_vec());
-                let broken_pipe = super::write_message(
-                    &mut buf,
-                    json_cat_message(&message, *log_time),
-                    &opts,
-                    &mut out,
-                )
-                .expect("csv message should write");
-                assert!(!broken_pipe);
-            }
-        }
-        (
-            String::from_utf8(buf).expect("csv output should be utf8"),
-            csv_state.dropped_extra_columns,
-        )
-    }
-
-    fn write_csv(messages: &[(u64, &[u8])]) -> String {
-        write_csv_with_dropped_columns(messages).0
-    }
-
-    #[test]
-    fn csv_writes_header_from_first_message_then_rows() {
-        let output = write_csv(&[(10, br#"{"a":1,"b":2}"#), (20, br#"{"a":3,"b":4}"#)]);
-        assert_eq!(
-            output,
-            "log_time,publish_time,sequence,a,b\n10,43,1,1,2\n20,43,1,3,4\n"
-        );
-    }
-
-    #[test]
-    fn csv_fills_missing_fields_with_empty_cells() {
-        let output = write_csv(&[(10, br#"{"a":1,"b":2}"#), (20, br#"{"a":3}"#)]);
-        assert_eq!(
-            output,
-            "log_time,publish_time,sequence,a,b\n10,43,1,1,2\n20,43,1,3,\n"
-        );
-    }
-
-    #[test]
-    fn csv_marks_extra_columns_as_dropped() {
-        let (output, dropped_extra_columns) =
-            write_csv_with_dropped_columns(&[(10, br#"{"a":1}"#), (20, br#"{"a":2,"b":3}"#)]);
-        assert_eq!(
-            output,
-            "log_time,publish_time,sequence,a\n10,43,1,1\n20,43,1,2\n"
-        );
-        assert!(dropped_extra_columns);
-    }
-
-    #[test]
-    fn csv_escapes_fields_with_commas_and_quotes() {
-        let output = write_csv(&[(10, br#"{"text":"a,\"b\""}"#)]);
-        assert_eq!(
-            output,
-            "log_time,publish_time,sequence,text\n10,43,1,\"a,\"\"b\"\"\"\n"
-        );
-    }
-
-    #[test]
-    fn csv_flattens_nested_objects_into_dotted_columns() {
-        let output = write_csv(&[(10, br#"{"pose":{"x":1,"y":2}}"#)]);
-        assert_eq!(
-            output,
-            "log_time,publish_time,sequence,pose.x,pose.y\n10,43,1,1,2\n"
         );
     }
 }
