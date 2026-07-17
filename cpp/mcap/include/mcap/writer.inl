@@ -543,7 +543,8 @@ void McapWriter::addChannel(Channel& channel) {
   ++statistics_.channelCount;
 }
 
-Status McapWriter::write(const Message& message) {
+Status McapWriter::write(const MessageHeader& header, const ByteSpan* payload,
+                         std::size_t payloadCount) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -551,10 +552,10 @@ Status McapWriter::write(const Message& message) {
   auto& channelMessageCounts = statistics_.channelMessageCounts;
 
   // Write out Channel if we have not yet done so
-  if (channelMessageCounts.find(message.channelId) == channelMessageCounts.end()) {
-    const size_t channelIndex = message.channelId - 1;
+  if (channelMessageCounts.find(header.channelId) == channelMessageCounts.end()) {
+    const size_t channelIndex = header.channelId - 1;
     if (channelIndex >= channels_.size()) {
-      const auto msg = internal::StrCat("invalid channel id ", message.channelId);
+      const auto msg = internal::StrCat("invalid channel id ", header.channelId);
       return Status{StatusCode::InvalidChannelId, msg};
     }
 
@@ -578,7 +579,7 @@ Status McapWriter::write(const Message& message) {
     uncompressedSize_ += write(output, channel);
 
     // Update channel statistics
-    channelMessageCounts.emplace(message.channelId, 0);
+    channelMessageCounts.emplace(header.channelId, 0);
   }
 
   auto* chunkWriter = getChunkWriter();
@@ -587,32 +588,32 @@ Status McapWriter::write(const Message& message) {
   const uint64_t messageOffset = uncompressedSize_;
 
   // Write the message
-  uncompressedSize_ += write(output, message);
+  uncompressedSize_ += write(output, header, payload, payloadCount);
 
   // Update message statistics
   if (!options_.noSummary) {
     if (statistics_.messageCount == 0) {
-      statistics_.messageStartTime = message.logTime;
-      statistics_.messageEndTime = message.logTime;
+      statistics_.messageStartTime = header.logTime;
+      statistics_.messageEndTime = header.logTime;
     } else {
-      statistics_.messageStartTime = std::min(statistics_.messageStartTime, message.logTime);
-      statistics_.messageEndTime = std::max(statistics_.messageEndTime, message.logTime);
+      statistics_.messageStartTime = std::min(statistics_.messageStartTime, header.logTime);
+      statistics_.messageEndTime = std::max(statistics_.messageEndTime, header.logTime);
     }
     ++statistics_.messageCount;
-    channelMessageCounts[message.channelId] += 1;
+    channelMessageCounts[header.channelId] += 1;
   }
 
   if (chunkWriter != nullptr) {
     if (!options_.noMessageIndex) {
       // Update the message index
-      auto& messageIndex = currentMessageIndex_[message.channelId];
-      messageIndex.channelId = message.channelId;
-      messageIndex.records.emplace_back(message.logTime, messageOffset);
+      auto& messageIndex = currentMessageIndex_[header.channelId];
+      messageIndex.channelId = header.channelId;
+      messageIndex.records.emplace_back(header.logTime, messageOffset);
     }
 
     // Update the chunk index start/end times
-    currentChunkStart_ = std::min(currentChunkStart_, message.logTime);
-    currentChunkEnd_ = std::max(currentChunkEnd_, message.logTime);
+    currentChunkStart_ = std::min(currentChunkStart_, header.logTime);
+    currentChunkEnd_ = std::max(currentChunkEnd_, header.logTime);
 
     // Check if the current chunk is ready to close
     if (uncompressedSize_ >= chunkSize_) {
@@ -622,6 +623,13 @@ Status McapWriter::write(const Message& message) {
   }
 
   return StatusCode::Success;
+}
+
+Status McapWriter::write(const Message& message) {
+  const MessageHeader header{message.channelId, message.sequence, message.logTime,
+                             message.publishTime};
+  const ByteSpan payload{message.data, message.dataSize};
+  return write(header, &payload, 1);
 }
 
 Status McapWriter::write(Attachment& attachment) {
@@ -926,35 +934,46 @@ uint64_t McapWriter::getRecordSize(const Message& message) {
 }
 
 uint64_t McapWriter::write(IWritable& output, const Message& message) {
-  const uint64_t recordSize = getRecordSize(message);
+  const MessageHeader header{message.channelId, message.sequence, message.logTime,
+                             message.publishTime};
+  const ByteSpan payload{message.data, message.dataSize};
+  return write(output, header, &payload, 1);
+}
+
+uint64_t McapWriter::write(IWritable& output, const MessageHeader& header, const ByteSpan* payload,
+                           std::size_t payloadCount) {
+  static const uint64_t emptyMessageRecordSize = getRecordSize(Message{});
+  const uint64_t recordSize =
+    emptyMessageRecordSize + internal::ByteSpanArraySize(payload, payloadCount);
 
   // Stage the fixed-size record header in one buffer so that the output
-  // receives two writes per message (header, payload). Each IWritable::write
-  // call updates the CRC when enabled and, for unchunked files, reaches the
-  // FileWriter/StreamWriter and its error check.
+  // receives one write for the header plus one write per payload span. Each
+  // IWritable::write call updates the CRC when enabled and, for unchunked
+  // files, reaches the FileWriter/StreamWriter and its error check.
   constexpr size_t HeaderSize = /* opcode */ 1 + /* record length */ 8 + /* channel id */ 2 +
                                 /* sequence */ 4 + /* log time */ 8 + /* publish time */ 8;
-  static_assert(sizeof(OpCode) + sizeof(recordSize) + sizeof(message.channelId) +
-                    sizeof(message.sequence) + sizeof(message.logTime) +
-                    sizeof(message.publishTime) ==
+  static_assert(sizeof(OpCode) + sizeof(recordSize) + sizeof(header.channelId) +
+                    sizeof(header.sequence) + sizeof(header.logTime) + sizeof(header.publishTime) ==
                   HeaderSize,
                 "Message header layout does not match HeaderSize");
-  std::array<std::byte, HeaderSize> header;
+  std::array<std::byte, HeaderSize> headerBytes;
   size_t offset = 0;
-  const auto put = [&header, &offset](const auto& value) {
-    std::memcpy(header.data() + offset, &value, sizeof(value));
+  const auto put = [&headerBytes, &offset](const auto& value) {
+    std::memcpy(headerBytes.data() + offset, &value, sizeof(value));
     offset += sizeof(value);
   };
   put(OpCode::Message);
   put(recordSize);
-  put(message.channelId);
-  put(message.sequence);
-  put(message.logTime);
-  put(message.publishTime);
+  put(header.channelId);
+  put(header.sequence);
+  put(header.logTime);
+  put(header.publishTime);
   assert(offset == HeaderSize);
 
-  output.write(header.data(), HeaderSize);
-  output.write(message.data, message.dataSize);
+  output.write(headerBytes.data(), HeaderSize);
+  for (std::size_t i = 0; i < payloadCount; ++i) {
+    output.write(payload[i].data, payload[i].size);
+  }
 
   return 9 + recordSize;
 }

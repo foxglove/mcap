@@ -983,6 +983,99 @@ TEST_CASE("Message index records", "[writer]") {
   REQUIRE(messageIndexChannelIds[1] == channel2.id);
 }
 
+TEST_CASE("McapWriter::write(MessageHeader, ByteSpan*, size_t)", "[reader][writer]") {
+  SECTION("Roundtrip") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+
+    opts.compression = mcap::Compression::None;
+
+    writer.open(buffer, opts);
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+
+    std::vector<std::byte> part1 = {std::byte(1), std::byte(2)};
+    std::vector<std::byte> part2 = {std::byte(3), std::byte(4), std::byte(5)};
+    const std::array<mcap::ByteSpan, 2> spans = {
+      mcap::ByteSpan{part1.data(), part1.size()},
+      mcap::ByteSpan{part2.data(), part2.size()},
+    };
+
+    mcap::MessageHeader header;
+    header.channelId = channel.id;
+    header.sequence = 0;
+    header.logTime = 2;
+    header.publishTime = 1;
+    requireOk(writer.write(header, spans.data(), spans.size()));
+
+    writer.close();
+
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+
+    size_t messageCount = 0;
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    const std::vector<std::byte> expected = {std::byte(1), std::byte(2), std::byte(3), std::byte(4),
+                                             std::byte(5)};
+    for (const auto& msgView : reader.readMessages(onProblem)) {
+      ++messageCount;
+      REQUIRE(msgView.message.sequence == 0);
+      REQUIRE(msgView.message.channelId == channel.id);
+      REQUIRE(msgView.message.logTime == 2);
+      REQUIRE(msgView.message.publishTime == 1);
+      REQUIRE(msgView.message.dataSize == expected.size());
+      REQUIRE(std::vector(msgView.message.data, msgView.message.data + msgView.message.dataSize) ==
+              expected);
+    }
+    REQUIRE(messageCount == 1);
+
+    reader.close();
+  }
+
+  SECTION("Matches a single contiguous write") {
+    std::vector<std::byte> part1 = {std::byte(1), std::byte(2)};
+    std::vector<std::byte> part2 = {std::byte(3), std::byte(4), std::byte(5)};
+    const std::array<mcap::ByteSpan, 2> spans = {
+      mcap::ByteSpan{part1.data(), part1.size()},
+      mcap::ByteSpan{part2.data(), part2.size()},
+    };
+
+    mcap::MessageHeader header;
+    header.channelId = 1;
+    header.sequence = 7;
+    header.logTime = 42;
+    header.publishTime = 43;
+
+    mcap::BufferWriter scattered;
+    mcap::McapWriter::write(scattered, header, spans.data(), spans.size());
+
+    std::vector<std::byte> contiguous;
+    contiguous.insert(contiguous.end(), part1.begin(), part1.end());
+    contiguous.insert(contiguous.end(), part2.begin(), part2.end());
+
+    mcap::Message msg;
+    msg.channelId = header.channelId;
+    msg.sequence = header.sequence;
+    msg.logTime = header.logTime;
+    msg.publishTime = header.publishTime;
+    msg.data = contiguous.data();
+    msg.dataSize = contiguous.size();
+
+    mcap::BufferWriter single;
+    mcap::McapWriter::write(single, msg);
+
+    REQUIRE(scattered.size() == single.size());
+    REQUIRE(std::vector(scattered.data(), scattered.data() + scattered.size()) ==
+            std::vector(single.data(), single.data() + single.size()));
+  }
+}
+
 TEST_CASE("explicit time range bounds", "[reader]") {
   Buffer buffer;
 

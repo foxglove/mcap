@@ -56,6 +56,14 @@ inline uint32_t KeyValueMapSize(const KeyValueMap& map) {
   return (uint32_t)(size);
 }
 
+inline uint64_t ByteSpanArraySize(const ByteSpan* payload, std::size_t payloadCount) {
+  uint64_t size = 0;
+  for (std::size_t i = 0; i < payloadCount; ++i) {
+    size += payload[i].size;
+  }
+  return size;
+}
+
 inline const std::string CompressionString(Compression compression) {
   switch (compression) {
     case Compression::None:

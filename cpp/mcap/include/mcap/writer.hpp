@@ -412,6 +412,21 @@ public:
   Status write(const Message& message);
 
   /**
+   * @brief Write a message to the output stream, gathering its payload from a
+   * list of buffers.
+   *
+   * The payload written is the concatenation of the spans in `payload`, in
+   * the given order.
+   *
+   * @param header Message header fields to add.
+   * @param payload Pointer to an array of spans making up the message
+   *   payload.
+   * @param payloadCount Number of spans in `payload`.
+   * @return A non-zero error code on failure.
+   */
+  Status write(const MessageHeader& header, const ByteSpan* payload, std::size_t payloadCount);
+
+  /**
    * @brief Write an attachment to the output stream.
    *
    * @param attachment Attachment to add. The `attachment.crc` will be
@@ -458,6 +473,8 @@ public:
   static uint64_t write(IWritable& output, const Channel& channel);
   static uint64_t getRecordSize(const Message& message);
   static uint64_t write(IWritable& output, const Message& message);
+  static uint64_t write(IWritable& output, const MessageHeader& header, const ByteSpan* payload,
+                        std::size_t payloadCount);
   static uint64_t write(IWritable& output, const Attachment& attachment);
   static uint64_t write(IWritable& output, const Metadata& metadata);
   static uint64_t write(IWritable& output, const Chunk& chunk);

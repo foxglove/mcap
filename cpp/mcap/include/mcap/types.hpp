@@ -178,6 +178,14 @@ using SchemaPtr = std::shared_ptr<Schema>;
 using ChannelPtr = std::shared_ptr<Channel>;
 
 /**
+ * @brief A non-owning pointer and size describing a region of memory.
+ */
+struct MCAP_PUBLIC ByteSpan {
+  const std::byte* data;
+  std::size_t size;
+};
+
+/**
  * @brief A single Message published to a Channel.
  */
 struct MCAP_PUBLIC Message {
@@ -207,6 +215,28 @@ struct MCAP_PUBLIC Message {
    * iterator is advanced.
    */
   const std::byte* data = nullptr;
+};
+
+/**
+ * @brief A single Message published to a Channel, excluding its payload.
+ */
+struct MCAP_PUBLIC MessageHeader {
+  ChannelId channelId;
+  /**
+   * @brief An optional sequence number. If non-zero, sequence numbers should be
+   * unique per channel and increasing over time.
+   */
+  uint32_t sequence;
+  /**
+   * @brief Nanosecond timestamp when this message was recorded or received for
+   * recording.
+   */
+  Timestamp logTime;
+  /**
+   * @brief Nanosecond timestamp when this message was initially published. If
+   * not available, this should be set to `logTime`.
+   */
+  Timestamp publishTime;
 };
 
 /**
