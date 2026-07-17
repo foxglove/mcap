@@ -20,9 +20,11 @@ class SchemaEncoding:
     SelfDescribing = ""  # used for self-describing content, such as arbitrary JSON.
     Protobuf = "protobuf"
     Flatbuffer = "flatbuffer"
+    Capnproto = "capnproto"
     ROS1 = "ros1msg"
     ROS2 = "ros2msg"
     ROS2IDL = "ros2idl"
+    OMGIDL = "omgidl"
     JSONSchema = "jsonschema"
 
 
@@ -33,5 +35,7 @@ class MessageEncoding:
     CDR = "cdr"
     Protobuf = "protobuf"
     Flatbuffer = "flatbuffer"
+    Capnproto = "capnproto"
     CBOR = "cbor"
+    MessagePack = "msgpack"
     JSON = "json"
