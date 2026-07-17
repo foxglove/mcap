@@ -101,11 +101,11 @@
 .heroAttribution a {
   color: inherit;
   font-weight: bold;
-  text-decoration: underline;
+  text-decoration: none;
 }
 
 .heroAttribution a:hover {
-  text-decoration: none;
+  text-decoration: underline;
 }
 
 .section {
