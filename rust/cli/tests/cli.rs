@@ -225,7 +225,7 @@ fn stdin_pipe_cat() {
 }
 
 #[test]
-fn cat_csv_stable_shape_exits_zero() {
+fn exit_code_0_on_cat_csv_stable_shape() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(
         &dir,
@@ -254,7 +254,7 @@ fn cat_csv_stable_shape_exits_zero() {
 }
 
 #[test]
-fn cat_csv_dropped_columns_exits_three() {
+fn exit_code_3_on_cat_csv_dropped_columns() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(
         &dir,

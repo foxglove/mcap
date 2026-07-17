@@ -718,18 +718,13 @@ fn write_message(
     }
 }
 
-/// Per-invocation CSV output state. The header is derived from the first message
-/// (a single topic almost always has a stable schema), so column memory is O(1)
-/// in the number of messages. Schema-derived columns would cover fixed protobuf,
-/// ROS1, and strict JSON-schema fields, but still cannot fully determine columns
-/// for schemaless JSON, permissive JSON schema, maps, or variable-length arrays.
-/// Later fields absent from the first row are therefore dropped and reported as a
-/// warning rather than requiring a full pre-scan of every message.
+/// Per-invocation CSV output state. The header is derived from the first message, so column memory
+/// is O(1) in the number of messages; fields present only in later messages are dropped and
+/// reported (see `dropped_extra_columns`) rather than requiring a full pre-scan.
 ///
-/// The header is derived from the first *emitted* message, and which message is
-/// first depends on read order (log-time order for indexed reads vs. file order
-/// for streaming/non-indexed reads). For variable-shape data the derived column
-/// set can therefore differ across input sources.
+/// Which message is "first" depends on read order (log-time order for indexed reads vs. file order
+/// for streaming/non-indexed reads), so for variable-shape data the derived column set can differ
+/// across input sources.
 #[derive(Debug, Default)]
 struct CsvState {
     header: Option<Vec<String>>,
