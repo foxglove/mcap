@@ -340,6 +340,22 @@ fn stdin_pipe_cat() {
 }
 
 #[test]
+fn stdin_pipe_cat_csv_errors_on_unknown_topic() {
+    // A stdin pipe has no summary, so channel existence is learned from Channel records during the
+    // scan; an unknown topic is still a hard error rather than a silently empty export.
+    let output = mcap_with_stdin(
+        &["cat", "--format=csv", "--topics", "/nope"],
+        &build_mcap(3),
+    );
+    assert_eq!(output.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("topic '/nope' not found"),
+        "stderr should report the unknown topic; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
 fn stdin_pipe_filter() {
     let dir = TempDir::new().unwrap();
     let out_path = dir.path().join("filtered.mcap");

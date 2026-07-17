@@ -169,14 +169,6 @@ fn cat_mcap(
     opts: &CatOptions,
     csv_state: &mut CsvState,
 ) -> Result<bool> {
-    // Record the file's channel topics (from the summary) so an absent CSV topic can be reported as
-    // an error rather than silently producing an empty file. Summaryless files skip this; there a
-    // topic with no messages is indistinguishable from an absent one without a full scan.
-    if matches!(opts.mode, OutputMode::Csv) {
-        if let Some(topics) = parse::summary_channel_topics(mcap)? {
-            csv_state.seen_topics.extend(topics);
-        }
-    }
     let mut json_transcoders = JsonTranscoders::default();
     let mut out = MessageWriter {
         csv: csv_state,
@@ -203,6 +195,16 @@ fn cat_indexed(
         Err(mcap::McapError::UnknownSchema(..)) => return Ok(None),
         Err(err) => return Err(err.into()),
     };
+    // Record channel topics (including zero-message channels) so an absent CSV topic can be
+    // reported as an error rather than a silently empty export.
+    if matches!(opts.mode, OutputMode::Csv) {
+        out.csv.seen_topics.extend(
+            summary
+                .channels
+                .values()
+                .map(|channel| channel.topic.clone()),
+        );
+    }
     if summary.chunk_indexes.is_empty() {
         return Ok(None);
     }
@@ -558,22 +560,40 @@ fn cat_linear(
     opts: &CatOptions,
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<bool> {
-    for message in mcap::MessageStream::new(mcap)? {
-        let message = message?;
-        if !opts.include_time(message.log_time) || !opts.include_topic(&message.channel.topic) {
-            continue;
-        }
-        let message = CatMessage {
-            channel: &message.channel,
-            sequence: message.sequence,
-            log_time: message.log_time,
-            publish_time: message.publish_time,
-            data: message.data.as_ref(),
-        };
-        if write_message(writer, message, opts, out)? {
-            return Ok(true);
+    // Scan records (not just messages) so channel definitions are observed even for topics with no
+    // messages; this feeds `seen_topics` for the CSV absent-vs-empty distinction in a single pass.
+    // The reader descends into chunks, emitting their inner records directly.
+    let mut reader = mcap::sans_io::LinearReader::new();
+    let mut remaining = mcap;
+    let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
+    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
+    let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+
+    while let Some(event) = reader.next_event() {
+        match event? {
+            mcap::sans_io::LinearReadEvent::ReadRequest(need) => {
+                let take = need.min(remaining.len());
+                reader.insert(take).copy_from_slice(&remaining[..take]);
+                reader.notify_read(take);
+                remaining = &remaining[take..];
+            }
+            mcap::sans_io::LinearReadEvent::Record { data, opcode } => {
+                let record = mcap::parse_record(opcode, data)?;
+                if handle_linear_record(
+                    writer,
+                    record,
+                    opts,
+                    &mut schemas,
+                    &mut channel_defs,
+                    &mut channels,
+                    out,
+                )? {
+                    return Ok(true);
+                }
+            }
         }
     }
+
     Ok(false)
 }
 
