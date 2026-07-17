@@ -190,6 +190,42 @@ mod tests {
     }
 
     #[test]
+    fn parses_cat_csv_with_topics() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "cat",
+            "demo.mcap",
+            "--format=csv",
+            "--topics",
+            "/tf",
+        ])
+        .expect("cat --format=csv --topics should parse");
+        assert_eq!(
+            args.command,
+            Command::Cat(CatCommand {
+                files: vec!["demo.mcap".into()],
+                topics: "/tf".to_string(),
+                start_secs: 0,
+                start_nsecs: 0,
+                end_secs: 0,
+                end_nsecs: 0,
+                format: CatFormat::Csv,
+                json: false,
+            })
+        );
+    }
+
+    #[test]
+    fn cat_topic_is_a_hidden_alias_for_topics() {
+        let args = Args::try_parse_from(["mcap", "cat", "demo.mcap", "--topic", "/tf"])
+            .expect("--topic should parse as an alias for --topics");
+        assert!(
+            matches!(args.command, Command::Cat(ref c) if c.topics == "/tf"),
+            "--topic should populate the topics field"
+        );
+    }
+
+    #[test]
     fn parses_completion_subcommand() {
         let args =
             Args::try_parse_from(["mcap", "completion", "bash"]).expect("completion should parse");

@@ -61,7 +61,19 @@ impl TimeRenderer {
     }
 
     pub fn format(&self, t: u64) -> String {
-        match self.resolved_kind(t) {
+        self.format_kind(t, self.resolved_kind(t))
+    }
+
+    /// Machine-facing timestamp string, matching [`Self::write_json`]'s content but without the
+    /// surrounding JSON quotes. Used by tabular machine output (`cat --format=csv`), where the CSV
+    /// writer supplies its own quoting. Like `write_json`, `auto` always resolves to RFC3339 (no
+    /// y2k cutoff, no latch) so the column has a single predictable shape.
+    pub fn format_machine(&self, t: u64) -> String {
+        self.format_kind(t, self.resolved_json_kind())
+    }
+
+    fn format_kind(&self, t: u64, kind: ResolvedTimeKind) -> String {
+        match kind {
             ResolvedTimeKind::Nanoseconds => t.to_string(),
             ResolvedTimeKind::Seconds => format_decimal_seconds(t),
             ResolvedTimeKind::Rfc3339 => format_rfc3339(t),
@@ -367,6 +379,24 @@ mod tests {
         assert_eq!(
             json_string(&TimeRenderer::new(TimeFormat::Rfc3339), PRE_CUTOFF_NS),
             "\"1970-01-01T00:00:01.000000000Z\""
+        );
+    }
+
+    #[test]
+    fn format_machine_is_write_json_content_without_quotes() {
+        // The tabular (`cat --format=csv`) path uses this: same resolution as `write_json`
+        // (`auto` is always RFC3339, no cutoff), but unquoted for the CSV writer.
+        assert_eq!(
+            TimeRenderer::new(TimeFormat::Auto).format_machine(PRE_CUTOFF_NS),
+            "1970-01-01T00:00:01.000000000Z"
+        );
+        assert_eq!(
+            TimeRenderer::new(TimeFormat::Seconds).format_machine(DEMO_NS),
+            DEMO_SECONDS
+        );
+        assert_eq!(
+            TimeRenderer::new(TimeFormat::Nanoseconds).format_machine(DEMO_NS),
+            DEMO_NANOS
         );
     }
 

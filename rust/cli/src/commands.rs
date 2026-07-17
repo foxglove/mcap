@@ -63,7 +63,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<CommandOutcome
         }
         .map(|()| CommandOutcome::Success),
 
-        Command::Cat(args) => cat::run(ctx, args).map(|()| CommandOutcome::Success),
+        Command::Cat(args) => cat::run(ctx, args),
         Command::Completion(args) => completion::run(args).map(|()| CommandOutcome::Success),
         Command::Compress(args) => compress::run(ctx, args).map(|()| CommandOutcome::Success),
         Command::Convert(args) => convert::run(ctx, args).map(|()| CommandOutcome::Success),

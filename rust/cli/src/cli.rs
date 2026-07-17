@@ -82,7 +82,8 @@ pub enum Command {
     /// Concatenate the messages in one or more MCAP files to stdout.
     ///
     /// By default prints one line per message (log time, topic, schema name, and a short byte
-    /// preview). Use `--format=ndjson` to print one JSON object per message instead.
+    /// preview). Use `--format=ndjson` to print one JSON object per message instead. Use
+    /// `--format=csv` to export a single topic (selected via `--topics`) as CSV.
     Cat(CatCommand),
     /// Generate shell completion scripts.
     ///
@@ -236,6 +237,8 @@ pub enum CatFormat {
     Text,
     /// One JSON object per message (supports ros1, protobuf, and json message encodings).
     Ndjson,
+    /// CSV rows for a single topic (supports ros1, protobuf, and json message encodings). Requires exactly one --topics value.
+    Csv,
 }
 
 #[derive(clap::Args, Debug, PartialEq, Eq)]
@@ -244,7 +247,15 @@ pub struct CatCommand {
     pub files: Vec<PathBuf>,
 
     /// Comma-separated list of topics to include (exact match). If empty (the default), all topics are included.
-    #[arg(long = "topics", default_value = "", hide_default_value = true)]
+    ///
+    /// `--format=csv` uses this to pick the single topic whose fields become the CSV columns, so it
+    /// requires exactly one topic. `--topic` is accepted as a singular alias.
+    #[arg(
+        long = "topics",
+        alias = "topic",
+        default_value = "",
+        hide_default_value = true
+    )]
     pub topics: String,
 
     /// Include messages with log time at or after this time (seconds)
