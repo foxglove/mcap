@@ -84,7 +84,7 @@ Schema `encoding` may only be omitted for self-describing message encodings such
 
 ### capnproto
 
-- `name`: The `displayName` of the root struct type (the path passed to `capnp compile` followed by the type's scoped name), e.g. `my_schema.capnp:Foo.Bar`. Must match exactly one struct node in `data`.
+- `name`: The `displayName` of the root struct node (the path passed to `capnp compile` followed by the type's scoped name), e.g. `my_schema.capnp:Foo.Bar`. Must match exactly one struct node in `data`.
 - `encoding`: `capnproto`
 - `data`: A binary [CodeGeneratorRequest](https://github.com/capnproto/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp) describing the parsed schema and all of its imports, as produced by `capnp compile -o/bin/cat`.
 
