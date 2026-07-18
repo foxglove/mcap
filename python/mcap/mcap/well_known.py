@@ -1,6 +1,6 @@
 """Enums listing the sets of well-known profiles, schema encodings and message encodings
 available in the
-`MCAP Specification <https://github.com/foxglove/mcap/blob/main/docs/specification/appendix.md>`_.
+`MCAP Format Registry <https://mcap.dev/spec/registry>`_.
 
 .. note:: You don't need to use these profiles or encodings to use MCAP! Custom profiles and
     encoding strings are allowed.
@@ -20,9 +20,11 @@ class SchemaEncoding:
     SelfDescribing = ""  # used for self-describing content, such as arbitrary JSON.
     Protobuf = "protobuf"
     Flatbuffer = "flatbuffer"
+    CapnProto = "capnproto"
     ROS1 = "ros1msg"
     ROS2 = "ros2msg"
     ROS2IDL = "ros2idl"
+    OMGIDL = "omgidl"
     JSONSchema = "jsonschema"
 
 
@@ -33,5 +35,7 @@ class MessageEncoding:
     CDR = "cdr"
     Protobuf = "protobuf"
     Flatbuffer = "flatbuffer"
+    CapnProto = "capnproto"
     CBOR = "cbor"
+    MessagePack = "msgpack"
     JSON = "json"
