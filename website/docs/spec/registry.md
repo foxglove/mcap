@@ -42,7 +42,7 @@ XCDR1 and XCDR2 are described in Section 7.4 "Data Representation" of [DDS-XType
 
 - `message_encoding`: [`capnproto`](https://capnproto.org/encoding.html)
 
-Each message is a single [Cap'n Proto](https://capnproto.org) message serialized using the recommended [stream framing](https://capnproto.org/encoding.html#serialization-over-a-stream): a segment table followed by the segment contents, unpacked (not packed).
+A single Cap'n Proto message using [stream framing](https://capnproto.org/encoding.html#serialization-over-a-stream): a segment table followed by segment contents, unpacked.
 
 ### cbor
 
@@ -84,9 +84,9 @@ Schema `encoding` may only be omitted for self-describing message encodings such
 
 ### capnproto
 
-- `name`: The `displayName` of the root type's node: the path passed to `capnp compile` followed by the type's scoped name, e.g. `my_schema.capnp:Foo.Bar`. Readers locate the root type by finding the struct node whose `displayName` exactly matches this value, which must identify a single node.
+- `name`: The `displayName` of the root struct type (the path passed to `capnp compile` followed by the type's scoped name), e.g. `my_schema.capnp:Foo.Bar`. Must match exactly one struct node in `data`.
 - `encoding`: `capnproto`
-- `data`: A binary [CodeGeneratorRequest](https://github.com/capnproto/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp) (defined in `capnp/schema.capnp`) describing the parsed schema and all of its imports, as produced by `capnp compile -o/bin/cat`. This is the same message `capnp compile` passes to code generator plugins.
+- `data`: A binary [CodeGeneratorRequest](https://github.com/capnproto/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp) describing the parsed schema and all of its imports, as produced by `capnp compile -o/bin/cat`.
 
 ### ros1msg
 
