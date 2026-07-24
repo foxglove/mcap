@@ -255,6 +255,10 @@ A metadata record contains arbitrary user data in key-value pairs.
 | 4 + N | name     | String                | Example: `my_company_name_hardware_info`.           |
 | 4 + N | metadata | `Map<string, string>` | Example keys: `part_id`, `serial`, `board_revision` |
 
+Multiple metadata records MAY share the same `name`.
+When resolving metadata by name, readers SHOULD merge key-value pairs from all metadata records with that `name` in file order, such that later records overwrite earlier values for the same key.
+Readers MAY additionally provide an interface that returns all metadata records without merging.
+
 ### Data End (op=0x0F)
 
 A Data End record indicates the end of the data section.
