@@ -42,7 +42,7 @@ XCDR1 and XCDR2 are described in Section 7.4 "Data Representation" of [DDS-XType
 
 - `message_encoding`: [`capnproto`](https://capnproto.org/encoding.html)
 
-A single Cap'n Proto message using [stream framing](https://capnproto.org/encoding.html#serialization-over-a-stream): a segment table followed by segment contents, unpacked.
+A single Cap'n Proto message using [stream framing](https://capnproto.org/encoding.html#serialization-over-a-stream): a segment table (count, sizes, and padding) followed by segment contents, unpacked.
 
 ### cbor
 
