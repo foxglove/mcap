@@ -45,6 +45,8 @@ words:
   - bfbs
   - bytearray
   - callerid
+  - capnp
+  - capnproto
   - cbor
   - clippy
   - cmake
@@ -84,6 +86,7 @@ words:
   - mcap
   - msgdef
   - msgpack
+  - myschema
   - nanos
   - nanosec
   - ndarray
