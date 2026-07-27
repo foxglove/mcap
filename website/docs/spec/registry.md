@@ -84,7 +84,7 @@ Schema `encoding` may only be omitted for self-describing message encodings such
 
 ### capnproto
 
-- `name`: The `displayName` of the struct in `data`. Must match exactly one non-group struct. While Cap'n Proto does not guarantee that `displayName` is unique or has a stable format, this is typically the file path followed by the type name, e.g. `myschema.capnp:Foo.Bar` (path prefix can be influenced by `capnp compile --src-prefix`).
+- `name`: The `displayName` of the root struct in `data`. Must match exactly one non-group struct. While Cap'n Proto does not guarantee that `displayName` is unique or has a stable format, this is typically the file path followed by the type name, e.g. `myschema.capnp:Foo.Bar` (path prefix can be influenced by `capnp compile --src-prefix`).
 - `encoding`: `capnproto`
 - `data`: A binary [CodeGeneratorRequest](https://github.com/capnproto/capnproto/blob/master/c%2B%2B/src/capnp/schema.capnp) describing the schema and its transitive dependencies ([stream framing](https://capnproto.org/encoding.html#serialization-over-a-stream), unpacked), as produced by `capnp compile -o - myschema.capnp`.
 
