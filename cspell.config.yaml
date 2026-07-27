@@ -74,6 +74,7 @@ words:
   - infima
   - inputfile
   - intrinsics
+  - IPC
   - isort
   - issubdtype
   - jsonschema
@@ -101,6 +102,7 @@ words:
   - protobuf
   - protoc
   - protos
+  - pyarrow
   - pyulog
   - Quickstart
   - robocar
@@ -118,6 +120,7 @@ words:
   - staticmethod
   - stoull
   - struct
+  - structs
   - swiftformat
   - swiftlint
   - tfmessage
