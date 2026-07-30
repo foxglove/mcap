@@ -198,7 +198,6 @@ def read_message(
     schema_name: str,
     msgdefs: Dict[str, MessageSpecification],
     data: bytes,
-    class_cache: Optional[Dict[int, type]] = None,
 ) -> DecodedMessage:
     """Deserialize a ROS2 message from bytes.
 
@@ -207,18 +206,20 @@ def read_message(
     :param msgdefs: A dictionary containing the message definitions for the top-level message and
         any nested messages.
     :param data: The message payload to deserialize.
-    :param class_cache: Optional mapping used to memoize the dynamically generated message classes,
-        keyed by the id of each message definition. Reusing a cache across calls (e.g. for every
-        message on a channel) avoids rebuilding an identical class per message and, critically, per
-        array element for arrays of nested messages. If omitted, a fresh cache scoped to this call
-        is used.
     :return: The deserialized message.
     """
+    return _read_message(schema_name, msgdefs, data, {})
+
+
+def _read_message(
+    schema_name: str,
+    msgdefs: Dict[str, MessageSpecification],
+    data: bytes,
+    class_cache: Dict[int, type],
+) -> DecodedMessage:
     msgdef = msgdefs.get(schema_name)
     if msgdef is None:
         raise ValueError(f'Message definition not found for "{schema_name}"')
-    if class_cache is None:
-        class_cache = {}
     reader = CdrReader(data)
     return _read_complex_type(msgdef, msgdefs, reader, class_cache)
 
@@ -251,7 +252,7 @@ def _make_read_message(
     # generated classes are built once per message type rather than once per
     # decoded instance.
     class_cache: Dict[int, type] = {}
-    return lambda data: read_message(schema_name, msgdefs, data, class_cache)
+    return lambda data: _read_message(schema_name, msgdefs, data, class_cache)
 
 
 def _make_encode_message(
@@ -260,9 +261,7 @@ def _make_encode_message(
     return lambda msg: encode_message(schema_name, msgdefs, msg)
 
 
-def _message_class(
-    msgdef: MessageSpecification, class_cache: Dict[int, type]
-) -> type:
+def _message_class(msgdef: MessageSpecification, class_cache: Dict[int, type]) -> type:
     """Return the dynamically generated class for a message definition, building it once.
 
     The class is fully determined by the message definition, so it is memoized in `class_cache`
@@ -270,6 +269,11 @@ def _message_class(
     for every decoded instance, including once per element for arrays of nested messages, which
     made memory usage scale with the number of decoded messages rather than the number of message
     types.
+
+    `class_cache` is the only shared mutable state in the decode path. In CPython, the atomic
+    `dict.setdefault` ensures concurrent callers return the first class cached, even if they race
+    to build separate candidates. Decoder thread safety is not guaranteed on Python implementations
+    where dictionary operations are not atomic.
     """
     cls = class_cache.get(id(msgdef))
     if cls is None:
@@ -287,7 +291,7 @@ def _message_class(
                 "_full_text": str(msgdef),
             },
         )
-        class_cache[id(msgdef)] = cls
+        cls = class_cache.setdefault(id(msgdef), cls)
     return cls
 
 

@@ -94,7 +94,7 @@ def test_decode_nested_array_reuses_message_class():
     """Regression test for decoder memory growth.
 
     The decoder must generate one class per message definition, not one per decoded instance.
-    Previously a message with an array of N nested submessages created N distinct classes, so
+    Previously a message with an array of N nested messages created N distinct classes, so
     memory scaled with the number of decoded messages instead of the number of message types.
     """
     nested_msgdef = (
@@ -108,11 +108,14 @@ def test_decode_nested_array_reuses_message_class():
     output = BytesIO()
     ros_writer = Ros2Writer(output=output)
     schema = ros_writer.register_msgdef("test_msgs/PointCloud", nested_msgdef)
-    for i in range(3):
+    offsets = [0, 1, 0]
+    for i, offset in enumerate(offsets):
         ros_writer.write_message(
             topic="/points",
             schema=schema,
-            message={"points": [{"x": float(j), "y": float(j + i)} for j in range(4)]},
+            message={
+                "points": [{"x": float(j), "y": float(j + offset)} for j in range(4)]
+            },
             log_time=i,
             publish_time=i,
             sequence=i,
@@ -124,9 +127,9 @@ def test_decode_nested_array_reuses_message_class():
     assert len(decoded) == 3
 
     # Values decode correctly.
-    for i, msg in enumerate(decoded):
+    for offset, msg in zip(offsets, decoded):
         assert [(p.x, p.y) for p in msg.points] == [
-            (float(j), float(j + i)) for j in range(4)
+            (float(j), float(j + offset)) for j in range(4)
         ]
 
     # The generated class is shared across every element of an array...
@@ -135,6 +138,9 @@ def test_decode_nested_array_reuses_message_class():
     # ...and reused across separately decoded messages on the same channel.
     assert type(decoded[1].points[0]) is type(first.points[0])
     assert type(decoded[2]) is type(first)
+    # Messages of the same generated type compare structurally.
+    assert decoded[0] != decoded[1]
+    assert decoded[0] == decoded[2]
 
 
 def test_write_metadata():
