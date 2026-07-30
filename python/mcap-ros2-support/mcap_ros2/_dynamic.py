@@ -248,9 +248,7 @@ def encode_message(
 def _make_read_message(
     schema_name: str, msgdefs: Dict[str, MessageSpecification]
 ) -> DecoderFunction:
-    # Share one class cache across every message decoded by this decoder so the
-    # generated classes are built once per message type rather than once per
-    # decoded instance.
+    # Reuse generated classes for this decoder's lifetime.
     class_cache: Dict[int, type] = {}
     return lambda data: _read_message(schema_name, msgdefs, data, class_cache)
 
@@ -262,19 +260,7 @@ def _make_encode_message(
 
 
 def _message_class(msgdef: MessageSpecification, class_cache: Dict[int, type]) -> type:
-    """Return the dynamically generated class for a message definition, building it once.
-
-    The class is fully determined by the message definition, so it is memoized in `class_cache`
-    keyed by the id of the definition. Without this, `_read_complex_type` built a brand-new class
-    for every decoded instance, including once per element for arrays of nested messages, which
-    made memory usage scale with the number of decoded messages rather than the number of message
-    types.
-
-    `class_cache` is the only shared mutable state in the decode path. In CPython, the atomic
-    `dict.setdefault` ensures concurrent callers return the first class cached, even if they race
-    to build separate candidates. Decoder thread safety is not guaranteed on Python implementations
-    where dictionary operations are not atomic.
-    """
+    """Return the cached class for a message definition, creating it if needed."""
     cls = class_cache.get(id(msgdef))
     if cls is None:
         cls = type(
@@ -291,6 +277,7 @@ def _message_class(msgdef: MessageSpecification, class_cache: Dict[int, type]) -
                 "_full_text": str(msgdef),
             },
         )
+        # On CPython, atomic setdefault preserves class identity if callers race.
         cls = class_cache.setdefault(id(msgdef), cls)
     return cls
 

@@ -91,12 +91,6 @@ def test_write_uint8_array_with_py_array():
 
 
 def test_decode_nested_array_reuses_message_class():
-    """Regression test for decoder memory growth.
-
-    The decoder must generate one class per message definition, not one per decoded instance.
-    Previously a message with an array of N nested messages created N distinct classes, so
-    memory scaled with the number of decoded messages instead of the number of message types.
-    """
     nested_msgdef = (
         "Point[] points\n"
         "================================================================================\n"
@@ -126,19 +120,17 @@ def test_decode_nested_array_reuses_message_class():
     decoded = [msg.decoded_message for msg in read_ros2_messages(output)]
     assert len(decoded) == 3
 
-    # Values decode correctly.
     for offset, msg in zip(offsets, decoded):
         assert [(p.x, p.y) for p in msg.points] == [
             (float(j), float(j + offset)) for j in range(4)
         ]
 
-    # The generated class is shared across every element of an array...
+    # Classes are reused within arrays and across messages on the same channel.
     first = decoded[0]
     assert all(type(p) is type(first.points[0]) for p in first.points)
-    # ...and reused across separately decoded messages on the same channel.
     assert type(decoded[1].points[0]) is type(first.points[0])
     assert type(decoded[2]) is type(first)
-    # Messages of the same generated type compare structurally.
+    # Shared classes enable structural equality.
     assert decoded[0] != decoded[1]
     assert decoded[0] == decoded[2]
 
