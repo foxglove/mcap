@@ -215,7 +215,7 @@ def _read_message(
     schema_name: str,
     msgdefs: Dict[str, MessageSpecification],
     data: bytes,
-    class_cache: Dict[int, type],
+    class_cache: Dict[str, type],
 ) -> DecodedMessage:
     msgdef = msgdefs.get(schema_name)
     if msgdef is None:
@@ -249,7 +249,7 @@ def _make_read_message(
     schema_name: str, msgdefs: Dict[str, MessageSpecification]
 ) -> DecoderFunction:
     # Reuse generated classes for this decoder's lifetime.
-    class_cache: Dict[int, type] = {}
+    class_cache: Dict[str, type] = {}
     return lambda data: _read_message(schema_name, msgdefs, data, class_cache)
 
 
@@ -259,9 +259,10 @@ def _make_encode_message(
     return lambda msg: encode_message(schema_name, msgdefs, msg)
 
 
-def _message_class(msgdef: MessageSpecification, class_cache: Dict[int, type]) -> type:
+def _message_class(msgdef: MessageSpecification, class_cache: Dict[str, type]) -> type:
     """Return the cached class for a message definition, creating it if needed."""
-    cls = class_cache.get(id(msgdef))
+    key = str(msgdef.base_type)
+    cls = class_cache.get(key)
     if cls is None:
         cls = type(
             msgdef.msg_name,
@@ -278,7 +279,7 @@ def _message_class(msgdef: MessageSpecification, class_cache: Dict[int, type]) -
             },
         )
         # On CPython, atomic setdefault preserves class identity if callers race.
-        cls = class_cache.setdefault(id(msgdef), cls)
+        cls = class_cache.setdefault(key, cls)
     return cls
 
 
@@ -286,7 +287,7 @@ def _read_complex_type(
     msgdef: MessageSpecification,
     msgdefs: Dict[str, MessageSpecification],
     reader: CdrReader,
-    class_cache: Dict[int, type],
+    class_cache: Dict[str, type],
 ) -> DecodedMessage:
     Msg = _message_class(msgdef, class_cache)
     msg = Msg()
