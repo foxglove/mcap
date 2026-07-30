@@ -195,7 +195,10 @@ def serialize_dynamic(schema_name: str, schema_text: str) -> Dict[str, EncoderFu
 
 
 def read_message(
-    schema_name: str, msgdefs: Dict[str, MessageSpecification], data: bytes
+    schema_name: str,
+    msgdefs: Dict[str, MessageSpecification],
+    data: bytes,
+    class_cache: Optional[Dict[int, type]] = None,
 ) -> DecodedMessage:
     """Deserialize a ROS2 message from bytes.
 
@@ -204,13 +207,20 @@ def read_message(
     :param msgdefs: A dictionary containing the message definitions for the top-level message and
         any nested messages.
     :param data: The message payload to deserialize.
+    :param class_cache: Optional mapping used to memoize the dynamically generated message classes,
+        keyed by the id of each message definition. Reusing a cache across calls (e.g. for every
+        message on a channel) avoids rebuilding an identical class per message and, critically, per
+        array element for arrays of nested messages. If omitted, a fresh cache scoped to this call
+        is used.
     :return: The deserialized message.
     """
     msgdef = msgdefs.get(schema_name)
     if msgdef is None:
         raise ValueError(f'Message definition not found for "{schema_name}"')
+    if class_cache is None:
+        class_cache = {}
     reader = CdrReader(data)
-    return _read_complex_type(msgdef, msgdefs, reader)
+    return _read_complex_type(msgdef, msgdefs, reader, class_cache)
 
 
 def encode_message(
@@ -237,7 +247,11 @@ def encode_message(
 def _make_read_message(
     schema_name: str, msgdefs: Dict[str, MessageSpecification]
 ) -> DecoderFunction:
-    return lambda data: read_message(schema_name, msgdefs, data)
+    # Share one class cache across every message decoded by this decoder so the
+    # generated classes are built once per message type rather than once per
+    # decoded instance.
+    class_cache: Dict[int, type] = {}
+    return lambda data: read_message(schema_name, msgdefs, data, class_cache)
 
 
 def _make_encode_message(
@@ -246,25 +260,44 @@ def _make_encode_message(
     return lambda msg: encode_message(schema_name, msgdefs, msg)
 
 
+def _message_class(
+    msgdef: MessageSpecification, class_cache: Dict[int, type]
+) -> type:
+    """Return the dynamically generated class for a message definition, building it once.
+
+    The class is fully determined by the message definition, so it is memoized in `class_cache`
+    keyed by the id of the definition. Without this, `_read_complex_type` built a brand-new class
+    for every decoded instance, including once per element for arrays of nested messages, which
+    made memory usage scale with the number of decoded messages rather than the number of message
+    types.
+    """
+    cls = class_cache.get(id(msgdef))
+    if cls is None:
+        cls = type(
+            msgdef.msg_name,
+            (SimpleNamespace,),
+            {
+                "__name__": msgdef.msg_name,
+                "__slots__": [field.name for field in msgdef.fields],
+                "__repr__": __repr__,
+                "__str__": __repr__,
+                "__eq__": __eq__,
+                "__ne__": __ne__,
+                "_type": str(msgdef.base_type),
+                "_full_text": str(msgdef),
+            },
+        )
+        class_cache[id(msgdef)] = cls
+    return cls
+
+
 def _read_complex_type(
     msgdef: MessageSpecification,
     msgdefs: Dict[str, MessageSpecification],
     reader: CdrReader,
+    class_cache: Dict[int, type],
 ) -> DecodedMessage:
-    Msg = type(
-        msgdef.msg_name,
-        (SimpleNamespace,),
-        {
-            "__name__": msgdef.msg_name,
-            "__slots__": [field.name for field in msgdef.fields],
-            "__repr__": __repr__,
-            "__str__": __repr__,
-            "__eq__": __eq__,
-            "__ne__": __ne__,
-            "_type": str(msgdef.base_type),
-            "_full_text": str(msgdef),
-        },
-    )
+    Msg = _message_class(msgdef, class_cache)
     msg = Msg()
 
     if len(msgdef.fields) == 0:
@@ -297,6 +330,7 @@ def _read_complex_type(
                         nested_definition,
                         msgdefs,
                         reader,
+                        class_cache,
                     )
                     for _ in range(array_length)
                 ]
@@ -306,6 +340,7 @@ def _read_complex_type(
                     nested_definition,
                     msgdefs,
                     reader,
+                    class_cache,
                 )
                 setattr(msg, field.name, value)
         else:
