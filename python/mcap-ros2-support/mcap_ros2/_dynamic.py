@@ -195,7 +195,9 @@ def serialize_dynamic(schema_name: str, schema_text: str) -> Dict[str, EncoderFu
 
 
 def read_message(
-    schema_name: str, msgdefs: Dict[str, MessageSpecification], data: bytes
+    schema_name: str,
+    msgdefs: Dict[str, MessageSpecification],
+    data: bytes,
 ) -> DecodedMessage:
     """Deserialize a ROS2 message from bytes.
 
@@ -206,11 +208,20 @@ def read_message(
     :param data: The message payload to deserialize.
     :return: The deserialized message.
     """
+    return _read_message(schema_name, msgdefs, data, {})
+
+
+def _read_message(
+    schema_name: str,
+    msgdefs: Dict[str, MessageSpecification],
+    data: bytes,
+    class_cache: Dict[str, type],
+) -> DecodedMessage:
     msgdef = msgdefs.get(schema_name)
     if msgdef is None:
         raise ValueError(f'Message definition not found for "{schema_name}"')
     reader = CdrReader(data)
-    return _read_complex_type(msgdef, msgdefs, reader)
+    return _read_complex_type(msgdef, msgdefs, reader, class_cache)
 
 
 def encode_message(
@@ -237,7 +248,9 @@ def encode_message(
 def _make_read_message(
     schema_name: str, msgdefs: Dict[str, MessageSpecification]
 ) -> DecoderFunction:
-    return lambda data: read_message(schema_name, msgdefs, data)
+    # Reuse generated classes for this decoder's lifetime.
+    class_cache: Dict[str, type] = {}
+    return lambda data: _read_message(schema_name, msgdefs, data, class_cache)
 
 
 def _make_encode_message(
@@ -246,25 +259,37 @@ def _make_encode_message(
     return lambda msg: encode_message(schema_name, msgdefs, msg)
 
 
+def _message_class(msgdef: MessageSpecification, class_cache: Dict[str, type]) -> type:
+    """Return the cached class for a message definition, creating it if needed."""
+    key = str(msgdef.base_type)
+    cls = class_cache.get(key)
+    if cls is None:
+        cls = type(
+            msgdef.msg_name,
+            (SimpleNamespace,),
+            {
+                "__name__": msgdef.msg_name,
+                "__slots__": [field.name for field in msgdef.fields],
+                "__repr__": __repr__,
+                "__str__": __repr__,
+                "__eq__": __eq__,
+                "__ne__": __ne__,
+                "_type": str(msgdef.base_type),
+                "_full_text": str(msgdef),
+            },
+        )
+        # On CPython, atomic setdefault preserves class identity if callers race.
+        cls = class_cache.setdefault(key, cls)
+    return cls
+
+
 def _read_complex_type(
     msgdef: MessageSpecification,
     msgdefs: Dict[str, MessageSpecification],
     reader: CdrReader,
+    class_cache: Dict[str, type],
 ) -> DecodedMessage:
-    Msg = type(
-        msgdef.msg_name,
-        (SimpleNamespace,),
-        {
-            "__name__": msgdef.msg_name,
-            "__slots__": [field.name for field in msgdef.fields],
-            "__repr__": __repr__,
-            "__str__": __repr__,
-            "__eq__": __eq__,
-            "__ne__": __ne__,
-            "_type": str(msgdef.base_type),
-            "_full_text": str(msgdef),
-        },
-    )
+    Msg = _message_class(msgdef, class_cache)
     msg = Msg()
 
     if len(msgdef.fields) == 0:
@@ -297,6 +322,7 @@ def _read_complex_type(
                         nested_definition,
                         msgdefs,
                         reader,
+                        class_cache,
                     )
                     for _ in range(array_length)
                 ]
@@ -306,6 +332,7 @@ def _read_complex_type(
                     nested_definition,
                     msgdefs,
                     reader,
+                    class_cache,
                 )
                 setattr(msg, field.name, value)
         else:

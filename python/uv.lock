@@ -409,7 +409,7 @@ requires-dist = [
 
 [[package]]
 name = "mcap-ros2-support"
-version = "0.5.7"
+version = "0.5.8"
 source = { editable = "mcap-ros2-support" }
 dependencies = [
     { name = "mcap" },
