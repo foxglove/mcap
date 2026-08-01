@@ -1076,6 +1076,115 @@ TEST_CASE("McapWriter::write(MessageHeader, ByteSpan*, size_t)", "[reader][write
   }
 }
 
+TEST_CASE("McapWriter::write(AttachmentHeader, ByteSpan*, size_t)", "[reader][writer]") {
+  SECTION("Roundtrip") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+
+    writer.open(buffer, opts);
+
+    std::vector<std::byte> part1 = {std::byte(1), std::byte(2)};
+    std::vector<std::byte> part2 = {std::byte(3), std::byte(4), std::byte(5)};
+    const std::array<mcap::ByteSpan, 2> spans = {
+      mcap::ByteSpan{part1.data(), part1.size()},
+      mcap::ByteSpan{part2.data(), part2.size()},
+    };
+
+    mcap::AttachmentHeader header;
+    header.logTime = 2;
+    header.createTime = 1;
+    header.name = "attachment";
+    header.mediaType = "application/octet-stream";
+    requireOk(writer.write(header, spans.data(), spans.size()));
+
+    writer.close();
+
+    mcap::RecordReader reader(buffer, sizeof(mcap::Magic), buffer.size() - sizeof(mcap::Magic));
+
+    std::optional<mcap::Attachment> parsed;
+    for (std::optional<mcap::Record> rec = reader.next(); rec != std::nullopt;
+         rec = reader.next()) {
+      requireOk(reader.status());
+      if (rec->opcode == mcap::OpCode::Attachment) {
+        mcap::Attachment parsedAttachment;
+        requireOk(mcap::McapReader::ParseAttachment(*rec, &parsedAttachment));
+        parsed = parsedAttachment;
+      }
+    }
+    requireOk(reader.status());
+
+    REQUIRE(parsed.has_value());
+    REQUIRE(parsed->logTime == 2);
+    REQUIRE(parsed->createTime == 1);
+    REQUIRE(parsed->name == "attachment");
+    REQUIRE(parsed->mediaType == "application/octet-stream");
+    REQUIRE(parsed->dataSize == 5);
+    const std::vector<std::byte> expected = {std::byte(1), std::byte(2), std::byte(3), std::byte(4),
+                                             std::byte(5)};
+    REQUIRE(std::vector(parsed->data, parsed->data + parsed->dataSize) == expected);
+
+    // Independently recompute the CRC the same way McapWriter does, since
+    // AttachmentHeader has no field to read the writer's computed CRC back from.
+    uint32_t crc = mcap::internal::CRC32_INIT;
+    crc = mcap::internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&header.logTime), 8);
+    crc =
+      mcap::internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&header.createTime), 8);
+    uint32_t sizePrefix = uint32_t(header.name.size());
+    crc = mcap::internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&sizePrefix), 4);
+    crc = mcap::internal::crc32Update(crc, reinterpret_cast<const std::byte*>(header.name.data()),
+                                      sizePrefix);
+    sizePrefix = uint32_t(header.mediaType.size());
+    crc = mcap::internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&sizePrefix), 4);
+    crc = mcap::internal::crc32Update(
+      crc, reinterpret_cast<const std::byte*>(header.mediaType.data()), sizePrefix);
+    const uint64_t dataSize = expected.size();
+    crc = mcap::internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&dataSize), 8);
+    crc = mcap::internal::crc32Update(crc, part1.data(), part1.size());
+    crc = mcap::internal::crc32Update(crc, part2.data(), part2.size());
+    REQUIRE(parsed->crc == mcap::internal::crc32Final(crc));
+  }
+
+  SECTION("Matches a single contiguous write") {
+    std::vector<std::byte> part1 = {std::byte(1), std::byte(2)};
+    std::vector<std::byte> part2 = {std::byte(3), std::byte(4), std::byte(5)};
+    const std::array<mcap::ByteSpan, 2> spans = {
+      mcap::ByteSpan{part1.data(), part1.size()},
+      mcap::ByteSpan{part2.data(), part2.size()},
+    };
+
+    mcap::AttachmentHeader header;
+    header.logTime = 2;
+    header.createTime = 1;
+    header.name = "attachment";
+    header.mediaType = "application/octet-stream";
+
+    mcap::BufferWriter scattered;
+    mcap::McapWriter::write(scattered, header, spans.data(), spans.size(), 0);
+
+    std::vector<std::byte> contiguous;
+    contiguous.insert(contiguous.end(), part1.begin(), part1.end());
+    contiguous.insert(contiguous.end(), part2.begin(), part2.end());
+
+    mcap::Attachment attachment;
+    attachment.logTime = header.logTime;
+    attachment.createTime = header.createTime;
+    attachment.name = header.name;
+    attachment.mediaType = header.mediaType;
+    attachment.data = contiguous.data();
+    attachment.dataSize = contiguous.size();
+    attachment.crc = 0;
+
+    mcap::BufferWriter single;
+    mcap::McapWriter::write(single, attachment);
+
+    REQUIRE(scattered.size() == single.size());
+    REQUIRE(std::vector(scattered.data(), scattered.data() + scattered.size()) ==
+            std::vector(single.data(), single.data() + single.size()));
+  }
+}
+
 TEST_CASE("explicit time range bounds", "[reader]") {
   Buffer buffer;
 

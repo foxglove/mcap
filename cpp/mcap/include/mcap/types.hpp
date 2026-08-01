@@ -295,6 +295,16 @@ struct MCAP_PUBLIC Attachment {
 };
 
 /**
+ * @brief An Attachment, excluding its payload and CRC.
+ */
+struct MCAP_PUBLIC AttachmentHeader {
+  Timestamp logTime;
+  Timestamp createTime;
+  std::string name;
+  std::string mediaType;
+};
+
+/**
  * @brief Attachment Index records are found in the Summary section, providing
  * summary information for a single Attachment.
  */
@@ -309,19 +319,23 @@ struct MCAP_PUBLIC AttachmentIndex {
 
   AttachmentIndex() = default;
   AttachmentIndex(const Attachment& attachment, ByteOffset fileOffset)
+      : AttachmentIndex(AttachmentHeader{attachment.logTime, attachment.createTime, attachment.name,
+                                         attachment.mediaType},
+                        attachment.dataSize, fileOffset) {}
+  AttachmentIndex(const AttachmentHeader& header, uint64_t _dataSize, ByteOffset fileOffset)
       : offset(fileOffset)
       , length(9 +
-               /* name */ 4 + attachment.name.size() +
+               /* name */ 4 + header.name.size() +
                /* log_time */ 8 +
                /* create_time */ 8 +
-               /* media_type */ 4 + attachment.mediaType.size() +
-               /* data */ 8 + attachment.dataSize +
+               /* media_type */ 4 + header.mediaType.size() +
+               /* data */ 8 + _dataSize +
                /* crc */ 4)
-      , logTime(attachment.logTime)
-      , createTime(attachment.createTime)
-      , dataSize(attachment.dataSize)
-      , name(attachment.name)
-      , mediaType(attachment.mediaType) {}
+      , logTime(header.logTime)
+      , createTime(header.createTime)
+      , dataSize(_dataSize)
+      , name(header.name)
+      , mediaType(header.mediaType) {}
 };
 
 /**
