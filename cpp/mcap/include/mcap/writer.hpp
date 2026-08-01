@@ -435,6 +435,25 @@ public:
   Status write(Attachment& attachment);
 
   /**
+   * @brief Write an attachment to the output stream, gathering its data from
+   * a list of buffers.
+   *
+   * `attachment.data` is ignored; the data written is the concatenation of
+   * the spans in `payload`, in the given order. `attachment.dataSize` is set
+   * to the total size of `payload`.
+   *
+   * @param attachment Attachment to add. Only the `logTime`, `createTime`,
+   *   `name`, and `mediaType` fields are used. The `attachment.dataSize` will
+   *   always be set. The `attachment.crc` will be calculated and set if
+   *   configuration options allow CRC calculation.
+   * @param payload Pointer to an array of spans making up the attachment
+   *   data.
+   * @param payloadCount Number of spans in `payload`.
+   * @return A non-zero error code on failure.
+   */
+  Status write(Attachment& attachment, const ByteSpan* payload, std::size_t payloadCount);
+
+  /**
    * @brief Write a metadata record to the output stream.
    *
    * @param metadata Named group of key/value string pairs to add.
@@ -475,6 +494,8 @@ public:
   static uint64_t write(IWritable& output, const Message& message, const ByteSpan* payload,
                         std::size_t payloadCount);
   static uint64_t write(IWritable& output, const Attachment& attachment);
+  static uint64_t write(IWritable& output, const Attachment& attachment, const ByteSpan* payload,
+                        std::size_t payloadCount);
   static uint64_t write(IWritable& output, const Metadata& metadata);
   static uint64_t write(IWritable& output, const Chunk& chunk);
   static uint64_t write(IWritable& output, const MessageIndex& index);
