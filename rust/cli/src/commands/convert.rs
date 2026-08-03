@@ -6,7 +6,7 @@ use std::io::Read;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
-use mcap::{Compression, WriteOptions};
+use mcap::WriteOptions;
 
 use crate::cli::{CompressionFormat, ConvertCommand};
 use crate::context::CommandContext;
@@ -82,11 +82,7 @@ fn build_write_options(
     chunked: bool,
     profile: &str,
 ) -> WriteOptions {
-    let compression = match compression {
-        CompressionFormat::Zstd => Some(Compression::Zstd),
-        CompressionFormat::Lz4 => Some(Compression::Lz4),
-        CompressionFormat::None => None,
-    };
+    let compression = compression.to_compression();
 
     WriteOptions::new()
         .profile(profile)

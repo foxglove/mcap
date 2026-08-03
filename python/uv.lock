@@ -293,7 +293,7 @@ wheels = [
 
 [[package]]
 name = "mcap"
-version = "1.3.1"
+version = "1.4.0"
 source = { editable = "mcap" }
 dependencies = [
     { name = "lz4" },
@@ -409,7 +409,7 @@ requires-dist = [
 
 [[package]]
 name = "mcap-ros2-support"
-version = "0.5.7"
+version = "0.5.8"
 source = { editable = "mcap-ros2-support" }
 dependencies = [
     { name = "mcap" },

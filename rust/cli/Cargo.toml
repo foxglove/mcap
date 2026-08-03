@@ -1,7 +1,7 @@
 [package]
 name = "mcap-cli"
 description = "MCAP CLI"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 license = "MIT"
 publish = false
@@ -19,6 +19,7 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 crc32fast = "1"
+csv = "1"
 log = "0.4"
 memmap2 = "0.9"
 mcap = { path = "../mcap" }

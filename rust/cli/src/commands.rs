@@ -63,7 +63,7 @@ pub fn dispatch(ctx: &CommandContext, command: Command) -> Result<CommandOutcome
         }
         .map(|()| CommandOutcome::Success),
 
-        Command::Cat(args) => cat::run(ctx, args).map(|()| CommandOutcome::Success),
+        Command::Cat(args) => cat::run(ctx, args),
         Command::Completion(args) => completion::run(args).map(|()| CommandOutcome::Success),
         Command::Compress(args) => compress::run(ctx, args).map(|()| CommandOutcome::Success),
         Command::Convert(args) => convert::run(ctx, args).map(|()| CommandOutcome::Success),
@@ -84,9 +84,10 @@ mod tests {
     use super::dispatch;
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Command,
-        CompressCommand, DoctorCommand, DuCommand, GetAttachmentCommand, GetMetadataCommand,
+        CommonRewriteArgs, DoctorCommand, DuCommand, GetAttachmentCommand, GetMetadataCommand,
         InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, RecoverCommand, SortCommand,
+        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MessageOrder, RecoverCommand,
+        SortCommand,
     };
     use crate::context::CommandContext;
 
@@ -248,37 +249,23 @@ mod tests {
     }
 
     #[test]
-    fn compress_rejects_invalid_compression() {
-        let err = dispatch(
-            &CommandContext::default(),
-            Command::Compress(CompressCommand {
-                file: None,
-                output: None,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                compression: "invalid".to_string(),
-            }),
-        )
-        .expect_err("compress should reject invalid compression");
-        assert!(err.to_string().contains("unrecognized compression format"));
-    }
-
-    #[test]
     fn sort_requires_existing_file() {
         let err = dispatch(
             &CommandContext::default(),
             Command::Sort(SortCommand {
-                file: PathBuf::from("does-not-exist.mcap"),
-                output_file: PathBuf::from("sorted.mcap"),
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                common: CommonRewriteArgs {
+                    file: Some(PathBuf::from("does-not-exist.mcap")),
+                    output: Some(PathBuf::from("sorted.mcap")),
+                    output_file: None,
+                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                    no_crc: false,
+                },
                 compression: crate::cli::CompressionFormat::Zstd,
-                no_crc: false,
                 no_chunks: false,
+                order: MessageOrder::LogTime,
             }),
         )
         .expect_err("sort should fail on missing input file");
-        assert!(
-            err.to_string().contains("couldn't open")
-                || err.to_string().contains("failed to canonicalize input")
-        );
+        assert!(err.to_string().contains("couldn't open"));
     }
 }

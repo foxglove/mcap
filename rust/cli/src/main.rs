@@ -4,6 +4,7 @@ mod context;
 mod logsetup;
 mod parse;
 mod render;
+mod rewrite;
 mod source;
 
 use std::process::ExitCode;
@@ -16,7 +17,12 @@ use context::CommandContext;
 fn run() -> Result<CommandOutcome> {
     let args = cli::Args::parse();
     logsetup::init_logger(args.verbose, args.color)?;
-    let ctx = CommandContext::new(args.verbose, args.color, args.allow_remote_scan);
+    let ctx = CommandContext::new(
+        args.verbose,
+        args.color,
+        args.allow_remote_scan,
+        args.time_format,
+    );
 
     commands::dispatch(&ctx, args.command)
 }
@@ -40,12 +46,12 @@ mod tests {
 
     use crate::cli::{
         AddAttachmentCommand, AddCommand, AddMetadataCommand, AddSubcommand, Args, CatCommand,
-        CoalesceChannels, Command, CompletionCommand, CompressCommand, CompressionFormat,
-        ConvertCommand, DecompressCommand, DoctorCommand, DuCommand, FilterCommand,
-        GetAttachmentCommand, GetCommand, GetMetadataCommand, GetSubcommand, InfoCommand,
-        ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand, ListCommand,
-        ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand, RecoverCommand,
-        SortCommand,
+        CatFormat, CoalesceChannels, Command, CommonRewriteArgs, CompletionCommand,
+        CompressCommand, CompressionFormat, ConvertCommand, DecompressCommand, DoctorCommand,
+        DuCommand, FilterCommand, GetAttachmentCommand, GetCommand, GetMetadataCommand,
+        GetSubcommand, InfoCommand, ListAttachmentsCommand, ListChannelsCommand, ListChunksCommand,
+        ListCommand, ListMetadataCommand, ListSchemasCommand, ListSubcommand, MergeCommand,
+        MessageOrder, RecoverCommand, SortCommand, TimeFormat,
     };
 
     #[test]
@@ -72,6 +78,7 @@ mod tests {
                 start_nsecs: 0,
                 end_secs: 0,
                 end_nsecs: 0,
+                format: CatFormat::Text,
                 json: false,
             })
         );
@@ -89,6 +96,7 @@ mod tests {
                 start_nsecs: 0,
                 end_secs: 0,
                 end_nsecs: 0,
+                format: CatFormat::Text,
                 json: false,
             })
         );
@@ -106,7 +114,7 @@ mod tests {
             "10",
             "--end-nsecs",
             "20000000000",
-            "--json",
+            "--format=ndjson",
         ])
         .expect("cat should parse");
         assert_eq!(
@@ -118,9 +126,40 @@ mod tests {
                 start_nsecs: 0,
                 end_secs: 0,
                 end_nsecs: 20_000_000_000,
+                format: CatFormat::Ndjson,
+                json: false,
+            })
+        );
+        assert!(matches!(args.command, Command::Cat(ref c) if c.json_output()));
+    }
+
+    #[test]
+    fn parses_cat_deprecated_json_alias() {
+        // `--json` is retained as a hidden deprecated alias for `--format=ndjson`.
+        let args = Args::try_parse_from(["mcap", "cat", "demo.mcap", "--json"])
+            .expect("deprecated --json should still parse");
+        assert_eq!(
+            args.command,
+            Command::Cat(CatCommand {
+                files: vec!["demo.mcap".into()],
+                topics: String::new(),
+                start_secs: 0,
+                start_nsecs: 0,
+                end_secs: 0,
+                end_nsecs: 0,
+                format: CatFormat::Text,
                 json: true,
             })
         );
+        assert!(matches!(args.command, Command::Cat(ref c) if c.json_output()));
+    }
+
+    #[test]
+    fn cat_rejects_format_with_json_alias() {
+        let parse_err =
+            Args::try_parse_from(["mcap", "cat", "demo.mcap", "--format=ndjson", "--json"])
+                .expect_err("--format and --json should conflict");
+        assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
     }
 
     #[test]
@@ -148,6 +187,42 @@ mod tests {
         ])
         .expect_err("end seconds and nanoseconds should conflict");
         assert_eq!(parse_err.kind(), clap::error::ErrorKind::ArgumentConflict);
+    }
+
+    #[test]
+    fn parses_cat_csv_with_topics() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "cat",
+            "demo.mcap",
+            "--format=csv",
+            "--topics",
+            "/tf",
+        ])
+        .expect("cat --format=csv --topics should parse");
+        assert_eq!(
+            args.command,
+            Command::Cat(CatCommand {
+                files: vec!["demo.mcap".into()],
+                topics: "/tf".to_string(),
+                start_secs: 0,
+                start_nsecs: 0,
+                end_secs: 0,
+                end_nsecs: 0,
+                format: CatFormat::Csv,
+                json: false,
+            })
+        );
+    }
+
+    #[test]
+    fn cat_topic_is_a_hidden_alias_for_topics() {
+        let args = Args::try_parse_from(["mcap", "cat", "demo.mcap", "--topic", "/tf"])
+            .expect("--topic should parse as an alias for --topics");
+        assert!(
+            matches!(args.command, Command::Cat(ref c) if c.topics == "/tf"),
+            "--topic should populate the topics field"
+        );
     }
 
     #[test]
@@ -190,6 +265,41 @@ mod tests {
         let args = Args::try_parse_from(["mcap", "info", "--allow-remote-scan", "demo.mcap"])
             .expect("allow remote scan should parse after subcommand");
         assert!(args.allow_remote_scan);
+    }
+
+    #[test]
+    fn parses_global_time_format_flag() {
+        let args =
+            Args::try_parse_from(["mcap", "--time-format", "nanoseconds", "info", "demo.mcap"])
+                .expect("time format should parse before subcommand");
+        assert_eq!(args.time_format, TimeFormat::Nanoseconds);
+
+        let args = Args::try_parse_from(["mcap", "cat", "--time-format=iso8601", "demo.mcap"])
+            .expect("time format should parse after subcommand");
+        assert_eq!(args.time_format, TimeFormat::Rfc3339);
+
+        let args = Args::try_parse_from(["mcap", "info", "demo.mcap"]).expect("default parse");
+        assert_eq!(args.time_format, TimeFormat::Auto);
+
+        for (value, expected) in [
+            ("auto", TimeFormat::Auto),
+            ("rfc3339", TimeFormat::Rfc3339),
+            ("iso8601", TimeFormat::Rfc3339),
+            ("seconds", TimeFormat::Seconds),
+            ("s", TimeFormat::Seconds),
+            ("sec", TimeFormat::Seconds),
+            ("secs", TimeFormat::Seconds),
+            ("nanoseconds", TimeFormat::Nanoseconds),
+            ("ns", TimeFormat::Nanoseconds),
+            ("nano", TimeFormat::Nanoseconds),
+            ("nanos", TimeFormat::Nanoseconds),
+            ("nsec", TimeFormat::Nanoseconds),
+            ("nsecs", TimeFormat::Nanoseconds),
+        ] {
+            let args = Args::try_parse_from(["mcap", "--time-format", value, "info", "demo.mcap"])
+                .unwrap_or_else(|_| panic!("time format {value} should parse"));
+            assert_eq!(args.time_format, expected);
+        }
     }
 
     #[test]
@@ -469,10 +579,15 @@ mod tests {
         assert_eq!(
             args.command,
             Command::Compress(CompressCommand {
-                file: Some("in.mcap".into()),
-                output: None,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
-                compression: "zstd".to_string(),
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: None,
+                    output_file: None,
+                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                    no_crc: false,
+                },
+                compression: CompressionFormat::Zstd,
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -489,17 +604,32 @@ mod tests {
             "1024",
             "--compression",
             "lz4",
+            "--no-crc",
+            "--order",
+            "log-time",
         ])
         .expect("compress with flags should parse");
         assert_eq!(
             args.command,
             Command::Compress(CompressCommand {
-                file: Some("in.mcap".into()),
-                output: Some("out.mcap".into()),
-                chunk_size: 1024,
-                compression: "lz4".to_string(),
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: Some("out.mcap".into()),
+                    output_file: None,
+                    chunk_size: 1024,
+                    no_crc: true,
+                },
+                compression: CompressionFormat::Lz4,
+                order: MessageOrder::LogTime,
             })
         );
+    }
+
+    #[test]
+    fn rejects_compress_invalid_compression() {
+        let err = Args::try_parse_from(["mcap", "compress", "in.mcap", "--compression", "invalid"])
+            .expect_err("invalid compression should be rejected at parse time");
+        assert_eq!(err.kind(), clap::error::ErrorKind::InvalidValue);
     }
 
     #[test]
@@ -509,9 +639,14 @@ mod tests {
         assert_eq!(
             args.command,
             Command::Decompress(DecompressCommand {
-                file: Some("in.mcap".into()),
-                output: None,
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: None,
+                    output_file: None,
+                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                    no_crc: false,
+                },
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -526,14 +661,22 @@ mod tests {
             "out.mcap",
             "--chunk-size",
             "2048",
+            "--no-crc",
+            "--order",
+            "log-time",
         ])
         .expect("decompress with flags should parse");
         assert_eq!(
             args.command,
             Command::Decompress(DecompressCommand {
-                file: Some("in.mcap".into()),
-                output: Some("out.mcap".into()),
-                chunk_size: 2048,
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: Some("out.mcap".into()),
+                    output_file: None,
+                    chunk_size: 2048,
+                    no_crc: true,
+                },
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -556,17 +699,24 @@ mod tests {
             "200",
             "--include-metadata",
             "--include-attachments",
-            "--output-compression",
+            "--compression",
             "lz4",
             "--chunk-size",
             "2048",
+            "--no-crc",
+            "--no-chunks",
         ])
         .expect("filter should parse");
         assert_eq!(
             args.command,
             Command::Filter(FilterCommand {
-                file: Some("in.mcap".into()),
-                output: Some("out.mcap".into()),
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: Some("out.mcap".into()),
+                    output_file: None,
+                    chunk_size: 2048,
+                    no_crc: true,
+                },
                 include_topic_regex: vec!["camera.*".to_string()],
                 exclude_topic_regex: vec![],
                 last_per_channel_topic_regex: vec!["camera_.*".to_string()],
@@ -576,11 +726,83 @@ mod tests {
                 end: Some("200".to_string()),
                 end_secs: 0,
                 end_nsecs: 0,
+                exclude_metadata: false,
+                exclude_attachments: false,
                 include_metadata: true,
                 include_attachments: true,
-                output_compression: "lz4".to_string(),
-                chunk_size: 2048,
+                compression: Some(CompressionFormat::Lz4),
+                output_compression: None,
+                no_chunks: true,
+                order: MessageOrder::Preserve,
             })
+        );
+    }
+
+    #[test]
+    fn parses_filter_deprecated_output_compression_alias() {
+        let args =
+            Args::try_parse_from(["mcap", "filter", "in.mcap", "--output-compression", "none"])
+                .expect("filter should parse");
+        match args.command {
+            Command::Filter(filter) => {
+                // The deprecated alias is captured separately and leaves --compression unset.
+                assert_eq!(filter.compression, None);
+                assert_eq!(filter.output_compression, Some(CompressionFormat::None));
+            }
+            other => panic!("expected filter command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn parses_filter_exclude_metadata_and_attachments() {
+        let args = Args::try_parse_from([
+            "mcap",
+            "filter",
+            "in.mcap",
+            "--exclude-metadata",
+            "--exclude-attachments",
+        ])
+        .expect("filter should parse");
+        match args.command {
+            Command::Filter(filter) => {
+                assert!(filter.exclude_metadata);
+                assert!(filter.exclude_attachments);
+                // Deprecated include flags default off and are no-ops.
+                assert!(!filter.include_metadata);
+                assert!(!filter.include_attachments);
+            }
+            other => panic!("expected filter command, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn filter_order_defaults_to_preserve_and_parses_log_time() {
+        // Each rewrite command owns its `--order` (so its default shows in --help): filter defaults
+        // to preserve; sort defaults to log_time. The flag name and values are identical across
+        // commands.
+        let default = Args::try_parse_from(["mcap", "filter", "in.mcap"])
+            .expect("filter should parse without --order");
+        match default.command {
+            Command::Filter(filter) => assert_eq!(filter.order, MessageOrder::Preserve),
+            other => panic!("expected filter command, got {other:?}"),
+        }
+
+        for (value, expected) in [
+            ("log_time", MessageOrder::LogTime),
+            ("log-time", MessageOrder::LogTime),
+            ("topic", MessageOrder::Topic),
+        ] {
+            let args = Args::try_parse_from(["mcap", "filter", "in.mcap", "--order", value])
+                .unwrap_or_else(|_| panic!("filter should parse --order {value}"));
+            match args.command {
+                Command::Filter(filter) => assert_eq!(filter.order, expected),
+                other => panic!("expected filter command, got {other:?}"),
+            }
+        }
+
+        assert!(
+            Args::try_parse_from(["mcap", "filter", "in.mcap", "--order", "bogus"]).is_err(),
+            "an unknown --order value should be rejected"
         );
     }
 
@@ -606,12 +828,40 @@ mod tests {
         assert_eq!(
             args.command,
             Command::Sort(SortCommand {
-                file: "in.mcap".into(),
-                output_file: "out.mcap".into(),
-                chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: Some("out.mcap".into()),
+                    output_file: None,
+                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                    no_crc: false,
+                },
                 compression: CompressionFormat::Zstd,
-                no_crc: false,
                 no_chunks: false,
+                // `sort` defaults --order to log_time; the copy commands default to preserve.
+                order: MessageOrder::LogTime,
+            })
+        );
+    }
+
+    #[test]
+    fn parses_sort_output_file_deprecated_alias() {
+        // `--output-file` is retained as a hidden deprecated alias for `--output` on every rewrite
+        // command; it parses into the separate field so the handler can warn.
+        let args = Args::try_parse_from(["mcap", "sort", "in.mcap", "--output-file", "out.mcap"])
+            .expect("deprecated --output-file should still parse");
+        assert_eq!(
+            args.command,
+            Command::Sort(SortCommand {
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: None,
+                    output_file: Some("out.mcap".into()),
+                    chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
+                    no_crc: false,
+                },
+                compression: CompressionFormat::Zstd,
+                no_chunks: false,
+                order: MessageOrder::LogTime,
             })
         );
     }
@@ -655,17 +905,25 @@ mod tests {
             "1024",
             "--no-crc",
             "--no-chunks",
+            "--order",
+            "preserve",
         ])
         .expect("sort with flags should parse");
         assert_eq!(
             args.command,
             Command::Sort(SortCommand {
-                file: "in.mcap".into(),
-                output_file: "out.mcap".into(),
-                chunk_size: 1024,
+                common: CommonRewriteArgs {
+                    file: Some("in.mcap".into()),
+                    output: Some("out.mcap".into()),
+                    output_file: None,
+                    chunk_size: 1024,
+                    no_crc: true,
+                },
                 compression: CompressionFormat::None,
-                no_crc: true,
                 no_chunks: true,
+                // `--order` is a real flag on `sort`, so it can be overridden rather than being
+                // locked to its log_time default.
+                order: MessageOrder::Preserve,
             })
         );
     }
@@ -678,6 +936,7 @@ mod tests {
             args.command,
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
+                output: None,
                 output_file: None,
                 compression: CompressionFormat::Zstd,
                 chunk_size: mcap::WriteOptions::DEFAULT_CHUNK_SIZE,
@@ -713,7 +972,9 @@ mod tests {
             args.command,
             Command::Merge(MergeCommand {
                 files: vec!["a.mcap".into(), "b.mcap".into()],
-                output_file: Some("out.mcap".into()),
+                // `-o` is the canonical `--output`; `--output-file` is the deprecated alias.
+                output: Some("out.mcap".into()),
+                output_file: None,
                 compression: CompressionFormat::None,
                 chunk_size: 2048,
                 no_crc: true,
@@ -722,6 +983,19 @@ mod tests {
                 coalesce_channels: CoalesceChannels::Force,
             })
         );
+    }
+
+    #[test]
+    fn parses_merge_deprecated_output_file_alias() {
+        // The deprecated `--output-file` parses into its own field; the handler resolves it and
+        // warns.
+        let args = Args::try_parse_from(["mcap", "merge", "a.mcap", "--output-file", "out.mcap"])
+            .expect("merge with --output-file should parse");
+        let Command::Merge(merge) = args.command else {
+            panic!("expected a merge command");
+        };
+        assert_eq!(merge.output, None);
+        assert_eq!(merge.output_file, Some("out.mcap".into()));
     }
 
     #[test]
@@ -736,7 +1010,15 @@ mod tests {
     }
 
     #[test]
-    fn sort_requires_output_file() {
-        Args::try_parse_from(["mcap", "sort", "in.mcap"]).expect_err("sort requires --output-file");
+    fn parses_sort_without_output_streams_to_stdout() {
+        // `sort` now shares the rewrite args, so (like filter/compress/decompress) omitting the
+        // output is allowed and writes to stdout rather than being a required flag.
+        let args = Args::try_parse_from(["mcap", "sort", "in.mcap"]).expect("sort should parse");
+        let Command::Sort(sort) = args.command else {
+            panic!("expected a sort command");
+        };
+        assert_eq!(sort.common.file, Some("in.mcap".into()));
+        assert_eq!(sort.common.output, None);
+        assert_eq!(sort.common.output_file, None);
     }
 }

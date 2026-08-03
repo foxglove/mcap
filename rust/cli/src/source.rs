@@ -1,4 +1,4 @@
-use std::io::{IsTerminal as _, Read as _, SeekFrom};
+use std::io::{IsTerminal as _, SeekFrom};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -304,12 +304,32 @@ pub fn load_input(file: Option<&Path>, options: SourceOptions) -> Result<InputDa
         bail!("{PLEASE_SUPPLY_FILE}");
     }
 
-    let mut buf = Vec::new();
-    stdin
-        .lock()
-        .read_to_end(&mut buf)
+    read_stdin_to_mapped_input(&mut stdin.lock())
+}
+
+/// Spool a non-seekable stdin stream to a temporary file and memory-map it instead of
+/// buffering the whole input in a `Vec`, so piping an arbitrarily large MCAP keeps
+/// process memory bounded (the OS pages a disk-backed mapping on demand).
+///
+/// The temp file lives in `$TMPDIR` (else `/tmp`); if that is a tmpfs — common on modern
+/// Linux — the spool stays in RAM and the paging benefit is lost, so point `$TMPDIR` at
+/// real storage for very large inputs. Mirrors the remote `materialize_input` path.
+fn read_stdin_to_mapped_input(reader: &mut impl std::io::Read) -> Result<InputData> {
+    let mut temp_file = tempfile::Builder::new()
+        .prefix("mcap-cli-stdin-input-")
+        .tempfile()
+        .context("failed to create temporary file for stdin input")?;
+    let bytes_copied = std::io::copy(reader, temp_file.as_file_mut())
         .context("failed to read input from stdin")?;
-    Ok(InputData::Buffered(buf))
+    std::io::Write::flush(temp_file.as_file_mut())
+        .context("failed to flush temporary stdin input file")?;
+    if bytes_copied == 0 {
+        // memmap2 refuses to map a zero-length file, so fall back to an empty buffer.
+        // Callers then get the usual empty-input MCAP parse error.
+        return Ok(InputData::Buffered(Vec::new()));
+    }
+    let mmap = map_file(temp_file.path())?;
+    Ok(InputData::TempMapped { temp_file, mmap })
 }
 
 pub(crate) fn open_streaming_input(
@@ -1303,6 +1323,29 @@ mod tests {
 
         super::ensure_distinct_local_input_output(&input, &output)
             .expect("missing input should be left to command open errors");
+    }
+
+    #[test]
+    fn stdin_input_is_spooled_to_temp_file_and_mapped() {
+        let (buffer, _) = summary_mcap_with_channel();
+        let mut reader = std::io::Cursor::new(buffer.clone());
+        let input = super::read_stdin_to_mapped_input(&mut reader).expect("stdin spool");
+        assert!(
+            matches!(input, super::InputData::TempMapped { .. }),
+            "non-empty stdin should be memory-mapped from a temp file, not buffered in RAM"
+        );
+        assert_eq!(input.as_slice(), buffer.as_slice());
+    }
+
+    #[test]
+    fn empty_stdin_input_falls_back_to_empty_buffer() {
+        let mut reader = std::io::Cursor::new(Vec::new());
+        let input = super::read_stdin_to_mapped_input(&mut reader).expect("empty stdin spool");
+        assert!(
+            matches!(input, super::InputData::Buffered(ref buf) if buf.is_empty()),
+            "empty stdin cannot be mmap'd and should fall back to an empty buffer"
+        );
+        assert!(input.as_slice().is_empty());
     }
 
     fn serve_http(body: &'static [u8], supports_ranges: bool) -> String {

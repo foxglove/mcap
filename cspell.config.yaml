@@ -45,6 +45,8 @@ words:
   - bfbs
   - bytearray
   - callerid
+  - capnp
+  - capnproto
   - cbor
   - clippy
   - cmake
@@ -84,9 +86,11 @@ words:
   - mcap
   - msgdef
   - msgpack
+  - myschema
   - nanos
   - nanosec
   - ndarray
+  - ndjson
   - noenv
   - Norlab
   - nsec
@@ -192,6 +196,9 @@ overrides:
       - addopts
       - xfail
       - pyyaml
+      - mmap
+      - seekable
+      - tmpfs
 
   - filename: "python/**/*.rst"
     words:

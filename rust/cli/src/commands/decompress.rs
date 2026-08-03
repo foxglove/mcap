@@ -1,16 +1,17 @@
 use anyhow::Result;
 
 use crate::cli::DecompressCommand;
-use crate::commands::filter::{self, TranscodeCommandOptions};
 use crate::context::CommandContext;
+use crate::rewrite::{self, RewriteOptions};
 
 pub fn run(ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
-    let options = TranscodeCommandOptions::new(args.file, args.output, args.chunk_size)
-        .compression("none")
-        .include_metadata(true)
-        .include_attachments(true)
-        .use_chunks(true);
-    filter::run_transcode(
+    args.common.warn_deprecations();
+    // `filter`-style rewrite with a preset: rechunk uncompressed, keeping metadata and
+    // attachments. Paths, chunk size, and `--no-crc` come from the shared args.
+    let options = RewriteOptions::from(&args.common)
+        .compression(None)
+        .order(args.order);
+    rewrite::run(
         options,
         crate::source::SourceOptions::new(ctx.allow_remote_scan()),
     )

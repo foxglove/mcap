@@ -90,6 +90,51 @@ def test_write_uint8_array_with_py_array():
         assert msg.message.sequence == i
 
 
+def test_decode_nested_array_reuses_message_class():
+    nested_msgdef = (
+        "Point[] points\n"
+        "================================================================================\n"
+        "MSG: test_msgs/Point\n"
+        "float64 x\n"
+        "float64 y"
+    )
+
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    schema = ros_writer.register_msgdef("test_msgs/PointCloud", nested_msgdef)
+    offsets = [0, 1, 0]
+    for i, offset in enumerate(offsets):
+        ros_writer.write_message(
+            topic="/points",
+            schema=schema,
+            message={
+                "points": [{"x": float(j), "y": float(j + offset)} for j in range(4)]
+            },
+            log_time=i,
+            publish_time=i,
+            sequence=i,
+        )
+    ros_writer.finish()
+
+    output.seek(0)
+    decoded = [msg.decoded_message for msg in read_ros2_messages(output)]
+    assert len(decoded) == 3
+
+    for offset, msg in zip(offsets, decoded):
+        assert [(p.x, p.y) for p in msg.points] == [
+            (float(j), float(j + offset)) for j in range(4)
+        ]
+
+    # Classes are reused within arrays and across messages on the same channel.
+    first = decoded[0]
+    assert all(type(p) is type(first.points[0]) for p in first.points)
+    assert type(decoded[1].points[0]) is type(first.points[0])
+    assert type(decoded[2]) is type(first)
+    # Shared classes enable structural equality.
+    assert decoded[0] != decoded[1]
+    assert decoded[0] == decoded[2]
+
+
 def test_write_metadata():
     output = BytesIO()
     ros_writer = Ros2Writer(output=output)
