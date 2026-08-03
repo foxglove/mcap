@@ -51,7 +51,7 @@ async function readStream(
           processRecord(record);
         }
       } catch (error) {
-        reject(error);
+        reject(error as Error);
         stream.close();
       }
     });
