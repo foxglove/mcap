@@ -7,8 +7,6 @@ const darkCodeTheme = require("prism-react-renderer/themes/dracula");
 const lightCodeTheme = require("prism-react-renderer/themes/github");
 const webpack = require("webpack");
 
-const modifySvgoConfigInPlace = require("./modifySvgoConfigInPlace");
-
 /** @type {import('@docusaurus/types').Config} */
 const config = {
   title: "MCAP",
@@ -17,7 +15,11 @@ const config = {
   url: "https://mcap.dev",
   baseUrl: "/",
   onBrokenLinks: "throw",
-  onBrokenMarkdownLinks: "throw",
+  markdown: {
+    hooks: {
+      onBrokenMarkdownLinks: "throw",
+    },
+  },
 
   // disable index.html files because Cloudflare Pages adds a trailing slash
   // https://docusaurus.io/docs/api/docusaurus-config#trailingSlash
@@ -34,7 +36,6 @@ const config = {
     (_context, _options) => ({
       name: "MCAP website custom webpack config",
       configureWebpack(config, _isServer, _utils, _content) {
-        modifySvgoConfigInPlace(config);
         return {
           mergeStrategy: {
             "resolve.extensions": "replace",
@@ -81,6 +82,34 @@ const config = {
         theme: {
           customCss: require.resolve("./src/css/custom.css"),
         },
+        svgr: {
+          svgrConfig: {
+            svgoConfig: {
+              plugins: [
+                {
+                  name: "preset-default",
+                  params: {
+                    overrides: {
+                      /**
+                       * Modify the svgo configuration to prevent it from minifying IDs in SVGs.
+                       * This is necessary because it doesn't account for the global ID namespace, and causes
+                       * ID collisions between the SVGs loaded into the same page.
+                       *
+                       * Refs:
+                       * - https://github.com/facebook/docusaurus/issues/8297
+                       * - https://github.com/svg/svgo/issues/1714
+                       * - https://linear.app/foxglove/issue/FG-7251/logos-are-cut-off-on-mcapdev
+                       */
+                      removeTitle: false,
+                      removeViewBox: false,
+                      cleanupIds: false, // do not change IDs
+                    },
+                  },
+                },
+              ],
+            }
+          }
+        }
       }),
     ],
   ],
