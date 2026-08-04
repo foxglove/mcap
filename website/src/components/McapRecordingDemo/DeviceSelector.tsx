@@ -10,7 +10,7 @@ interface MediaDeviceInfo {
   groupId: string;
 }
 
-export function DeviceSelector(): JSX.Element {
+export function DeviceSelector(): React.JSX.Element {
   const state = useStore();
   const {
     actions,

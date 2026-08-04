@@ -10,7 +10,7 @@ import {
   supportsH265Encoding,
 } from "./videoCapture.ts";
 
-export function VideoContainer(): JSX.Element {
+export function VideoContainer(): React.JSX.Element {
   const state = useStore();
   const { videoError, enabledVideoFormats, videoStarted, actions } = state;
   const enableCamera = enabledVideoFormats.size > 0;

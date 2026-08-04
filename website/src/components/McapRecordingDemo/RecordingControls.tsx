@@ -13,7 +13,7 @@ import {
 
 const hasMouse = window.matchMedia("(hover: hover)").matches;
 
-export function RecordingControls(): JSX.Element {
+export function RecordingControls(): React.JSX.Element {
   const state = useStore();
   const { actions, recordAudio, recordMouse, recordOrientation } = state;
 

@@ -23,11 +23,15 @@ A [Kaitai Struct](http://kaitai.io) description for the MCAP format is provided 
 
 A valid MCAP file is structured as follows. The Summary and Summary Offset sections are optional.
 
-    <Magic><Header><Data section>[<Summary section>][<Summary Offset section>]<Footer><Magic>
+```
+<Magic><Header><Data section>[<Summary section>][<Summary Offset section>]<Footer><Magic>
+```
 
 The Data, Summary, and Summary Offset sections are structured as sequences of **records**:
 
-    [<record type><record content length><record><record type><record content length><record>...]
+```
+[<record type><record content length><record><record type><record content length><record>...]
+```
 
 Files not conforming to this structure are considered malformed.
 
@@ -35,7 +39,9 @@ Files not conforming to this structure are considered malformed.
 
 An MCAP file must begin and end with the following [magic bytes](https://en.wikipedia.org/wiki/File_format#Magic_number):
 
-    0x89, M, C, A, P, 0x30, \r, \n
+```
+0x89, M, C, A, P, 0x30, \r, \n
+```
 
 The byte following "MCAP" is the major version byte. `0x30` is the ASCII character `0`. Any changes to this specification document (i.e. adding fields to records, introducing new records) will be binary backward-compatible within the major version.
 
@@ -43,13 +49,17 @@ The byte following "MCAP" is the major version byte. `0x30` is the ASCII charact
 
 The first record after the leading magic bytes is the [Header](#header-op0x01) record.
 
-    <0x01><record content length><record>
+```
+<0x01><record content length><record>
+```
 
 ### Footer
 
 The last record before the trailing magic bytes is the [Footer](#footer-op0x02) record.
 
-    <0x02><record content length><record>
+```
+<0x02><record content length><record>
+```
 
 ### Data Section
 
@@ -109,7 +119,9 @@ Private records are application-specific and not defined within the MCAP spec.
 
 All MCAP records are serialized as follows:
 
-    <record type><record content length><record content>
+```
+<record type><record content length><record content>
+```
 
 Record type is a single byte opcode, and record content length is a uint64 value.
 
@@ -329,41 +341,55 @@ Multi-byte integers (`uint16`, `uint32`, `uint64`) are serialized using [little-
 
 Strings are serialized using a `uint32` byte length followed by the string data, which must be valid [UTF-8](https://en.wikipedia.org/wiki/UTF-8).
 
-    <byte length><utf-8 bytes>
+```
+<byte length><utf-8 bytes>
+```
 
 ### Bytes
 
 Bytes is sequence of bytes with no additional requirements.
 
-    <bytes>
+```
+<bytes>
+```
 
-### Tuple<first_type, second_type>
+### Tuple\<first_type, second_type>
 
 Tuple represents a pair of values. The first value has type first_type and the second has type second_type.
 
 Tuple is serialized by serializing the first value and then the second value:
 
-    <first value><second value>
+```
+<first value><second value>
+```
 
 Example `Tuple<uint8, uint32>`:
 
-    <uint8><uint32>
+```
+<uint8><uint32>
+```
 
 Example `Tuple<uint16, string>`:
 
-    <uint16><string>
+```
+<uint16><string>
 
-    <uint16><uint32><utf-8 bytes>
+<uint16><uint32><utf-8 bytes>
+```
 
-### Array<array_type>
+### Array\<array_type>
 
 Arrays are serialized using a `uint32` byte length followed by the serialized array elements.
 
-    <byte length><serialized element><serialized element>...
+```
+<byte length><serialized element><serialized element>...
+```
 
 An array of uint64 is specified as `Array<uint64>` and serialized as:
 
-    <byte length><uint64><uint64><uint64>...
+```
+<byte length><uint64><uint64><uint64>...
+```
 
 > Since arrays use a `uint32` byte length prefix, the maximum size of the serialized array elements cannot exceed 4,294,967,295 bytes.
 
@@ -371,17 +397,21 @@ An array of uint64 is specified as `Array<uint64>` and serialized as:
 
 `uint64` nanoseconds since a user-understood epoch (i.e unix epoch, robot boot time, etc.)
 
-### Map<key_type, value_type>
+### Map\<key_type, value_type>
 
 A Map is an [association](https://en.wikipedia.org/wiki/Associative_array) of unique keys to values.
 
 Maps are serialized using a `uint32` byte length followed by the serialized map key/value entries. The key and value entries are serialized according to their `key_type` and `value_type`.
 
-    <byte length><key><value><key><value>...
+```
+<byte length><key><value><key><value>...
+```
 
 A `Map<string, string>` would be serialized as:
 
-    <byte length><uint32 key length><utf-8 key bytes><uint32 value length><utf-8 value bytes>...
+```
+<byte length><uint32 key length><utf-8 key bytes><uint32 value length><utf-8 value bytes>...
+```
 
 A serialization which has duplicate keys may cause indeterminate decoding.
 
