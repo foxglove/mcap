@@ -12,7 +12,7 @@ import {
  * @param videoContainerRef - Reference to the video container element
  */
 export function useVideoRecording(
-  videoContainerRef: React.RefObject<HTMLDivElement>,
+  videoContainerRef: React.RefObject<HTMLDivElement | null>,
 ): void {
   const {
     actions,

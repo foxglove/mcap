@@ -9,7 +9,7 @@ import { useStore } from "../state.ts";
  * @param audioWaveformRef - Reference to the canvas element for waveform visualization
  */
 export function useAudioRecording(
-  audioWaveformRef: React.RefObject<HTMLCanvasElement>,
+  audioWaveformRef: React.RefObject<HTMLCanvasElement | null>,
 ): void {
   const {
     actions,

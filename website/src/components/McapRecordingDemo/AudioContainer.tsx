@@ -5,12 +5,12 @@ import styles from "./McapRecordingDemo.module.css";
 import { useStore } from "./state.ts";
 
 interface AudioContainerProps {
-  audioWaveformRef: React.RefObject<HTMLCanvasElement>;
+  audioWaveformRef: React.RefObject<HTMLCanvasElement | null>;
 }
 
 export function AudioContainer({
   audioWaveformRef,
-}: AudioContainerProps): JSX.Element {
+}: AudioContainerProps): React.JSX.Element {
   const state = useStore();
   const { audioError, recordAudio, actions } = state;
   const enableMicrophone = recordAudio;

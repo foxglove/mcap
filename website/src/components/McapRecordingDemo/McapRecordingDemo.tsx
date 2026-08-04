@@ -22,7 +22,7 @@ import { useStore, formatBytes } from "./state.ts";
 
 const hasMouse = window.matchMedia("(hover: hover)").matches;
 
-export function McapRecordingDemo(): JSX.Element {
+export function McapRecordingDemo(): React.JSX.Element {
   const state = useStore();
 
   const videoContainerRef = useRef<HTMLDivElement>(null);
