@@ -184,7 +184,7 @@ jobs:
 
       # Verify the crate builds with the rust-version declared in rust/mcap/Cargo.toml,
       # using the committed Cargo.lock so we test our own MSRV rather than dependencies.
-      - uses: taiki-e/install-action@v2.85.5
+      - uses: taiki-e/install-action@v2.85.6
         with:
           tool: cargo-msrv
       - run: cargo msrv verify --manifest-path rust/mcap/Cargo.toml -- cargo check -p mcap --all-features --locked
@@ -386,7 +386,7 @@ jobs:
           version: 0.16.0
       - name: Install cargo-zigbuild
         if: matrix.os == 'linux'
-        uses: taiki-e/install-action@v2.85.5
+        uses: taiki-e/install-action@v2.85.6
         with:
           tool: cargo-zigbuild@0.22.3
           fallback: none
@@ -572,7 +572,7 @@ jobs:
       - run: yarn install --immutable
       - run: echo '::add-matcher::.github/cspell-problem-matcher.json'
       - run: yarn spellcheck --no-progress
-      - uses: taiki-e/install-action@v2.85.5
+      - uses: taiki-e/install-action@v2.85.6
         with:
           tool: typos
       - run: typos
