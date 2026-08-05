@@ -8,6 +8,9 @@ import { MCAP_MAGIC } from "./constants.ts";
 import { parseMagic, parseRecord } from "./parse.ts";
 import type { DecompressHandlers, IReadable, TypedMcapRecords } from "./types.ts";
 
+const MAX_PREFETCH_CONCURRENCY = 6;
+const MAX_PREFETCH_CACHE_BYTES = 256 * 1024 * 1024; // 256 MB
+
 type McapIndexedReaderArgs = {
   readable: IReadable;
   chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
@@ -31,6 +34,15 @@ type McapIndexedReaderArgs = {
    * that later queries against different channels can be served from the cache.
    */
   messageIndexCacheSizeBytes?: number;
+  /**
+   * When true, message indexes are prefetched in parallel (up to `MAX_PREFETCH_CONCURRENCY`
+   * concurrent reads) during reader construction. Requires the readable to support concurrent
+   * reads (see {@link IReadable.supportsConcurrentReads}).
+   *
+   * If messageIndexCacheSizeBytes is set, it will set the cache size to that number if it is lower
+   * than the total message index size.
+   */
+  prefetchMessageIndexes?: boolean;
 };
 
 export class McapIndexedReader {
@@ -50,6 +62,8 @@ export class McapIndexedReader {
   #readable: IReadable;
   #messageIndexReadable: IReadable;
   #decompressHandlers?: DecompressHandlers;
+  #messageIndexPrefetchPromise?: Promise<void>;
+  #messageIndexPrefetchError?: Error;
 
   #messageStartTime: bigint | undefined;
   #messageEndTime: bigint | undefined;
@@ -97,16 +111,127 @@ export class McapIndexedReader {
         this.#attachmentEndTime = attachment.logTime;
       }
     }
+
+    if (
+      args.prefetchMessageIndexes === true &&
+      this.#messageIndexReadable instanceof CachedReadable
+    ) {
+      this.#startMessageIndexPrefetch(this.#messageIndexReadable);
+    }
+  }
+
+  /**
+   * Kick off parallel reads (up to `MAX_PREFETCH_CONCURRENCY`) of message index regions through
+   * the cached readable, in chunk order, stopping once the next chunk's index would exceed the
+   * cache budget. Successful reads populate the byte cache so that later `readMessages()` calls
+   * hit cache.
+   *
+   * The first failure is captured on the instance and surfaced once from the next
+   * `readMessages()` call; subsequent calls fall back to on-demand loading via
+   * `ChunkCursor.loadMessageIndexes()`. Chunks that were successfully prefetched before the
+   * failure remain in cache and continue to be served from there.
+   */
+  #startMessageIndexPrefetch(cachedReadable: CachedReadable): void {
+    type Request = { readStart: bigint; readLength: bigint };
+    const indexRequests: Request[] = [];
+    let cumulativeBytes = 0;
+    for (const chunk of this.chunkIndexes) {
+      if (chunk.messageIndexLength === 0n) {
+        continue;
+      }
+      let readStart: bigint | undefined;
+      for (const offset of chunk.messageIndexOffsets.values()) {
+        if (readStart == undefined || offset < readStart) {
+          readStart = offset;
+        }
+      }
+      if (readStart == undefined) {
+        continue;
+      }
+      // Stop once the next chunk's index would exceed the cache budget; reads beyond the cap
+      // would consume bandwidth without being cached.
+      cumulativeBytes += Number(chunk.messageIndexLength);
+      if (cumulativeBytes > cachedReadable.maxCacheSizeBytes) {
+        break;
+      }
+      indexRequests.push({ readStart, readLength: chunk.messageIndexLength });
+    }
+
+    if (indexRequests.length === 0) {
+      return;
+    }
+
+    // Shared state between workers. Accessed via closures (`getError`/`setError`) so that
+    // TypeScript does not narrow the value across awaits; each call re-reads the current value.
+    let prefetchError: Error | undefined;
+    const getError = (): Error | undefined => prefetchError;
+    const setError = (err: Error): void => {
+      prefetchError = err;
+    };
+    let nextIndex = 0;
+    const workers = Array.from(
+      { length: Math.min(MAX_PREFETCH_CONCURRENCY, indexRequests.length) },
+      async () => {
+        for (;;) {
+          // Safe: JS is single-threaded; each worker awaits between iterations,
+          // so nextIndex++ never races.
+          if (getError()) {
+            return;
+          }
+          const i = nextIndex++;
+          if (i >= indexRequests.length) {
+            return;
+          }
+          const req = indexRequests[i]!;
+          try {
+            await cachedReadable.read(req.readStart, req.readLength);
+          } catch (err) {
+            // On the first failure, record the error. Other workers observe the error flag on
+            // their next iteration and exit without processing further requests. Successfully
+            // prefetched entries stay in cache and will be used by on-demand loads.
+            if (!getError()) {
+              setError(err as Error);
+            }
+            return;
+          }
+        }
+      },
+    );
+    this.#messageIndexPrefetchPromise = Promise.all(workers).then(() => {
+      this.#messageIndexPrefetchError = getError();
+    });
   }
 
   #errorWithLibrary(message: string): Error {
     return new Error(`${message} [library=${this.header.library}]`);
   }
 
+  /**
+   * Returns true if the message index region for `chunkIndex` is already present in the cached
+   * readable. Uses the same offset/length that {@link ChunkCursor.loadMessageIndexes} would read
+   * (and that {@link #startMessageIndexPrefetch} prefetches).
+   */
+  #isMessageIndexCached(chunkIndex: TypedMcapRecords["ChunkIndex"]): boolean {
+    if (!(this.#messageIndexReadable instanceof CachedReadable)) {
+      return false;
+    }
+    let readStart: bigint | undefined;
+    for (const offset of chunkIndex.messageIndexOffsets.values()) {
+      if (readStart == undefined || offset < readStart) {
+        readStart = offset;
+      }
+    }
+    if (readStart == undefined) {
+      return false;
+    }
+    return this.#messageIndexReadable.has(readStart, chunkIndex.messageIndexLength);
+  }
+
   static async Initialize({
     readable,
     decompressHandlers,
     messageIndexCacheSizeBytes,
+    prefetchMessageIndexes,
   }: {
     readable: IReadable;
 
@@ -115,15 +240,23 @@ export class McapIndexedReader {
      * compression will be called to decompress the chunk data.
      */
     decompressHandlers?: DecompressHandlers;
+
     /**
      * Maximum number of bytes of message index data to cache in memory across calls to
      * `readMessages()`. When > 0, message indexes read on demand are cached so subsequent calls do
      * not re-read them from the underlying readable. Defaults to 0 (no caching).
-     *
-     * When caching is enabled, each chunk's full message index region is read on first access so
-     * that later queries against different channels can be served from the cache.
      */
     messageIndexCacheSizeBytes?: number;
+
+    /**
+     * When true, message indexes are prefetched in parallel (up to 6 concurrent reads) during
+     * reader construction. Requires `readable.supportsConcurrentReads === true`; otherwise an
+     * error is thrown. Implies message index caching: when `messageIndexCacheSizeBytes` is not
+     * set, the cache is sized to fit all message indexes, capped at 256 MB. When
+     * `messageIndexCacheSizeBytes` is set, the smaller of the two values is used and prefetch
+     * stops once it would exceed that budget.
+     */
+    prefetchMessageIndexes?: boolean;
   }): Promise<McapIndexedReader> {
     const size = await readable.size();
 
@@ -345,6 +478,26 @@ export class McapIndexedReader {
       throw errorWithLibrary(`${indexReader.bytesRemaining()} bytes remaining in index section`);
     }
 
+    let effectiveCacheSizeBytes = messageIndexCacheSizeBytes ?? 0;
+    if (prefetchMessageIndexes === true) {
+      if (readable.supportsConcurrentReads !== true) {
+        throw errorWithLibrary(
+          "prefetchMessageIndexes requires the readable to declare supportsConcurrentReads",
+        );
+      }
+      let totalMessageIndexBytes = 0;
+      for (const ci of chunkIndexes) {
+        totalMessageIndexBytes += Number(ci.messageIndexLength);
+      }
+      const derivedCacheSizeBytes = Math.min(totalMessageIndexBytes, MAX_PREFETCH_CACHE_BYTES);
+      // When the caller specified an explicit cache size, respect it as an upper bound; otherwise
+      // size the cache to fit all message indexes (capped at MAX_PREFETCH_CACHE_BYTES).
+      effectiveCacheSizeBytes =
+        messageIndexCacheSizeBytes != undefined
+          ? Math.min(messageIndexCacheSizeBytes, derivedCacheSizeBytes)
+          : derivedCacheSizeBytes;
+    }
+
     return new McapIndexedReader({
       readable,
       chunkIndexes,
@@ -359,7 +512,8 @@ export class McapIndexedReader {
       footer,
       dataEndOffset,
       dataSectionCrc,
-      messageIndexCacheSizeBytes,
+      messageIndexCacheSizeBytes: effectiveCacheSizeBytes,
+      prefetchMessageIndexes,
     });
   }
 
@@ -425,6 +579,18 @@ export class McapIndexedReader {
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
+        // Only block on the prefetch when this chunk's index is not already cached, so callers
+        // requesting time ranges covered by already-cached chunks proceed without waiting.
+        if (this.#messageIndexPrefetchPromise && !this.#isMessageIndexCached(cursor.chunkIndex)) {
+          const promise = this.#messageIndexPrefetchPromise;
+          this.#messageIndexPrefetchPromise = undefined;
+          await promise;
+          const err = this.#messageIndexPrefetchError;
+          this.#messageIndexPrefetchError = undefined;
+          if (err) {
+            throw err;
+          }
+        }
         await cursor.loadMessageIndexes(this.#messageIndexReadable);
         if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);
