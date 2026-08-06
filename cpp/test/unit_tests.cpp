@@ -101,6 +101,22 @@ TEST_CASE("internal::crc32", "[writer]") {
   }
 }
 
+#if defined(__linux__)
+TEST_CASE("FileWriter reports filesystem write errors", "[writer]") {
+  mcap::FileWriter writer;
+  requireOk(writer.open("/dev/full"));
+
+  // Use a payload larger than the stdio buffer so fwrite reaches the device immediately.
+  const std::vector<std::byte> data(1024 * 1024);
+  try {
+    writer.write(data.data(), data.size());
+    FAIL("Expected writing to /dev/full to fail");
+  } catch (const std::system_error& error) {
+    REQUIRE(error.code() == std::errc::no_space_on_device);
+  }
+}
+#endif
+
 TEST_CASE("internal::Parse*()", "[reader]") {
   SECTION("uint64_t") {
     const std::array<std::byte, 8> input = {std::byte(0xef), std::byte(0xcd), std::byte(0xab),

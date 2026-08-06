@@ -1,7 +1,9 @@
 #include "crc32.hpp"
 #include <algorithm>
 #include <cassert>
+#include <cerrno>
 #include <iostream>
+#include <system_error>
 #ifndef MCAP_COMPRESSION_NO_LZ4
 #  include <lz4frame.h>
 #  include <lz4hc.h>
@@ -55,9 +57,15 @@ Status FileWriter::open(std::string_view filename) {
 
 void FileWriter::handleWrite(const std::byte* data, uint64_t size) {
   assert(file_);
+  errno = 0;
   const size_t written = std::fwrite(data, 1, size, file_);
-  (void)written;
-  assert(written == size);
+  if (written != size) {
+    const auto error = errno == 0 ? std::make_error_code(std::errc::io_error)
+                                  : std::error_code(errno, std::generic_category());
+    const auto message =
+      internal::StrCat("failed to write ", size, " bytes (", written, " bytes written)");
+    throw std::system_error(error, message);
+  }
   size_ += size;
 }
 
