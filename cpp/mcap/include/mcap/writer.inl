@@ -531,7 +531,7 @@ void McapWriter::addChannel(Channel& channel) {
   ++statistics_.channelCount;
 }
 
-Status McapWriter::write(const Message& message) {
+Status McapWriter::write(const Message& message, const ByteSpanArray& payload) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -570,10 +570,12 @@ Status McapWriter::write(const Message& message) {
   }
 
   // Before writing a message that would overflow the current chunk, close it.
+  static const uint64_t emptyMessageRecordSize = getRecordSize(Message{});
   auto* chunkWriter = getChunkWriter();
   if (chunkWriter != nullptr && /* Chunked? */
       uncompressedSize_ != 0 && /* Current chunk is not empty/new? */
-      9 + getRecordSize(message) + uncompressedSize_ >= chunkSize_ /* Overflowing? */) {
+      9 + emptyMessageRecordSize + internal::ByteSpanArraySize(payload) + uncompressedSize_ >=
+        chunkSize_ /* Overflowing? */) {
     auto& fileOutput = *output_;
     writeChunk(fileOutput, *chunkWriter);
   }
@@ -582,7 +584,7 @@ Status McapWriter::write(const Message& message) {
   const uint64_t messageOffset = uncompressedSize_;
 
   // Write the message
-  uncompressedSize_ += write(output, message);
+  uncompressedSize_ += write(output, message, payload);
 
   // Update message statistics
   if (!options_.noSummary) {
@@ -619,7 +621,11 @@ Status McapWriter::write(const Message& message) {
   return StatusCode::Success;
 }
 
-Status McapWriter::write(Attachment& attachment) {
+Status McapWriter::write(const Message& message) {
+  return write(message, {ByteSpan{message.data, message.dataSize}});
+}
+
+Status McapWriter::write(Attachment& attachment, const ByteSpanArray& payload) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -630,6 +636,8 @@ Status McapWriter::write(Attachment& attachment) {
   if (chunkWriter && !chunkWriter->empty()) {
     writeChunk(fileOutput, *chunkWriter);
   }
+
+  attachment.dataSize = internal::ByteSpanArraySize(payload);
 
   if (!options_.noAttachmentCRC) {
     // Calculate the CRC32 of the attachment
@@ -646,15 +654,16 @@ Status McapWriter::write(Attachment& attachment) {
     crc = internal::crc32Update(
       crc, reinterpret_cast<const std::byte*>(attachment.mediaType.data()), sizePrefix);
     crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(&attachment.dataSize), 8);
-    crc = internal::crc32Update(crc, reinterpret_cast<const std::byte*>(attachment.data),
-                                attachment.dataSize);
+    for (const auto& span : payload) {
+      crc = internal::crc32Update(crc, span.data, span.size);
+    }
     attachment.crc = internal::crc32Final(crc);
   }
 
   const uint64_t fileOffset = fileOutput.size();
 
   // Write the attachment
-  write(fileOutput, attachment);
+  write(fileOutput, attachment, payload);
 
   // Update statistics and attachment index
   if (!options_.noSummary) {
@@ -665,6 +674,10 @@ Status McapWriter::write(Attachment& attachment) {
   }
 
   return StatusCode::Success;
+}
+
+Status McapWriter::write(Attachment& attachment) {
+  return write(attachment, {ByteSpan{attachment.data, attachment.dataSize}});
 }
 
 Status McapWriter::write(const Metadata& metadata) {
@@ -913,7 +926,12 @@ uint64_t McapWriter::getRecordSize(const Message& message) {
 }
 
 uint64_t McapWriter::write(IWritable& output, const Message& message) {
-  const uint64_t recordSize = getRecordSize(message);
+  return write(output, message, {ByteSpan{message.data, message.dataSize}});
+}
+
+uint64_t McapWriter::write(IWritable& output, const Message& message, const ByteSpanArray& payload) {
+  static const uint64_t emptyMessageRecordSize = getRecordSize(Message{});
+  const uint64_t recordSize = emptyMessageRecordSize + internal::ByteSpanArraySize(payload);
 
   write(output, OpCode::Message);
   write(output, recordSize);
@@ -921,14 +939,22 @@ uint64_t McapWriter::write(IWritable& output, const Message& message) {
   write(output, message.sequence);
   write(output, message.logTime);
   write(output, message.publishTime);
-  write(output, message.data, message.dataSize);
+  for (const auto& span : payload) {
+    write(output, span.data, span.size);
+  }
 
   return 9 + recordSize;
 }
 
 uint64_t McapWriter::write(IWritable& output, const Attachment& attachment) {
+  return write(output, attachment, {ByteSpan{attachment.data, attachment.dataSize}});
+}
+
+uint64_t McapWriter::write(IWritable& output, const Attachment& attachment,
+                            const ByteSpanArray& payload) {
+  const uint64_t dataSize = internal::ByteSpanArraySize(payload);
   const uint64_t recordSize = 4 + attachment.name.size() + 8 + 8 + 4 + attachment.mediaType.size() +
-                              8 + attachment.dataSize + 4;
+                              8 + dataSize + 4;
 
   write(output, OpCode::Attachment);
   write(output, recordSize);
@@ -936,8 +962,10 @@ uint64_t McapWriter::write(IWritable& output, const Attachment& attachment) {
   write(output, attachment.createTime);
   write(output, attachment.name);
   write(output, attachment.mediaType);
-  write(output, attachment.dataSize);
-  write(output, attachment.data, attachment.dataSize);
+  write(output, dataSize);
+  for (const auto& span : payload) {
+    write(output, span.data, span.size);
+  }
   write(output, attachment.crc);
 
   return 9 + recordSize;

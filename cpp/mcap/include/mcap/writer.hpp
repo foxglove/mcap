@@ -410,6 +410,20 @@ public:
   Status write(const Message& message);
 
   /**
+   * @brief Write a message to the output stream, gathering its payload from a
+   * list of buffers.
+   *
+   * `message.data` and `message.dataSize` are ignored; the payload written is
+   * the concatenation of `payload`, in the given order.
+   *
+   * @param message Message to add. Only the `channelId`, `sequence`,
+   *   `logTime`, and `publishTime` fields are used.
+   * @param payload The message payload, as a list of spans.
+   * @return A non-zero error code on failure.
+   */
+  Status write(const Message& message, const ByteSpanArray& payload);
+
+  /**
    * @brief Write an attachment to the output stream.
    *
    * @param attachment Attachment to add. The `attachment.crc` will be
@@ -417,6 +431,23 @@ public:
    * @return A non-zero error code on failure.
    */
   Status write(Attachment& attachment);
+
+  /**
+   * @brief Write an attachment to the output stream, gathering its data from
+   * a list of buffers.
+   *
+   * `attachment.data` is ignored; the data written is the concatenation of
+   * `payload`, in the given order. `attachment.dataSize` is set to the total
+   * size of `payload`.
+   *
+   * @param attachment Attachment to add. Only the `logTime`, `createTime`,
+   *   `name`, and `mediaType` fields are used. The `attachment.dataSize` will
+   *   always be set. The `attachment.crc` will be calculated and set if
+   *   configuration options allow CRC calculation.
+   * @param payload The attachment data, as a list of spans.
+   * @return A non-zero error code on failure.
+   */
+  Status write(Attachment& attachment, const ByteSpanArray& payload);
 
   /**
    * @brief Write a metadata record to the output stream.
@@ -456,7 +487,10 @@ public:
   static uint64_t write(IWritable& output, const Channel& channel);
   static uint64_t getRecordSize(const Message& message);
   static uint64_t write(IWritable& output, const Message& message);
+  static uint64_t write(IWritable& output, const Message& message, const ByteSpanArray& payload);
   static uint64_t write(IWritable& output, const Attachment& attachment);
+  static uint64_t write(IWritable& output, const Attachment& attachment,
+                        const ByteSpanArray& payload);
   static uint64_t write(IWritable& output, const Metadata& metadata);
   static uint64_t write(IWritable& output, const Chunk& chunk);
   static uint64_t write(IWritable& output, const MessageIndex& index);
