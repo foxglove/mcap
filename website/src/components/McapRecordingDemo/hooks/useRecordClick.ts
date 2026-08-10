@@ -28,6 +28,7 @@ export function useRecordClick(): (
         "requestPermission" in DeviceOrientationEvent &&
         typeof DeviceOrientationEvent.requestPermission === "function"
       ) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call
         void Promise.resolve(DeviceOrientationEvent.requestPermission())
           .then((result) => {
             if (result !== "granted") {

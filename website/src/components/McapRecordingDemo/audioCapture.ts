@@ -99,7 +99,7 @@ export function startAudioStream({
 
         update(analyzer);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (canceled) {
           return;
         }

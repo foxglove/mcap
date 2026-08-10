@@ -294,6 +294,7 @@ async function main(options: { dataDir: string; verify: boolean }) {
           console.log(`* outdated   ${filePath}`);
           hadError = true;
         }
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (error) {
         console.log(`- missing    ${filePath}`);
         hadError = true;

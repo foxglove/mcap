@@ -11,11 +11,8 @@
   "files.trimFinalNewlines": true,
   "files.trimTrailingWhitespace": true,
 
-  "typescript.tsdk": "node_modules/typescript/lib",
+  "js/ts.tsdk.path": "node_modules/typescript/lib",
   "prettier.prettierPath": "./node_modules/prettier/index.cjs",
-  "eslint.options": {
-    "reportUnusedDisableDirectives": "error"
-  },
   "jest.jestCommandLine": "yarn typescript:test",
 
   "cSpell.enabled": true,

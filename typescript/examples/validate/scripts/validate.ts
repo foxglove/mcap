@@ -51,7 +51,8 @@ async function readStream(
           processRecord(record);
         }
       } catch (error) {
-        reject(error as Error);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        reject(error);
         stream.close();
       }
     });
@@ -97,6 +98,7 @@ async function validate(
   function processRecord(record: TypedMcapRecord) {
     recordCounts.set(record.type, (recordCounts.get(record.type) ?? 0) + 1);
 
+    // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
     switch (record.type) {
       default:
         break;
@@ -140,6 +142,7 @@ async function validate(
             if (size !== data.byteLength) {
               throw new Error(`Message size ${size} should match buffer length ${data.byteLength}`);
             }
+            // eslint-disable-next-line @typescript-eslint/no-deprecated
             return reader.readMessage(data).toJSON();
           };
         } else if (schema.encoding === "ros2msg" && record.messageEncoding === "cdr") {

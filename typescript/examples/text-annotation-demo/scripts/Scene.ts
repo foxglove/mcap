@@ -33,7 +33,7 @@ export default class Scene {
 
   #ball: Ball;
 
-  constructor({ width, height, ballRadius, gravityCoefficient = 0.005, frameId }: SceneParams) {
+  constructor({ width, height, ballRadius, gravityCoefficient, frameId }: SceneParams) {
     this.image = new Image(width, height);
     this.width = width;
     this.height = height;

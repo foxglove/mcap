@@ -88,6 +88,7 @@ function rosMsgDefinitionToProto(
     let fieldNumber = 1;
     for (const field of def.definitions) {
       if (field.isConstant === true) {
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
         fields.push(`// ${field.type} ${field.name} = ${field.valueText ?? field.value ?? ""}`);
         continue;
       }
@@ -258,6 +259,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
   }
 
   const readResults: Array<{ topic: string; message: unknown; timestamp: Time }> = [];
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   await bag.readMessages(
     {
       decompress: {

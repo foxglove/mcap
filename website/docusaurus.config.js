@@ -1,5 +1,4 @@
 // @ts-check
-/* eslint-env node */
 /* eslint-disable filenames/match-exported */
 
 const path = require("node:path");

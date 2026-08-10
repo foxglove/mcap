@@ -79,7 +79,7 @@ function humanReadableStatistics(values: number[], unit: string): string {
     return "(No samples)";
   }
   if (count < 2) {
-    return `${values[0]} ${unit}`;
+    return `${values[0]!} ${unit}`;
   }
   const mean = values.reduce((a, b) => a + b, 0) / count;
   const stdDev = Math.sqrt(

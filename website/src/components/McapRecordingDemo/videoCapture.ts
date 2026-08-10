@@ -53,7 +53,7 @@ export function startVideoStream(params: VideoStreamParams): () => void {
         }
         params.onStart();
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         if (canceled) {
           return;
         }

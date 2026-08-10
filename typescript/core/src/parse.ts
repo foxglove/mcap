@@ -35,7 +35,7 @@ export function parseRecord(reader: Reader, validateCrcs = false): TypedMcapReco
     return undefined;
   }
   const start = reader.offset;
-  const opcode = reader.uint8();
+  const opcode: Opcode = reader.uint8();
   const recordLength = reader.uint64();
 
   if (recordLength > Number.MAX_SAFE_INTEGER) {
@@ -50,7 +50,7 @@ export function parseRecord(reader: Reader, validateCrcs = false): TypedMcapReco
   }
 
   let result: TypedMcapRecord;
-  switch (opcode as Opcode) {
+  switch (opcode) {
     case Opcode.HEADER:
       result = parseHeader(reader, recordLengthNum);
       break;
