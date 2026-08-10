@@ -241,7 +241,7 @@ int ZStdCompressionLevel(CompressionLevel level) {
       return -3;
     case CompressionLevel::Default:
     default:
-      return 1;
+      return 3;
     case CompressionLevel::Slow:
       return 5;
     case CompressionLevel::Slowest:
@@ -577,14 +577,7 @@ Status McapWriter::write(const Message& message) {
     channelMessageCounts.emplace(message.channelId, 0);
   }
 
-  // Before writing a message that would overflow the current chunk, close it.
   auto* chunkWriter = getChunkWriter();
-  if (chunkWriter != nullptr && /* Chunked? */
-      uncompressedSize_ != 0 && /* Current chunk is not empty/new? */
-      9 + getRecordSize(message) + uncompressedSize_ >= chunkSize_ /* Overflowing? */) {
-    auto& fileOutput = *output_;
-    writeChunk(fileOutput, *chunkWriter);
-  }
 
   // For the chunk-local message index.
   const uint64_t messageOffset = uncompressedSize_;
