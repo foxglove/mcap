@@ -65,6 +65,15 @@ struct MCAP_PUBLIC McapWriterOptions {
    */
   uint64_t chunkSize = DefaultChunkSize;
   /**
+   * @brief Trigger data flush to disk once data written to the file from
+   * the last file synch meets or exceeds this size. The default value equal 0
+   * means no explicit calls for fsync(fd). i.e. OS will manage by its own how
+   * often to dump internal buffers to the disk.
+   * @note fsync(fd) is a blocking system call and could affect total
+   * disk write throughput.
+   */
+  uint64_t sizeForFsynch = 0;
+  /**
    * @brief Compression algorithm to use when writing Chunks. This option is
    * ignored if `noChunking=true`.
    */
@@ -167,7 +176,7 @@ class MCAP_PUBLIC FileWriter final : public IWritable {
 public:
   ~FileWriter() override;
 
-  Status open(std::string_view filename);
+  Status open(std::string_view filename, uint64_t size_for_fsync);
 
   void handleWrite(const std::byte* data, uint64_t size) override;
   void end() override;
@@ -177,6 +186,8 @@ public:
 private:
   std::FILE* file_ = nullptr;
   uint64_t size_ = 0;
+  uint64_t bytes_since_fsync_ = 0;
+  uint64_t size_for_fsync_ = 0;
 };
 
 /**
