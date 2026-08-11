@@ -4,14 +4,7 @@ import globals from "globals";
 
 export default defineConfig([
   { linterOptions: { reportUnusedDisableDirectives: "error" } },
-  globalIgnores([
-    ".docusaurus",
-    "/build",
-    "dist",
-    "node_modules",
-    "build",
-    ".docusaurus",
-  ]),
+  globalIgnores(["dist", "node_modules", "build", ".docusaurus"]),
   foxglove.configs.base,
   foxglove.configs.react,
   foxglove.configs.jest,
