@@ -26,11 +26,7 @@ function createULogMock({
   const msgIds = new Map<string, number>();
   const definitions = new Map<string, MessageDefinition>();
   messageFields.forEach((fields, name) => {
-    definitions.set(name, {
-      name,
-      fields,
-      format: "not read",
-    } as MessageDefinition);
+    definitions.set(name, { name, fields, format: "not read" });
   });
   const subscriptionMap = new Map<number, Subscription>();
   subscriptions.forEach((subscription, index) => {
@@ -42,11 +38,7 @@ function createULogMock({
   });
   const ulogMock: jest.Mocked<ULog> = {
     open: jest.fn().mockResolvedValue(undefined),
-    header: {
-      timestamp,
-      definitions,
-      version: 1,
-    },
+    header: { timestamp, definitions, version: 1 },
     subscriptions: subscriptionMap,
     readMessages: jest.fn().mockImplementation(async function* () {
       for (const msg of messages) {
@@ -83,11 +75,7 @@ describe("Create MCAP files from ULog", () => {
     ]);
 
     const messageFixture = [
-      {
-        topic: "sensor_data",
-        timestamp: 1000n,
-        value: 42.0,
-      } as MockMessage,
+      { topic: "sensor_data", timestamp: 1000n, value: 42.0 } as MockMessage,
       {
         topic: "item_list",
         timestamp: 2000n,
@@ -96,11 +84,7 @@ describe("Create MCAP files from ULog", () => {
           { enabled: false, matrix: [0.0, 1.0, 0.0, 0.0] },
         ],
       } as MockMessage,
-      {
-        topic: "sensor_data",
-        timestamp: 3000n,
-        value: 84.0,
-      } as MockMessage,
+      { topic: "sensor_data", timestamp: 3000n, value: 84.0 } as MockMessage,
     ];
 
     it("should throw an error for missing ULog definitions", async () => {
@@ -126,9 +110,7 @@ describe("Create MCAP files from ULog", () => {
       const mockOutputFile = new TempBuffer();
       await convertULogFileToMCAP(mockULog, new McapWriter({ writable: mockOutputFile }));
 
-      const mcapReader = await McapIndexedReader.Initialize({
-        readable: mockOutputFile,
-      });
+      const mcapReader = await McapIndexedReader.Initialize({ readable: mockOutputFile });
       const channelNames = Array.from(mcapReader.channelsById.values())
         .map((ch) => ch.topic)
         .sort();
@@ -145,9 +127,7 @@ describe("Create MCAP files from ULog", () => {
       const mockOutputFile = new TempBuffer();
       await convertULogFileToMCAP(mockULog, new McapWriter({ writable: mockOutputFile }));
 
-      const mcapReader = await McapIndexedReader.Initialize({
-        readable: mockOutputFile,
-      });
+      const mcapReader = await McapIndexedReader.Initialize({ readable: mockOutputFile });
       const logTimes = [];
       const messageData = [];
       const topics = [];
@@ -190,25 +170,15 @@ describe("Create MCAP files from ULog", () => {
         ]),
         subscriptions: [{ name: "text_topic" }],
         messages: [
-          {
-            topic: "text_topic",
-            timestamp: 1000n,
-            text: "Message 1!",
-          } as MockMessage,
-          {
-            topic: "text_topic",
-            timestamp: 2000n,
-            text: "Message 2!",
-          } as MockMessage,
+          { topic: "text_topic", timestamp: 1000n, text: "Message 1!" },
+          { topic: "text_topic", timestamp: 2000n, text: "Message 2!" },
         ],
       });
 
       const mockOutputFile = new TempBuffer();
       await convertULogFileToMCAP(mockULog, new McapWriter({ writable: mockOutputFile }));
 
-      const mcapReader = await McapIndexedReader.Initialize({
-        readable: mockOutputFile,
-      });
+      const mcapReader = await McapIndexedReader.Initialize({ readable: mockOutputFile });
       const logTimes = [];
       const messageData = [];
       for await (const msg of mcapReader.readMessages()) {
@@ -234,9 +204,7 @@ describe("Create MCAP files from ULog", () => {
         startTime: 1735689600000000n,
       });
 
-      const mcapReader = await McapIndexedReader.Initialize({
-        readable: mockOutputFile,
-      });
+      const mcapReader = await McapIndexedReader.Initialize({ readable: mockOutputFile });
       const logTimes = [];
       for await (const msg of mcapReader.readMessages()) {
         logTimes.push(msg.publishTime);
@@ -258,17 +226,8 @@ describe("Create MCAP files from ULog", () => {
           { name: "item_list" },
         ],
         messages: [
-          {
-            topic: "sensor_data",
-            timestamp: 1000n,
-            value: 42.0,
-          } as MockMessage,
-          {
-            topic: "sensor_data",
-            multiId: 1,
-            timestamp: 1000n,
-            value: 36.0,
-          } as MockMessage,
+          { topic: "sensor_data", timestamp: 1000n, value: 42.0 },
+          { topic: "sensor_data", multiId: 1, timestamp: 1000n, value: 36.0 },
           {
             topic: "item_list",
             timestamp: 2000n,
@@ -276,27 +235,16 @@ describe("Create MCAP files from ULog", () => {
               { enabled: true, matrix: [1.0, 0.0, 0.0, 0.0] },
               { enabled: false, matrix: [0.0, 1.0, 0.0, 0.0] },
             ],
-          } as MockMessage,
-          {
-            topic: "sensor_data",
-            timestamp: 3000n,
-            value: 84.0,
-          } as MockMessage,
-          {
-            topic: "sensor_data",
-            multiId: 1,
-            timestamp: 3000n,
-            value: 64.0,
-          } as MockMessage,
+          },
+          { topic: "sensor_data", timestamp: 3000n, value: 84.0 },
+          { topic: "sensor_data", multiId: 1, timestamp: 3000n, value: 64.0 },
         ],
       });
 
       const mockOutputFile = new TempBuffer();
       await convertULogFileToMCAP(mockULog, new McapWriter({ writable: mockOutputFile }));
 
-      const mcapReader = await McapIndexedReader.Initialize({
-        readable: mockOutputFile,
-      });
+      const mcapReader = await McapIndexedReader.Initialize({ readable: mockOutputFile });
       const logTimes = [];
       const messageData = [];
       const topics = [];
@@ -337,11 +285,7 @@ describe("Create MCAP files from ULog", () => {
     it("should write logs to a separate log channel", async () => {
       const mockULog = {
         open: jest.fn().mockResolvedValue(undefined),
-        header: {
-          timestamp: 0n,
-          definitions: new Map<string, MessageDefinition>(),
-          version: 1,
-        },
+        header: { timestamp: 0n, definitions: new Map<string, MessageDefinition>(), version: 1 },
         subscriptions: new Map<number, Subscription>(),
         readMessages: jest.fn().mockImplementation(async function* () {
           const msgData = [
@@ -352,10 +296,7 @@ describe("Create MCAP files from ULog", () => {
           ];
           let timestamp = 1000n;
           for (const msg of msgData) {
-            yield {
-              timestamp,
-              ...msg,
-            };
+            yield { timestamp, ...msg };
             timestamp += 1000n;
           }
         }),
@@ -364,9 +305,7 @@ describe("Create MCAP files from ULog", () => {
       const mockOutputFile = new TempBuffer();
       await convertULogFileToMCAP(mockULog, new McapWriter({ writable: mockOutputFile }));
 
-      const mcapReader = await McapIndexedReader.Initialize({
-        readable: mockOutputFile,
-      });
+      const mcapReader = await McapIndexedReader.Initialize({ readable: mockOutputFile });
       const logTimes = [];
       const messageData = [];
       const topics = [];
@@ -407,9 +346,7 @@ describe("Create MCAP files from ULog", () => {
         metadata: [metadata],
       });
 
-      const mcapReader = await McapIndexedReader.Initialize({
-        readable: mockOutputFile,
-      });
+      const mcapReader = await McapIndexedReader.Initialize({ readable: mockOutputFile });
 
       const storedMetadata = [];
 
@@ -433,20 +370,12 @@ describe("Create MCAP files from ULog", () => {
           ],
         ]),
         subscriptions: [{ name: "sensor_data" }],
-        messages: [
-          {
-            topic: "sensor_data",
-            timestamp: 1000n,
-            value: 18446744073709551615n,
-          } as MockMessage,
-        ],
+        messages: [{ topic: "sensor_data", timestamp: 1000n, value: 18446744073709551615n }],
       });
 
       const mockOutputFile = new TempBuffer();
       await convertULogFileToMCAP(mockULog, new McapWriter({ writable: mockOutputFile }));
-      const mcapReader = await McapIndexedReader.Initialize({
-        readable: mockOutputFile,
-      });
+      const mcapReader = await McapIndexedReader.Initialize({ readable: mockOutputFile });
       const messageData = [];
       for await (const msg of mcapReader.readMessages()) {
         const channel = mcapReader.channelsById.get(msg.channelId);
@@ -468,9 +397,7 @@ describe("Create MCAP files from ULog", () => {
       new McapWriter({ writable: mockOutputFile }),
     );
 
-    const mcapReader = await McapIndexedReader.Initialize({
-      readable: mockOutputFile,
-    });
+    const mcapReader = await McapIndexedReader.Initialize({ readable: mockOutputFile });
 
     const channelTopics = Array.from(mcapReader.channelsById.values()).map((ch) => ch.topic);
     expect(channelTopics.length).toBe(115);

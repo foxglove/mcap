@@ -3,7 +3,6 @@
 import { Bag } from "@foxglove/rosbag";
 import { FileReader } from "@foxglove/rosbag/node.js";
 import { parse as parseMessageDefinition } from "@foxglove/rosmsg";
-import type { Time } from "@foxglove/rosmsg-serialization";
 import { toNanoSec } from "@foxglove/rostime";
 import Bzip2 from "@foxglove/wasm-bz2";
 import decompressLZ4 from "@foxglove/wasm-lz4";
@@ -15,8 +14,10 @@ import { protobufToDescriptor } from "@mcap/support";
 import type { ProtobufDescriptor } from "@mcap/support";
 import { program } from "commander";
 import { open } from "node:fs/promises";
-import * as protobufjs from "protobufjs";
-import { FileDescriptorSet } from "protobufjs/ext/descriptor/index.js";
+import protobufjs from "protobufjs";
+import protobufDescriptor from "protobufjs/ext/descriptor/index.js";
+
+const { FileDescriptorSet } = protobufDescriptor;
 
 const builtinSrc = `
 syntax = "proto3";
@@ -88,6 +89,7 @@ function rosMsgDefinitionToProto(
     let fieldNumber = 1;
     for (const field of def.definitions) {
       if (field.isConstant === true) {
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
         fields.push(`// ${field.type} ${field.name} = ${field.valueText ?? field.value ?? ""}`);
         continue;
       }
@@ -198,7 +200,12 @@ async function convert(filePath: string, options: { indexed: boolean }) {
   await zstd.isLoaded;
   const bzip2 = await Bzip2.init();
 
-  const bag = new Bag(new FileReader(filePath));
+  const bag = new Bag(new FileReader(filePath), {
+    decompress: {
+      lz4: (buffer: Uint8Array, size: number) => new Uint8Array(decompressLZ4(buffer, size)),
+      bz2: (buffer: Uint8Array, size: number) => bzip2.decompress(buffer, size, { small: false }),
+    },
+  });
   await bag.open();
 
   const mcapFilePath = filePath.replace(".bag", ".mcap");
@@ -257,20 +264,7 @@ async function convert(filePath: string, options: { indexed: boolean }) {
     });
   }
 
-  const readResults: Array<{ topic: string; message: unknown; timestamp: Time }> = [];
-  await bag.readMessages(
-    {
-      decompress: {
-        lz4: (buffer: Uint8Array, size: number) => new Uint8Array(decompressLZ4(buffer, size)),
-        bz2: (buffer: Uint8Array, size: number) => bzip2.decompress(buffer, size, { small: false }),
-      },
-    },
-    (result) => {
-      readResults.push(result);
-    },
-  );
-
-  for (const result of readResults) {
+  for await (const result of bag.messageIterator()) {
     const detail = topicToDetailMap.get(result.topic);
     if (!detail) {
       return;

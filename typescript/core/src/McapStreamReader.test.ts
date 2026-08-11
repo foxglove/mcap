@@ -110,7 +110,7 @@ describe("McapStreamReader", () => {
           ...uint64LE(0n), // decompressed size
           ...uint32LE(0), // decompressed crc32
           ...string("lz4"), // compression
-          ...uint64LE(BigInt(0n)),
+          ...uint64LE(0n),
           // no chunk data
         ]),
         ...record(Opcode.DATA_END, [
@@ -195,7 +195,7 @@ describe("McapStreamReader", () => {
           ...uint64LE(0n), // decompressed size
           ...uint32LE(0), // decompressed crc32
           ...string(""), // compression
-          ...uint64LE(BigInt(0n)),
+          ...uint64LE(0n),
           // (no chunk data)
         ]),
 
@@ -228,7 +228,7 @@ describe("McapStreamReader", () => {
           ...uint64LE(1n), // decompressed size
           ...uint32LE(crc32(new Uint8Array([Opcode.CHANNEL]))), // decompressed crc32
           ...string(""), // compression
-          ...uint64LE(BigInt(1n)),
+          ...uint64LE(1n),
           Opcode.CHANNEL, // truncated record
         ]),
 
@@ -378,14 +378,14 @@ describe("McapStreamReader", () => {
         ...MCAP_MAGIC,
       ]),
     );
-    expect(reader.nextRecord()).toEqual({
+    expect(reader.nextRecord()).toEqual<TypedMcapRecords["Channel"]>({
       type: "Channel",
       id: 1,
       schemaId: 2,
       topic: "myTopic",
       messageEncoding: "utf12",
       metadata: new Map([["foo", "bar"]]),
-    } as TypedMcapRecords["Channel"]);
+    });
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
       summaryStart: 0n,
@@ -429,14 +429,14 @@ describe("McapStreamReader", () => {
         ...MCAP_MAGIC,
       ]),
     );
-    expect(reader.nextRecord()).toEqual({
+    expect(reader.nextRecord()).toEqual<TypedMcapRecords["Channel"]>({
       type: "Channel",
       id: 1,
       schemaId: 2,
       topic: "myTopic",
       messageEncoding: "utf12",
       metadata: new Map([["foo", "bar"]]),
-    } as TypedMcapRecords["Channel"]);
+    });
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
       summaryStart: 0n,
@@ -535,14 +535,14 @@ describe("McapStreamReader", () => {
             ...MCAP_MAGIC,
           ]),
         );
-        expect(reader.nextRecord()).toEqual({
+        expect(reader.nextRecord()).toEqual<TypedMcapRecords["Channel"]>({
           type: "Channel",
           id: 42,
           schemaId: 1,
           topic: "myTopic",
           messageEncoding: "utf12",
           metadata: new Map([["foo", "bar"]]),
-        } as TypedMcapRecords["Channel"]);
+        });
         expect(() => reader.nextRecord()).toThrow(
           /Channel record for id 42 \(topic: (myTopic|XXXXXXXX)\) differs from previous channel record of the same id./,
         );
@@ -573,14 +573,14 @@ describe("McapStreamReader", () => {
         ...MCAP_MAGIC,
       ]),
     );
-    expect(reader.nextRecord()).toEqual({
+    expect(reader.nextRecord()).toEqual<TypedMcapRecords["Attachment"]>({
       type: "Attachment",
       name: "myFile",
       logTime: 2n,
       createTime: 1n,
       mediaType: "text/plain",
       data: new TextEncoder().encode("hello"),
-    } as TypedMcapRecords["Attachment"]);
+    });
     expect(reader.nextRecord()).toEqual({
       type: "Footer",
       summaryStart: 0n,
