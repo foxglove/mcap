@@ -10,8 +10,10 @@ import { isEqual } from "lodash-es";
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import { performance } from "node:perf_hooks";
-import * as protobufjs from "protobufjs";
-import { FileDescriptorSet } from "protobufjs/ext/descriptor/index.js";
+import protobufjs from "protobufjs";
+import protobufDescriptor from "protobufjs/ext/descriptor/index.js";
+
+const { FileDescriptorSet } = protobufDescriptor;
 
 function log(...data: unknown[]) {
   console.log(...data);
@@ -142,8 +144,7 @@ async function validate(
             if (size !== data.byteLength) {
               throw new Error(`Message size ${size} should match buffer length ${data.byteLength}`);
             }
-            // eslint-disable-next-line @typescript-eslint/no-deprecated
-            return reader.readMessage(data).toJSON();
+            return reader.readMessage(data).toObject();
           };
         } else if (schema.encoding === "ros2msg" && record.messageEncoding === "cdr") {
           const reader = new ROS2MessageReader(
