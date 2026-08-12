@@ -140,6 +140,14 @@ impl IndexedReader {
         // the empty starting_after(u64::MAX) range as plain bounds ([u64::MAX, u64::MAX)).
         let resolved_start = options.start();
         let resolved_end = options.end();
+        if let (Some(start), Some(end)) = (resolved_start, resolved_end) {
+            // A crossed range is a caller error. Equal resolved bounds are a valid empty
+            // range — including the empty starting_after(u64::MAX) range, which resolves
+            // to [u64::MAX, u64::MAX) — so only a strict crossing is rejected.
+            if start > end {
+                return Err(McapError::EndBeforeStart);
+            }
+        }
         let channel_ids = if let Some(include_topics) = options.include_topics {
             let mut set = BTreeSet::new();
             for (id, channel) in summary.channels.iter() {
@@ -1031,6 +1039,33 @@ mod tests {
         // starting_after below the maximum keeps its normal exclusive behavior.
         let messages = read_mcap_noseek(IndexedReaderOptions::new().starting_after(3), &mcap);
         assert_eq!(&messages, &[(0, u64::MAX)]);
+    }
+    #[test]
+    fn test_crossed_time_range_errors() {
+        let mcap = make_mcap(None, &[&[(0, 1), (0, 2), (0, 3)]]);
+        let summary = crate::Summary::read(&mcap).unwrap().unwrap();
+        // A strictly crossed range is a caller error.
+        let result = IndexedReader::new_with_options(
+            &summary,
+            IndexedReaderOptions::new().starting_at(10).ending_before(5),
+        );
+        assert!(matches!(result, Err(McapError::EndBeforeStart)));
+        // The deprecated fields resolve through the same check.
+        #[allow(deprecated)]
+        let options = {
+            let mut options = IndexedReaderOptions::new();
+            options.start = Some(10);
+            options.end = Some(5);
+            options
+        };
+        let result = IndexedReader::new_with_options(&summary, options);
+        assert!(matches!(result, Err(McapError::EndBeforeStart)));
+        // Equal resolved bounds are a valid empty range, not an error.
+        let messages = read_mcap_noseek(
+            IndexedReaderOptions::new().starting_at(5).ending_before(5),
+            &mcap,
+        );
+        assert!(messages.is_empty());
     }
     #[test]
     #[allow(deprecated)]
