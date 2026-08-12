@@ -683,32 +683,32 @@ TEST_CASE("explicit time range bounds", "[reader]") {
   {
     // Inclusive and exclusive bounds on both sides, via the chained setters.
     mcap::ReadMessageOptions options;
-    options.startsAt(3).endsBefore(5);
+    options.startingAt(3).endingBefore(5);
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, 4});
-    options.endsAt(5);
+    options.endingAt(5);
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, 4, 5});
-    options.startsAfter(3);
+    options.startingAfter(3);
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{4, 5});
   }
   {
     // Each setter replaces any previously-set bound on its side.
     mcap::ReadMessageOptions options;
-    options.startsAfter(5).endsAt(6);
-    options.startsAt(3);
+    options.startingAfter(5).endingAt(6);
+    options.startingAt(3);
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, 4, 5, 6});
-    options.endsBefore(5);
+    options.endingBefore(5);
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, 4});
   }
   {
     // Equal inclusive bounds select the single matching log time.
     mcap::ReadMessageOptions options;
-    options.startsAt(3).endsAt(3);
+    options.startingAt(3).endingAt(3);
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3});
   }
   {
-    // endsAt(MaxTime) means no upper bound.
+    // endingAt(MaxTime) means no upper bound.
     mcap::ReadMessageOptions options;
-    options.endsAt(mcap::MaxTime);
+    options.endingAt(mcap::MaxTime);
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{1, 2, 3, 4, 5, 6});
   }
   {
@@ -757,7 +757,7 @@ TEST_CASE("explicit time range bounds", "[reader]") {
   {
     // A crossing range is rejected.
     mcap::ReadMessageOptions options;
-    options.startsAt(5).endsBefore(3);
+    options.startingAt(5).endingBefore(3);
     REQUIRE(!options.validate().ok());
   }
 }
@@ -791,10 +791,10 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
   };
 
   {
-    // An explicit endsAt(MaxTime) is a true "no upper bound": the message logged at
+    // An explicit endingAt(MaxTime) is a true "no upper bound": the message logged at
     // exactly MaxTime is included.
     mcap::ReadMessageOptions options;
-    options.endsAt(mcap::MaxTime);
+    options.endingAt(mcap::MaxTime);
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, mcap::MaxTime});
   }
   {
@@ -805,22 +805,22 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
   }
   {
     // An explicit end bound takes precedence over the deprecated endTime field, including
-    // the explicitly-unbounded endsAt(MaxTime).
+    // the explicitly-unbounded endingAt(MaxTime).
     MCAP_DIAGNOSTIC_PUSH
     MCAP_IGNORE_DEPRECATED
     mcap::ReadMessageOptions options;
     options.endTime = 4;
-    options.endsAt(mcap::MaxTime);
+    options.endingAt(mcap::MaxTime);
     MCAP_DIAGNOSTIC_POP
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, mcap::MaxTime});
   }
   {
-    // startsAfter(MaxTime) selects nothing: no log time is strictly after MaxTime, so the
+    // startingAfter(MaxTime) selects nothing: no log time is strictly after MaxTime, so the
     // bounds resolve to the empty range [MaxTime, MaxTime). It is a valid (empty) query,
-    // not an error, so pagination via startsAfter(lastLogTime) terminates even when the
+    // not an error, so pagination via startingAfter(lastLogTime) terminates even when the
     // last message is logged at MaxTime.
     mcap::ReadMessageOptions options;
-    options.startsAfter(mcap::MaxTime);
+    options.startingAfter(mcap::MaxTime);
     REQUIRE(options.start() == mcap::MaxTime);
     REQUIRE(options.end() == mcap::MaxTime);
     requireOk(options.validate());
@@ -830,7 +830,7 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
     // The empty range overrides any end bound (its intersection with anything is empty),
     // even one the saturated lower bound would appear to cross.
     mcap::ReadMessageOptions options;
-    options.startsAfter(mcap::MaxTime).endsBefore(5);
+    options.startingAfter(mcap::MaxTime).endingBefore(5);
     REQUIRE(options.end() == mcap::MaxTime);
     requireOk(options.validate());
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{});
@@ -838,7 +838,7 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
   {
     // The indexed read path yields nothing for the empty range too.
     mcap::ReadMessageOptions options;
-    options.startsAfter(mcap::MaxTime);
+    options.startingAfter(mcap::MaxTime);
     options.readOrder = mcap::ReadMessageOptions::ReadOrder::LogTimeOrder;
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{});
   }
@@ -846,14 +846,14 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
     // A later lower bound replaces the empty range. (With no explicit end bound the
     // deprecated endTime default applies, which drops the MaxTime message as pinned above.)
     mcap::ReadMessageOptions options;
-    options.startsAfter(mcap::MaxTime).startsAt(3);
+    options.startingAfter(mcap::MaxTime).startingAt(3);
     REQUIRE(options.start() == 3);
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3});
   }
   {
-    // startsAfter below MaxTime keeps its normal exclusive behavior.
+    // startingAfter below MaxTime keeps its normal exclusive behavior.
     mcap::ReadMessageOptions options;
-    options.startsAfter(3).endsAt(mcap::MaxTime);
+    options.startingAfter(3).endingAt(mcap::MaxTime);
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{mcap::MaxTime});
   }
 }

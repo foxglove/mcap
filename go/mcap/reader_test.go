@@ -433,8 +433,8 @@ func TestMessageReading(t *testing.T) {
 						r, err := NewReader(reader)
 						require.NoError(t, err)
 						it, err := r.Messages(
-							StartsAtNanos(100),
-							EndsBeforeNanos(200),
+							StartingAtNanos(100),
+							EndingBeforeNanos(200),
 							UsingIndex(useIndex),
 						)
 						require.NoError(t, err)
@@ -865,7 +865,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	require.ErrorIs(t, io.EOF, err)
 }
 
-// Test reading an MCAP with two overlapping chunks, with a StartsAtNanos filter that causes the
+// Test reading an MCAP with two overlapping chunks, with a StartingAtNanos filter that causes the
 // chunks to be read in reverse order.
 func TestReadingMessageOrderWithFilter(t *testing.T) {
 	buf := &bytes.Buffer{}
@@ -917,7 +917,7 @@ func TestReadingMessageOrderWithFilter(t *testing.T) {
 
 	it, err := reader.Messages(
 		UsingIndex(true),
-		StartsAtNanos(50),
+		StartingAtNanos(50),
 		InOrder(LogTimeOrder),
 	)
 	require.NoError(t, err)
@@ -939,7 +939,7 @@ func TestReadingMessageOrderWithFilter(t *testing.T) {
 	// now try iterating in reverse
 	reverseIt, err := reader.Messages(
 		UsingIndex(true),
-		StartsAtNanos(50),
+		StartingAtNanos(50),
 		InOrder(ReverseLogTimeOrder),
 	)
 	require.NoError(t, err)
@@ -1064,7 +1064,7 @@ func TestReadingBigTimestamps(t *testing.T) {
 		assert.Equal(t, uint64(math.MaxUint64-1), info.Statistics.MessageEndTime)
 	})
 	t.Run("message iteration works as expected", func(t *testing.T) {
-		it, err := reader.Messages(StartsAtNanos(math.MaxUint64-2), EndsBeforeNanos(math.MaxUint64))
+		it, err := reader.Messages(StartingAtNanos(math.MaxUint64-2), EndingBeforeNanos(math.MaxUint64))
 		require.NoError(t, err)
 		count := 0
 		for {
@@ -1117,13 +1117,13 @@ func TestExplicitTimeRangeBounds(t *testing.T) {
 	}
 
 	// Inclusive and exclusive bounds on both sides.
-	assert.Equal(t, []uint64{3, 4}, logTimes(t, StartsAtNanos(3), EndsBeforeNanos(5)))
-	assert.Equal(t, []uint64{3, 4, 5}, logTimes(t, StartsAtNanos(3), EndsAtNanos(5)))
-	assert.Equal(t, []uint64{4, 5}, logTimes(t, StartsAfterNanos(3), EndsAtNanos(5)))
+	assert.Equal(t, []uint64{3, 4}, logTimes(t, StartingAtNanos(3), EndingBeforeNanos(5)))
+	assert.Equal(t, []uint64{3, 4, 5}, logTimes(t, StartingAtNanos(3), EndingAtNanos(5)))
+	assert.Equal(t, []uint64{4, 5}, logTimes(t, StartingAfterNanos(3), EndingAtNanos(5)))
 	// Equal inclusive bounds select the single matching log time.
-	assert.Equal(t, []uint64{3}, logTimes(t, StartsAtNanos(3), EndsAtNanos(3)))
-	// EndsAtNanos(math.MaxUint64) saturates rather than being truly unbounded.
-	assert.Equal(t, []uint64{1, 2, 3, 4, 5, 6}, logTimes(t, EndsAtNanos(math.MaxUint64)))
+	assert.Equal(t, []uint64{3}, logTimes(t, StartingAtNanos(3), EndingAtNanos(3)))
+	// EndingAtNanos(math.MaxUint64) saturates rather than being truly unbounded.
+	assert.Equal(t, []uint64{1, 2, 3, 4, 5, 6}, logTimes(t, EndingAtNanos(math.MaxUint64)))
 	// The deprecated options must keep their exact historical behavior.
 	//nolint:staticcheck // intentionally exercising deprecated options
 	assert.Equal(t, []uint64{3, 4}, logTimes(t, AfterNanos(3), BeforeNanos(5)))
@@ -1166,18 +1166,18 @@ func TestMaxTimestampBound(t *testing.T) {
 	}
 
 	// A message logged at exactly math.MaxUint64 cannot be included by the uint64 bound
-	// representation: EndsAtNanos(math.MaxUint64) saturates to an exclusive MaxUint64
+	// representation: EndingAtNanos(math.MaxUint64) saturates to an exclusive MaxUint64
 	// bound, the same pre-existing limit as the unfiltered default. Other language
 	// implementations (C++, Python, Rust, TypeScript) include this message; see the
-	// EndsAtNanos documentation.
-	assert.Equal(t, 1, countMessages(t, EndsAtNanos(math.MaxUint64)))
+	// EndingAtNanos documentation.
+	assert.Equal(t, 1, countMessages(t, EndingAtNanos(math.MaxUint64)))
 	assert.Equal(t, 1, countMessages(t))
-	// StartsAfterNanos(math.MaxUint64) yields nothing: no log time is strictly after
+	// StartingAfterNanos(math.MaxUint64) yields nothing: no log time is strictly after
 	// math.MaxUint64. The resolved StartNanos saturates to math.MaxUint64, and the message
 	// logged at exactly that time is excluded by the exclusive upper bound as pinned above.
-	assert.Equal(t, 0, countMessages(t, StartsAfterNanos(math.MaxUint64)))
-	// StartsAfterNanos below the maximum keeps its normal exclusive behavior.
-	assert.Equal(t, 1, countMessages(t, StartsAfterNanos(2)))
+	assert.Equal(t, 0, countMessages(t, StartingAfterNanos(math.MaxUint64)))
+	// StartingAfterNanos below the maximum keeps its normal exclusive behavior.
+	assert.Equal(t, 1, countMessages(t, StartingAfterNanos(2)))
 }
 
 func TestUnexpectedTokenOnHeader(t *testing.T) {
