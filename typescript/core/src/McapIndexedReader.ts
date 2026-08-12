@@ -634,11 +634,13 @@ export class McapIndexedReader {
 /**
  * Resolve the explicit (`startingAt`/`startingAfter`/`endingAt`/`endingBefore`) and deprecated
  * (`startTime`/`endTime`) time bounds to the canonical inclusive `startingAt`/`endingAt`
- * pair used internally, throwing if more than one bound is provided for a side. Log
- * times are integer nanoseconds, so `startingAfter(t)` is `startingAt(t + 1n)` and
- * `endingBefore(t)` is `endingAt(t - 1n)`. This is the only place the deprecated bounds
- * are read.
+ * pair used internally, throwing if more than one bound is provided for a side or if the
+ * provided bounds form a strictly crossed range. Log times are integer nanoseconds, so
+ * `startingAfter(t)` is `startingAt(t + 1n)` and `endingBefore(t)` is `endingAt(t - 1n)`.
+ * This is the only place the deprecated bounds are read.
  */
+const MAX_LOG_TIME = 2n ** 64n - 1n;
+
 function resolveInclusiveTimeRange(
   args: {
     startTime?: bigint;
@@ -659,13 +661,27 @@ function resolveInclusiveTimeRange(
   if ([args.endTime, args.endingAt, args.endingBefore].filter((b) => b != undefined).length > 1) {
     throw new Error("Provide at most one of endTime, endingAt, endingBefore");
   }
-  let startingAt = args.startingAt ?? args.startTime ?? defaultStart;
+  let startingAt = args.startingAt ?? args.startTime;
   if (args.startingAfter != undefined) {
     startingAt = args.startingAfter + 1n;
   }
-  let endingAt = args.endingAt ?? args.endTime ?? defaultEnd;
+  let endingAt = args.endingAt ?? args.endTime;
   if (args.endingBefore != undefined) {
     endingAt = args.endingBefore - 1n;
   }
-  return { startingAt, endingAt };
+  // A strictly crossed range is a caller error, checked on the provided bounds only: the
+  // defaults below come from the file's own time range, and a bound beyond that range is a
+  // valid (empty) query. Equal exclusive bounds (startingAt === endingAt + 1n) are a valid
+  // empty range, and a start bound beyond the largest representable log time
+  // (startingAfter at 2^64 - 1) selects nothing and stays valid too, so pagination via
+  // startingAfter terminates there instead of throwing.
+  if (
+    startingAt != undefined &&
+    endingAt != undefined &&
+    startingAt <= MAX_LOG_TIME &&
+    startingAt > endingAt + 1n
+  ) {
+    throw new Error("end time cannot come before start time");
+  }
+  return { startingAt: startingAt ?? defaultStart, endingAt: endingAt ?? defaultEnd };
 }

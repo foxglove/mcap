@@ -102,6 +102,8 @@ pub enum McapError {
     BadSummaryCrc { saved: u32, calculated: u32 },
     #[error("Index offset and length didn't point to the expected record type")]
     BadIndex,
+    #[error("end time cannot come before start time")]
+    EndBeforeStart,
     #[error("Attachment length ({header}) exceeds space in record ({available})")]
     BadAttachmentLength { header: u64, available: u64 },
     #[error("Chunk length ({header}) exceeds space in record ({available})")]

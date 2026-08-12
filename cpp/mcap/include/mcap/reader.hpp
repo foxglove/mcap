@@ -876,6 +876,7 @@ struct MCAP_PUBLIC LinearMessageView {
   };
 
   LinearMessageView(McapReader& mcapReader, const ProblemCallback& onProblem);
+  LinearMessageView(McapReader& mcapReader, const Status& status, const ProblemCallback& onProblem);
   LinearMessageView(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
                     Timestamp startingAt, Timestamp endingBefore, const ProblemCallback& onProblem);
   LinearMessageView(McapReader& mcapReader, const ReadMessageOptions& options, ByteOffset dataStart,
@@ -889,12 +890,23 @@ struct MCAP_PUBLIC LinearMessageView {
   Iterator begin();
   Iterator end();
 
+  /**
+   * @brief The status of the readMessages() call that produced this view. A view returned
+   * from a failed call (such as reading from a reader that has not been opened, or invalid
+   * ReadMessageOptions) is empty and carries the failure here, in addition to reporting it
+   * through the ProblemCallback — so it is discoverable even through the overloads that take
+   * no callback. Problems encountered while iterating (such as a message referencing a
+   * missing channel) are reported through the ProblemCallback only.
+   */
+  const Status& status() const;
+
 private:
   McapReader& mcapReader_;
   ByteOffset dataStart_;
   ByteOffset dataEnd_;
   ReadMessageOptions readMessageOptions_;
   const ProblemCallback onProblem_;
+  Status status_;
 };
 
 }  // namespace mcap
