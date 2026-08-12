@@ -762,6 +762,62 @@ TEST_CASE("explicit time range bounds", "[reader]") {
   }
 }
 
+TEST_CASE("LinearMessageView status", "[reader]") {
+  {
+    // Reading from a reader that has not been opened produces an empty view carrying
+    // NotOpen, discoverable even through the no-callback overload.
+    mcap::McapReader reader;
+    auto view = reader.readMessages();
+    REQUIRE(view.status().code == mcap::StatusCode::NotOpen);
+    REQUIRE(view.begin() == view.end());
+  }
+
+  Buffer buffer;
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("test");
+  opts.compression = mcap::Compression::None;
+  writer.open(buffer, opts);
+  mcap::Schema schema("schema", "schemaEncoding", "ab");
+  writer.addSchema(schema);
+  mcap::Channel channel("topic", "messageEncoding", schema.id);
+  writer.addChannel(channel);
+  WriteMsg(writer, channel.id, 0, 3, 3, std::vector<std::byte>(8));
+  writer.close();
+
+  mcap::McapReader reader;
+  requireOk(reader.open(buffer));
+  {
+    // Crossed bounds through the deprecated positional overload keep their historical
+    // swallowed-callback behavior, but the failure is now discoverable on the view.
+    MCAP_DIAGNOSTIC_PUSH
+    MCAP_IGNORE_DEPRECATED
+    auto view = reader.readMessages(10, 5);
+    MCAP_DIAGNOSTIC_POP
+    REQUIRE(view.status().code == mcap::StatusCode::InvalidMessageReadOptions);
+    REQUIRE(view.begin() == view.end());
+  }
+  {
+    // The same failure reaches both the callback and the view through the modern overload.
+    std::optional<mcap::Status> reported;
+    const auto onProblem = [&reported](const mcap::Status& status) {
+      reported = status;
+    };
+    mcap::ReadMessageOptions options;
+    options.startingAt(10).endingBefore(5);
+    auto view = reader.readMessages(onProblem, options);
+    REQUIRE(reported.has_value());
+    REQUIRE(reported->code == mcap::StatusCode::InvalidMessageReadOptions);
+    REQUIRE(view.status().code == mcap::StatusCode::InvalidMessageReadOptions);
+    REQUIRE(view.begin() == view.end());
+  }
+  {
+    // A successful call reports success and yields messages.
+    auto view = reader.readMessages();
+    REQUIRE(view.status().ok());
+    REQUIRE(view.begin() != view.end());
+  }
+}
+
 TEST_CASE("maximum timestamp bound", "[reader]") {
   Buffer buffer;
 

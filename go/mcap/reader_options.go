@@ -77,7 +77,10 @@ func Before(end int64) ReadOpt {
 // timestamp (inclusive lower bound). A later start option overrides an earlier one.
 func StartingAtNanos(start uint64) ReadOpt {
 	return func(ro *ReadOptions) error {
-		if ro.EndNanos < start {
+		// A start bound of math.MaxUint64 selects nothing regardless of the end bound (a
+		// message logged at exactly that time is always excluded by the exclusive upper
+		// bound), so it is a valid empty query, exempt from the crossing check.
+		if start != math.MaxUint64 && ro.EndNanos < start {
 			return fmt.Errorf("end cannot come before start")
 		}
 		ro.StartNanos = start
@@ -89,14 +92,18 @@ func StartingAtNanos(start uint64) ReadOpt {
 // this timestamp (exclusive lower bound). Log times are integer nanoseconds, so this is
 // StartingAtNanos(start + 1). Passing math.MaxUint64 yields no messages, as no log time is
 // strictly after it: the resolved StartNanos saturates to math.MaxUint64, and a message logged
-// at exactly that time is always excluded by the exclusive upper bound (see EndingAtNanos). A
-// later start option overrides an earlier one.
+// at exactly that time is always excluded by the exclusive upper bound (see EndingAtNanos).
+// Combining it with an end bound is likewise a valid empty query, not an error, so windowed
+// pagination via StartingAfterNanos(lastLogTime) terminates even when the last message is
+// logged at math.MaxUint64. A later start option overrides an earlier one.
 func StartingAfterNanos(start uint64) ReadOpt {
 	return func(ro *ReadOptions) error {
 		if start != math.MaxUint64 {
 			start++
 		}
-		if ro.EndNanos < start {
+		// A saturated start bound selects nothing regardless of the end bound, so it is a
+		// valid empty query, exempt from the crossing check.
+		if start != math.MaxUint64 && ro.EndNanos < start {
 			return fmt.Errorf("end cannot come before start")
 		}
 		ro.StartNanos = start
@@ -112,11 +119,16 @@ func StartingAfterNanos(start uint64) ReadOpt {
 // overrides an earlier one.
 func EndingAtNanos(end uint64) ReadOpt {
 	return func(ro *ReadOptions) error {
-		if end < ro.StartNanos {
-			return fmt.Errorf("end cannot come before start")
-		}
+		// Resolve the inclusive end to its exclusive form before the crossing check, so the
+		// check compares the same resolved pair as the other options: EndingAtNanos(start-1)
+		// is the valid empty range [start, start), not a crossing, in either option order.
 		if end != math.MaxUint64 {
 			end++
+		}
+		// A start bound of math.MaxUint64 selects nothing regardless of the end bound, so
+		// the query is already empty and exempt from the crossing check.
+		if ro.StartNanos != math.MaxUint64 && end < ro.StartNanos {
+			return fmt.Errorf("end cannot come before start")
 		}
 		ro.EndNanos = end
 		return nil
@@ -127,7 +139,9 @@ func EndingAtNanos(end uint64) ReadOpt {
 // this timestamp (exclusive upper bound). A later end option overrides an earlier one.
 func EndingBeforeNanos(end uint64) ReadOpt {
 	return func(ro *ReadOptions) error {
-		if end < ro.StartNanos {
+		// A start bound of math.MaxUint64 selects nothing regardless of the end bound, so
+		// the query is already empty and exempt from the crossing check.
+		if ro.StartNanos != math.MaxUint64 && end < ro.StartNanos {
 			return fmt.Errorf("end cannot come before start")
 		}
 		ro.EndNanos = end
