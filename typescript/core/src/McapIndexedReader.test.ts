@@ -472,6 +472,93 @@ describe("McapIndexedReader", () => {
         }
       },
     );
+
+    it("supports explicit time range bounds", async () => {
+      const tempBuffer = new TempBuffer();
+      const writer = new McapWriter({ writable: tempBuffer });
+      await writer.start({ library: "", profile: "" });
+      const channelId1 = await writer.registerChannel({
+        topic: "test1",
+        schemaId: 0,
+        messageEncoding: "json",
+        metadata: new Map(),
+      });
+      const channelId2 = await writer.registerChannel({
+        topic: "test2",
+        schemaId: 0,
+        messageEncoding: "json",
+        metadata: new Map(),
+      });
+      const channelIds = [channelId1, channelId2];
+      await writer.addMessage({ channelId: channelId1, ...messages[0]! });
+      await writer.addMessage({ channelId: channelId2, ...messages[1]! });
+      await writer.end();
+
+      const readWith = async (args: {
+        startTime?: bigint;
+        endTime?: bigint;
+        startsAt?: bigint;
+        startsAfter?: bigint;
+        endsAt?: bigint;
+        endsBefore?: bigint;
+      }) => {
+        const reader = await McapIndexedReader.Initialize({ readable: tempBuffer });
+        return await collect(reader.readMessages(args));
+      };
+
+      const expectIndices = (indices: number[]) =>
+        indices.map((i) => ({ channelId: channelIds[i]!, ...messages[i]! }));
+
+      // Messages have log times 10 and 11. Inclusive and exclusive bounds on both sides:
+      await expect(readWith({ startsAt: 10n, endsAt: 11n })).resolves.toEqual(
+        expectIndices([0, 1]),
+      );
+      await expect(readWith({ startsAt: 10n, endsBefore: 11n })).resolves.toEqual(
+        expectIndices([0]),
+      );
+      await expect(readWith({ startsAfter: 10n, endsAt: 11n })).resolves.toEqual(
+        expectIndices([1]),
+      );
+      // Equal inclusive bounds select the single matching log time.
+      await expect(readWith({ startsAt: 10n, endsAt: 10n })).resolves.toEqual(expectIndices([0]));
+      // The deprecated names keep their historical (inclusive) behavior.
+      await expect(readWith({ startTime: 10n, endTime: 10n })).resolves.toEqual(expectIndices([0]));
+      // At most one bound per side may be provided.
+      await expect(readWith({ startsAt: 10n, startsAfter: 10n })).rejects.toThrow(
+        "at most one of startTime, startsAt, startsAfter",
+      );
+      await expect(readWith({ endTime: 11n, endsBefore: 11n })).rejects.toThrow(
+        "at most one of endTime, endsAt, endsBefore",
+      );
+    });
+
+    it("includes a message logged at the maximum timestamp", async () => {
+      const maxTime = 2n ** 64n - 1n;
+      const tempBuffer = new TempBuffer();
+      const writer = new McapWriter({ writable: tempBuffer });
+      await writer.start({ library: "", profile: "" });
+      const channelId = await writer.registerChannel({
+        topic: "test1",
+        schemaId: 0,
+        messageEncoding: "json",
+        metadata: new Map(),
+      });
+      await writer.addMessage({ channelId, ...messages[0]! });
+      await writer.addMessage({ channelId, ...messages[1]!, logTime: maxTime });
+      await writer.end();
+
+      const reader = await McapIndexedReader.Initialize({ readable: tempBuffer });
+      const collectedDefault = await collect(reader.readMessages());
+      expect(collectedDefault.map((m) => m.logTime)).toEqual([10n, maxTime]);
+      const collectedBounded = await collect(reader.readMessages({ endsAt: maxTime }));
+      expect(collectedBounded.map((m) => m.logTime)).toEqual([10n, maxTime]);
+      // No log time is strictly after the maximum timestamp.
+      const collectedAfterMax = await collect(reader.readMessages({ startsAfter: maxTime }));
+      expect(collectedAfterMax).toEqual([]);
+      // startsAfter below the maximum keeps its normal exclusive behavior.
+      const collectedAfter = await collect(reader.readMessages({ startsAfter: 10n }));
+      expect(collectedAfter.map((m) => m.logTime)).toEqual([maxTime]);
+    });
   });
 
   it("sorts and merges out-of-order and overlapping chunks", async () => {
@@ -1300,6 +1387,18 @@ describe("McapIndexedReader", () => {
         type: "Attachment",
       },
     ]);
+
+    // Explicit bounds: attachments have log times 1, 4, and 6. endsAt is inclusive,
+    // endsBefore and startsAfter are exclusive.
+    attachments = await collect(reader.readAttachments({ startsAt: 4n, endsAt: 4n }));
+    expect(attachments.map((attachment) => attachment.logTime)).toEqual([4n]);
+    attachments = await collect(reader.readAttachments({ startsAt: 4n, endsBefore: 6n }));
+    expect(attachments.map((attachment) => attachment.logTime)).toEqual([4n]);
+    attachments = await collect(reader.readAttachments({ startsAfter: 4n, endsAt: 6n }));
+    expect(attachments.map((attachment) => attachment.logTime)).toEqual([6n]);
+    await expect(collect(reader.readAttachments({ endsAt: 4n, endsBefore: 4n }))).rejects.toThrow(
+      "at most one of endTime, endsAt, endsBefore",
+    );
   });
 
   it("supports chunk index where message index is empty", async () => {

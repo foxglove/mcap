@@ -7,8 +7,8 @@ import type { IReadable, TypedMcapRecords } from "./types.ts";
 type ChunkCursorParams = {
   chunkIndex: TypedMcapRecords["ChunkIndex"];
   relevantChannels: Set<number> | undefined;
-  startTime: bigint | undefined;
-  endTime: bigint | undefined;
+  startsAt: bigint | undefined;
+  endsAt: bigint | undefined;
   reverse: boolean;
   /**
    * When true, `loadMessageIndexes()` reads the full message index region for the chunk (not just
@@ -29,8 +29,8 @@ export class ChunkCursor {
   readonly chunkIndex: TypedMcapRecords["ChunkIndex"];
 
   #relevantChannels?: Set<number>;
-  #startTime: bigint | undefined;
-  #endTime: bigint | undefined;
+  #startsAt: bigint | undefined;
+  #endsAt: bigint | undefined;
   #reverse: boolean;
   #readFullMessageIndexRange: boolean;
 
@@ -42,8 +42,8 @@ export class ChunkCursor {
   constructor(params: ChunkCursorParams) {
     this.chunkIndex = params.chunkIndex;
     this.#relevantChannels = params.relevantChannels;
-    this.#startTime = params.startTime;
-    this.#endTime = params.endTime;
+    this.#startsAt = params.startsAt;
+    this.#endsAt = params.endsAt;
     this.#reverse = params.reverse;
     this.#readFullMessageIndexRange = params.readFullMessageIndexRange ?? false;
 
@@ -214,20 +214,20 @@ export class ChunkCursor {
     }
 
     // Determine the indexes corresponding to the start and end time.
-    const startTime = reverse ? this.#endTime : this.#startTime;
-    const endTime = reverse ? this.#startTime : this.#endTime;
+    const startsAt = reverse ? this.#endsAt : this.#startsAt;
+    const endsAt = reverse ? this.#startsAt : this.#endsAt;
     const iteratee = reverse ? (logTime: bigint) => -logTime : (logTime: bigint) => logTime;
     let startIndex: number | undefined;
     let endIndex: number | undefined;
 
-    if (startTime != undefined) {
-      startIndex = sortedIndexBy(this.#orderedMessageOffsets, startTime, iteratee);
+    if (startsAt != undefined) {
+      startIndex = sortedIndexBy(this.#orderedMessageOffsets, startsAt, iteratee);
     }
-    if (endTime != undefined) {
-      endIndex = sortedLastIndexBy(this.#orderedMessageOffsets, endTime, iteratee);
+    if (endsAt != undefined) {
+      endIndex = sortedLastIndexBy(this.#orderedMessageOffsets, endsAt, iteratee);
     }
 
-    // Remove offsets whose log time is outside of the range [startTime, endTime] which
+    // Remove offsets whose log time is outside of the range [startsAt, endsAt] which
     // avoids having to do additional book-keep of additional array start & stop indexes.
     if (startIndex != undefined || endIndex != undefined) {
       this.#orderedMessageOffsets = this.#orderedMessageOffsets.slice(startIndex, endIndex);
