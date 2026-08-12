@@ -610,17 +610,17 @@ LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem) {
   return readMessages(onProblem, ReadMessageOptions{});
 }
 
-LinearMessageView McapReader::readMessages(Timestamp startsAt, Timestamp endsBefore) {
+LinearMessageView McapReader::readMessages(Timestamp startingAt, Timestamp endingBefore) {
   const auto onProblem = [](const Status&) {};
   ReadMessageOptions options;
-  options.startsAt(startsAt).endsBefore(endsBefore);
+  options.startingAt(startingAt).endingBefore(endingBefore);
   return readMessages(onProblem, options);
 }
 
-LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem, Timestamp startsAt,
-                                           Timestamp endsBefore) {
+LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem, Timestamp startingAt,
+                                           Timestamp endingBefore) {
   ReadMessageOptions options;
-  options.startsAt(startsAt).endsBefore(endsBefore);
+  options.startingAt(startingAt).endingBefore(endingBefore);
   return readMessages(onProblem, options);
 }
 
@@ -643,15 +643,15 @@ LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem,
   return LinearMessageView{*this, normalizedOptions, startOffset, endOffset, onProblem};
 }
 
-std::pair<ByteOffset, ByteOffset> McapReader::byteRange(Timestamp startsAt,
-                                                        Timestamp endsBefore) const {
+std::pair<ByteOffset, ByteOffset> McapReader::byteRange(Timestamp startingAt,
+                                                        Timestamp endingBefore) const {
   if (!parsedSummary_ || chunkRanges_.empty()) {
     return {dataStart_, dataEnd_};
   }
 
   ByteOffset dataStart = dataEnd_;
   ByteOffset dataEnd = dataStart_;
-  chunkRanges_.visit_overlapping(startsAt, endsBefore, [&](const auto& interval) {
+  chunkRanges_.visit_overlapping(startingAt, endingBefore, [&](const auto& interval) {
     const auto& chunkIndex = interval.value;
     dataStart = std::min(dataStart, chunkIndex.chunkStartOffset);
     dataEnd = std::max(dataEnd, chunkIndex.chunkStartOffset + chunkIndex.chunkLength);
@@ -1662,12 +1662,12 @@ LinearMessageView::LinearMessageView(McapReader& mcapReader, const ProblemCallba
     , onProblem_(onProblem) {}
 
 LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStart,
-                                     ByteOffset dataEnd, Timestamp startsAt,
-                                     Timestamp endsBefore, const ProblemCallback& onProblem)
+                                     ByteOffset dataEnd, Timestamp startingAt,
+                                     Timestamp endingBefore, const ProblemCallback& onProblem)
     : mcapReader_(mcapReader)
     , dataStart_(dataStart)
     , dataEnd_(dataEnd)
-    , readMessageOptions_(ReadMessageOptions().startsAt(startsAt).endsBefore(endsBefore))
+    , readMessageOptions_(ReadMessageOptions().startingAt(startingAt).endingBefore(endingBefore))
     , onProblem_(onProblem) {}
 
 LinearMessageView::LinearMessageView(McapReader& mcapReader, const ReadMessageOptions& options,
@@ -1860,7 +1860,7 @@ bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::I
 
 Status ReadMessageOptions::validate() const {
   const auto normalized = this->normalized();
-  // The empty range [MaxTime, MaxTime) from startsAfter(MaxTime) passes this check like
+  // The empty range [MaxTime, MaxTime) from startingAfter(MaxTime) passes this check like
   // any other empty range: a valid query with no matches, not an error.
   if (normalized.end().has_value() && *normalized.start() > *normalized.end()) {
     return Status(StatusCode::InvalidMessageReadOptions, "start time must be before end time");
