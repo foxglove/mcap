@@ -148,8 +148,15 @@ def test_max_timestamp_bound(reader_cls: AnyReaderSubclass):
     assert count_messages(ending_at=2**64 - 1) == 2
     # No log time is strictly after the maximum timestamp.
     assert count_messages(starting_after=2**64 - 1) == 0
+    # Combining that empty lower bound with an end bound is a valid empty query, not a
+    # crossed-range error, so pagination terminates there instead of raising.
+    assert count_messages(starting_after=2**64 - 1, ending_before=5) == 0
     # starting_after below the maximum keeps its normal exclusive behavior.
     assert count_messages(starting_after=3) == 1
+    # A strictly crossed range is a caller error; equal bounds are a valid empty query.
+    with pytest.raises(ValueError, match="end time cannot come before start time"):
+        count_messages(starting_at=10, ending_before=5)
+    assert count_messages(starting_at=5, ending_before=5) == 0
 
 
 @pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
