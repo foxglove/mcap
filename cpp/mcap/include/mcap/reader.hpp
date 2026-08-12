@@ -249,46 +249,48 @@ public:
   /**
    * @brief Only messages with log timestamps greater or equal to startTime will be included.
    *
-   * @deprecated Use the `startsAt()` setter, which has the same (inclusive) behavior, or
-   * `startsAfter()` instead. If the `start` bound is set, it takes precedence over this field.
+   * @deprecated Use the `startingAt()` setter, which has the same (inclusive) behavior, or
+   * `startingAfter()` instead. If the `start` bound is set, it takes precedence over this field.
    */
-  [[deprecated("use the startsAt() setter (same inclusive behavior) or startsAfter() instead")]]  //
+  [[deprecated(
+    "use the startingAt() setter (same inclusive behavior) or startingAfter() instead")]]  //
   Timestamp startTime = 0;
   /**
    * @brief Only messages with log timestamps less than endTime will be included.
    *
-   * @deprecated Use the `endsBefore()` setter, which has the same (exclusive) behavior, or
-   * `endsAt()` instead. If the `end` bound is set, it takes precedence over this field.
+   * @deprecated Use the `endingBefore()` setter, which has the same (exclusive) behavior, or
+   * `endingAt()` instead. If the `end` bound is set, it takes precedence over this field.
    */
-  [[deprecated("use the endsBefore() setter (same exclusive behavior) or endsAt() instead")]]  //
+  [[deprecated(
+    "use the endingBefore() setter (same exclusive behavior) or endingAt() instead")]]  //
   Timestamp endTime = MaxTime;
   /**
    * @brief Limit reading to messages with log timestamps at or after this time (inclusive
    * lower bound). Replaces any previously-set lower bound.
    */
-  ReadMessageOptions& startsAt(Timestamp time) {
+  ReadMessageOptions& startingAt(Timestamp time) {
     startAt_ = time;
     startAfter_ = std::nullopt;
     return *this;
   }
   /**
    * @brief Limit reading to messages with log timestamps strictly after this time (exclusive
-   * lower bound). Log times are integer nanoseconds, so this is `startsAt(time + 1)`.
-   * `startsAfter(MaxTime)` selects nothing: no log time is strictly after MaxTime, so the
+   * lower bound). Log times are integer nanoseconds, so this is `startingAt(time + 1)`.
+   * `startingAfter(MaxTime)` selects nothing: no log time is strictly after MaxTime, so the
    * bounds resolve to the empty range [MaxTime, MaxTime) (see `start()` and `end()`).
    * Replaces any previously-set lower bound.
    */
-  ReadMessageOptions& startsAfter(Timestamp time) {
+  ReadMessageOptions& startingAfter(Timestamp time) {
     startAfter_ = time;
     startAt_ = std::nullopt;
     return *this;
   }
   /**
    * @brief Limit reading to messages with log timestamps at or before this time (inclusive
-   * upper bound). Log times are integer nanoseconds, so this is `endsBefore(time + 1)`; an
+   * upper bound). Log times are integer nanoseconds, so this is `endingBefore(time + 1)`; an
    * inclusive end of MaxTime means no upper bound. Replaces any previously-set upper bound.
    */
-  ReadMessageOptions& endsAt(Timestamp time) {
+  ReadMessageOptions& endingAt(Timestamp time) {
     endAt_ = time;
     endBefore_ = std::nullopt;
     return *this;
@@ -297,7 +299,7 @@ public:
    * @brief Limit reading to messages with log timestamps strictly before this time (exclusive
    * upper bound). Replaces any previously-set upper bound.
    */
-  ReadMessageOptions& endsBefore(Timestamp time) {
+  ReadMessageOptions& endingBefore(Timestamp time) {
     endBefore_ = time;
     endAt_ = std::nullopt;
     return *this;
@@ -305,10 +307,10 @@ public:
   /**
    * @brief The resolved inclusive lower bound on message log times, or std::nullopt if no
    * lower bound has been set: only messages with `logTime >= start()` are included. Set it
-   * with `startsAt()` or `startsAfter()`. A lower bound of `startsAfter(MaxTime)`
+   * with `startingAt()` or `startingAfter()`. A lower bound of `startingAfter(MaxTime)`
    * resolves to the empty range [MaxTime, MaxTime): start() and end() both return MaxTime,
    * so `start() <= logTime < end()` filtering matches no message and pagination via
-   * `startsAfter(lastLogTime)` terminates even at MaxTime.
+   * `startingAfter(lastLogTime)` terminates even at MaxTime.
    */
   std::optional<Timestamp> start() const {
     if (startAfter_.has_value()) {
@@ -321,7 +323,7 @@ public:
   /**
    * @brief The resolved exclusive upper bound on message log times, or std::nullopt if the
    * range is unbounded above: only messages with `logTime < end()` are included. Set it with
-   * `endsAt()` or `endsBefore()`. A lower bound of `startsAfter(MaxTime)` resolves to
+   * `endingAt()` or `endingBefore()`. A lower bound of `startingAfter(MaxTime)` resolves to
    * the empty range [MaxTime, MaxTime), overriding any end bound here: the intersection of
    * an empty range with anything is empty.
    */
@@ -365,15 +367,15 @@ public:
   MCAP_IGNORE_DEPRECATED
   /**
    * @brief Construct options with an inclusive start time and exclusive end time. Equivalent
-   * to calling `startsAt(startsAtTime)` and `endsBefore(endsBeforeTime)`.
+   * to calling `startingAt(startingAtTime)` and `endingBefore(endingBeforeTime)`.
    *
    * @deprecated Positional time bounds cannot state whether each bound is inclusive at the call
-   * site. Use the `startsAt()`/`endsBefore()` setters instead.
+   * site. Use the `startingAt()`/`endingBefore()` setters instead.
    */
-  [[deprecated("use the startsAt()/endsBefore() setters instead")]]  //
-  ReadMessageOptions(Timestamp startsAtTime, Timestamp endsBeforeTime)
-      : startAt_(startsAtTime)
-      , endBefore_(endsBeforeTime) {}
+  [[deprecated("use the startingAt()/endingBefore() setters instead")]]  //
+  ReadMessageOptions(Timestamp startingAtTime, Timestamp endingBeforeTime)
+      : startAt_(startingAtTime)
+      , endBefore_(endingBeforeTime) {}
 
   ReadMessageOptions() = default;
   ReadMessageOptions(const ReadMessageOptions&) = default;
@@ -393,7 +395,7 @@ public:
    * folded into the explicit bounds, for callers that still set them. This is the only place
    * the deprecated fields are read. The deprecated fields apply only when no explicit bound
    * was provided on their side; an explicit bound — including the explicitly-unbounded
-   * `endsAt(MaxTime)` — always takes precedence.
+   * `endingAt(MaxTime)` — always takes precedence.
    */
   ReadMessageOptions normalized() const;
 
@@ -480,26 +482,27 @@ public:
   LinearMessageView readMessages(const ProblemCallback& onProblem);
   /**
    * @brief Returns an iterable view with `begin()` and `end()` methods for
-   * iterating Messages in the MCAP file. If a non-zero `startsAt` is
+   * iterating Messages in the MCAP file. If a non-zero `startingAt` is
    * provided, this will first parse the Summary section (by calling
    * `readSummary()`) if allowed by the configuration options and it has not
    * been parsed yet.
    *
-   * @param startsAt Start time in nanoseconds (inclusive). Messages before
+   * @param startingAt Start time in nanoseconds (inclusive). Messages before
    *   this time will not be returned.
-   * @param endsBefore Optional end time in nanoseconds (exclusive). Messages
+   * @param endingBefore Optional end time in nanoseconds (exclusive). Messages
    *   equal to or after this time will not be returned.
    *
    * @deprecated Positional time bounds cannot state whether each bound is inclusive at the
    * call site. Use readMessages(const ReadMessageOptions&) with
-   * `startsAt()`/`endsBefore()` instead.
+   * `startingAt()`/`endingBefore()` instead.
    */
-  [[deprecated("use readMessages(ReadMessageOptions) with startsAt()/endsBefore() instead")]]  //
+  [[deprecated(
+    "use readMessages(ReadMessageOptions) with startingAt()/endingBefore() instead")]]  //
   LinearMessageView
-  readMessages(Timestamp startsAt, Timestamp endsBefore = MaxTime);
+  readMessages(Timestamp startingAt, Timestamp endingBefore = MaxTime);
   /**
    * @brief Returns an iterable view with `begin()` and `end()` methods for
-   * iterating Messages in the MCAP file. If a non-zero `startsAt` is
+   * iterating Messages in the MCAP file. If a non-zero `startingAt` is
    * provided, this will first parse the Summary section (by calling
    * `readSummary()`) if allowed by the configuration options and it has not
    * been parsed yet.
@@ -507,21 +510,21 @@ public:
    * @param onProblem A callback that will be called when a parsing error
    *   occurs. Problems can either be recoverable, indicating some data could
    *   not be read, or non-recoverable, stopping the iteration.
-   * @param startsAt Start time in nanoseconds (inclusive). Messages before
+   * @param startingAt Start time in nanoseconds (inclusive). Messages before
    *   this time will not be returned.
-   * @param endsBefore Optional end time in nanoseconds (exclusive). Messages
+   * @param endingBefore Optional end time in nanoseconds (exclusive). Messages
    *   equal to or after this time will not be returned.
    *
    * @deprecated Positional time bounds cannot state whether each bound is inclusive at the
    * call site. Use readMessages(onProblem, const ReadMessageOptions&) with
-   * `startsAt()`/`endsBefore()` instead.
+   * `startingAt()`/`endingBefore()` instead.
    */
   [[deprecated(
-    "use readMessages(onProblem, ReadMessageOptions) with startsAt()/endsBefore() "
+    "use readMessages(onProblem, ReadMessageOptions) with startingAt()/endingBefore() "
     "instead")]]  //
   LinearMessageView
-  readMessages(const ProblemCallback& onProblem, Timestamp startsAt,
-               Timestamp endsBefore = MaxTime);
+  readMessages(const ProblemCallback& onProblem, Timestamp startingAt,
+               Timestamp endingBefore = MaxTime);
 
   /**
    * @brief Returns an iterable view with `begin()` and `end()` methods for
@@ -542,12 +545,12 @@ public:
    * This method is automatically used by `readMessages()`, and only needs to be
    * called directly if the caller is manually constructing an iterator.
    *
-   * @param startsAt Start time in nanoseconds (inclusive).
-   * @param endsBefore Optional end time in nanoseconds (exclusive).
+   * @param startingAt Start time in nanoseconds (inclusive).
+   * @param endingBefore Optional end time in nanoseconds (exclusive).
    * @return Start and end byte offsets.
    */
-  std::pair<ByteOffset, ByteOffset> byteRange(Timestamp startsAt,
-                                              Timestamp endsBefore = MaxTime) const;
+  std::pair<ByteOffset, ByteOffset> byteRange(Timestamp startingAt,
+                                              Timestamp endingBefore = MaxTime) const;
 
   /**
    * @brief Returns a pointer to the IReadable data source backing this reader.
@@ -874,7 +877,7 @@ struct MCAP_PUBLIC LinearMessageView {
 
   LinearMessageView(McapReader& mcapReader, const ProblemCallback& onProblem);
   LinearMessageView(McapReader& mcapReader, ByteOffset dataStart, ByteOffset dataEnd,
-                    Timestamp startsAt, Timestamp endsBefore, const ProblemCallback& onProblem);
+                    Timestamp startingAt, Timestamp endingBefore, const ProblemCallback& onProblem);
   LinearMessageView(McapReader& mcapReader, const ReadMessageOptions& options, ByteOffset dataStart,
                     ByteOffset dataEnd, const ProblemCallback& onProblem);
 

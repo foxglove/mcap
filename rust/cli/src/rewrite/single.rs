@@ -131,7 +131,7 @@ fn filter_indexed<W: Write + Seek>(
                 summary,
                 mcap::sans_io::IndexedReaderOptions::new()
                     .with_order(mcap::sans_io::indexed_reader::ReadOrder::ReverseLogTime)
-                    .ends_before(opts.start)
+                    .ending_before(opts.start)
                     .include_topics(target_topics.iter().cloned()),
             )?;
 
@@ -203,9 +203,9 @@ fn filter_indexed<W: Write + Seek>(
     if !(has_topic_filters && included_topics.is_empty()) {
         // The time window and topic filters apply regardless of ordering; the read order is chosen
         // per `opts.order` below.
-        let mut indexed_opts = mcap::sans_io::IndexedReaderOptions::new().starts_at(opts.start);
+        let mut indexed_opts = mcap::sans_io::IndexedReaderOptions::new().starting_at(opts.start);
         if opts.end != u64::MAX {
-            indexed_opts = indexed_opts.ends_before(opts.end);
+            indexed_opts = indexed_opts.ending_before(opts.end);
         }
         if has_topic_filters {
             indexed_opts = indexed_opts.include_topics(included_topics.iter().cloned());
