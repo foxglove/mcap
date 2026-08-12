@@ -899,7 +899,10 @@ type WriterOptions struct {
 func encoderLevelFromLZ4(level CompressionLevel) lz4.CompressionLevel {
 	switch level {
 	case CompressionLevelDefault:
-		return lz4.Level3
+		// Fast mode, matching the default of the other MCAP writer implementations (C++,
+		// Rust, Python). The compressing levels remain available through Better/Best for
+		// callers that prefer ratio over the speed that makes LZ4 worth choosing.
+		return lz4.Fast
 	case CompressionLevelFastest:
 		return lz4.Fast
 	case CompressionLevelBetter:
@@ -907,7 +910,7 @@ func encoderLevelFromLZ4(level CompressionLevel) lz4.CompressionLevel {
 	case CompressionLevelBest:
 		return lz4.Level9
 	default:
-		return lz4.Level3
+		return lz4.Fast
 	}
 }
 

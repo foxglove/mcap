@@ -165,10 +165,12 @@ int LZ4CompressionLevel(CompressionLevel level) {
     case CompressionLevel::Fastest:
       return -1;  // "fast acceleration"
     case CompressionLevel::Fast:
-      return 0;  // "fast mode"
     case CompressionLevel::Default:
     default:
-      return LZ4HC_CLEVEL_DEFAULT;
+      // Fast mode, matching the default of the other MCAP writer implementations (Go, Rust,
+      // Python). LZ4HC remains available through Slow/Slowest for callers that prefer ratio
+      // over the speed that makes LZ4 worth choosing.
+      return 0;  // "fast mode"
     case CompressionLevel::Slow:
       return LZ4HC_CLEVEL_OPT_MIN;
     case CompressionLevel::Slowest:
