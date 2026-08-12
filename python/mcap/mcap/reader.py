@@ -43,40 +43,45 @@ from .summary import Summary
 def _resolve_time_range(
     start_time: Optional[int],
     end_time: Optional[int],
-    starts_at: Optional[int],
-    starts_after: Optional[int],
-    ends_at: Optional[int],
-    ends_before: Optional[int],
+    starting_at: Optional[int],
+    starting_after: Optional[int],
+    ending_at: Optional[int],
+    ending_before: Optional[int],
 ) -> Tuple[Optional[int], Optional[int]]:
     """Resolve the explicit and deprecated time bounds to an inclusive-start /
     exclusive-end pair, warning on deprecated names and rejecting conflicting bounds.
-    Log times are integer nanoseconds, so ``starts_after(t)`` is ``starts_at(t + 1)``
-    and ``ends_at(t)`` is ``ends_before(t + 1)``.
+    Log times are integer nanoseconds, so ``starting_after(t)`` is ``starting_at(t + 1)``
+    and ``ending_at(t)`` is ``ending_before(t + 1)``.
     """
     if start_time is not None:
         warnings.warn(
-            "start_time is deprecated; use starts_at (inclusive) or starts_after"
+            "start_time is deprecated; use starting_at (inclusive) or starting_after"
             " (exclusive) instead",
             DeprecationWarning,
             stacklevel=3,
         )
     if end_time is not None:
         warnings.warn(
-            "end_time is deprecated; use ends_before (exclusive) or ends_at"
+            "end_time is deprecated; use ending_before (exclusive) or ending_at"
             " (inclusive) instead",
             DeprecationWarning,
             stacklevel=3,
         )
-    if sum(bound is not None for bound in (start_time, starts_at, starts_after)) > 1:
-        raise ValueError("provide at most one of start_time, starts_at, starts_after")
-    if sum(bound is not None for bound in (end_time, ends_at, ends_before)) > 1:
-        raise ValueError("provide at most one of end_time, ends_at, ends_before")
-    start = starts_at if starts_at is not None else start_time
-    if starts_after is not None:
-        start = starts_after + 1
-    end = ends_before if ends_before is not None else end_time
-    if ends_at is not None:
-        end = ends_at + 1
+    if (
+        sum(bound is not None for bound in (start_time, starting_at, starting_after))
+        > 1
+    ):
+        raise ValueError(
+            "provide at most one of start_time, starting_at, starting_after"
+        )
+    if sum(bound is not None for bound in (end_time, ending_at, ending_before)) > 1:
+        raise ValueError("provide at most one of end_time, ending_at, ending_before")
+    start = starting_at if starting_at is not None else start_time
+    if starting_after is not None:
+        start = starting_after + 1
+    end = ending_before if ending_before is not None else end_time
+    if ending_at is not None:
+        end = ending_at + 1
     return start, end
 
 
@@ -118,21 +123,24 @@ def _read_summary_from_stream_reader(stream_reader: StreamReader) -> Optional[Su
 def _chunks_matching_topics(
     summary: Summary,
     topics: Optional[Iterable[str]],
-    starts_at: Optional[float],
-    ends_before: Optional[float],
+    starting_at: Optional[float],
+    ending_before: Optional[float],
 ) -> List[ChunkIndex]:
     """returns candidate ChunkIndex records that may include messages of the given topics.
 
     :param summary: the summary of this MCAP.
     :param topics: topics to match. If None, all chunk indices in the summary are returned.
-    :param starts_at: if not None, messages from before this unix timestamp are not included.
-    :param ends_before: if not None, messages at or after this unix timestamp are not included.
+    :param starting_at: if not None, messages from before this unix timestamp are not included.
+    :param ending_before: if not None, messages at or after this unix timestamp are not included.
     """
     out: List[ChunkIndex] = []
     for chunk_index in summary.chunk_indexes:
-        if starts_at is not None and chunk_index.message_end_time < starts_at:
+        if starting_at is not None and chunk_index.message_end_time < starting_at:
             continue
-        if ends_before is not None and chunk_index.message_start_time >= ends_before:
+        if (
+            ending_before is not None
+            and chunk_index.message_start_time >= ending_before
+        ):
             continue
         if topics is None:
             out.append(chunk_index)
@@ -182,33 +190,33 @@ class McapReader(ABC):
         log_time_order: bool = True,
         reverse: bool = False,
         *,
-        starts_at: Optional[int] = None,
-        starts_after: Optional[int] = None,
-        ends_at: Optional[int] = None,
-        ends_before: Optional[int] = None,
+        starting_at: Optional[int] = None,
+        starting_after: Optional[int] = None,
+        ending_at: Optional[int] = None,
+        ending_before: Optional[int] = None,
     ) -> Iterator[Tuple[Optional[Schema], Channel, Message]]:
         """iterates through the messages in an MCAP.
 
         :param topics: if not None, only messages from these topics will be returned.
-        :param start_time: deprecated alias for ``starts_at``; use ``starts_at`` or
-            ``starts_after`` instead.
-        :param end_time: deprecated alias for ``ends_before``; use ``ends_before`` or
-            ``ends_at`` instead.
+        :param start_time: deprecated alias for ``starting_at``; use ``starting_at`` or
+            ``starting_after`` instead.
+        :param end_time: deprecated alias for ``ending_before``; use ``ending_before`` or
+            ``ending_at`` instead.
         :param log_time_order: if True, messages will be yielded in ascending log time order. If
             False, messages will be yielded in the order they appear in the MCAP file.
         :param reverse: if both ``log_time_order`` and ``reverse`` are True, messages will be
             yielded in descending log time order.
-        :param starts_at: an integer nanosecond timestamp. if provided, messages logged before
+        :param starting_at: an integer nanosecond timestamp. if provided, messages logged before
             this timestamp are not included (inclusive lower bound).
-        :param starts_after: an integer nanosecond timestamp. if provided, messages logged at or
+        :param starting_after: an integer nanosecond timestamp. if provided, messages logged at or
             before this timestamp are not included (exclusive lower bound).
-        :param ends_at: an integer nanosecond timestamp. if provided, messages logged after this
+        :param ending_at: an integer nanosecond timestamp. if provided, messages logged after this
             timestamp are not included (inclusive upper bound).
-        :param ends_before: an integer nanosecond timestamp. if provided, messages logged at or
+        :param ending_before: an integer nanosecond timestamp. if provided, messages logged at or
             after this timestamp are not included (exclusive upper bound).
 
-        At most one lower bound (``start_time``, ``starts_at``, ``starts_after``) and one upper
-        bound (``end_time``, ``ends_at``, ``ends_before``) may be provided.
+        At most one lower bound (``start_time``, ``starting_at``, ``starting_after``) and one upper
+        bound (``end_time``, ``ending_at``, ``ending_before``) may be provided.
         """
         raise NotImplementedError()
 
@@ -220,10 +228,10 @@ class McapReader(ABC):
         log_time_order: bool = True,
         reverse: bool = False,
         *,
-        starts_at: Optional[int] = None,
-        starts_after: Optional[int] = None,
-        ends_at: Optional[int] = None,
-        ends_before: Optional[int] = None,
+        starting_at: Optional[int] = None,
+        starting_after: Optional[int] = None,
+        ending_at: Optional[int] = None,
+        ending_before: Optional[int] = None,
     ) -> Iterator[DecodedMessageTuple]:
         """iterates through messages in an MCAP, decoding their contents.
 
@@ -235,10 +243,10 @@ class McapReader(ABC):
             end_time,
             log_time_order,
             reverse,
-            starts_at=starts_at,
-            starts_after=starts_after,
-            ends_at=ends_at,
-            ends_before=ends_before,
+            starting_at=starting_at,
+            starting_after=starting_after,
+            ending_at=ending_at,
+            ending_before=ending_before,
         )
 
         def decoded_message(
@@ -339,17 +347,17 @@ class SeekingReader(McapReader):
         log_time_order: bool = True,
         reverse: bool = False,
         *,
-        starts_at: Optional[int] = None,
-        starts_after: Optional[int] = None,
-        ends_at: Optional[int] = None,
-        ends_before: Optional[int] = None,
+        starting_at: Optional[int] = None,
+        starting_after: Optional[int] = None,
+        ending_at: Optional[int] = None,
+        ending_before: Optional[int] = None,
     ) -> Iterator[Tuple[Optional[Schema], Channel, Message]]:
         """iterates through the messages in an MCAP.
 
         See :py:meth:`McapReader.iter_messages` for a description of the arguments.
         """
-        starts_at, ends_before = _resolve_time_range(
-            start_time, end_time, starts_at, starts_after, ends_at, ends_before
+        starting_at, ending_before = _resolve_time_range(
+            start_time, end_time, starting_at, starting_after, ending_at, ending_before
         )
         if isinstance(topics, str):
             topics = [topics]
@@ -361,8 +369,8 @@ class SeekingReader(McapReader):
             yield from NonSeekingReader(self._stream).iter_messages(
                 topics,
                 log_time_order=log_time_order,
-                starts_at=starts_at,
-                ends_before=ends_before,
+                starting_at=starting_at,
+                ending_before=ending_before,
             )
             return
 
@@ -370,7 +378,7 @@ class SeekingReader(McapReader):
             log_time_order=log_time_order, reverse=reverse
         )
         for chunk_index in _chunks_matching_topics(
-            summary, topics, starts_at, ends_before
+            summary, topics, starting_at, ending_before
         ):
             message_queue.push(chunk_index)
         while message_queue:
@@ -385,9 +393,12 @@ class SeekingReader(McapReader):
                         channel = summary.channels[record.channel_id]
                         if topics is not None and channel.topic not in topics:
                             continue
-                        if starts_at is not None and record.log_time < starts_at:
+                        if starting_at is not None and record.log_time < starting_at:
                             continue
-                        if ends_before is not None and record.log_time >= ends_before:
+                        if (
+                            ending_before is not None
+                            and record.log_time >= ending_before
+                        ):
                             continue
                         if channel.schema_id == 0:
                             schema = None
@@ -547,10 +558,10 @@ class NonSeekingReader(McapReader):
         log_time_order: bool = True,
         reverse: bool = False,
         *,
-        starts_at: Optional[int] = None,
-        starts_after: Optional[int] = None,
-        ends_at: Optional[int] = None,
-        ends_before: Optional[int] = None,
+        starting_at: Optional[int] = None,
+        starting_after: Optional[int] = None,
+        ending_at: Optional[int] = None,
+        ending_before: Optional[int] = None,
     ) -> Iterator[Tuple[Optional[Schema], Channel, Message]]:
         """Iterates through the messages in an MCAP.
 
@@ -560,17 +571,17 @@ class NonSeekingReader(McapReader):
             setting log_time_order to True on a non-seekable stream will cause the entire content
             of the MCAP to be loaded into memory.
         """
-        starts_at, ends_before = _resolve_time_range(
-            start_time, end_time, starts_at, starts_after, ends_at, ends_before
+        starting_at, ending_before = _resolve_time_range(
+            start_time, end_time, starting_at, starting_after, ending_at, ending_before
         )
         if isinstance(topics, str):
             topics = [topics]
         if not log_time_order:
-            for t in self._iter_messages_internal(topics, starts_at, ends_before):
+            for t in self._iter_messages_internal(topics, starting_at, ending_before):
                 yield t
         else:
             for t in sorted(
-                self._iter_messages_internal(topics, starts_at, ends_before),
+                self._iter_messages_internal(topics, starting_at, ending_before),
                 key=lambda tup: tup[2].log_time,
                 reverse=reverse,
             ):
@@ -579,8 +590,8 @@ class NonSeekingReader(McapReader):
     def _iter_messages_internal(
         self,
         topics: Optional[Iterable[str]] = None,
-        starts_at: Optional[int] = None,
-        ends_before: Optional[int] = None,
+        starting_at: Optional[int] = None,
+        ending_before: Optional[int] = None,
     ) -> Iterator[Tuple[Optional[Schema], Channel, Message]]:
         self._check_spent()
         for record in self._stream_reader.records:
@@ -600,9 +611,9 @@ class NonSeekingReader(McapReader):
                 channel = self._channels[record.channel_id]
                 if topics is not None and channel.topic not in topics:
                     continue
-                if starts_at is not None and record.log_time < starts_at:
+                if starting_at is not None and record.log_time < starting_at:
                     continue
-                if ends_before is not None and record.log_time >= ends_before:
+                if ending_before is not None and record.log_time >= ending_before:
                     continue
                 if channel.schema_id == 0:
                     schema = None
