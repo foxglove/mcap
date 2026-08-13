@@ -72,12 +72,12 @@ Options:
       --allow-remote-scan
           Allow whole-file scans or downloads of remote inputs.
 
-          Applies to http(s):// and object-store URLs (s3://, s3a://, gs://, az://, abfs://). Small bounded indexed reads work without this flag.
+          Applies to http(s):// and object store URLs (s3://, s3a://, gs://, az://, abfs://). Small bounded indexed reads work without this flag.
 
       --no-sign-request
-          Do not sign object-store requests (credentials are not loaded).
+          Do not sign requests to S3, GCS, or Azure.
 
-          Useful for public buckets. Without this flag, S3 reads still fall back to unsigned requests when no credentials are available.
+          Useful for public buckets. Credentials are not loaded. Without this flag, S3 reads still fall back to unsigned requests when no credentials are available.
 
       --time-format <TIME_FORMAT>
           How to render timestamps in command output
