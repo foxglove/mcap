@@ -73,6 +73,7 @@ words:
   - genpy
   - gentools
   - golangci
+  - IMDS
   - infima
   - inputfile
   - intrinsics
@@ -118,6 +119,7 @@ words:
   - serde
   - sfixed
   - srgb
+  - SSO
   - staticmethod
   - stoull
   - struct

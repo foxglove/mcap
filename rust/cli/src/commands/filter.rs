@@ -22,6 +22,6 @@ pub fn run(ctx: &CommandContext, args: FilterCommand) -> Result<()> {
     }
     rewrite::run(
         RewriteOptions::from(&args),
-        source::SourceOptions::new(ctx.allow_remote_scan()),
+        source::SourceOptions::from_context(ctx),
     )
 }

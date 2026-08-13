@@ -5,7 +5,7 @@ use crate::context::CommandContext;
 use crate::{parse, render, source};
 
 pub fn run(ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
-    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let source_options = source::SourceOptions::from_context(ctx);
     let records = if let Some(remote) = source::try_open_remote_mcap(&args.file, source_options)? {
         collect_remote_metadata_records(&remote, source_options)?
     } else {

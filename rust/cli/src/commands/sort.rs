@@ -16,7 +16,7 @@ pub fn run(ctx: &CommandContext, args: SortCommand) -> Result<()> {
     args.common.warn_deprecations();
     rewrite::run(
         RewriteOptions::from(&args),
-        source::SourceOptions::new(ctx.allow_remote_scan()),
+        source::SourceOptions::from_context(ctx),
     )
 }
 

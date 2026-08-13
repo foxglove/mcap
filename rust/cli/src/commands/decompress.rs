@@ -11,8 +11,5 @@ pub fn run(ctx: &CommandContext, args: DecompressCommand) -> Result<()> {
     let options = RewriteOptions::from(&args.common)
         .compression(None)
         .order(args.order);
-    rewrite::run(
-        options,
-        crate::source::SourceOptions::new(ctx.allow_remote_scan()),
-    )
+    rewrite::run(options, crate::source::SourceOptions::from_context(ctx))
 }

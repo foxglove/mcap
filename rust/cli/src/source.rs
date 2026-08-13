@@ -73,12 +73,14 @@ impl InputData {
 pub struct SourceOptions {
     pub allow_remote_scan: bool,
     pub scan_data_without_statistics: bool,
+    pub no_sign_request: bool,
 }
 
 impl SourceOptions {
-    pub fn new(allow_remote_scan: bool) -> Self {
+    pub fn from_context(ctx: &crate::context::CommandContext) -> Self {
         Self {
-            allow_remote_scan,
+            allow_remote_scan: ctx.allow_remote_scan(),
+            no_sign_request: ctx.no_sign_request(),
             ..Self::default()
         }
     }
@@ -237,7 +239,7 @@ pub fn open_seekable_mcap_source(path: &Path) -> Result<std::fs::File> {
 
 pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<ParsedMcap> {
     if is_remote_url(path) {
-        match open_remote_range_reader(path)? {
+        match open_remote_range_reader(path, options)? {
             Some(mut reader) => {
                 if let Some(summary_bytes) = read_summary_bytes_from_remote(&mut reader, options)
                     .map_err(|err| remote_read_error(path, err))?
@@ -378,7 +380,7 @@ pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<Material
     let mut temp_file = builder
         .tempfile()
         .context("failed to create temporary remote input file")?;
-    read_remote_input_to_writer(path, temp_file.as_file_mut())?;
+    read_remote_input_to_writer(path, temp_file.as_file_mut(), options)?;
     std::io::Write::flush(temp_file.as_file_mut())
         .context("failed to flush temporary remote input file")?;
     Ok(MaterializedInput {
@@ -391,7 +393,7 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
     if !is_remote_url(path) {
         return Ok(None);
     }
-    let Some(mut reader) = open_remote_range_reader(path)? else {
+    let Some(mut reader) = open_remote_range_reader(path, options)? else {
         if !options.allow_remote_scan {
             bail!(
                 "{}: remote server does not support range requests; {}",
@@ -493,15 +495,24 @@ impl RemoteUrl {
         })
     }
 
-    fn options(&self) -> Vec<(String, String)> {
-        self.options_from_env_vars(std::env::vars_os())
+    fn is_s3(&self) -> bool {
+        matches!(
+            self.url.scheme().to_ascii_lowercase().as_str(),
+            "s3" | "s3a"
+        )
+    }
+
+    fn options(&self, source_options: SourceOptions) -> (Vec<(String, String)>, bool) {
+        self.options_from_env_vars(std::env::vars_os(), source_options, aws_imds_available)
     }
 
     fn options_from_env_vars(
         &self,
         vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
-    ) -> Vec<(String, String)> {
-        match self.kind {
+        source_options: SourceOptions,
+        imds_available: impl FnOnce() -> bool,
+    ) -> (Vec<(String, String)>, bool) {
+        let mut options = match self.kind {
             RemoteUrlKind::Http if self.url.scheme() == "http" => {
                 vec![("allow_http".to_string(), "true".to_string())]
             }
@@ -509,7 +520,19 @@ impl RemoteUrl {
             RemoteUrlKind::CloudSuffix | RemoteUrlKind::CloudNoSuffix => {
                 object_store_options_from_env_vars(vars)
             }
+        };
+
+        let unsigned = should_skip_signature(
+            &options,
+            self.is_s3(),
+            source_options.no_sign_request,
+            imds_available,
+        );
+        if unsigned && !options_request_skip_signature(&options) {
+            // object_store accepts the unprefixed alias for S3, GCS, and Azure.
+            options.push(("skip_signature".to_string(), "true".to_string()));
         }
+        (options, unsigned)
     }
 
     fn extension(&self) -> Option<String> {
@@ -534,35 +557,36 @@ struct ObjectStoreSource {
     store: Arc<dyn ObjectStore>,
     path: ObjectStorePath,
     display_url: String,
+    unsigned: bool,
 }
 
 impl ObjectStoreSource {
-    fn open(path: &Path) -> Result<Self> {
-        Self::open_remote(RemoteUrl::parse(path)?)
+    fn open(path: &Path, options: SourceOptions) -> Result<Self> {
+        Self::open_remote(RemoteUrl::parse(path)?, options)
     }
 
-    fn open_remote(remote_url: RemoteUrl) -> Result<Self> {
-        let (store, object_path) =
-            object_store::parse_url_opts(&remote_url.url, remote_url.options()).with_context(
-                || {
-                    format!(
-                        "failed to configure remote store for {}",
-                        remote_url.display_url
-                    )
-                },
-            )?;
+    fn open_remote(remote_url: RemoteUrl, options: SourceOptions) -> Result<Self> {
+        let (store_options, unsigned) = remote_url.options(options);
+        let (store, object_path) = object_store::parse_url_opts(&remote_url.url, store_options)
+            .with_context(|| {
+                format!(
+                    "failed to configure remote store for {}",
+                    remote_url.display_url
+                )
+            })?;
         Ok(Self {
             runtime: object_store_runtime()?,
             store: Arc::from(store),
             path: object_path,
             display_url: remote_url.display_url,
+            unsigned,
         })
     }
 
     fn stat(&self) -> Result<object_store::ObjectMeta> {
         self.runtime
             .block_on(self.store.head(&self.path))
-            .map_err(|err| concise_remote_stat_error(&self.display_url, err))
+            .map_err(|err| concise_remote_stat_error(&self.display_url, self.unsigned, err))
     }
 
     fn head_size(&self) -> Result<u64> {
@@ -582,7 +606,12 @@ impl ObjectStoreSource {
                 },
             ))
             .map_err(|err| {
-                concise_remote_operation_error("fetching range from", &self.display_url, err)
+                concise_remote_operation_error(
+                    "fetching range from",
+                    &self.display_url,
+                    self.unsigned,
+                    err,
+                )
             })?;
         validate_identity_content_encoding(&response.attributes, &self.display_url)?;
         let bytes = self
@@ -615,6 +644,7 @@ impl ObjectStoreSource {
             Err(err) => Err(concise_remote_operation_error(
                 "fetching range from",
                 &self.display_url,
+                self.unsigned,
                 err,
             )),
         }
@@ -682,6 +712,7 @@ impl ObjectStoreSource {
                     return Err(concise_remote_operation_error(
                         "fetching range from",
                         &self.display_url,
+                        self.unsigned,
                         err,
                     ));
                 }
@@ -714,10 +745,10 @@ pub struct RemoteRangeReader {
 }
 
 impl RemoteRangeReader {
-    fn open(path: &Path) -> Result<Option<Self>> {
+    fn open(path: &Path, options: SourceOptions) -> Result<Option<Self>> {
         let remote_url = RemoteUrl::parse(path)?;
         let kind = remote_url.kind;
-        let source = ObjectStoreSource::open_remote(remote_url)?;
+        let source = ObjectStoreSource::open_remote(remote_url, options)?;
         let Some((size, tail)) = source.read_summary_tail(kind, REMOTE_SUMMARY_TAIL_BYTES)? else {
             return Ok(None);
         };
@@ -738,6 +769,7 @@ impl RemoteRangeReader {
                 store,
                 path,
                 display_url: "memory:///test".to_string(),
+                unsigned: false,
             },
             kind: RemoteUrlKind::CloudSuffix,
             size,
@@ -766,6 +798,7 @@ impl RemoteRangeReader {
                 store,
                 path,
                 display_url: "memory:///test".to_string(),
+                unsigned: false,
             },
             kind: RemoteUrlKind::CloudSuffix,
             size,
@@ -831,14 +864,136 @@ const OBJECT_STORE_ENV_PREFIXES: [&str; 3] = ["AWS_", "GOOGLE_", "AZURE_"];
 fn object_store_options_from_env_vars(
     vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
 ) -> Vec<(String, String)> {
-    vars.into_iter()
+    let mut options: Vec<(String, String)> = vars
+        .into_iter()
         .filter_map(|(key, value)| Some((key.into_string().ok()?, value.into_string().ok()?)))
         .filter(|(key, _)| {
             OBJECT_STORE_ENV_PREFIXES
                 .iter()
                 .any(|prefix| key.starts_with(prefix))
         })
-        .collect()
+        .collect();
+
+    // object_store recognizes AWS_METADATA_ENDPOINT, not the AWS SDK name
+    // AWS_EC2_METADATA_SERVICE_ENDPOINT. Mirror the latter onto the former so the
+    // IMDS probe and credential fetch agree on the endpoint.
+    let has_metadata_endpoint = env_option(&options, &["AWS_METADATA_ENDPOINT"]).is_some();
+    if !has_metadata_endpoint {
+        if let Some(endpoint) = env_option(&options, &["AWS_EC2_METADATA_SERVICE_ENDPOINT"]) {
+            options.push(("AWS_METADATA_ENDPOINT".to_string(), endpoint.to_string()));
+        }
+    }
+
+    options
+}
+
+fn env_option<'a>(options: &'a [(String, String)], names: &[&str]) -> Option<&'a str> {
+    options.iter().find_map(|(key, value)| {
+        names
+            .iter()
+            .any(|name| key.eq_ignore_ascii_case(name))
+            .then_some(value.as_str())
+    })
+}
+
+fn is_env_truthy(value: &str) -> bool {
+    matches!(
+        value.to_ascii_lowercase().as_str(),
+        "1" | "true" | "t" | "yes" | "y" | "on"
+    )
+}
+
+fn options_request_skip_signature(options: &[(String, String)]) -> bool {
+    env_option(
+        options,
+        &[
+            "skip_signature",
+            "aws_skip_signature",
+            "google_skip_signature",
+            "azure_skip_signature",
+        ],
+    )
+    .is_some_and(is_env_truthy)
+}
+
+// Mirrors the credential branches AmazonS3Builder::build takes before its IMDS
+// fallback, so auto-unsigned only kicks in when object_store would otherwise
+// probe the instance metadata service.
+fn aws_env_credentials_present(options: &[(String, String)]) -> bool {
+    let has = |name: &str| env_option(options, &[name]).is_some();
+    if has("AWS_ACCESS_KEY_ID") || has("AWS_SECRET_ACCESS_KEY") {
+        return true;
+    }
+    if has("AWS_WEB_IDENTITY_TOKEN_FILE") && has("AWS_ROLE_ARN") {
+        return true;
+    }
+    if has("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI") {
+        return true;
+    }
+    has("AWS_CONTAINER_CREDENTIALS_FULL_URI") && has("AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE")
+}
+
+fn should_skip_signature(
+    options: &[(String, String)],
+    is_s3: bool,
+    no_sign_request: bool,
+    imds_available: impl FnOnce() -> bool,
+) -> bool {
+    if options_request_skip_signature(options) || no_sign_request {
+        return true;
+    }
+    // Auto-unsigned is S3-only: GCS and Azure have their own credential fallbacks.
+    is_s3 && !aws_env_credentials_present(options) && !imds_available()
+}
+
+fn aws_ec2_metadata_disabled() -> bool {
+    // AWS SDKs treat only the string "true" (case-insensitive) as disabled.
+    std::env::var("AWS_EC2_METADATA_DISABLED")
+        .ok()
+        .is_some_and(|value| value.eq_ignore_ascii_case("true"))
+}
+
+fn aws_imds_endpoint() -> String {
+    std::env::var("AWS_EC2_METADATA_SERVICE_ENDPOINT")
+        .or_else(|_| std::env::var("AWS_METADATA_ENDPOINT"))
+        .unwrap_or_else(|_| "http://169.254.169.254".to_string())
+}
+
+// One attempt, one-second timeout — matching AWS SDK defaults for
+// metadata_service_timeout / metadata_service_num_attempts. Cached so a process
+// that opens several S3 URLs does not repeat the probe.
+fn aws_imds_available() -> bool {
+    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        if aws_ec2_metadata_disabled() {
+            return false;
+        }
+        probe_aws_imds_at(&aws_imds_endpoint())
+    })
+}
+
+fn probe_aws_imds_at(endpoint: &str) -> bool {
+    let endpoint = endpoint.trim_end_matches('/');
+    let token_url = format!("{endpoint}/latest/api/token");
+    let Ok(runtime) = object_store_runtime() else {
+        return false;
+    };
+    runtime.block_on(async {
+        let Ok(client) = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(1))
+            .connect_timeout(std::time::Duration::from_secs(1))
+            .build()
+        else {
+            return false;
+        };
+        client
+            .put(token_url)
+            .header("X-aws-ec2-metadata-token-ttl-seconds", "60")
+            .send()
+            .await
+            .map(|response| response.status().is_success())
+            .unwrap_or(false)
+    })
 }
 
 // object_store maps a `200 OK` response to a ranged request onto `NotSupported`,
@@ -848,9 +1003,13 @@ fn remote_range_not_supported(err: &object_store::Error) -> bool {
     matches!(err, object_store::Error::NotSupported { .. })
 }
 
-fn concise_remote_stat_error(display_url: &str, err: object_store::Error) -> anyhow::Error {
+fn concise_remote_stat_error(
+    display_url: &str,
+    unsigned: bool,
+    err: object_store::Error,
+) -> anyhow::Error {
     if let Some(status) = object_store_error_status(&err) {
-        return remote_status_read_error(display_url, &status);
+        return remote_status_read_error(display_url, &status, unsigned);
     }
     anyhow::anyhow!("failed to read {display_url}\nFailed to stat remote input: {err}")
 }
@@ -858,16 +1017,26 @@ fn concise_remote_stat_error(display_url: &str, err: object_store::Error) -> any
 fn concise_remote_operation_error(
     operation: &str,
     display_url: &str,
+    unsigned: bool,
     err: object_store::Error,
 ) -> anyhow::Error {
     if let Some(status) = object_store_error_status(&err) {
-        return remote_status_read_error(display_url, &status);
+        return remote_status_read_error(display_url, &status, unsigned);
     }
     anyhow::anyhow!("failed to read {display_url}\nFailed while {operation}: {err}")
 }
 
-fn remote_status_read_error(display_url: &str, status: &str) -> anyhow::Error {
-    anyhow::anyhow!("failed to read {display_url}\nRemote server returned {status}")
+fn remote_status_read_error(display_url: &str, status: &str, unsigned: bool) -> anyhow::Error {
+    let mut message = format!("failed to read {display_url}\nRemote server returned {status}");
+    if unsigned && status.starts_with("403") {
+        let scheme = display_url.split_once("://").map(|(scheme, _)| scheme);
+        if matches!(scheme, Some("s3" | "s3a")) {
+            message.push_str(
+                "\nNo AWS credentials were found. The CLI reads credentials from environment variables only (not ~/.aws/credentials or SSO profiles). If this bucket is private, export credentials (for example via `aws configure export-credentials`); if it is public, check AWS_REGION.",
+            );
+        }
+    }
+    anyhow::anyhow!("{message}")
 }
 
 fn remote_read_error(path: &Path, err: anyhow::Error) -> anyhow::Error {
@@ -922,9 +1091,12 @@ fn status_from_object_store_message(message: &str) -> Option<String> {
     (!status.is_empty()).then(|| status.to_string())
 }
 
-fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
+fn open_remote_range_reader(
+    path: &Path,
+    options: SourceOptions,
+) -> Result<Option<RemoteRangeReader>> {
     if is_remote_url(path) {
-        return RemoteRangeReader::open(path);
+        return RemoteRangeReader::open(path, options);
     }
     Ok(None)
 }
@@ -935,13 +1107,22 @@ pub(crate) fn redacted_display(path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-fn read_remote_input_to_writer(path: &Path, writer: &mut impl std::io::Write) -> Result<()> {
-    let source = ObjectStoreSource::open(path)?;
+fn read_remote_input_to_writer(
+    path: &Path,
+    writer: &mut impl std::io::Write,
+    options: SourceOptions,
+) -> Result<()> {
+    let source = ObjectStoreSource::open(path, options)?;
     eprintln!("Warning: reading entire remote file {}", source.display_url);
 
     source.runtime.block_on(async {
         let response = source.store.get(&source.path).await.map_err(|err| {
-            concise_remote_operation_error("reading remote input from", &source.display_url, err)
+            concise_remote_operation_error(
+                "reading remote input from",
+                &source.display_url,
+                source.unsigned,
+                err,
+            )
         })?;
         validate_identity_content_encoding(&response.attributes, &source.display_url)?;
         let mut stream = response.into_stream();
@@ -1648,16 +1829,28 @@ mod tests {
     #[test]
     fn remote_http_input_reads_entire_file() {
         let url = serve_http(b"hello remote", true);
-        let input =
-            load_path(Path::new(&url), super::SourceOptions::new(true)).expect("remote read");
+        let input = load_path(
+            Path::new(&url),
+            super::SourceOptions {
+                allow_remote_scan: true,
+                ..super::SourceOptions::default()
+            },
+        )
+        .expect("remote read");
         assert_eq!(input.as_slice(), b"hello remote");
     }
 
     #[test]
     fn remote_http_input_rejects_gzip_content_encoding() {
         let url = serve_http_with_headers(b"hello remote", false, &[("Content-Encoding", "gzip")]);
-        let err = load_path(Path::new(&url), super::SourceOptions::new(true))
-            .expect_err("gzip-encoded remote read should fail");
+        let err = load_path(
+            Path::new(&url),
+            super::SourceOptions {
+                allow_remote_scan: true,
+                ..super::SourceOptions::default()
+            },
+        )
+        .expect_err("gzip-encoded remote read should fail");
         let message = format!("{err:#}");
         assert!(message.contains("MCAP remote reads require identity encoding"));
     }
@@ -1917,9 +2110,10 @@ mod tests {
     #[test]
     fn http_range_reader_uses_object_store_and_allows_seek_past_end() {
         let url = serve_http(b"hello remote", true);
-        let mut reader = super::RemoteRangeReader::open(Path::new(&url))
-            .expect("HTTP range reader should open through object_store")
-            .expect("HTTP range reader should support ranges");
+        let mut reader =
+            super::RemoteRangeReader::open(Path::new(&url), super::SourceOptions::default())
+                .expect("HTTP range reader should open through object_store")
+                .expect("HTTP range reader should support ranges");
 
         assert_eq!(reader.read_range(0, 5).expect("range"), b"hello");
         assert_eq!(
@@ -1958,9 +2152,11 @@ mod tests {
 
     #[test]
     fn object_store_source_open_uses_url_parser() {
-        let source =
-            super::ObjectStoreSource::open(Path::new("https://example.com/demo.mcap?token=secret"))
-                .expect("HTTP object store URL should parse");
+        let source = super::ObjectStoreSource::open(
+            Path::new("https://example.com/demo.mcap?token=secret"),
+            super::SourceOptions::default(),
+        )
+        .expect("HTTP object store URL should parse");
         assert_eq!(source.path.as_ref(), "demo.mcap");
         assert_eq!(source.display_url, "https://example.com/demo.mcap");
     }
@@ -1979,18 +2175,25 @@ mod tests {
         ];
         let http =
             super::RemoteUrl::parse(Path::new("http://example.com/demo.mcap")).expect("http URL");
+        let (http_options, http_unsigned) =
+            http.options_from_env_vars(vars.clone(), super::SourceOptions::default(), || false);
         assert_eq!(
-            http.options_from_env_vars(vars.clone()),
+            http_options,
             vec![("allow_http".to_string(), "true".to_string())]
         );
+        assert!(!http_unsigned);
 
         let https =
             super::RemoteUrl::parse(Path::new("https://example.com/demo.mcap")).expect("https URL");
-        assert!(https.options_from_env_vars(vars.clone()).is_empty());
+        let (https_options, _) =
+            https.options_from_env_vars(vars.clone(), super::SourceOptions::default(), || false);
+        assert!(https_options.is_empty());
 
         let s3 = super::RemoteUrl::parse(Path::new("s3://bucket/demo.mcap")).expect("s3 URL");
+        let (s3_options, s3_unsigned) =
+            s3.options_from_env_vars(vars, super::SourceOptions::default(), || false);
         assert_eq!(
-            s3.options_from_env_vars(vars),
+            s3_options,
             vec![
                 ("AWS_ACCESS_KEY_ID".to_string(), "akid".to_string()),
                 ("GOOGLE_BUCKET".to_string(), "bucket".to_string()),
@@ -1999,6 +2202,153 @@ mod tests {
                     "account".to_string()
                 ),
             ]
+        );
+        assert!(!s3_unsigned);
+    }
+
+    #[test]
+    fn s3_skips_signature_when_no_credentials_and_imds_unavailable() {
+        use std::ffi::OsString;
+
+        let s3 = super::RemoteUrl::parse(Path::new("s3://bucket/demo.mcap")).expect("s3 URL");
+        let (options, unsigned) = s3.options_from_env_vars(
+            None::<(OsString, OsString)>,
+            super::SourceOptions::default(),
+            || false,
+        );
+        assert!(unsigned);
+        assert!(options
+            .iter()
+            .any(|(key, value)| { key.eq_ignore_ascii_case("skip_signature") && value == "true" }));
+    }
+
+    #[test]
+    fn s3_keeps_signature_when_imds_available() {
+        use std::ffi::OsString;
+
+        let s3 = super::RemoteUrl::parse(Path::new("s3://bucket/demo.mcap")).expect("s3 URL");
+        let (options, unsigned) = s3.options_from_env_vars(
+            None::<(OsString, OsString)>,
+            super::SourceOptions::default(),
+            || true,
+        );
+        assert!(!unsigned);
+        assert!(!options
+            .iter()
+            .any(|(key, _)| key.eq_ignore_ascii_case("skip_signature")));
+    }
+
+    #[test]
+    fn s3_keeps_signature_when_env_credentials_present() {
+        use std::ffi::OsString;
+
+        let s3 = super::RemoteUrl::parse(Path::new("s3://bucket/demo.mcap")).expect("s3 URL");
+        let (options, unsigned) = s3.options_from_env_vars(
+            [
+                (OsString::from("AWS_ACCESS_KEY_ID"), OsString::from("akid")),
+                (
+                    OsString::from("AWS_SECRET_ACCESS_KEY"),
+                    OsString::from("secret"),
+                ),
+            ],
+            super::SourceOptions::default(),
+            || false,
+        );
+        assert!(!unsigned);
+        assert!(!options
+            .iter()
+            .any(|(key, _)| key.eq_ignore_ascii_case("skip_signature")));
+    }
+
+    #[test]
+    fn no_sign_request_forces_unsigned_even_with_credentials() {
+        use std::ffi::OsString;
+
+        let s3 = super::RemoteUrl::parse(Path::new("s3://bucket/demo.mcap")).expect("s3 URL");
+        let source_options = super::SourceOptions {
+            no_sign_request: true,
+            ..super::SourceOptions::default()
+        };
+        let (options, unsigned) = s3.options_from_env_vars(
+            [
+                (OsString::from("AWS_ACCESS_KEY_ID"), OsString::from("akid")),
+                (
+                    OsString::from("AWS_SECRET_ACCESS_KEY"),
+                    OsString::from("secret"),
+                ),
+            ],
+            source_options,
+            || true,
+        );
+        assert!(unsigned);
+        assert!(options
+            .iter()
+            .any(|(key, value)| { key.eq_ignore_ascii_case("skip_signature") && value == "true" }));
+    }
+
+    #[test]
+    fn gs_does_not_auto_skip_signature_without_credentials() {
+        use std::ffi::OsString;
+
+        let gs = super::RemoteUrl::parse(Path::new("gs://bucket/demo.mcap")).expect("gs URL");
+        let (options, unsigned) = gs.options_from_env_vars(
+            None::<(OsString, OsString)>,
+            super::SourceOptions::default(),
+            || false,
+        );
+        assert!(!unsigned);
+        assert!(!options
+            .iter()
+            .any(|(key, _)| key.eq_ignore_ascii_case("skip_signature")));
+    }
+
+    #[test]
+    fn aws_skip_signature_env_is_left_alone() {
+        use std::ffi::OsString;
+
+        let s3 = super::RemoteUrl::parse(Path::new("s3://bucket/demo.mcap")).expect("s3 URL");
+        let (options, unsigned) = s3.options_from_env_vars(
+            [(OsString::from("AWS_SKIP_SIGNATURE"), OsString::from("true"))],
+            super::SourceOptions::default(),
+            || true,
+        );
+        assert!(unsigned);
+        assert_eq!(
+            options
+                .iter()
+                .filter(|(key, _)| key.eq_ignore_ascii_case("skip_signature")
+                    || key.eq_ignore_ascii_case("aws_skip_signature"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn imds_probe_succeeds_against_token_endpoint() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        thread::spawn(move || {
+            if let Ok((mut stream, _)) = listener.accept() {
+                let mut request = [0u8; 1024];
+                let _ = stream.read(&mut request);
+                let _ = stream.write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 8\r\nConnection: close\r\n\r\ntokentok",
+                );
+            }
+        });
+        assert!(super::probe_aws_imds_at(&format!("http://{addr}")));
+    }
+
+    #[test]
+    fn imds_probe_fails_fast_against_closed_port() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        drop(listener);
+        let started = std::time::Instant::now();
+        assert!(!super::probe_aws_imds_at(&format!("http://{addr}")));
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(3),
+            "IMDS probe should fail within the one-second timeout budget"
         );
     }
 
@@ -2056,6 +2406,40 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn object_store_env_options_mirror_sdk_imds_endpoint() {
+        use std::ffi::OsString;
+
+        let options = super::object_store_options_from_env_vars([(
+            OsString::from("AWS_EC2_METADATA_SERVICE_ENDPOINT"),
+            OsString::from("http://127.0.0.1:9"),
+        )]);
+        assert!(options.iter().any(|(key, value)| {
+            key == "AWS_METADATA_ENDPOINT" && value == "http://127.0.0.1:9"
+        }));
+
+        let options = super::object_store_options_from_env_vars([
+            (
+                OsString::from("AWS_EC2_METADATA_SERVICE_ENDPOINT"),
+                OsString::from("http://127.0.0.1:9"),
+            ),
+            (
+                OsString::from("AWS_METADATA_ENDPOINT"),
+                OsString::from("http://127.0.0.1:8"),
+            ),
+        ]);
+        assert_eq!(
+            options
+                .iter()
+                .filter(|(key, _)| key == "AWS_METADATA_ENDPOINT")
+                .count(),
+            1
+        );
+        assert!(options.iter().any(|(key, value)| {
+            key == "AWS_METADATA_ENDPOINT" && value == "http://127.0.0.1:8"
+        }));
     }
 
     #[test]
@@ -2172,8 +2556,14 @@ mod tests {
         let (buffer, channel_id) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let url = serve_http(body, false);
-        let parsed = super::parse_mcap_from_path(Path::new(&url), super::SourceOptions::new(true))
-            .expect("non-range HTTP input should materialize with scan opt-in");
+        let parsed = super::parse_mcap_from_path(
+            Path::new(&url),
+            super::SourceOptions {
+                allow_remote_scan: true,
+                ..super::SourceOptions::default()
+            },
+        )
+        .expect("non-range HTTP input should materialize with scan opt-in");
 
         assert!(parsed.channels.contains_key(&channel_id));
     }

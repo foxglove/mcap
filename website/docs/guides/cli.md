@@ -74,6 +74,11 @@ Options:
 
           Applies to http(s):// and object-store URLs (s3://, s3a://, gs://, az://, abfs://). Small bounded indexed reads work without this flag.
 
+      --no-sign-request
+          Do not sign object-store requests (credentials are not loaded).
+
+          Useful for public buckets. Without this flag, S3 reads still fall back to unsigned requests when no credentials are available.
+
       --time-format <TIME_FORMAT>
           How to render timestamps in command output
 
@@ -301,11 +306,16 @@ mcap filter --allow-remote-scan gs://your-remote-bucket/demo.mcap -o filtered.mc
 
 #### Credentials
 
-Credentials are read from the standard environment variables for each backend (`AWS_*` for S3, `GOOGLE_*` for GCS, and `AZURE_*` for Azure Blob Storage). When reading from S3 you must also specify the region of the bucket:
+Credentials are read from the standard environment variables for each backend (`AWS_*` for S3, `GOOGLE_*` for GCS, and `AZURE_*` for Azure Blob Storage). The CLI does not read `~/.aws/credentials` or SSO profiles; export credentials into the environment when needed (for example with `aws configure export-credentials`).
+
+When reading from S3, set the bucket region. Public buckets work without credentials: if none are available, the CLI sends an unsigned request. Force that with `--no-sign-request`:
 
 ```
 AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
+AWS_REGION=eu-north-1 mcap --no-sign-request info s3://my-public-bucket/demo.mcap
 ```
+
+Set `AWS_EC2_METADATA_DISABLED=true` to skip the EC2 instance metadata probe when no credential environment variables are set.
 
 ### File Diagnostics
 

@@ -58,6 +58,13 @@ pub struct Args {
     #[arg(long, default_value_t = false, global = true)]
     pub allow_remote_scan: bool,
 
+    /// Do not sign object-store requests (credentials are not loaded).
+    ///
+    /// Useful for public buckets. Without this flag, S3 reads still fall back to unsigned
+    /// requests when no credentials are available.
+    #[arg(long, default_value_t = false, global = true)]
+    pub no_sign_request: bool,
+
     /// How to render timestamps in command output
     #[arg(
         long,

@@ -36,6 +36,8 @@ When adding a command that can complete despite losing data, return `CommandOutc
 
 Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://`/`abfs://`) are handled in `source.rs` via `object_store`. Bounded, indexed reads — a summary-section read, or a single attachment/metadata range read under the no-opt-in caps — are allowed without a flag. Any command that would scan or download an entire remote file requires the global `--allow-remote-scan` flag; gate new whole-file remote reads behind `SourceOptions::allow_remote_scan` accordingly.
 
+For S3, requests are signed when credential environment variables are set or the EC2 instance metadata service answers a one-second probe. Otherwise the CLI falls back to an unsigned request (and `--no-sign-request` forces that). Construct new remote sources with `SourceOptions::from_context` so global flags stay wired.
+
 ### Output and logging
 
 Results go to stdout; diagnostics and warnings go to stderr. Use the `render` helpers for tabular output so column alignment and byte/time formatting stay consistent.
