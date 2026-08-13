@@ -72,8 +72,8 @@ impl InputData {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SourceOptions {
     pub allow_remote_scan: bool,
-    pub scan_data_without_statistics: bool,
     pub no_sign_request: bool,
+    pub scan_data_without_statistics: bool,
 }
 
 impl SourceOptions {
@@ -861,6 +861,22 @@ impl std::io::Seek for RemoteRangeReader {
 // object_store builders themselves read in their `from_env` constructors.
 const OBJECT_STORE_ENV_PREFIXES: [&str; 3] = ["AWS_", "GOOGLE_", "AZURE_"];
 
+fn env_option<'a>(options: &'a [(String, String)], names: &[&str]) -> Option<&'a str> {
+    options.iter().find_map(|(key, value)| {
+        names
+            .iter()
+            .any(|name| key.eq_ignore_ascii_case(name))
+            .then_some(value.as_str())
+    })
+}
+
+fn is_env_truthy(value: &str) -> bool {
+    matches!(
+        value.to_ascii_lowercase().as_str(),
+        "1" | "true" | "t" | "yes" | "y" | "on"
+    )
+}
+
 fn object_store_options_from_env_vars(
     vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
 ) -> Vec<(String, String)> {
@@ -885,22 +901,6 @@ fn object_store_options_from_env_vars(
     }
 
     options
-}
-
-fn env_option<'a>(options: &'a [(String, String)], names: &[&str]) -> Option<&'a str> {
-    options.iter().find_map(|(key, value)| {
-        names
-            .iter()
-            .any(|name| key.eq_ignore_ascii_case(name))
-            .then_some(value.as_str())
-    })
-}
-
-fn is_env_truthy(value: &str) -> bool {
-    matches!(
-        value.to_ascii_lowercase().as_str(),
-        "1" | "true" | "t" | "yes" | "y" | "on"
-    )
 }
 
 fn options_request_skip_signature(options: &[(String, String)]) -> bool {
@@ -934,19 +934,6 @@ fn aws_env_credentials_present(options: &[(String, String)]) -> bool {
     has("AWS_CONTAINER_CREDENTIALS_FULL_URI") && has("AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE")
 }
 
-fn should_skip_signature(
-    options: &[(String, String)],
-    is_s3: bool,
-    no_sign_request: bool,
-    imds_available: impl FnOnce() -> bool,
-) -> bool {
-    if options_request_skip_signature(options) || no_sign_request {
-        return true;
-    }
-    // Auto-unsigned is S3-only: GCS and Azure have their own credential fallbacks.
-    is_s3 && !aws_env_credentials_present(options) && !imds_available()
-}
-
 fn aws_ec2_metadata_disabled() -> bool {
     // AWS SDKs treat only the string "true" (case-insensitive) as disabled.
     std::env::var("AWS_EC2_METADATA_DISABLED")
@@ -958,19 +945,6 @@ fn aws_imds_endpoint() -> String {
     std::env::var("AWS_EC2_METADATA_SERVICE_ENDPOINT")
         .or_else(|_| std::env::var("AWS_METADATA_ENDPOINT"))
         .unwrap_or_else(|_| "http://169.254.169.254".to_string())
-}
-
-// One attempt, one-second timeout — matching AWS SDK defaults for
-// metadata_service_timeout / metadata_service_num_attempts. Cached so a process
-// that opens several S3 URLs does not repeat the probe.
-fn aws_imds_available() -> bool {
-    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        if aws_ec2_metadata_disabled() {
-            return false;
-        }
-        probe_aws_imds_at(&aws_imds_endpoint())
-    })
 }
 
 fn probe_aws_imds_at(endpoint: &str) -> bool {
@@ -995,6 +969,32 @@ fn probe_aws_imds_at(endpoint: &str) -> bool {
             .map(|response| response.status().is_success())
             .unwrap_or(false)
     })
+}
+
+// One attempt, one-second timeout — matching AWS SDK defaults for
+// metadata_service_timeout / metadata_service_num_attempts. Cached so a process
+// that opens several S3 URLs does not repeat the probe.
+fn aws_imds_available() -> bool {
+    static AVAILABLE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *AVAILABLE.get_or_init(|| {
+        if aws_ec2_metadata_disabled() {
+            return false;
+        }
+        probe_aws_imds_at(&aws_imds_endpoint())
+    })
+}
+
+fn should_skip_signature(
+    options: &[(String, String)],
+    is_s3: bool,
+    no_sign_request: bool,
+    imds_available: impl FnOnce() -> bool,
+) -> bool {
+    if options_request_skip_signature(options) || no_sign_request {
+        return true;
+    }
+    // Auto-unsigned is S3-only: GCS and Azure have their own credential fallbacks.
+    is_s3 && !aws_env_credentials_present(options) && !imds_available()
 }
 
 // object_store maps a `200 OK` response to a ranged request onto `NotSupported`,
@@ -2162,6 +2162,96 @@ mod tests {
         assert_eq!(source.display_url, "https://example.com/demo.mcap");
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn object_store_env_options_ignore_non_utf8_values() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let options = super::object_store_options_from_env_vars([
+            (OsString::from("AWS_REGION"), OsString::from("us-east-1")),
+            (
+                OsString::from_vec(vec![0xFF, b'B', b'A', b'D']),
+                OsString::from("ignored-key"),
+            ),
+            (
+                OsString::from("IGNORED_VALUE"),
+                OsString::from_vec(vec![0xFF, b'v']),
+            ),
+        ]);
+        assert_eq!(
+            options,
+            vec![("AWS_REGION".to_string(), "us-east-1".to_string())]
+        );
+    }
+
+    #[test]
+    fn object_store_env_options_only_forward_recognized_prefixes() {
+        use std::ffi::OsString;
+
+        let options = super::object_store_options_from_env_vars([
+            (OsString::from("AWS_ACCESS_KEY_ID"), OsString::from("akid")),
+            (OsString::from("GOOGLE_BUCKET"), OsString::from("bucket")),
+            (
+                OsString::from("AZURE_STORAGE_ACCOUNT_NAME"),
+                OsString::from("account"),
+            ),
+            // Unprefixed aliases like `endpoint`/`region`/`token` would otherwise
+            // be applied by object_store; they must not be forwarded.
+            (
+                OsString::from("ENDPOINT"),
+                OsString::from("http://attacker"),
+            ),
+            (OsString::from("REGION"), OsString::from("elsewhere")),
+            (OsString::from("TOKEN"), OsString::from("unrelated")),
+        ]);
+        assert_eq!(
+            options,
+            vec![
+                ("AWS_ACCESS_KEY_ID".to_string(), "akid".to_string()),
+                ("GOOGLE_BUCKET".to_string(), "bucket".to_string()),
+                (
+                    "AZURE_STORAGE_ACCOUNT_NAME".to_string(),
+                    "account".to_string()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn object_store_env_options_mirror_sdk_imds_endpoint() {
+        use std::ffi::OsString;
+
+        let options = super::object_store_options_from_env_vars([(
+            OsString::from("AWS_EC2_METADATA_SERVICE_ENDPOINT"),
+            OsString::from("http://127.0.0.1:9"),
+        )]);
+        assert!(options.iter().any(|(key, value)| {
+            key == "AWS_METADATA_ENDPOINT" && value == "http://127.0.0.1:9"
+        }));
+
+        let options = super::object_store_options_from_env_vars([
+            (
+                OsString::from("AWS_EC2_METADATA_SERVICE_ENDPOINT"),
+                OsString::from("http://127.0.0.1:9"),
+            ),
+            (
+                OsString::from("AWS_METADATA_ENDPOINT"),
+                OsString::from("http://127.0.0.1:8"),
+            ),
+        ]);
+        assert_eq!(
+            options
+                .iter()
+                .filter(|(key, _)| key == "AWS_METADATA_ENDPOINT")
+                .count(),
+            1
+        );
+        assert!(options.iter().any(|(key, value)| {
+            key == "AWS_METADATA_ENDPOINT" && value == "http://127.0.0.1:8"
+        }));
+    }
+
     #[test]
     fn remote_url_options_keep_http_and_cloud_config_separate() {
         use std::ffi::OsString;
@@ -2351,96 +2441,6 @@ mod tests {
             started.elapsed() < std::time::Duration::from_secs(3),
             "IMDS probe should fail within the one-second timeout budget"
         );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn object_store_env_options_ignore_non_utf8_values() {
-        use std::ffi::OsString;
-        use std::os::unix::ffi::OsStringExt;
-
-        let options = super::object_store_options_from_env_vars([
-            (OsString::from("AWS_REGION"), OsString::from("us-east-1")),
-            (
-                OsString::from_vec(vec![0xFF, b'B', b'A', b'D']),
-                OsString::from("ignored-key"),
-            ),
-            (
-                OsString::from("IGNORED_VALUE"),
-                OsString::from_vec(vec![0xFF, b'v']),
-            ),
-        ]);
-        assert_eq!(
-            options,
-            vec![("AWS_REGION".to_string(), "us-east-1".to_string())]
-        );
-    }
-
-    #[test]
-    fn object_store_env_options_only_forward_recognized_prefixes() {
-        use std::ffi::OsString;
-
-        let options = super::object_store_options_from_env_vars([
-            (OsString::from("AWS_ACCESS_KEY_ID"), OsString::from("akid")),
-            (OsString::from("GOOGLE_BUCKET"), OsString::from("bucket")),
-            (
-                OsString::from("AZURE_STORAGE_ACCOUNT_NAME"),
-                OsString::from("account"),
-            ),
-            // Unprefixed aliases like `endpoint`/`region`/`token` would otherwise
-            // be applied by object_store; they must not be forwarded.
-            (
-                OsString::from("ENDPOINT"),
-                OsString::from("http://attacker"),
-            ),
-            (OsString::from("REGION"), OsString::from("elsewhere")),
-            (OsString::from("TOKEN"), OsString::from("unrelated")),
-        ]);
-        assert_eq!(
-            options,
-            vec![
-                ("AWS_ACCESS_KEY_ID".to_string(), "akid".to_string()),
-                ("GOOGLE_BUCKET".to_string(), "bucket".to_string()),
-                (
-                    "AZURE_STORAGE_ACCOUNT_NAME".to_string(),
-                    "account".to_string()
-                ),
-            ]
-        );
-    }
-
-    #[test]
-    fn object_store_env_options_mirror_sdk_imds_endpoint() {
-        use std::ffi::OsString;
-
-        let options = super::object_store_options_from_env_vars([(
-            OsString::from("AWS_EC2_METADATA_SERVICE_ENDPOINT"),
-            OsString::from("http://127.0.0.1:9"),
-        )]);
-        assert!(options.iter().any(|(key, value)| {
-            key == "AWS_METADATA_ENDPOINT" && value == "http://127.0.0.1:9"
-        }));
-
-        let options = super::object_store_options_from_env_vars([
-            (
-                OsString::from("AWS_EC2_METADATA_SERVICE_ENDPOINT"),
-                OsString::from("http://127.0.0.1:9"),
-            ),
-            (
-                OsString::from("AWS_METADATA_ENDPOINT"),
-                OsString::from("http://127.0.0.1:8"),
-            ),
-        ]);
-        assert_eq!(
-            options
-                .iter()
-                .filter(|(key, _)| key == "AWS_METADATA_ENDPOINT")
-                .count(),
-            1
-        );
-        assert!(options.iter().any(|(key, value)| {
-            key == "AWS_METADATA_ENDPOINT" && value == "http://127.0.0.1:8"
-        }));
     }
 
     #[test]

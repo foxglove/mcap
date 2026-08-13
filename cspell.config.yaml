@@ -115,11 +115,11 @@ words:
   - rustc
   - rustup
   - Saronic
+  - SSO
   - schemaless
   - serde
   - sfixed
   - srgb
-  - SSO
   - staticmethod
   - stoull
   - struct
