@@ -917,8 +917,9 @@ fn options_request_skip_signature(options: &[(String, String)]) -> bool {
 }
 
 // Mirrors the credential branches AmazonS3Builder::build takes before its IMDS
-// fallback, so auto-unsigned only kicks in when object_store would otherwise
-// probe the instance metadata service.
+// fallback (object_store 0.13.2), so auto-unsigned only kicks in when
+// object_store would otherwise probe the instance metadata service. Re-check
+// this list when bumping object_store.
 fn aws_env_credentials_present(options: &[(String, String)]) -> bool {
     let has = |name: &str| env_option(options, &[name]).is_some();
     if has("AWS_ACCESS_KEY_ID") || has("AWS_SECRET_ACCESS_KEY") {
@@ -1032,7 +1033,7 @@ fn remote_status_read_error(display_url: &str, status: &str, unsigned: bool) -> 
         let scheme = display_url.split_once("://").map(|(scheme, _)| scheme);
         if matches!(scheme, Some("s3" | "s3a")) {
             message.push_str(
-                "\nNo AWS credentials were found. The CLI reads credentials from environment variables only (not ~/.aws/credentials or SSO profiles). If this bucket is private, export credentials (for example via `aws configure export-credentials`); if it is public, check AWS_REGION.",
+                "\nThe request was sent unsigned. The CLI reads AWS credentials from environment variables only (not ~/.aws/credentials or SSO profiles). If this bucket is private, export credentials (for example via `aws configure export-credentials`); if it is public, check AWS_REGION.",
             );
         }
     }
