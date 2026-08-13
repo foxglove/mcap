@@ -312,7 +312,7 @@ When reading from S3, set the bucket region. Public buckets work without credent
 
 ```
 AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
-AWS_REGION=eu-north-1 mcap --no-sign-request info s3://my-public-bucket/demo.mcap
+AWS_REGION=eu-north-1 mcap info --no-sign-request s3://my-public-bucket/demo.mcap
 ```
 
 Set `AWS_EC2_METADATA_DISABLED=true` to skip the EC2 instance metadata probe when no credential environment variables are set.
