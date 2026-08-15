@@ -65,3 +65,14 @@ def test_write_attachment():
     assert attachments[0].name == "test_attachment"
     assert attachments[0].media_type == "text/plain"
     assert attachments[0].data == b"test_data"
+
+
+def test_write_custom_profile():
+    output = BytesIO()
+    writer = Writer(output=output, profile="custom_profile")
+    writer.write_message("timestamps", Timestamp(seconds=5, nanos=10), log_time=15)
+    writer.finish()
+
+    output.seek(0)
+    reader = make_reader(output, decoder_factories=[DecoderFactory()])
+    assert reader.get_header().profile == "custom_profile"
