@@ -11,7 +11,7 @@ import type {
   TypedMcapRecords,
 } from "./types.ts";
 
-type McapReaderOptions = {
+export type McapReaderOptions = {
   /**
    * When set to true, Chunk records will be returned from `nextRecord()`. Chunk contents will still
    * be processed after each chunk record itself.
@@ -56,16 +56,16 @@ type McapReaderOptions = {
  * ```
  */
 export default class McapStreamReader {
-  #buffer = new ArrayBuffer(MCAP_MAGIC.length * 2);
-  #view = new DataView(this.#buffer, 0, 0);
-  #reader = new Reader(this.#view);
-  #decompressHandlers;
-  #includeChunks;
-  #validateCrcs;
-  #noMagicPrefix;
-  #doneReading = false;
-  #generator = this.#read();
-  #channelsById = new Map<number, TypedMcapRecords["Channel"]>();
+  protected buffer = new ArrayBuffer(MCAP_MAGIC.length * 2);
+  protected view = new DataView(this.buffer, 0, 0);
+  protected reader = new Reader(this.view);
+  protected decompressHandlers: DecompressHandlers;
+  protected includeChunks: boolean;
+  protected validateCrcs: boolean;
+  protected noMagicPrefix: boolean;
+  protected doneReading = false;
+  protected generator = this.read();
+  protected channelsById = new Map<number, TypedMcapRecords["Channel"]>();
 
   constructor({
     includeChunks = false,
@@ -73,20 +73,20 @@ export default class McapStreamReader {
     validateCrcs = true,
     noMagicPrefix = false,
   }: McapReaderOptions = {}) {
-    this.#includeChunks = includeChunks;
-    this.#decompressHandlers = decompressHandlers;
-    this.#validateCrcs = validateCrcs;
-    this.#noMagicPrefix = noMagicPrefix;
+    this.includeChunks = includeChunks;
+    this.decompressHandlers = decompressHandlers;
+    this.validateCrcs = validateCrcs;
+    this.noMagicPrefix = noMagicPrefix;
   }
 
   /** @returns True if a valid, complete mcap file has been parsed. */
   done(): boolean {
-    return this.#doneReading;
+    return this.doneReading;
   }
 
   /** @returns The number of bytes that have been received by `append()` but not yet parsed. */
   bytesRemaining(): number {
-    return this.#reader.bytesRemaining();
+    return this.reader.bytesRemaining();
   }
 
   /**
@@ -94,64 +94,61 @@ export default class McapStreamReader {
    * call `nextRecord()` again to parse any records that are now available.
    */
   append(data: Uint8Array): void {
-    if (this.#doneReading) {
+    if (this.doneReading) {
       throw new Error("Already done reading");
     }
-    this.#appendOrShift(data);
+    this.appendOrShift(data);
   }
 
-  #appendOrShift(data: Uint8Array): void {
+  protected appendOrShift(data: Uint8Array): void {
     /** Add data to the buffer, shifting existing data or reallocating if necessary. */
-    const consumedBytes = this.#reader.offset;
-    const unconsumedBytes = this.#view.byteLength - consumedBytes;
+    const consumedBytes = this.reader.offset;
+    const unconsumedBytes = this.view.byteLength - consumedBytes;
     const neededCapacity = unconsumedBytes + data.byteLength;
 
-    if (neededCapacity <= this.#buffer.byteLength) {
+    if (neededCapacity <= this.buffer.byteLength) {
       // Data fits in the current buffer
-      if (
-        this.#view.byteOffset + this.#view.byteLength + data.byteLength <=
-        this.#buffer.byteLength
-      ) {
+      if (this.view.byteOffset + this.view.byteLength + data.byteLength <= this.buffer.byteLength) {
         // Data fits by appending only
-        const array = new Uint8Array(this.#buffer, this.#view.byteOffset);
-        array.set(data, this.#view.byteLength);
-        this.#view = new DataView(
-          this.#buffer,
-          this.#view.byteOffset,
-          this.#view.byteLength + data.byteLength,
+        const array = new Uint8Array(this.buffer, this.view.byteOffset);
+        array.set(data, this.view.byteLength);
+        this.view = new DataView(
+          this.buffer,
+          this.view.byteOffset,
+          this.view.byteLength + data.byteLength,
         );
         // Reset the reader to use the new larger view. We keep the reader's previous offset as the
         // view's byte offset didn't change, it only got larger.
-        this.#reader.reset(this.#view, this.#reader.offset);
+        this.reader.reset(this.view, this.reader.offset);
       } else {
         // Data fits but requires moving existing data to start of buffer
         const existingData = new Uint8Array(
-          this.#buffer,
-          this.#view.byteOffset + consumedBytes,
+          this.buffer,
+          this.view.byteOffset + consumedBytes,
           unconsumedBytes,
         );
-        const array = new Uint8Array(this.#buffer);
+        const array = new Uint8Array(this.buffer);
         array.set(existingData, 0);
         array.set(data, existingData.byteLength);
-        this.#view = new DataView(this.#buffer, 0, existingData.byteLength + data.byteLength);
-        this.#reader.reset(this.#view);
+        this.view = new DataView(this.buffer, 0, existingData.byteLength + data.byteLength);
+        this.reader.reset(this.view);
       }
     } else {
       // New data doesn't fit, copy to a new buffer
 
       // Currently, the new buffer size may be smaller than the old size. For future optimizations,
       // we could consider making the buffer size increase monotonically.
-      this.#buffer = new ArrayBuffer(neededCapacity * 2);
-      const array = new Uint8Array(this.#buffer);
+      this.buffer = new ArrayBuffer(neededCapacity * 2);
+      const array = new Uint8Array(this.buffer);
       const existingData = new Uint8Array(
-        this.#view.buffer,
-        this.#view.byteOffset + consumedBytes,
+        this.view.buffer,
+        this.view.byteOffset + consumedBytes,
         unconsumedBytes,
       );
       array.set(existingData, 0);
       array.set(data, existingData.byteLength);
-      this.#view = new DataView(this.#buffer, 0, existingData.byteLength + data.byteLength);
-      this.#reader.reset(this.#view);
+      this.view = new DataView(this.buffer, 0, existingData.byteLength + data.byteLength);
+      this.reader.reset(this.view);
     }
   }
 
@@ -163,14 +160,14 @@ export default class McapStreamReader {
    * reader is in an unspecified state and should no longer be used.
    */
   nextRecord(): TypedMcapRecord | undefined {
-    if (this.#doneReading) {
+    if (this.doneReading) {
       return undefined;
     }
-    const result = this.#generator.next();
+    const result = this.generator.next();
 
     if (result.value?.type === "Channel") {
-      const existing = this.#channelsById.get(result.value.id);
-      this.#channelsById.set(result.value.id, result.value);
+      const existing = this.channelsById.get(result.value.id);
+      this.channelsById.set(result.value.id, result.value);
       if (existing && !isChannelEqual(existing, result.value)) {
         throw new Error(
           `Channel record for id ${result.value.id} (topic: ${result.value.topic}) differs from previous channel record of the same id.`,
@@ -178,22 +175,22 @@ export default class McapStreamReader {
       }
     } else if (result.value?.type === "Message") {
       const channelId = result.value.channelId;
-      const existing = this.#channelsById.get(channelId);
+      const existing = this.channelsById.get(channelId);
       if (!existing) {
         throw new Error(`Encountered message on channel ${channelId} without prior channel record`);
       }
     }
 
     if (result.done === true) {
-      this.#doneReading = true;
+      this.doneReading = true;
     }
     return result.value;
   }
 
-  *#read(): Generator<TypedMcapRecord | undefined, TypedMcapRecord | undefined, void> {
-    if (!this.#noMagicPrefix) {
+  protected *read(): Generator<TypedMcapRecord | undefined, TypedMcapRecord | undefined, void> {
+    if (!this.noMagicPrefix) {
       let magic: McapMagic | undefined;
-      while (((magic = parseMagic(this.#reader)), !magic)) {
+      while (((magic = parseMagic(this.reader)), !magic)) {
         yield;
       }
     }
@@ -206,7 +203,7 @@ export default class McapStreamReader {
 
     for (;;) {
       let record;
-      while (((record = parseRecord(this.#reader, this.#validateCrcs)), !record)) {
+      while (((record = parseRecord(this.reader, this.validateCrcs)), !record)) {
         yield;
       }
 
@@ -237,18 +234,18 @@ export default class McapStreamReader {
           break;
 
         case "Chunk": {
-          if (this.#includeChunks) {
+          if (this.includeChunks) {
             yield record;
           }
           let buffer = record.records;
           if (record.compression !== "" && buffer.byteLength > 0) {
-            const decompress = this.#decompressHandlers[record.compression];
+            const decompress = this.decompressHandlers[record.compression];
             if (!decompress) {
               throw errorWithLibrary(`Unsupported compression ${record.compression}`);
             }
             buffer = decompress(buffer, record.uncompressedSize);
           }
-          if (this.#validateCrcs && record.uncompressedCrc !== 0) {
+          if (this.validateCrcs && record.uncompressedCrc !== 0) {
             const chunkCrc = crc32(buffer);
             if (chunkCrc !== record.uncompressedCrc) {
               throw errorWithLibrary(
@@ -259,7 +256,7 @@ export default class McapStreamReader {
           const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
           const chunkReader = new Reader(view);
           let chunkRecord;
-          while ((chunkRecord = parseRecord(chunkReader, this.#validateCrcs))) {
+          while ((chunkRecord = parseRecord(chunkReader, this.validateCrcs))) {
             switch (chunkRecord.type) {
               case "Header":
               case "Footer":
@@ -290,15 +287,15 @@ export default class McapStreamReader {
         case "Footer":
           try {
             let magic;
-            while (((magic = parseMagic(this.#reader)), !magic)) {
+            while (((magic = parseMagic(this.reader)), !magic)) {
               yield;
             }
           } catch (error) {
             throw errorWithLibrary((error as Error).message);
           }
-          if (this.#reader.bytesRemaining() !== 0) {
+          if (this.reader.bytesRemaining() !== 0) {
             throw errorWithLibrary(
-              `${this.#reader.bytesRemaining()} bytes remaining after MCAP footer and trailing magic`,
+              `${this.reader.bytesRemaining()} bytes remaining after MCAP footer and trailing magic`,
             );
           }
           return record;

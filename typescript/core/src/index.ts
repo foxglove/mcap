@@ -1,9 +1,13 @@
 export { McapIndexedReader } from "./McapIndexedReader.ts";
+export type { McapIndexedReaderArgs } from "./McapIndexedReader.ts";
 export { default as McapStreamReader } from "./McapStreamReader.ts";
+export type { McapReaderOptions } from "./McapStreamReader.ts";
 export { McapWriter } from "./McapWriter.ts";
 export type { McapWriterOptions } from "./McapWriter.ts";
 export { McapRecordBuilder } from "./McapRecordBuilder.ts";
+export type { McapRecordBuilderOptions } from "./McapRecordBuilder.ts";
 export { ChunkBuilder as McapChunkBuilder } from "./ChunkBuilder.ts";
+export type { ChunkBuilderOptions } from "./ChunkBuilder.ts";
 export type { IWritable } from "./IWritable.ts";
 export type { ISeekableWriter } from "./ISeekableWriter.ts";
 
