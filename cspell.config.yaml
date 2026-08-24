@@ -84,6 +84,7 @@ words:
   - magick
   - matplotlib
   - mcap
+  - mdinclude
   - msgdef
   - msgpack
   - myschema
