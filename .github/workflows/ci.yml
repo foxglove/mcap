@@ -388,7 +388,7 @@ jobs:
         if: matrix.os == 'linux'
         uses: taiki-e/install-action@v2.85.10
         with:
-          tool: cargo-zigbuild@0.22.3
+          tool: cargo-zigbuild@0.23.0
           fallback: none
       - name: Build binary
         run: |
