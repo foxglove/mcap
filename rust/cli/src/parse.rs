@@ -167,11 +167,9 @@ pub(crate) fn try_parsed_mcap_from_summary(
     match crate::byte_source::read_summary(source) {
         Ok(Some(summary)) => Ok(Some(parsed_mcap_from_library_summary(header, &summary))),
         Ok(None) => Ok(None),
-        Err(err) if is_unknown_schema_error(&err) => {
-            read_raw_summary_section(source)?
-                .map(|bytes| parsed_mcap_from_summary_section(header, &bytes))
-                .transpose()
-        }
+        Err(err) if is_unknown_schema_error(&err) => read_raw_summary_section(source)?
+            .map(|bytes| parsed_mcap_from_summary_section(header, &bytes))
+            .transpose(),
         Err(err) => Err(err),
     }
 }
