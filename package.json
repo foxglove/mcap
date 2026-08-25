@@ -39,5 +39,10 @@
     "typedoc": "0.28.20",
     "typescript": "5.9.3",
     "wrangler": "4.118.0"
+  },
+  "resolutions": {
+    "serialize-javascript": "^7.0.5",
+    "undici@npm:7.28.0": "7.29.0",
+    "uuid": "^11.1.1"
   }
 }
