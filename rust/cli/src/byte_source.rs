@@ -3,12 +3,11 @@
 //! Local files use seek+read (no mmap). Remote URLs prefer HTTP range requests.
 //! Stdin is spooled to a temp file when opened through [`open_byte_source`].
 
-#![allow(dead_code)] // Foundation module; command wiring comes in a follow-up.
-#![allow(unused_imports)]
+#![allow(dead_code)] // Some sources/helpers are test-only or awaiting remaining command ports.
 
 mod drivers;
 
-pub use drivers::{for_each_linear_record, read_summary, service_indexed_chunk};
+pub use drivers::{for_each_linear_record, read_header, read_summary, service_indexed_chunk};
 
 use std::fs::File;
 use std::io::{IsTerminal as _, Read as _, Seek as _, SeekFrom, Write as _};
@@ -146,6 +145,7 @@ impl MemorySource {
         Self { data: data.into() }
     }
 
+    #[allow(dead_code)] // Handy for tests that compare against a known buffer.
     pub fn as_slice(&self) -> &[u8] {
         &self.data
     }
