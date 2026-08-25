@@ -123,6 +123,23 @@ impl SummaryReaderOptions {
     }
 }
 
+/// Cap a read request to the bytes that can still exist in the file.
+///
+/// `insert(n)` allocates `n` bytes before any I/O happens. A corrupt record can ask for
+/// gigabytes; the summary section cannot be larger than the remaining file, so a larger
+/// request can never be satisfied.
+fn clamp_read_request(pos: u64, file_size: Option<u64>, n: usize) -> McapResult<usize> {
+    let Some(file_size) = file_size else {
+        return Ok(n);
+    };
+    let remaining = file_size.saturating_sub(pos);
+    if remaining == 0 {
+        return Err(McapError::UnexpectedEof);
+    }
+    let remaining = usize::try_from(remaining).unwrap_or(usize::MAX);
+    Ok(n.min(remaining))
+}
+
 /// Returns the lesser of the remaining file size, and the configured record length limit.
 fn compute_record_length_limit(
     pos: u64,
@@ -265,6 +282,7 @@ impl SummaryReader {
                         continue;
                     }
                     Some(Ok(LinearReadEvent::ReadRequest(n))) => {
+                        let n = clamp_read_request(self.pos, self.file_size, n)?;
                         return Ok(Some(SummaryReadEvent::ReadRequest(n)));
                     }
                     Some(Err(err)) => {
@@ -513,5 +531,111 @@ mod tests {
             Summary::read(file.get_ref()),
             Err(McapError::RecordTooLarge { opcode: 2, .. })
         );
+    }
+
+    /// Tiny MCAP whose summary starts with a Chunk that declares a ~1.69 GiB compression string.
+    fn mcap_with_summary_chunk_compression_len(
+        compression_len: u32,
+        chunk_record_len: u64,
+    ) -> Vec<u8> {
+        let mut file = Vec::new();
+        file.extend_from_slice(MAGIC);
+        file.push(crate::records::op::HEADER);
+        file.extend_from_slice(&8u64.to_le_bytes());
+        file.extend_from_slice(&0u32.to_le_bytes());
+        file.extend_from_slice(&0u32.to_le_bytes());
+        file.push(crate::records::op::DATA_END);
+        file.extend_from_slice(&4u64.to_le_bytes());
+        file.extend_from_slice(&0u32.to_le_bytes());
+
+        let summary_start = file.len() as u64;
+        file.push(crate::records::op::CHUNK);
+        file.extend_from_slice(&chunk_record_len.to_le_bytes());
+        file.extend_from_slice(&0u64.to_le_bytes());
+        file.extend_from_slice(&0u64.to_le_bytes());
+        file.extend_from_slice(&0u64.to_le_bytes());
+        file.extend_from_slice(&0u32.to_le_bytes());
+        file.extend_from_slice(&compression_len.to_le_bytes());
+        file.extend_from_slice(&0u64.to_le_bytes());
+
+        file.push(crate::records::op::FOOTER);
+        file.extend_from_slice(&20u64.to_le_bytes());
+        file.extend_from_slice(&summary_start.to_le_bytes());
+        file.extend_from_slice(&0u64.to_le_bytes());
+        file.extend_from_slice(&0u32.to_le_bytes());
+        file.extend_from_slice(MAGIC);
+        file
+    }
+
+    fn drive_summary_reader(
+        bytes: &[u8],
+        record_length_limit: Option<usize>,
+    ) -> (Option<McapError>, usize) {
+        let mut options = SummaryReaderOptions::default().with_file_size(bytes.len() as u64);
+        if let Some(limit) = record_length_limit {
+            options = options.with_record_length_limit(limit);
+        }
+        let mut reader = SummaryReader::new_with_options(options);
+        let mut cursor = std::io::Cursor::new(bytes);
+        let mut max_insert = 0usize;
+        while let Some(event) = reader.next_event() {
+            match event {
+                Ok(SummaryReadEvent::ReadRequest(n)) => {
+                    assert!(
+                        n <= bytes.len(),
+                        "insert requested {n} bytes for a {}-byte file",
+                        bytes.len()
+                    );
+                    max_insert = max_insert.max(n);
+                    let read = cursor.read(reader.insert(n)).expect("read");
+                    reader.notify_read(read);
+                }
+                Ok(SummaryReadEvent::SeekRequest(to)) => {
+                    let pos = cursor.seek(to).expect("seek");
+                    reader.notify_seeked(pos);
+                }
+                Err(err) => return (Some(err), max_insert),
+            }
+        }
+        (None, max_insert)
+    }
+
+    #[test]
+    fn test_summary_chunk_compression_len_does_not_overallocate() {
+        const HUGE: u32 = 1_687_060_480;
+        let bytes = mcap_with_summary_chunk_compression_len(HUGE, 40);
+        assert!(bytes.len() < 1024);
+
+        let (err, max_insert) = drive_summary_reader(&bytes, None);
+        assert!(
+            max_insert <= bytes.len(),
+            "insert requested {max_insert} bytes for a {}-byte file",
+            bytes.len()
+        );
+        assert_matches!(
+            err,
+            Some(McapError::BadChunkLength {
+                header,
+                available: 40
+            }) if header == 40 + HUGE as u64
+        );
+
+        assert!(Summary::read(&bytes).is_err());
+    }
+
+    #[test]
+    fn test_summary_chunk_compression_len_with_record_length_limit() {
+        const HUGE: u32 = 1_687_060_480;
+        // Length field agrees with the huge compression string. record_length_limit is 64x the
+        // file, matching the report that the documented bound still did not stop the allocation.
+        let bytes = mcap_with_summary_chunk_compression_len(HUGE, 40 + HUGE as u64);
+        let limit = bytes.len().saturating_mul(64);
+        let (err, max_insert) = drive_summary_reader(&bytes, Some(limit));
+        assert!(
+            max_insert <= bytes.len(),
+            "insert requested {max_insert} bytes for a {}-byte file",
+            bytes.len()
+        );
+        assert!(err.is_some(), "expected an error, got success");
     }
 }
