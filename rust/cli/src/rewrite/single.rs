@@ -500,11 +500,12 @@ fn build_channel(
 mod tests {
     use std::collections::{BTreeMap, HashMap};
     use std::io::Cursor;
+    use std::sync::Arc;
 
     use regex::Regex;
 
     use super::{filter_to_writer, MessageOrder, ResolvedOptions};
-    use crate::byte_source::MemorySource;
+    use crate::byte_source::{ByteSource, MemorySource};
     use crate::cli::CommonRewriteArgs;
     use crate::source::SourceOptions;
     use anyhow::Result;
@@ -1878,5 +1879,76 @@ mod tests {
         assert_eq!(stats.topic_counts["radar_a"], 100);
         assert_eq!(stats.metadata_count, 1);
         assert_eq!(stats.attachment_count, 1);
+    }
+
+    /// Wraps [`MemorySource`] and counts bytes returned from [`ByteSource::read_at`].
+    /// Reports `is_remote() == true` so rewrite remote-scan gating applies.
+    struct CountingRemoteSource {
+        inner: MemorySource,
+        bytes_read: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl ByteSource for CountingRemoteSource {
+        fn size(&self) -> anyhow::Result<Option<u64>> {
+            self.inner.size()
+        }
+
+        fn is_remote(&self) -> bool {
+            true
+        }
+
+        fn display_name(&self) -> String {
+            "memory://remote-fixture.mcap".into()
+        }
+
+        fn read_at(&mut self, offset: u64, len: usize) -> anyhow::Result<Vec<u8>> {
+            let data = self.inner.read_at(offset, len)?;
+            self.bytes_read
+                .fetch_add(data.len(), std::sync::atomic::Ordering::SeqCst);
+            Ok(data)
+        }
+
+        fn is_seekable(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn remote_indexed_filter_uses_range_reads_without_scan_flag() {
+        use std::sync::atomic::Ordering;
+
+        let input = write_filter_test_input(true, false);
+        let file_len = input.len();
+        let bytes_read = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut source = CountingRemoteSource {
+            inner: MemorySource::new(input),
+            bytes_read: bytes_read.clone(),
+        };
+
+        let mut opts = include_all_options();
+        opts.include_topics = vec![regex::Regex::new("^camera_a$").expect("regex")];
+        opts.include_metadata = false;
+        opts.include_attachments = false;
+
+        let mut output = Cursor::new(Vec::new());
+        filter_to_writer(
+            &mut source,
+            &mut output,
+            &opts,
+            false,
+            SourceOptions::default(),
+        )
+        .expect("indexed remote filter should not need --allow-remote-scan");
+
+        let read = bytes_read.load(Ordering::SeqCst);
+        assert!(
+            read < file_len,
+            "indexed topic filter must not read the whole {file_len}-byte object; read {read}"
+        );
+
+        let stats = analyze_output(&output.into_inner());
+        assert_eq!(stats.topic_counts.get("camera_a").copied().unwrap_or(0), 100);
+        assert!(!stats.topic_counts.contains_key("camera_b"));
+        assert!(!stats.topic_counts.contains_key("radar_a"));
     }
 }
