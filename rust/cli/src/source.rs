@@ -1218,7 +1218,7 @@ impl RemoteRangeReader {
         })
     }
 
-    fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
+    pub(crate) fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         if length == 0 || offset >= self.size {
             return Ok(Vec::new());
         }
@@ -1229,8 +1229,13 @@ impl RemoteRangeReader {
         self.source.get_range(offset..end)
     }
 
-    fn size(&self) -> u64 {
+    pub(crate) fn size(&self) -> u64 {
         self.size
+    }
+
+    #[allow(dead_code)] // Used by byte_source::RemoteRangeSource.
+    pub(crate) fn display_url(&self) -> &str {
+        &self.source.display_url
     }
 }
 
@@ -1372,7 +1377,7 @@ fn status_from_object_store_message(message: &str) -> Option<String> {
     (!status.is_empty()).then(|| status.to_string())
 }
 
-fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
+pub(crate) fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
     if is_remote_url(path) {
         return RemoteRangeReader::open(path);
     }
@@ -1440,7 +1445,7 @@ fn build_object_store(
     Ok((store, object_path))
 }
 
-fn read_remote_input_to_writer(path: &Path, writer: &mut impl Write) -> Result<()> {
+pub(crate) fn read_remote_input_to_writer(path: &Path, writer: &mut impl Write) -> Result<()> {
     let source = ObjectStoreSource::open_for_download(path)?;
     eprintln!("Warning: reading entire remote file {}", source.display_url);
     source.download_to_writer(writer, REMOTE_DOWNLOAD_CHUNK_BYTES)
@@ -1519,7 +1524,7 @@ pub(crate) fn require_remote_indexed_read_budget(
     );
 }
 
-fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()> {
+pub(crate) fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()> {
     if options.allow_remote_scan {
         return Ok(());
     }
