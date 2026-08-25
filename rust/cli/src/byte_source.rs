@@ -2,12 +2,11 @@
 //! range requests (see [`open_byte_source`]), plus a forward-only [`SequentialSource`] for
 //! stdin and other streams that commands read exactly once, in order.
 
-#![allow(dead_code)] // Foundation module; command wiring comes in a follow-up.
-#![allow(unused_imports)]
+#![allow(dead_code)] // Some sources/helpers are test-only or awaiting remaining command ports.
 
 mod drivers;
 
-pub use drivers::{for_each_linear_record, read_summary, service_indexed_chunk};
+pub use drivers::{for_each_linear_record, read_header, read_summary, service_indexed_chunk};
 
 use std::fs::File;
 use std::io::{BufReader, IsTerminal as _, Read, Seek as _, SeekFrom, Write as _};
