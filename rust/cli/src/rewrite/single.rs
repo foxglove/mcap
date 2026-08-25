@@ -20,11 +20,12 @@ pub(crate) fn run(args: RewriteOptions, source_options: SourceOptions) -> Result
     if let (Some(input), Some(output)) = (args.file.as_deref(), opts.output.as_deref()) {
         source::ensure_distinct_local_input_output(input, output)?;
     }
-    // A rewrite reads the whole input through random access, so a remote URL is downloaded first
-    // under the scan opt-in, checked from the path before any request goes out. Stdin is spooled
-    // to a file, since a rewrite may seek back to the summary.
+    // A rewrite reads message data, so a remote input always needs the scan opt-in, checked
+    // from the path before opening so no request is sent. With it, a remote input is read by
+    // range rather than downloaded whole. Stdin is spooled to a file first, since a rewrite may
+    // seek back to the summary.
     let mut input = match args.file.as_deref() {
-        Some(path) => byte_source::open_materialized_byte_source(path, source_options)?,
+        Some(path) => byte_source::open_byte_source_for_scan(path, source_options)?,
         None => byte_source::open_stdin_byte_source()?,
     };
 

@@ -446,20 +446,6 @@ pub fn open_byte_source_for_scan(
     open_byte_source(path, options)
 }
 
-/// Opens `path` for a command that reads the whole input through random access, such as the
-/// rewrite engine. A remote URL is downloaded to a tempfile first, under the `--allow-remote-scan`
-/// opt-in checked from the path before any request goes out, exactly like the whole-file loads
-/// this replaces. Reading such inputs by range instead is separate work.
-pub fn open_materialized_byte_source(
-    path: &Path,
-    options: SourceOptions,
-) -> Result<Box<dyn ByteSource>> {
-    if is_remote_url(path) {
-        return Ok(Box::new(spool_remote_to_local(path, options)?));
-    }
-    Ok(Box::new(LocalFileSource::open_path(path)?))
-}
-
 /// Spools stdin to a tempfile and opens it as a random-access [`ByteSource`], for commands that
 /// may seek. Commands that only scan forward should use [`SequentialSource::stdin`] instead.
 pub fn open_stdin_byte_source() -> Result<Box<dyn ByteSource>> {
