@@ -1508,7 +1508,8 @@ mod tests {
     fn remote_errors_redact_query_strings() {
         let url = "http://127.0.0.1:1/demo.mcap?X-Amz-Signature=secret-token";
         let err = materialize_input(Path::new(url), super::SourceOptions::default())
-            .expect_err("remote scan rejection should report redacted URL");
+            .err()
+            .expect("remote scan rejection should report redacted URL");
         assert!(!err.to_string().contains("secret-token"));
         assert!(!err.to_string().contains("X-Amz-Signature"));
     }
@@ -1517,7 +1518,8 @@ mod tests {
     fn remote_errors_redact_userinfo() {
         let url = "http://AKIA:secret@127.0.0.1:1/demo.mcap";
         let err = materialize_input(Path::new(url), super::SourceOptions::default())
-            .expect_err("remote scan rejection should report redacted URL");
+            .err()
+            .expect("remote scan rejection should report redacted URL");
         assert!(!err.to_string().contains("AKIA"));
         assert!(!err.to_string().contains("secret"));
         assert!(err.to_string().contains("http://127.0.0.1:1/demo.mcap"));
@@ -1527,7 +1529,8 @@ mod tests {
     fn remote_http_input_requires_remote_scan_opt_in() {
         let url = serve_http(b"hello remote", true);
         let err = materialize_input(Path::new(&url), super::SourceOptions::default())
-            .expect_err("remote full read should require opt-in");
+            .err()
+            .expect("remote full read should require opt-in");
         assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
@@ -1537,7 +1540,8 @@ mod tests {
             Path::new("s3://bucket/demo.mcap?X-Amz-Signature=secret-token"),
             super::SourceOptions::default(),
         )
-        .expect_err("cloud remote full read should require opt-in");
+        .err()
+        .expect("cloud remote full read should require opt-in");
         assert!(err.to_string().contains("--allow-remote-scan"));
         assert!(!err.to_string().contains("secret-token"));
         assert!(!err.to_string().contains("X-Amz-Signature"));
@@ -1558,7 +1562,8 @@ mod tests {
     fn remote_http_input_rejects_gzip_content_encoding() {
         let url = serve_http_with_headers(b"hello remote", false, &[("Content-Encoding", "gzip")]);
         let err = materialize_input(Path::new(&url), super::SourceOptions::new(true))
-            .expect_err("gzip-encoded remote read should fail");
+            .err()
+            .expect("gzip-encoded remote read should fail");
         let message = format!("{err:#}");
         assert!(message.contains("MCAP remote reads require identity encoding"));
     }
