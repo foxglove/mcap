@@ -72,6 +72,23 @@ pub fn record_length_limit(source: &dyn ByteSource) -> Option<usize> {
     source.size().and_then(|size| usize::try_from(size).ok())
 }
 
+/// Reads the leading [`Header`](mcap::records::Header) record, if present. Stops after the first
+/// record, and takes a leading chunk whole rather than decompressing it.
+pub fn read_header(source: &mut dyn ByteSource) -> Result<Option<mcap::records::Header>> {
+    let mut header = None;
+    try_for_each_linear_record(
+        source,
+        LinearReaderOptions::default().with_emit_chunks(true),
+        |opcode, data| {
+            if let mcap::records::Record::Header(found) = mcap::parse_record(opcode, data)? {
+                header = Some(found);
+            }
+            Ok(ControlFlow::Break(()))
+        },
+    )?;
+    Ok(header)
+}
+
 /// Load the MCAP summary section via [`SummaryReader`].
 ///
 /// Returns `Ok(None)` when the file has no summary section.
