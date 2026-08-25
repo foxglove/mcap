@@ -107,15 +107,18 @@ impl MaterializedInput {
 }
 
 pub struct RemoteMcap {
+    #[allow(dead_code)] // Used by tests; remaining commands (doctor/recover) still to port.
     reader: RemoteRangeReader,
     summary: mcap::Summary,
 }
 
 impl RemoteMcap {
+    #[allow(dead_code)] // Used by tests; remaining commands still to port.
     pub fn summary(&self) -> &mcap::Summary {
         &self.summary
     }
 
+    #[allow(dead_code)] // Used by tests; remaining commands still to port.
     pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         self.reader.read_range(offset, length)
     }
@@ -237,12 +240,15 @@ pub fn open_seekable_mcap_source(path: &Path) -> Result<std::fs::File> {
 
 pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<ParsedMcap> {
     if is_remote_url(path) {
+        let mut stats_scan_fallback = false;
         match open_remote_range_reader(path)? {
             Some(mut reader) => {
                 if let Some(summary_bytes) = read_summary_bytes_from_remote(&mut reader, options)
                     .map_err(|err| remote_read_error(path, err))?
                 {
-                    let header = read_header_from_seekable(&mut reader)?;
+                    let header = read_header_from_seekable(&mut reader).map_err(|err| {
+                        remote_read_error(path, classify_remote_summary_error(&reader, err))
+                    })?;
                     let parsed = parse::parsed_mcap_from_summary_section(header, &summary_bytes)
                         .map_err(|err| {
                             remote_read_error(path, classify_remote_summary_error(&reader, err))
@@ -253,8 +259,8 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
                     {
                         return Ok(parsed);
                     }
-                }
-                if !options.allow_remote_scan {
+                    stats_scan_fallback = true;
+                } else if !options.allow_remote_scan {
                     bail!(
                         "failed to read {}\nRemote file has no summary section; reading without one requires opt-in; {}",
                         redacted_display(path),
@@ -271,15 +277,42 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
             }
             None => {}
         }
+
+        // Remote linear / stats-scan fallback via ByteSource (no mmap).
+        let mut source = crate::byte_source::open_byte_source(Some(path), options)?;
+        let header = crate::byte_source::read_header(source.as_mut())
+            .map_err(|err| remote_read_error(path, err))?;
+        if stats_scan_fallback {
+            eprintln!(
+                "Warning: Statistics record not available; full scan may be slow. Run `mcap doctor` for details."
+            );
+        } else {
+            eprintln!(
+                "Warning: summary section not available; full scan may be slow. Run `mcap doctor` for details."
+            );
+        }
+        return parse::parse_mcap_linear_from_byte_source(source.as_mut(), header)
+            .map_err(|err| remote_read_error(path, err));
     }
 
-    let mcap = load_path(path, options)?;
-    let parsed = parse::parse_mcap_with_scan_fallback(&mcap, options.scan_data_without_statistics);
-    if is_remote_url(path) {
-        parsed.map_err(|err| remote_read_error(path, err))
-    } else {
-        parsed
+    let mut source = crate::byte_source::open_byte_source(Some(path), options)?;
+    let header = crate::byte_source::read_header(source.as_mut())?;
+    if let Some(parsed) = parse::try_parsed_mcap_from_summary(source.as_mut(), header.clone())? {
+        let want_stats_scan =
+            options.scan_data_without_statistics && parsed.statistics.is_none();
+        if !want_stats_scan {
+            return Ok(parsed);
+        }
+        eprintln!(
+            "Warning: Statistics record not available; full scan may be slow. Run `mcap doctor` for details."
+        );
+        return parse::parse_mcap_linear_from_byte_source(source.as_mut(), header);
     }
+
+    eprintln!(
+        "Warning: summary section not available; full scan may be slow. Run `mcap doctor` for details."
+    );
+    parse::parse_mcap_linear_from_byte_source(source.as_mut(), header)
 }
 
 pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
@@ -388,6 +421,7 @@ pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<Material
     })
 }
 
+#[allow(dead_code)] // Used by tests; remaining commands (doctor/recover) still to port.
 pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Option<RemoteMcap>> {
     if !is_remote_url(path) {
         return Ok(None);
@@ -1052,6 +1086,22 @@ pub(crate) fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -
     );
 }
 
+/// Errors when a remote [`ByteSource`] would need a full linear scan without `--allow-remote-scan`.
+pub(crate) fn require_remote_scan_for_linear(
+    source: &dyn crate::byte_source::ByteSource,
+    options: SourceOptions,
+) -> Result<()> {
+    if source.is_remote() && !options.allow_remote_scan {
+        bail!(
+            "{}: remote file requires a full scan; {}",
+            source.display_name(),
+            remote_scan_opt_in_suffix()
+        );
+    }
+    Ok(())
+}
+
+#[allow(dead_code)] // Used by try_open_remote_mcap / tests.
 fn read_summary_from_remote(
     reader: &mut RemoteRangeReader,
     options: SourceOptions,

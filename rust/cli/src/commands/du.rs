@@ -2,10 +2,11 @@ use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use mcap::records::{self, op, Record};
-use mcap::sans_io::{LinearReadEvent, LinearReader, LinearReaderOptions};
+use mcap::sans_io::LinearReaderOptions;
 
+use crate::byte_source::{self, ByteSource};
 use crate::cli::DuCommand;
 use crate::context::CommandContext;
 use crate::{render, source};
@@ -32,23 +33,23 @@ struct OffsetEntry {
 }
 
 pub fn run(ctx: &CommandContext, args: DuCommand) -> Result<()> {
-    let mcap = source::load_path(
-        &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()),
-    )?;
+    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let mut input = byte_source::open_byte_source(Some(&args.file), source_options)?;
 
     let (usage, used_approximate) = if args.approximate {
-        match collect_usage_approximate(&mcap)? {
+        match collect_usage_approximate(input.as_mut())? {
             Some(usage) => (usage, true),
             None => {
                 eprintln!(
                     "Warning: summary/chunk indexes unavailable; falling back to exact du scan."
                 );
-                (collect_usage_exact(&mcap)?, false)
+                source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
+                (collect_usage_exact(input.as_mut())?, false)
             }
         }
     } else {
-        (collect_usage_exact(&mcap)?, false)
+        source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
+        (collect_usage_exact(input.as_mut())?, false)
     };
 
     print_record_table(&usage.record_kind_size, usage.total_size, used_approximate);
@@ -57,38 +58,49 @@ pub fn run(ctx: &CommandContext, args: DuCommand) -> Result<()> {
     Ok(())
 }
 
-fn collect_usage_exact(mcap: &[u8]) -> Result<Usage> {
+fn collect_usage_exact(source: &mut dyn ByteSource) -> Result<Usage> {
     let mut usage = Usage {
         total_size: 2 * MCAP_MAGIC_SIZE,
         ..Usage::default()
     };
     let mut channels = BTreeMap::<u16, String>::new();
-    scan_top_level_records(mcap, |opcode, data| {
-        let kind = record_kind_name(opcode);
-        let record_size = (RECORD_ENVELOPE_SIZE + data.len()) as u64;
-        usage.total_size += record_size;
-        *usage.record_kind_size.entry(kind.to_string()).or_default() += record_size;
+    let record_limit = source
+        .size()?
+        .and_then(|size| usize::try_from(size).ok())
+        .unwrap_or(usize::MAX);
+    byte_source::for_each_linear_record(
+        source,
+        LinearReaderOptions::default()
+            .with_emit_chunks(true)
+            .with_validate_chunk_crcs(true)
+            .with_record_length_limit(record_limit),
+        |opcode, data| {
+            let kind = record_kind_name(opcode);
+            let record_size = (RECORD_ENVELOPE_SIZE + data.len()) as u64;
+            usage.total_size += record_size;
+            *usage.record_kind_size.entry(kind.to_string()).or_default() += record_size;
 
-        match mcap::parse_record(opcode, data)? {
-            Record::Channel(channel) => {
-                channels.insert(channel.id, channel.topic);
+            match mcap::parse_record(opcode, data)? {
+                Record::Channel(channel) => {
+                    channels.insert(channel.id, channel.topic);
+                }
+                Record::Message { header, data } => {
+                    process_message(&mut usage, &channels, header.channel_id, data.len() as u64)?;
+                }
+                Record::Chunk { header, data } => {
+                    process_chunk(&mut usage, &mut channels, header, data.as_ref())?;
+                }
+                _ => {}
             }
-            Record::Message { header, data } => {
-                process_message(&mut usage, &channels, header.channel_id, data.len() as u64)?;
-            }
-            Record::Chunk { header, data } => {
-                process_chunk(&mut usage, &mut channels, header, data.as_ref())?;
-            }
-            _ => {}
-        }
-        Ok(())
-    })?;
+            Ok(())
+        },
+    )?;
 
     Ok(usage)
 }
 
-fn collect_usage_approximate(mcap: &[u8]) -> Result<Option<Usage>> {
-    let summary = match mcap::Summary::read(mcap) {
+fn collect_usage_approximate(source: &mut dyn ByteSource) -> Result<Option<Usage>> {
+    let summary = match byte_source::read_summary(source) {
         Ok(Some(summary)) => summary,
         Ok(None) | Err(_) => return Ok(None),
     };
@@ -97,15 +109,16 @@ fn collect_usage_approximate(mcap: &[u8]) -> Result<Option<Usage>> {
         return Ok(None);
     }
 
-    let footer = match mcap::read::footer(mcap) {
-        Ok(footer) => footer,
-        Err(_) => return Ok(None),
+    let Some(total_file_size) = source.size()? else {
+        return Ok(None);
     };
-    if footer.summary_start == 0 {
+    let Some(summary_start) = read_summary_start(source)? else {
+        return Ok(None);
+    };
+    if summary_start == 0 {
         return Ok(None);
     }
 
-    let total_file_size = mcap.len() as u64;
     let mut usage = Usage {
         total_size: total_file_size,
         ..Usage::default()
@@ -129,10 +142,10 @@ fn collect_usage_approximate(mcap: &[u8]) -> Result<Option<Usage>> {
     let minimum_file_size = MCAP_MAGIC_SIZE + FOOTER_RECORD_SIZE + MCAP_MAGIC_SIZE;
     if total_file_size >= minimum_file_size {
         let footer_start = total_file_size - MCAP_MAGIC_SIZE - FOOTER_RECORD_SIZE;
-        if footer_start > footer.summary_start {
+        if footer_start > summary_start {
             usage.record_kind_size.insert(
                 "summary section".to_string(),
-                footer_start - footer.summary_start,
+                footer_start - summary_start,
             );
         }
     }
@@ -160,7 +173,7 @@ fn collect_usage_approximate(mcap: &[u8]) -> Result<Option<Usage>> {
         .collect();
 
     let (topic_message_size, total_message_size) =
-        compute_topic_sizes_from_index(mcap, &summary.chunk_indexes, &channel_topics)?;
+        compute_topic_sizes_from_index(source, &summary.chunk_indexes, &channel_topics)?;
 
     usage.topic_message_size = topic_message_size;
     usage.total_message_size = total_message_size;
@@ -168,34 +181,21 @@ fn collect_usage_approximate(mcap: &[u8]) -> Result<Option<Usage>> {
     Ok(Some(usage))
 }
 
-fn scan_top_level_records<F>(mcap: &[u8], mut process: F) -> Result<()>
-where
-    F: FnMut(u8, &[u8]) -> Result<()>,
-{
-    let mut reader = LinearReader::new_with_options(
-        LinearReaderOptions::default()
-            .with_emit_chunks(true)
-            .with_validate_chunk_crcs(true)
-            .with_record_length_limit(mcap.len()),
-    );
-    let mut remaining = mcap;
-
-    while let Some(event) = reader.next_event() {
-        match event? {
-            LinearReadEvent::ReadRequest(need) => {
-                let read = need.min(remaining.len());
-                let dst = reader.insert(read);
-                dst.copy_from_slice(&remaining[..read]);
-                reader.notify_read(read);
-                remaining = &remaining[read..];
-            }
-            LinearReadEvent::Record { opcode, data } => {
-                process(opcode, data)?;
-            }
-        }
+fn read_summary_start(source: &mut dyn ByteSource) -> Result<Option<u64>> {
+    let Some(size) = source.size()? else {
+        return Ok(None);
+    };
+    if size < MCAP_MAGIC_SIZE + FOOTER_RECORD_SIZE + MCAP_MAGIC_SIZE {
+        return Ok(None);
     }
-
-    Ok(())
+    let footer_offset = size - MCAP_MAGIC_SIZE - FOOTER_RECORD_SIZE;
+    let footer_bytes = source.read_at(footer_offset, FOOTER_RECORD_SIZE as usize)?;
+    if footer_bytes.len() != FOOTER_RECORD_SIZE as usize || footer_bytes[0] != op::FOOTER {
+        return Ok(None);
+    }
+    Ok(Some(u64::from_le_bytes(
+        footer_bytes[9..17].try_into().expect("8 bytes"),
+    )))
 }
 
 fn process_chunk(
@@ -234,46 +234,68 @@ fn process_message(
 }
 
 fn compute_topic_sizes_from_index(
-    mcap: &[u8],
+    source: &mut dyn ByteSource,
     chunk_indexes: &[records::ChunkIndex],
     channel_topics: &BTreeMap<u16, String>,
 ) -> Result<(BTreeMap<String, u64>, u64)> {
+    // Fetch message-index bytes via read_at first (ByteSource isn't Sync), then parse in parallel.
+    let mut index_bufs = Vec::with_capacity(chunk_indexes.len());
+    for chunk in chunk_indexes {
+        index_bufs.push(read_chunk_message_index_bytes(source, chunk)?);
+    }
+
     let worker_count = std::thread::available_parallelism()
         .map(|parallelism| parallelism.get())
         .unwrap_or(1)
         .min(MAX_APPROX_WORKERS)
-        .min(chunk_indexes.len());
+        .min(index_bufs.len());
 
-    if worker_count <= 1 || chunk_indexes.len() <= 1 {
-        return compute_topic_sizes_from_index_sequential(mcap, chunk_indexes, channel_topics);
-    }
-
-    compute_topic_sizes_from_index_parallel(mcap, chunk_indexes, channel_topics, worker_count)
-}
-
-fn compute_topic_sizes_from_index_sequential(
-    mcap: &[u8],
-    chunk_indexes: &[records::ChunkIndex],
-    channel_topics: &BTreeMap<u16, String>,
-) -> Result<(BTreeMap<String, u64>, u64)> {
-    let mut topic_sizes = BTreeMap::<String, u64>::new();
-    let mut total_size = 0u64;
-
-    for chunk in chunk_indexes {
-        let (chunk_topic_sizes, chunk_total_size) =
-            compute_topic_sizes_for_chunk(mcap, chunk, channel_topics)?;
-
-        for (topic, size) in chunk_topic_sizes {
-            *topic_sizes.entry(topic).or_default() += size;
+    if worker_count <= 1 || index_bufs.len() <= 1 {
+        let mut topic_sizes = BTreeMap::<String, u64>::new();
+        let mut total_size = 0u64;
+        for (chunk, buf) in chunk_indexes.iter().zip(index_bufs) {
+            let Some(buf) = buf else {
+                continue;
+            };
+            let (chunk_topic_sizes, chunk_total_size) =
+                parse_chunk_message_indexes(&buf, chunk.uncompressed_size, channel_topics)?;
+            for (topic, size) in chunk_topic_sizes {
+                *topic_sizes.entry(topic).or_default() += size;
+            }
+            total_size += chunk_total_size;
         }
-        total_size += chunk_total_size;
+        return Ok((topic_sizes, total_size));
     }
 
-    Ok((topic_sizes, total_size))
+    compute_topic_sizes_from_bufs_parallel(&index_bufs, chunk_indexes, channel_topics, worker_count)
 }
 
-fn compute_topic_sizes_from_index_parallel(
-    mcap: &[u8],
+fn read_chunk_message_index_bytes(
+    source: &mut dyn ByteSource,
+    chunk: &records::ChunkIndex,
+) -> Result<Option<Vec<u8>>> {
+    if chunk.message_index_length == 0 {
+        return Ok(None);
+    }
+    let message_index_offset = chunk.chunk_start_offset + chunk.chunk_length;
+    let length = usize::try_from(chunk.message_index_length).with_context(|| {
+        format!(
+            "message index length out of range: {}",
+            chunk.message_index_length
+        )
+    })?;
+    let bytes = source.read_at(message_index_offset, length)?;
+    if bytes.len() != length {
+        bail!(
+            "message index section extends beyond file at offset {message_index_offset} (wanted {length}, got {})",
+            bytes.len()
+        );
+    }
+    Ok(Some(bytes))
+}
+
+fn compute_topic_sizes_from_bufs_parallel(
+    index_bufs: &[Option<Vec<u8>>],
     chunk_indexes: &[records::ChunkIndex],
     channel_topics: &BTreeMap<u16, String>,
     worker_count: usize,
@@ -295,12 +317,18 @@ fn compute_topic_sizes_from_index_parallel(
                     }
 
                     let index = next_index.fetch_add(1, Ordering::Relaxed);
-                    if index >= chunk_indexes.len() {
+                    if index >= index_bufs.len() {
                         break;
                     }
 
-                    match compute_topic_sizes_for_chunk(mcap, &chunk_indexes[index], channel_topics)
-                    {
+                    let Some(buf) = index_bufs[index].as_ref() else {
+                        continue;
+                    };
+                    match parse_chunk_message_indexes(
+                        buf,
+                        chunk_indexes[index].uncompressed_size,
+                        channel_topics,
+                    ) {
                         Ok((chunk_sizes, chunk_total)) => {
                             for (topic, size) in chunk_sizes {
                                 *local_sizes.entry(topic).or_default() += size;
@@ -352,32 +380,6 @@ fn compute_topic_sizes_from_index_parallel(
     }
 
     Ok((merged_sizes, merged_total))
-}
-
-fn compute_topic_sizes_for_chunk(
-    mcap: &[u8],
-    chunk: &records::ChunkIndex,
-    channel_topics: &BTreeMap<u16, String>,
-) -> Result<(BTreeMap<String, u64>, u64)> {
-    if chunk.message_index_length == 0 {
-        return Ok((BTreeMap::new(), 0));
-    }
-
-    let message_index_offset = chunk.chunk_start_offset + chunk.chunk_length;
-    let message_index_end = message_index_offset + chunk.message_index_length;
-    let start = usize::try_from(message_index_offset)
-        .map_err(|_| anyhow!("message index offset out of range: {message_index_offset}"))?;
-    let end = usize::try_from(message_index_end)
-        .map_err(|_| anyhow!("message index end out of range: {message_index_end}"))?;
-    if end > mcap.len() {
-        bail!(
-            "message index section extends beyond file ({} > {})",
-            end,
-            mcap.len()
-        );
-    }
-
-    parse_chunk_message_indexes(&mcap[start..end], chunk.uncompressed_size, channel_topics)
 }
 
 fn parse_chunk_message_indexes(
@@ -597,6 +599,7 @@ mod tests {
         collect_usage_approximate, collect_usage_exact, parse_chunk_message_indexes,
         print_record_table, print_topic_table, record_kind_name,
     };
+    use crate::byte_source::MemorySource;
     use mcap::records::{op, MessageHeader};
 
     fn write_test_file(
@@ -674,7 +677,7 @@ mod tests {
             &["/camera", "/imu"],
         );
 
-        let usage = collect_usage_exact(&mcap).expect("collect exact usage");
+        let usage = collect_usage_exact(&mut MemorySource::new(mcap)).expect("collect exact usage");
         assert_eq!(usage.total_message_size, 175);
         assert_eq!(usage.topic_message_size["/camera"], 150);
         assert_eq!(usage.topic_message_size["/imu"], 25);
@@ -689,7 +692,7 @@ mod tests {
             &["/alpha", "/beta"],
         );
 
-        let usage = collect_usage_exact(&mcap).expect("collect exact usage");
+        let usage = collect_usage_exact(&mut MemorySource::new(mcap)).expect("collect exact usage");
         assert_eq!(usage.total_message_size, 200);
         assert_eq!(usage.topic_message_size["/alpha"], 140);
         assert_eq!(usage.topic_message_size["/beta"], 60);
@@ -704,8 +707,8 @@ mod tests {
             &["/left", "/right"],
         );
 
-        let exact = collect_usage_exact(&mcap).expect("exact");
-        let approximate = collect_usage_approximate(&mcap)
+        let exact = collect_usage_exact(&mut MemorySource::new(mcap.clone())).expect("exact");
+        let approximate = collect_usage_approximate(&mut MemorySource::new(mcap))
             .expect("approximate")
             .expect("summary-backed approximate usage");
         assert_eq!(approximate.total_message_size, exact.total_message_size);
@@ -741,14 +744,16 @@ mod tests {
             writer.finish().expect("finish writer");
         }
 
-        let approximate = collect_usage_approximate(&buffer).expect("approximate");
+        let approximate =
+            collect_usage_approximate(&mut MemorySource::new(buffer)).expect("approximate");
         assert!(approximate.is_none());
     }
 
     #[test]
     fn approximate_usage_falls_back_when_no_chunk_indexes() {
         let mcap = write_test_file(false, None, &[(0, 0, 10), (0, 1, 10)], &["/data"]);
-        let approximate = collect_usage_approximate(&mcap).expect("approximate");
+        let approximate =
+            collect_usage_approximate(&mut MemorySource::new(mcap)).expect("approximate");
         assert!(approximate.is_none());
     }
 
@@ -816,7 +821,8 @@ mod tests {
     #[test]
     fn exact_usage_includes_magic_bytes_baseline() {
         let mcap = write_test_file(false, None, &[(0, 0, 10)], &["/data"]);
-        let usage = collect_usage_exact(&mcap).expect("collect exact usage");
-        assert_eq!(usage.total_size, mcap.len() as u64);
+        let len = mcap.len() as u64;
+        let usage = collect_usage_exact(&mut MemorySource::new(mcap)).expect("collect exact usage");
+        assert_eq!(usage.total_size, len);
     }
 }

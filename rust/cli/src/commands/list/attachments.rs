@@ -1,27 +1,39 @@
 use anyhow::Result;
 
+use crate::byte_source::{self, ByteSource};
 use crate::cli::{ListAttachmentsCommand, TimeFormat};
 use crate::context::CommandContext;
 use crate::{parse, render, source};
 
 pub fn run(ctx: &CommandContext, args: ListAttachmentsCommand) -> Result<()> {
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
-    let mut indexes =
-        if let Some(remote) = source::try_open_remote_mcap(&args.file, source_options)? {
-            remote.summary().attachment_indexes.clone()
-        } else {
-            let mcap = source::load_path(&args.file, source_options)?;
-            let parsed = parse::parse_mcap(&mcap)?;
-            if parse::attachment_indexes_need_scan(&parsed) {
-                parse::warn_index_scan("attachment");
-                parse::collect_attachment_indexes_linear(&mcap)?
-            } else {
-                parsed.attachment_indexes
-            }
-        };
+    let mut input = byte_source::open_byte_source(Some(&args.file), source_options)?;
+    let mut indexes = attachment_indexes(input.as_mut(), source_options)?;
     indexes.sort_by_key(|index| index.offset);
     render::print_table(&render_attachment_rows(&indexes, ctx.time_format()));
     Ok(())
+}
+
+fn attachment_indexes(
+    source: &mut dyn ByteSource,
+    source_options: source::SourceOptions,
+) -> Result<Vec<mcap::records::AttachmentIndex>> {
+    let header = byte_source::read_header(source)?;
+    let parsed = match parse::try_parsed_mcap_from_summary(source, header.clone())? {
+        Some(parsed) => parsed,
+        None => {
+            source::require_remote_scan_for_linear(source, source_options)?;
+            return Ok(
+                parse::parse_mcap_linear_from_byte_source(source, header)?.attachment_indexes,
+            );
+        }
+    };
+    if parse::attachment_indexes_need_scan(&parsed) {
+        parse::warn_index_scan("attachment");
+        source::require_remote_scan_for_linear(source, source_options)?;
+        return parse::collect_attachment_indexes_from_byte_source(source);
+    }
+    Ok(parsed.attachment_indexes)
 }
 
 fn render_attachment_rows(

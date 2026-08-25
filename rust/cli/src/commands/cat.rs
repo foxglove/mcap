@@ -8,6 +8,7 @@ use log::warn;
 use mcap::sans_io::indexed_reader::ReadOrder;
 use prost_reflect::{DescriptorPool, DynamicMessage, MessageDescriptor, SerializeOptions};
 
+use crate::byte_source::{self, ByteSource};
 use crate::cli::{CatCommand, CatFormat, TimeFormat};
 use crate::context::CommandContext;
 use crate::{parse, render, source};
@@ -75,20 +76,8 @@ fn cat_file(
     source_options: source::SourceOptions,
     csv_state: &mut CsvState,
 ) -> Result<bool> {
-    if let Some(remote) = source::try_open_remote_mcap(file, source_options)? {
-        let mut json_transcoders = JsonTranscoders::default();
-        let mut out = MessageWriter {
-            csv: csv_state,
-            json: &mut json_transcoders,
-        };
-        match cat_remote_indexed(sink, file, &remote, opts, source_options, &mut out)? {
-            RemoteCatResult::BrokenPipe => return Ok(true),
-            RemoteCatResult::Done => return Ok(false),
-            RemoteCatResult::NeedsFullScan => {}
-        }
-    }
-    let mcap = source::load_path(file, source_options)?;
-    cat_mcap(sink, &mcap, opts, csv_state)
+    let mut input = byte_source::open_byte_source(Some(file), source_options)?;
+    cat_from_source(sink, input.as_mut(), opts, source_options, csv_state)
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -168,10 +157,11 @@ impl CatOptions {
     }
 }
 
-fn cat_mcap(
+fn cat_from_source(
     sink: &mut OutputSink<impl std::io::Write>,
-    mcap: &[u8],
+    source: &mut dyn ByteSource,
     opts: &CatOptions,
+    source_options: source::SourceOptions,
     csv_state: &mut CsvState,
 ) -> Result<bool> {
     let mut json_transcoders = JsonTranscoders::default();
@@ -179,26 +169,72 @@ fn cat_mcap(
         csv: csv_state,
         json: &mut json_transcoders,
     };
-    if let Some(broken_pipe) = cat_indexed(sink, mcap, opts, &mut out)? {
-        return Ok(broken_pipe);
+    match cat_indexed(sink, source, opts, source_options, &mut out)? {
+        IndexedCatResult::BrokenPipe => return Ok(true),
+        IndexedCatResult::Done => return Ok(false),
+        IndexedCatResult::NeedsLinear => {}
     }
-    cat_linear(sink, mcap, opts, &mut out)
+    source::require_remote_scan_for_linear(source, source_options).or_else(|err| {
+        // Preserve the historical remote cat wording when there is no usable chunk index.
+        if source.is_remote() {
+            bail!(
+                "{}: remote file has no chunk index; reading messages requires opt-in; {}",
+                source.display_name(),
+                source::remote_scan_opt_in_suffix()
+            );
+        }
+        Err(err)
+    })?;
+    cat_linear(sink, source, opts, &mut out)
+}
+
+#[cfg(test)]
+fn cat_mcap(
+    sink: &mut OutputSink<impl std::io::Write>,
+    mcap: &[u8],
+    opts: &CatOptions,
+    csv_state: &mut CsvState,
+) -> Result<bool> {
+    let mut source = byte_source::MemorySource::new(mcap.to_vec());
+    cat_from_source(
+        sink,
+        &mut source,
+        opts,
+        source::SourceOptions::default(),
+        csv_state,
+    )
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum IndexedCatResult {
+    BrokenPipe,
+    Done,
+    NeedsLinear,
 }
 
 fn cat_indexed(
     sink: &mut OutputSink<impl std::io::Write>,
-    mcap: &[u8],
+    source: &mut dyn ByteSource,
     opts: &CatOptions,
+    _source_options: source::SourceOptions,
     out: &mut MessageWriter<'_, '_>,
-) -> Result<Option<bool>> {
-    let summary = match mcap::Summary::read(mcap) {
+) -> Result<IndexedCatResult> {
+    let summary = match byte_source::read_summary(source) {
         Ok(Some(summary)) => summary,
-        Ok(None) => return Ok(None),
+        Ok(None) => return Ok(IndexedCatResult::NeedsLinear),
         // A spec-valid file may repeat a channel in the summary without repeating its schema,
         // leaving the schema defined only inside a chunk. That can't be resolved from the summary
         // alone, so fall back to a linear scan, which registers in-chunk definitions as it reads.
-        Err(mcap::McapError::UnknownSchema(..)) => return Ok(None),
-        Err(err) => return Err(err.into()),
+        Err(err)
+            if err.chain().any(|cause| {
+                cause
+                    .downcast_ref::<mcap::McapError>()
+                    .is_some_and(|e| matches!(e, mcap::McapError::UnknownSchema(..)))
+            }) =>
+        {
+            return Ok(IndexedCatResult::NeedsLinear);
+        }
+        Err(err) => return Err(err),
     };
     // Record channel topics (including zero-message channels) so an absent CSV topic can be
     // reported as an error rather than a silently empty export.
@@ -211,27 +247,13 @@ fn cat_indexed(
         );
     }
     if summary.chunk_indexes.is_empty() {
-        return Ok(None);
+        return Ok(IndexedCatResult::NeedsLinear);
     }
 
     let needs_in_chunk_definitions = needs_in_chunk_definitions(&summary);
     let mut schemas = summary.schemas.clone();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
     let mut channels = summary.channels.clone();
-    // When channels/schemas are defined only inside chunks (not repeated in the summary), collect
-    // their definitions from every chunk up front. Collecting lazily per requested chunk would miss
-    // a definition that lives in a chunk skipped by a topic or time filter (e.g. a channel defined
-    // in an early chunk but referenced by messages in a later one).
-    if needs_in_chunk_definitions {
-        for chunk_index in &summary.chunk_indexes {
-            parse::collect_chunk_definitions_from_mcap(
-                mcap,
-                chunk_index,
-                &mut schemas,
-                &mut channel_defs,
-            )?;
-        }
-    }
 
     let included_topics: BTreeSet<String> = summary
         .channels
@@ -240,157 +262,16 @@ fn cat_indexed(
         .map(|channel| channel.topic.clone())
         .collect();
     if !opts.topics.is_empty() && included_topics.is_empty() && !needs_in_chunk_definitions {
-        return Ok(Some(false));
+        return Ok(IndexedCatResult::Done);
     }
 
-    let mut indexed_opts =
-        mcap::sans_io::IndexedReaderOptions::new().with_order(ReadOrder::LogTime);
-    if opts.start != 0 {
-        indexed_opts = indexed_opts.log_time_on_or_after(opts.start);
-    }
-    if let Some(end) = opts.end {
-        indexed_opts = indexed_opts.log_time_before(end);
-    }
-    // Reader-level topic filtering keys on `summary.channels`, so skip it when chunk-local channels
-    // may exist (see `needs_in_chunk_definitions`) and let the per-message `include_topic` check
-    // below filter instead, to avoid silently dropping matching chunk-local messages.
-    if !opts.topics.is_empty() && !included_topics.is_empty() && !needs_in_chunk_definitions {
-        indexed_opts = indexed_opts.include_topics(included_topics.iter().cloned());
-    }
-
-    let mut reader = mcap::sans_io::IndexedReader::new_with_options(&summary, indexed_opts)?;
-
-    while let Some(event) = reader.next_event() {
-        match event? {
-            mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                let start = offset as usize;
-                let end = start
-                    .checked_add(length)
-                    .ok_or_else(|| anyhow::anyhow!("chunk read overflow at offset {offset}"))?;
-                if end > mcap.len() {
-                    anyhow::bail!("chunk read out of bounds at offset {offset} length {length}");
-                }
-                reader.insert_chunk_record_data(offset, &mcap[start..end])?;
-            }
-            mcap::sans_io::IndexedReadEvent::Message { header, data } => {
-                let channel =
-                    resolve_channel(header.channel_id, &schemas, &channel_defs, &mut channels)?;
-                if !opts.include_topic(&channel.topic) {
-                    continue;
-                }
-                let message = CatMessage {
-                    channel: &channel,
-                    sequence: header.sequence,
-                    log_time: header.log_time,
-                    publish_time: header.publish_time,
-                    data,
-                };
-                if write_message(sink, message, opts, out)? {
-                    return Ok(Some(true));
-                }
-            }
-        }
-    }
-
-    Ok(Some(false))
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RemoteCatResult {
-    BrokenPipe,
-    Done,
-    NeedsFullScan,
-}
-
-fn cat_remote_indexed(
-    sink: &mut OutputSink<impl std::io::Write>,
-    file: &std::path::Path,
-    remote: &source::RemoteMcap,
-    opts: &CatOptions,
-    source_options: source::SourceOptions,
-    out: &mut MessageWriter<'_, '_>,
-) -> Result<RemoteCatResult> {
-    let summary = remote.summary();
-    if matches!(opts.mode, OutputMode::Csv) {
-        out.csv.seen_topics.extend(
-            summary
-                .channels
-                .values()
-                .map(|channel| channel.topic.clone()),
-        );
-    }
-    if summary.chunk_indexes.is_empty() {
-        if !source_options.allow_remote_scan {
-            bail!(
-                "{}: remote file has no chunk index; reading messages requires opt-in; {}",
-                source::redacted_display(file),
-                source::remote_scan_opt_in_suffix()
-            );
-        }
-        return Ok(RemoteCatResult::NeedsFullScan);
-    }
-    let has_chunks_without_message_indexes = summary
-        .chunk_indexes
-        .iter()
-        .any(|chunk| chunk.message_index_offsets.is_empty());
-    if has_chunks_without_message_indexes && !source_options.allow_remote_scan {
-        bail!(
-            "{}: remote file has chunk indexes without message indexes; reading messages requires opt-in; {}",
-            source::redacted_display(file),
-            source::remote_scan_opt_in_suffix()
-        );
-    }
-    let needs_in_chunk_definitions = needs_in_chunk_definitions(summary);
-    let mut schemas = summary.schemas.clone();
-    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
-    let mut channels = summary.channels.clone();
-
-    let included_topics: BTreeSet<String> = summary
-        .channels
-        .values()
-        .filter(|channel| opts.include_topic(&channel.topic))
-        .map(|channel| channel.topic.clone())
-        .collect();
-    if !opts.topics.is_empty() && included_topics.is_empty() && !needs_in_chunk_definitions {
-        return Ok(RemoteCatResult::Done);
-    }
     let planned_chunks =
-        planned_chunk_reads(summary, opts, &included_topics, needs_in_chunk_definitions);
-    if !planned_chunks.is_empty() && !source_options.allow_remote_scan {
-        // When chunk-local definitions must be collected, every chunk is read up front (a
-        // definition can live in a chunk the filter would otherwise skip), so size the warning from
-        // the full set rather than the filtered plan to avoid under-quoting the bytes fetched.
-        let (chunk_count, compressed_bytes) = if needs_in_chunk_definitions {
-            (
-                summary.chunk_indexes.len(),
-                summary
-                    .chunk_indexes
-                    .iter()
-                    .map(|chunk| chunk.compressed_size)
-                    .sum::<u64>(),
-            )
-        } else {
-            (
-                planned_chunks.len(),
-                planned_chunks
-                    .iter()
-                    .map(|chunk| chunk.compressed_size)
-                    .sum::<u64>(),
-            )
-        };
-        bail!(
-            "{}: remote cat would read {} message chunks ({} compressed); {}",
-            source::redacted_display(file),
-            chunk_count,
-            render::human_bytes(compressed_bytes),
-            source::remote_scan_opt_in_suffix()
-        );
-    }
+        planned_chunk_reads(&summary, opts, &included_topics, needs_in_chunk_definitions);
 
     // When channels/schemas are defined only inside chunks, fetch every chunk once up front to
     // collect their definitions, caching the compressed data so the indexed read below doesn't
     // re-fetch. Lazy per-chunk collection would miss a definition in a chunk skipped by a topic or
-    // time filter. The remote-scan gate above already required opt-in to reach here.
+    // time filter.
     let mut chunk_data_cache: HashMap<u64, Vec<u8>> = HashMap::new();
     if needs_in_chunk_definitions && !planned_chunks.is_empty() {
         for chunk_index in &summary.chunk_indexes {
@@ -400,7 +281,7 @@ fn cat_remote_indexed(
                     chunk_index.chunk_length
                 )
             })?;
-            let chunk = remote.read_range(chunk_index.chunk_start_offset, chunk_len)?;
+            let chunk = source.read_at(chunk_index.chunk_start_offset, chunk_len)?;
             parse::collect_chunk_definitions_from_record_bytes(
                 &chunk,
                 &mut schemas,
@@ -434,7 +315,7 @@ fn cat_remote_indexed(
         indexed_opts = indexed_opts.include_topics(included_topics.iter().cloned());
     }
 
-    let mut reader = mcap::sans_io::IndexedReader::new_with_options(summary, indexed_opts)?;
+    let mut reader = mcap::sans_io::IndexedReader::new_with_options(&summary, indexed_opts)?;
     while let Some(event) = reader.next_event() {
         match event? {
             mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
@@ -446,8 +327,7 @@ fn cat_remote_indexed(
                     })?;
                     reader.insert_chunk_record_data(offset, compressed)?;
                 } else {
-                    let chunk = remote.read_range(offset, length)?;
-                    reader.insert_chunk_record_data(offset, &chunk)?;
+                    byte_source::service_indexed_chunk(&mut reader, source, offset, length)?;
                 }
             }
             mcap::sans_io::IndexedReadEvent::Message { header, data } => {
@@ -464,13 +344,13 @@ fn cat_remote_indexed(
                     data,
                 };
                 if write_message(sink, message, opts, out)? {
-                    return Ok(RemoteCatResult::BrokenPipe);
+                    return Ok(IndexedCatResult::BrokenPipe);
                 }
             }
         }
     }
 
-    Ok(RemoteCatResult::Done)
+    Ok(IndexedCatResult::Done)
 }
 
 /// Returns whether chunk definitions must be read before indexed iteration.
@@ -515,7 +395,7 @@ fn resolve_channel(
 }
 
 // Keep this planner conservative: it intentionally mirrors IndexedReader chunk filtering as an
-// upper bound so the remote-scan gate fires before any possible chunk payload fetch.
+// upper bound so callers can size definition-prefetch work before any possible chunk payload fetch.
 fn planned_chunk_reads<'a>(
     summary: &'a mcap::Summary,
     opts: &CatOptions,
@@ -561,45 +441,42 @@ fn planned_chunk_reads<'a>(
 
 fn cat_linear(
     sink: &mut OutputSink<impl std::io::Write>,
-    mcap: &[u8],
+    source: &mut dyn ByteSource,
     opts: &CatOptions,
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<bool> {
     // Scan records (not just messages) so channel definitions are observed even for topics with no
     // messages; this feeds `seen_topics` for the CSV absent-vs-empty distinction in a single pass.
     // The reader descends into chunks, emitting their inner records directly.
-    let mut reader = mcap::sans_io::LinearReader::new();
-    let mut remaining = mcap;
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+    let mut broken_pipe = false;
 
-    while let Some(event) = reader.next_event() {
-        match event? {
-            mcap::sans_io::LinearReadEvent::ReadRequest(need) => {
-                let take = need.min(remaining.len());
-                reader.insert(take).copy_from_slice(&remaining[..take]);
-                reader.notify_read(take);
-                remaining = &remaining[take..];
+    byte_source::for_each_linear_record(
+        source,
+        mcap::sans_io::LinearReaderOptions::default(),
+        |opcode, data| {
+            if broken_pipe {
+                return Ok(());
             }
-            mcap::sans_io::LinearReadEvent::Record { data, opcode } => {
-                let record = mcap::parse_record(opcode, data)?;
-                if handle_linear_record(
-                    sink,
-                    record,
-                    opts,
-                    &mut schemas,
-                    &mut channel_defs,
-                    &mut channels,
-                    out,
-                )? {
-                    return Ok(true);
-                }
+            let record = mcap::parse_record(opcode, data)?;
+            if handle_linear_record(
+                sink,
+                record,
+                opts,
+                &mut schemas,
+                &mut channel_defs,
+                &mut channels,
+                out,
+            )? {
+                broken_pipe = true;
             }
-        }
-    }
+            Ok(())
+        },
+    )?;
 
-    Ok(false)
+    Ok(broken_pipe)
 }
 
 fn cat_streaming(
@@ -1503,12 +1380,24 @@ mod tests {
         cat_indexed, cat_mcap, cat_streaming, flush_or_ignore_broken_pipe,
         needs_in_chunk_definitions, parse_ros1_field_type, planned_chunk_reads,
         write_message_fields, write_payload_preview, write_ros1_float, write_signed_decimal_time,
-        CatOptions, CsvState, JsonTranscoders, MessageWriter, OutputMode, OutputSink,
-        Ros1MessageDef, MESSAGE_PREVIEW_LEN,
+        CatOptions, CsvState, IndexedCatResult, JsonTranscoders, MessageWriter, OutputMode,
+        OutputSink, Ros1MessageDef, MESSAGE_PREVIEW_LEN,
     };
+    use crate::byte_source::MemorySource;
     use crate::cli::{CatCommand, CatFormat, TimeFormat};
     use crate::render;
+    use crate::source::SourceOptions;
     use std::io::BufWriter;
+
+    fn cat_indexed_bytes(
+        sink: &mut OutputSink<impl std::io::Write>,
+        mcap: &[u8],
+        opts: &CatOptions,
+        out: &mut MessageWriter<'_, '_>,
+    ) -> anyhow::Result<IndexedCatResult> {
+        let mut source = MemorySource::new(mcap.to_vec());
+        cat_indexed(sink, &mut source, opts, SourceOptions::default(), out)
+    }
 
     /// Runs `f` with a buffered plain sink and returns flushed stdout bytes.
     fn capture_plain<T>(
@@ -2020,10 +1909,10 @@ mod tests {
     }
 
     #[test]
-    fn remote_cat_requires_allow_remote_scan_before_chunk_reads() {
+    fn remote_cat_indexed_reads_chunks_without_allow_remote_scan() {
         let body: &'static [u8] = Box::leak(build_multi_topic_mcap().into_boxed_slice());
         let url = serve_http(body);
-        let err = capture_plain(|sink| {
+        let (broken_pipe, out) = capture_plain(|sink| {
             super::cat_file(
                 sink,
                 Path::new(&url),
@@ -2032,9 +1921,10 @@ mod tests {
                 &mut CsvState::default(),
             )
         })
-        .expect_err("remote cat should require opt-in before reading chunks");
-        assert!(err.to_string().contains("remote cat would read"));
-        assert!(err.to_string().contains("--allow-remote-scan"));
+        .expect("indexed remote cat should work without --allow-remote-scan");
+        assert!(!broken_pipe);
+        let output = String::from_utf8(out).expect("utf8");
+        assert!(output.contains("/camera") || output.contains("/imu") || !output.is_empty());
     }
 
     fn planned_chunks_for_opts<'a>(
@@ -2203,7 +2093,7 @@ mod tests {
 
         let mut json_transcoders = JsonTranscoders::default();
         let (indexed_result, indexed_out) = capture_plain(|sink| {
-            cat_indexed(
+            cat_indexed_bytes(
                 sink,
                 &mcap,
                 &CatOptions::default(),
@@ -2214,7 +2104,7 @@ mod tests {
             )
         })
         .expect("indexed cat should succeed");
-        assert_eq!(indexed_result, Some(false));
+        assert_eq!(indexed_result, IndexedCatResult::Done);
 
         let output = String::from_utf8(indexed_out).expect("valid utf8 output");
         let lines: Vec<&str> = output.lines().collect();
@@ -2255,7 +2145,7 @@ mod tests {
 
         let mut json_transcoders = JsonTranscoders::default();
         let (indexed_result, indexed_out) = capture_plain(|sink| {
-            cat_indexed(
+            cat_indexed_bytes(
                 sink,
                 mcap,
                 &CatOptions::default(),
@@ -2266,7 +2156,7 @@ mod tests {
             )
         })
         .expect("indexed cat should succeed");
-        assert_eq!(indexed_result, Some(false));
+        assert_eq!(indexed_result, IndexedCatResult::Done);
         let indexed_output = String::from_utf8(indexed_out).expect("valid utf8 output");
         let indexed_lines: Vec<&str> = indexed_output.lines().collect();
         assert_eq!(indexed_lines, expected);
@@ -2300,7 +2190,7 @@ mod tests {
 
         let mut json_transcoders = JsonTranscoders::default();
         let (indexed_result, out) = capture_plain(|sink| {
-            cat_indexed(
+            cat_indexed_bytes(
                 sink,
                 mcap,
                 &CatOptions::default(),
@@ -2311,7 +2201,7 @@ mod tests {
             )
         })
         .expect("indexed cat should succeed");
-        assert_eq!(indexed_result, Some(false));
+        assert_eq!(indexed_result, IndexedCatResult::Done);
 
         let output = String::from_utf8(out).expect("valid utf8 output");
         let lines: Vec<&str> = output.lines().collect();
@@ -2331,7 +2221,7 @@ mod tests {
 
         let mut json_transcoders = JsonTranscoders::default();
         let (indexed_result, indexed_out) = capture_plain(|sink| {
-            cat_indexed(
+            cat_indexed_bytes(
                 sink,
                 mcap,
                 &CatOptions::default(),
@@ -2342,7 +2232,7 @@ mod tests {
             )
         })
         .expect("indexed planner should fall back");
-        assert_eq!(indexed_result, None);
+        assert_eq!(indexed_result, IndexedCatResult::NeedsLinear);
         assert!(indexed_out.is_empty());
 
         let (broken_pipe, out) = capture_plain(|sink| {
@@ -2422,7 +2312,7 @@ mod tests {
         };
         let mut json_transcoders = JsonTranscoders::default();
         let (indexed_result, out) = capture_plain(|sink| {
-            cat_indexed(
+            cat_indexed_bytes(
                 sink,
                 &mcap,
                 &opts,
@@ -2433,7 +2323,7 @@ mod tests {
             )
         })
         .expect("indexed cat should resolve chunk-local channel");
-        assert_eq!(indexed_result, Some(false));
+        assert_eq!(indexed_result, IndexedCatResult::Done);
 
         let output = String::from_utf8(out).expect("valid utf8 output");
         let lines: Vec<&str> = output.lines().collect();
@@ -2467,7 +2357,7 @@ mod tests {
         // Matching topic keeps the chunk-local channel's message.
         let mut json_transcoders = JsonTranscoders::default();
         let (result, matched) = capture_plain(|sink| {
-            cat_indexed(
+            cat_indexed_bytes(
                 sink,
                 mcap,
                 &CatOptions {
@@ -2481,7 +2371,7 @@ mod tests {
             )
         })
         .expect("indexed cat should succeed");
-        assert_eq!(result, Some(false));
+        assert_eq!(result, IndexedCatResult::Done);
         let matched = String::from_utf8(matched).expect("valid utf8 output");
         assert_eq!(matched.lines().count(), 1);
 
@@ -2489,7 +2379,7 @@ mod tests {
         // reader-level filtering), and the indexed path still completes without a linear fallback.
         let mut json_transcoders = JsonTranscoders::default();
         let (result, filtered) = capture_plain(|sink| {
-            cat_indexed(
+            cat_indexed_bytes(
                 sink,
                 mcap,
                 &CatOptions {
@@ -2503,7 +2393,7 @@ mod tests {
             )
         })
         .expect("indexed cat should succeed");
-        assert_eq!(result, Some(false));
+        assert_eq!(result, IndexedCatResult::Done);
         assert!(filtered.is_empty());
     }
 
