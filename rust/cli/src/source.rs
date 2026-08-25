@@ -1668,12 +1668,7 @@ mod tests {
             super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
                 .expect_err("oversized remote summary should require scan opt-in");
         let message = format!("{err:#}");
-        eprintln!("ACTUAL_ERR={message}");
-        assert!(
-            message.contains("Remote summary section")
-                || message.contains("remote summary section"),
-            "{message}"
-        );
+        assert!(message.contains("remote summary section"));
         assert!(message.contains("--allow-remote-scan"));
     }
 
