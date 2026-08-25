@@ -310,7 +310,7 @@ mod tests {
         let output = run_sort(build_out_of_order_indexed_input(), |input, out| {
             sort_command(input.clone(), out.clone())
         });
-        let library = crate::parse::read_header(&output)
+        let library = crate::parse::slice::read_header(&output)
             .expect("read header")
             .expect("header present")
             .library;
