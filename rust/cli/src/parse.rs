@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context as _, Result};
 use mcap::records::{self, Record};
-use mcap::sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions};
 
 const FOOTER_RECORD_LEN: usize = 1 + 8 + 8 + 8 + 4;
 const RECORD_PREFIX_LEN: u64 = 1 + 8;
@@ -32,73 +31,6 @@ pub struct ParsedMcap {
     pub chunk_indexes: Vec<records::ChunkIndex>,
     pub attachment_indexes: Vec<records::AttachmentIndex>,
     pub metadata_indexes: Vec<records::MetadataIndex>,
-}
-
-#[allow(dead_code)] // Slice-based parse API kept for unit tests.
-pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
-    parse_mcap_with_scan_fallback(mcap, false)
-}
-
-#[allow(dead_code)] // Slice-based parse API kept for unit tests.
-pub fn parse_mcap_with_scan_fallback(
-    mcap: &[u8],
-    scan_without_statistics: bool,
-) -> Result<ParsedMcap> {
-    let header = read_header(mcap)?;
-    if let Some(parsed_from_summary) = parse_mcap_from_summary(mcap, header.clone())? {
-        if scan_without_statistics && parsed_from_summary.statistics.is_none() {
-            eprintln!(
-                "Warning: Statistics record not available; full scan may be slow. Run `mcap doctor` for details."
-            );
-            return parse_mcap_linear(mcap, header);
-        }
-        return Ok(parsed_from_summary);
-    }
-
-    eprintln!(
-        "Warning: summary section not available; full scan may be slow. Run `mcap doctor` for details."
-    );
-    parse_mcap_linear(mcap, header)
-}
-
-pub(crate) fn read_header(mcap: &[u8]) -> Result<Option<records::Header>> {
-    let mut reader = mcap::read::LinearReader::new(mcap)?;
-    match reader.next() {
-        Some(Ok(Record::Header(header))) => Ok(Some(header)),
-        Some(Ok(_)) | None => Ok(None),
-        Some(Err(err)) => Err(err.into()),
-    }
-}
-
-fn parse_mcap_from_summary(
-    mcap: &[u8],
-    header: Option<records::Header>,
-) -> Result<Option<ParsedMcap>> {
-    let footer = mcap::read::footer(mcap)?;
-    if footer.summary_start == 0 {
-        return Ok(None);
-    }
-
-    let footer_start = mcap
-        .len()
-        .checked_sub(FOOTER_RECORD_AND_END_MAGIC_LEN)
-        .context("input is too short to contain a footer")?;
-    let summary_start =
-        usize::try_from(footer.summary_start).context("summary offset is too large")?;
-    if summary_start > footer_start {
-        return Err(mcap::McapError::UnexpectedEof.into());
-    }
-
-    Ok(Some(parsed_mcap_from_summary_section(
-        header,
-        &mcap[summary_start..footer_start],
-    )?))
-}
-
-#[allow(dead_code)] // Kept for callers that still inspect summary sections via `&[u8]`.
-pub(crate) fn summary_section_has_chunk_indexes(mcap: &[u8]) -> Result<bool> {
-    Ok(parse_mcap_from_summary(mcap, None)?
-        .is_some_and(|summary| !summary.chunk_indexes.is_empty()))
 }
 
 pub(crate) fn parsed_mcap_from_summary_section(
@@ -334,66 +266,6 @@ where
     Ok(())
 }
 
-fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
-    let mut out = ParsedMcap {
-        header,
-        message_count: Some(0),
-        attachment_count: Some(0),
-        metadata_count: Some(0),
-        ..ParsedMcap::default()
-    };
-    scan_top_level_records(mcap, |record, offset, length| {
-        if let Record::Chunk { header, data } = record {
-            for nested_record in mcap::read::ChunkReader::new(header, data.as_ref())? {
-                collect_record(&mut out, nested_record?, None)?;
-            }
-        } else {
-            collect_record(&mut out, record, Some((offset, length)))?;
-        }
-        Ok(())
-    })?;
-
-    Ok(out)
-}
-
-#[allow(dead_code)] // Slice-based helper kept for unit tests.
-pub(crate) fn collect_attachment_indexes_linear(
-    mcap: &[u8],
-) -> Result<Vec<records::AttachmentIndex>> {
-    let mut indexes = Vec::new();
-    scan_top_level_records(mcap, |record, offset, length| {
-        if let Record::Attachment { header, data, .. } = record {
-            indexes.push(records::AttachmentIndex {
-                offset,
-                length,
-                log_time: header.log_time,
-                create_time: header.create_time,
-                data_size: data.len() as u64,
-                name: header.name,
-                media_type: header.media_type,
-            });
-        }
-        Ok(())
-    })?;
-    Ok(indexes)
-}
-
-#[allow(dead_code)] // Slice-based helper kept for unit tests.
-pub(crate) fn collect_metadata_indexes_linear(mcap: &[u8]) -> Result<Vec<records::MetadataIndex>> {
-    let mut indexes = Vec::new();
-    scan_top_level_records(mcap, |record, offset, length| {
-        if let Record::Metadata(metadata) = record {
-            indexes.push(records::MetadataIndex {
-                offset,
-                length,
-                name: metadata.name,
-            });
-        }
-        Ok(())
-    })?;
-    Ok(indexes)
-}
-
 pub(crate) fn attachment_indexes_need_scan(parsed: &ParsedMcap) -> bool {
     if !parsed.summary_available {
         return false;
@@ -416,44 +288,6 @@ pub(crate) fn metadata_indexes_need_scan(parsed: &ParsedMcap) -> bool {
 
 pub(crate) fn warn_index_scan(record_kind: &str) {
     eprintln!("Warning: {record_kind} indexes incomplete or unavailable; full scan may be slow.");
-}
-
-#[allow(dead_code)] // Used by the slice-based parse helpers above.
-fn scan_top_level_records<F>(mcap: &[u8], mut process: F) -> Result<()>
-where
-    F: FnMut(Record<'_>, u64, u64) -> Result<()>,
-{
-    let mut reader = SansIoReader::new_with_options(
-        LinearReaderOptions::default()
-            .with_emit_chunks(true)
-            .with_record_length_limit(mcap.len()),
-    );
-    let mut remaining = mcap;
-    let mut next_record_offset = mcap::MAGIC.len() as u64;
-
-    while let Some(event) = reader.next_event() {
-        match event? {
-            LinearReadEvent::ReadRequest(need) => {
-                let read = need.min(remaining.len());
-                let dst = reader.insert(read);
-                dst.copy_from_slice(&remaining[..read]);
-                reader.notify_read(read);
-                remaining = &remaining[read..];
-            }
-            LinearReadEvent::Record { opcode, data } => {
-                let record_offset = next_record_offset;
-                let record_length = RECORD_PREFIX_LEN + data.len() as u64;
-                next_record_offset += record_length;
-                process(
-                    mcap::parse_record(opcode, data)?,
-                    record_offset,
-                    record_length,
-                )?;
-            }
-        }
-    }
-
-    Ok(())
 }
 
 fn collect_record(
@@ -734,38 +568,6 @@ impl<'c> ChunkDefinitions<'c> {
         }
     }
 
-    /// Collects from the chunk that `index` locates within an in-memory file.
-    #[allow(dead_code)] // Slice convenience; ByteSource callers use collect_from_record_bytes.
-    pub(crate) fn collect_from_mcap(
-        &mut self,
-        mcap: &[u8],
-        index: &records::ChunkIndex,
-    ) -> Result<()> {
-        let start = usize::try_from(index.chunk_start_offset).with_context(|| {
-            format!(
-                "chunk offset out of range for this platform: {}",
-                index.chunk_start_offset
-            )
-        })?;
-        let length = usize::try_from(index.chunk_length).with_context(|| {
-            format!(
-                "chunk length out of range for this platform: {}",
-                index.chunk_length
-            )
-        })?;
-        let end = start.checked_add(length).ok_or_else(|| {
-            anyhow::anyhow!("chunk read overflow at offset {}", index.chunk_start_offset)
-        })?;
-        let chunk = mcap.get(start..end).ok_or_else(|| {
-            anyhow::anyhow!(
-                "chunk read out of bounds at offset {} length {}",
-                index.chunk_start_offset,
-                length
-            )
-        })?;
-        self.collect_from_record_bytes(chunk)
-    }
-
     /// Collects from one complete chunk record (opcode, length, and body).
     pub(crate) fn collect_from_record_bytes(&mut self, chunk: &[u8]) -> Result<()> {
         if chunk.len() < 9 || chunk[0] != records::op::CHUNK {
@@ -827,16 +629,185 @@ impl<'c> ChunkDefinitions<'c> {
     }
 }
 
+/// Slice-based parse helpers for unit tests. Production code uses [`ByteSource`] APIs.
+#[cfg(test)]
+pub(crate) mod slice {
+    use anyhow::{Context as _, Result};
+    use mcap::records::{self, Record};
+    use mcap::sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions};
+
+    use super::{
+        collect_record, parsed_mcap_from_summary_section, ParsedMcap,
+        FOOTER_RECORD_AND_END_MAGIC_LEN, RECORD_PREFIX_LEN,
+    };
+
+    pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
+        parse_mcap_with_scan_fallback(mcap, false)
+    }
+
+    pub fn parse_mcap_with_scan_fallback(
+        mcap: &[u8],
+        scan_without_statistics: bool,
+    ) -> Result<ParsedMcap> {
+        let header = read_header(mcap)?;
+        if let Some(parsed_from_summary) = parse_mcap_from_summary(mcap, header.clone())? {
+            if scan_without_statistics && parsed_from_summary.statistics.is_none() {
+                eprintln!(
+                    "Warning: Statistics record not available; full scan may be slow. Run `mcap doctor` for details."
+                );
+                return parse_mcap_linear(mcap, header);
+            }
+            return Ok(parsed_from_summary);
+        }
+
+        eprintln!(
+            "Warning: summary section not available; full scan may be slow. Run `mcap doctor` for details."
+        );
+        parse_mcap_linear(mcap, header)
+    }
+
+    pub(crate) fn read_header(mcap: &[u8]) -> Result<Option<records::Header>> {
+        let mut reader = mcap::read::LinearReader::new(mcap)?;
+        match reader.next() {
+            Some(Ok(Record::Header(header))) => Ok(Some(header)),
+            Some(Ok(_)) | None => Ok(None),
+            Some(Err(err)) => Err(err.into()),
+        }
+    }
+
+    pub(crate) fn parse_mcap_from_summary(
+        mcap: &[u8],
+        header: Option<records::Header>,
+    ) -> Result<Option<ParsedMcap>> {
+        let footer = mcap::read::footer(mcap)?;
+        if footer.summary_start == 0 {
+            return Ok(None);
+        }
+
+        let footer_start = mcap
+            .len()
+            .checked_sub(FOOTER_RECORD_AND_END_MAGIC_LEN)
+            .context("input is too short to contain a footer")?;
+        let summary_start =
+            usize::try_from(footer.summary_start).context("summary offset is too large")?;
+        if summary_start > footer_start {
+            return Err(mcap::McapError::UnexpectedEof.into());
+        }
+
+        Ok(Some(parsed_mcap_from_summary_section(
+            header,
+            &mcap[summary_start..footer_start],
+        )?))
+    }
+
+    fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
+        let mut out = ParsedMcap {
+            header,
+            message_count: Some(0),
+            attachment_count: Some(0),
+            metadata_count: Some(0),
+            ..ParsedMcap::default()
+        };
+        scan_top_level_records(mcap, |record, offset, length| {
+            if let Record::Chunk { header, data } = record {
+                for nested_record in mcap::read::ChunkReader::new(header, data.as_ref())? {
+                    collect_record(&mut out, nested_record?, None)?;
+                }
+            } else {
+                collect_record(&mut out, record, Some((offset, length)))?;
+            }
+            Ok(())
+        })?;
+
+        Ok(out)
+    }
+
+    pub(crate) fn collect_attachment_indexes_linear(
+        mcap: &[u8],
+    ) -> Result<Vec<records::AttachmentIndex>> {
+        let mut indexes = Vec::new();
+        scan_top_level_records(mcap, |record, offset, length| {
+            if let Record::Attachment { header, data, .. } = record {
+                indexes.push(records::AttachmentIndex {
+                    offset,
+                    length,
+                    log_time: header.log_time,
+                    create_time: header.create_time,
+                    data_size: data.len() as u64,
+                    name: header.name,
+                    media_type: header.media_type,
+                });
+            }
+            Ok(())
+        })?;
+        Ok(indexes)
+    }
+
+    pub(crate) fn collect_metadata_indexes_linear(
+        mcap: &[u8],
+    ) -> Result<Vec<records::MetadataIndex>> {
+        let mut indexes = Vec::new();
+        scan_top_level_records(mcap, |record, offset, length| {
+            if let Record::Metadata(metadata) = record {
+                indexes.push(records::MetadataIndex {
+                    offset,
+                    length,
+                    name: metadata.name,
+                });
+            }
+            Ok(())
+        })?;
+        Ok(indexes)
+    }
+
+    fn scan_top_level_records<F>(mcap: &[u8], mut process: F) -> Result<()>
+    where
+        F: FnMut(Record<'_>, u64, u64) -> Result<()>,
+    {
+        let mut reader = SansIoReader::new_with_options(
+            LinearReaderOptions::default()
+                .with_emit_chunks(true)
+                .with_record_length_limit(mcap.len()),
+        );
+        let mut remaining = mcap;
+        let mut next_record_offset = mcap::MAGIC.len() as u64;
+
+        while let Some(event) = reader.next_event() {
+            match event? {
+                LinearReadEvent::ReadRequest(need) => {
+                    let read = need.min(remaining.len());
+                    let dst = reader.insert(read);
+                    dst.copy_from_slice(&remaining[..read]);
+                    reader.notify_read(read);
+                    remaining = &remaining[read..];
+                }
+                LinearReadEvent::Record { opcode, data } => {
+                    let record_offset = next_record_offset;
+                    let record_length = RECORD_PREFIX_LEN + data.len() as u64;
+                    next_record_offset += record_length;
+                    process(
+                        mcap::parse_record(opcode, data)?,
+                        record_offset,
+                        record_length,
+                    )?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::borrow::Cow;
     use std::collections::BTreeMap;
 
-    use super::{
+    use super::slice::{
         collect_attachment_indexes_linear, collect_metadata_indexes_linear, parse_mcap,
-        parse_mcap_from_summary, parse_mcap_with_scan_fallback, parse_summary_section,
-        ChunkDefinitions,
+        parse_mcap_from_summary, parse_mcap_with_scan_fallback,
     };
+    use super::{parse_summary_section, ChunkDefinitions};
     use mcap::records;
 
     fn record(opcode: u8, body: &[u8]) -> Vec<u8> {
