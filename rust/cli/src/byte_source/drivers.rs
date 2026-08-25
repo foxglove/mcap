@@ -10,6 +10,35 @@ use mcap::sans_io::{
 
 use super::ByteSource;
 
+/// Read the leading [`Header`](mcap::records::Header) record, if present.
+pub fn read_header(source: &mut dyn ByteSource) -> Result<Option<mcap::records::Header>> {
+    if !source.is_seekable() {
+        bail!("reading the MCAP header requires a seekable byte source");
+    }
+
+    let mut reader = LinearReader::new_with_options(LinearReaderOptions::default());
+    let mut pos = 0u64;
+    while let Some(event) = reader.next_event() {
+        match event.context("linear reader error")? {
+            LinearReadEvent::ReadRequest(need) => {
+                let data = source.read_at(pos, need)?;
+                let buf = reader.insert(need);
+                let n = data.len().min(buf.len());
+                buf[..n].copy_from_slice(&data[..n]);
+                reader.notify_read(n);
+                pos = pos.saturating_add(n as u64);
+            }
+            LinearReadEvent::Record { opcode, data } => {
+                return match mcap::parse_record(opcode, data)? {
+                    mcap::records::Record::Header(header) => Ok(Some(header)),
+                    _ => Ok(None),
+                };
+            }
+        }
+    }
+    Ok(None)
+}
+
 /// Load the MCAP summary section via [`SummaryReader`].
 ///
 /// Returns `Ok(None)` when the file has no summary section.
