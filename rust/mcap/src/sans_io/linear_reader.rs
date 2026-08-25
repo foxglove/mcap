@@ -571,7 +571,20 @@ impl LinearReader {
                     let min_header_buf = load!(MIN_CHUNK_HEADER_SIZE);
                     let compression_len =
                         u32::from_le_bytes(min_header_buf[28..32].try_into().unwrap());
-                    let header_len = MIN_CHUNK_HEADER_SIZE + compression_len as usize;
+                    // The compression string sits between the length prefix and compressed_size.
+                    // A corrupt file can declare a multi-gigabyte string here. Requesting that
+                    // many bytes used to allocate them in insert() before any length check ran.
+                    let header_len =
+                        (MIN_CHUNK_HEADER_SIZE as u64).saturating_add(u64::from(compression_len));
+                    if header_len > len {
+                        return Some(Err(McapError::BadChunkLength {
+                            header: header_len,
+                            available: len,
+                        }));
+                    }
+                    let header_len =
+                        check!(check_len(header_len, self.options.record_length_limit)
+                            .ok_or(McapError::ChunkTooLarge(header_len)));
                     let header_buf = consume!(header_len);
                     let header: ChunkHeader = check!(std::io::Cursor::new(header_buf).read_le());
                     // Re-use or construct a compressor
@@ -843,7 +856,9 @@ fn decompress_inner(
     }
     dest_buf.reserve_exact(additional);
     loop {
-        let need = decompressor.next_read_size();
+        let need = decompressor
+            .next_read_size()
+            .min(clamp_to_usize(*compressed_remaining));
         let have = src_buf.len();
         if need > have {
             return Ok(Some(need - have));
@@ -870,6 +885,7 @@ mod tests {
 
     use super::*;
     use crate::{parse_record, Compression};
+    use assert_matches::assert_matches;
     use std::collections::BTreeMap;
     use std::io::Read;
 
@@ -1031,6 +1047,88 @@ mod tests {
         panic!("should have errored")
     }
 
+    /// MAGIC + empty Header + a Chunk whose compression-string length disagrees with the
+    /// chunk record length. `insert()` used to allocate the declared string length.
+    fn file_with_chunk_compression_len(compression_len: u32, record_len: u64) -> Vec<u8> {
+        let mut buf = Vec::new();
+        buf.extend_from_slice(MAGIC);
+        // Header: empty profile and library strings.
+        buf.push(op::HEADER);
+        buf.extend_from_slice(&8u64.to_le_bytes());
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf.extend_from_slice(&0u32.to_le_bytes());
+        buf.push(op::CHUNK);
+        buf.extend_from_slice(&record_len.to_le_bytes());
+        buf.extend_from_slice(&0u64.to_le_bytes()); // message_start_time
+        buf.extend_from_slice(&0u64.to_le_bytes()); // message_end_time
+        buf.extend_from_slice(&0u64.to_le_bytes()); // uncompressed_size
+        buf.extend_from_slice(&0u32.to_le_bytes()); // uncompressed_crc
+        buf.extend_from_slice(&compression_len.to_le_bytes());
+        buf.extend_from_slice(&0u64.to_le_bytes()); // compressed_size if compression_len == 0
+        buf
+    }
+
+    fn drive_linear_reader(
+        bytes: &[u8],
+        options: LinearReaderOptions,
+    ) -> (Option<McapError>, usize) {
+        let mut reader = LinearReader::new_with_options(options);
+        let mut cursor = std::io::Cursor::new(bytes);
+        let mut max_insert = 0usize;
+        let mut iter_count = 0;
+        while let Some(event) = reader.next_event() {
+            match event {
+                Ok(LinearReadEvent::ReadRequest(n)) => {
+                    assert!(
+                        n <= bytes.len().max(64),
+                        "insert requested {n} bytes for a {}-byte file",
+                        bytes.len()
+                    );
+                    max_insert = max_insert.max(n);
+                    let written = cursor
+                        .read(reader.insert(n))
+                        .expect("insert should not fail");
+                    reader.notify_read(written);
+                }
+                Ok(LinearReadEvent::Record { .. }) => {}
+                Err(err) => return (Some(err), max_insert),
+            }
+            iter_count += 1;
+            assert!(iter_count < 10000);
+        }
+        (None, max_insert)
+    }
+
+    #[test]
+    fn test_chunk_compression_len_exceeds_record() {
+        // Record body is the 40-byte minimum header; compression_len claims ~1.69 GiB.
+        const HUGE: u32 = 1_687_060_480;
+        let bytes = file_with_chunk_compression_len(HUGE, 40);
+        let (err, max_insert) = drive_linear_reader(&bytes, LinearReaderOptions::default());
+        assert!(max_insert <= 1024);
+        assert_matches!(
+            err,
+            Some(McapError::BadChunkLength {
+                header,
+                available: 40
+            }) if header == 40 + HUGE as u64
+        );
+    }
+
+    #[test]
+    fn test_chunk_compression_len_exceeds_record_length_limit() {
+        const HUGE: u32 = 1_687_060_480;
+        // Length field agrees with the huge compression string, so BadChunkLength does not
+        // fire; the record-length limit must still refuse to allocate it.
+        let bytes = file_with_chunk_compression_len(HUGE, 40 + HUGE as u64);
+        let (err, max_insert) = drive_linear_reader(
+            &bytes,
+            LinearReaderOptions::default().with_record_length_limit(1024),
+        );
+        assert!(max_insert <= 1024);
+        assert_matches!(err, Some(McapError::ChunkTooLarge(n)) if n == 40 + HUGE as u64);
+    }
+
     fn test_chunked(
         compression: Option<Compression>,
         options: LinearReaderOptions,
@@ -1077,7 +1175,6 @@ mod tests {
         );
         Ok(())
     }
-    use assert_matches::assert_matches;
     use paste::paste;
 
     macro_rules! test_chunked_parametrized {
