@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::io::{IsTerminal as _, SeekFrom, Write};
 use std::path::Path;
 use std::sync::Arc;
@@ -97,32 +96,6 @@ impl MaterializedInput {
                 .as_deref()
                 .expect("materialized input should have a path")
         }
-    }
-}
-
-pub struct RemoteMcap {
-    #[allow(dead_code)] // Used by tests.
-    reader: RemoteRangeReader,
-    summary: mcap::Summary,
-    omitted_channels: BTreeMap<u16, String>,
-}
-
-impl RemoteMcap {
-    #[allow(dead_code)] // Used by tests.
-    pub fn summary(&self) -> &mcap::Summary {
-        &self.summary
-    }
-
-    /// Channels the summary named but could not define, by id (see
-    /// [`parse::ParsedSummary::omitted_channels`]).
-    #[allow(dead_code)] // Used by tests.
-    pub fn omitted_channels(&self) -> &BTreeMap<u16, String> {
-        &self.omitted_channels
-    }
-
-    #[allow(dead_code)] // Used by tests.
-    pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
-        self.reader.read_range(offset, length)
     }
 }
 
@@ -320,40 +293,6 @@ pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<Material
         temp_file: Some(temp_file),
         local_path: None,
     })
-}
-
-#[allow(dead_code)] // Used by tests.
-pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Option<RemoteMcap>> {
-    if !is_remote_url(path) {
-        return Ok(None);
-    }
-    let Some(mut reader) = open_remote_range_reader(path)? else {
-        if !options.allow_remote_scan {
-            bail!(
-                "{}: remote server does not support range requests; {}",
-                redacted_display(path),
-                remote_scan_opt_in_suffix()
-            );
-        }
-        return Ok(None);
-    };
-    let Some(parsed) = read_summary_from_remote(&mut reader, options)
-        .map_err(|err| remote_read_error(path, err))?
-    else {
-        if !options.allow_remote_scan {
-            bail!(
-                "failed to read {}\nRemote file has no summary section; reading without one requires opt-in; {}",
-                redacted_display(path),
-                remote_scan_opt_in_suffix()
-            );
-        }
-        return Ok(None);
-    };
-    Ok(Some(RemoteMcap {
-        reader,
-        summary: parsed.summary,
-        omitted_channels: parsed.omitted_channels,
-    }))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1458,19 +1397,6 @@ pub(crate) fn require_remote_scan_for_linear(
         );
     }
     Ok(())
-}
-
-#[allow(dead_code)] // Used by try_open_remote_mcap / tests.
-fn read_summary_from_remote(
-    reader: &mut RemoteRangeReader,
-    options: SourceOptions,
-) -> Result<Option<parse::ParsedSummary>> {
-    let Some(summary_bytes) = read_summary_bytes_from_remote(reader, options)? else {
-        return Ok(None);
-    };
-    parse::parse_summary_section(&summary_bytes)
-        .map(Some)
-        .map_err(|err| classify_remote_summary_error(reader, err))
 }
 
 fn read_summary_bytes_from_remote(
@@ -2693,11 +2619,13 @@ mod tests {
         }
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let url = serve_http_with_headers(body, true, &[("Content-Encoding", "gzip")]);
-        let err =
-            match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
-                Ok(_) => panic!("gzip-encoded range probe should fail"),
-                Err(err) => err,
-            };
+        let err = match crate::byte_source::open_byte_source(
+            Path::new(&url),
+            super::SourceOptions::default(),
+        ) {
+            Ok(_) => panic!("gzip-encoded range probe should fail"),
+            Err(err) => err,
+        };
         let message = format!("{err:#}");
         assert!(message.contains("MCAP remote reads require identity encoding"));
     }
@@ -2748,11 +2676,13 @@ mod tests {
             ..TestHttpServer::new(body)
         }
         .serve();
-        let err =
-            match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
-                Ok(_) => panic!("unknown range total should surface as an error, not a bogus size"),
-                Err(err) => err,
-            };
+        let err = match crate::byte_source::open_byte_source(
+            Path::new(&url),
+            super::SourceOptions::default(),
+        ) {
+            Ok(_) => panic!("unknown range total should surface as an error, not a bogus size"),
+            Err(err) => err,
+        };
         let message = format!("{err:#}");
         assert!(message.contains("Failed while fetching range from"));
     }
@@ -2776,13 +2706,14 @@ mod tests {
         body[len - mcap::MAGIC.len()..].copy_from_slice(mcap::MAGIC);
 
         let url = serve_http(Box::leak(body.into_boxed_slice()), true);
+        let mut reader = super::open_remote_range_reader(Path::new(&url))
+            .expect("remote open")
+            .expect("range support");
         let err =
-            match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
-                Ok(_) => panic!("oversized remote summary should require scan opt-in"),
-                Err(err) => err,
-            };
+            super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
+                .expect_err("oversized remote summary should require scan opt-in");
         let message = format!("{err:#}");
-        assert!(message.contains("Remote summary section"));
+        assert!(message.contains("remote summary section"));
         assert!(message.contains("--allow-remote-scan"));
     }
 
@@ -3052,11 +2983,14 @@ mod tests {
         let (buffer, channel_id) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let url = serve_http(body, true);
-        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
+        let mut source =
+            crate::byte_source::open_byte_source(Path::new(&url), super::SourceOptions::default())
+                .expect("remote open");
+        let summary = crate::byte_source::read_summary(source.as_mut())
             .expect("remote summary read")
             .expect("summary should be present");
 
-        assert!(remote.summary().channels.contains_key(&channel_id));
+        assert!(summary.channels.contains_key(&channel_id));
     }
 
     #[test]
@@ -3066,10 +3000,16 @@ mod tests {
         let (buffer, channel_id) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let (url, requests) = serve_http_counting(body, true);
-        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
-            .expect("remote summary read")
-            .expect("summary should be present");
-        assert!(remote.summary().channels.contains_key(&channel_id));
+        let mut reader = super::open_remote_range_reader(Path::new(&url))
+            .expect("remote open")
+            .expect("range support");
+        let summary_bytes =
+            super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
+                .expect("remote summary read")
+                .expect("summary should be present");
+        let summary =
+            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
+        assert!(summary.summary.channels.contains_key(&channel_id));
         assert_eq!(
             requests.load(Ordering::SeqCst),
             1,
@@ -3083,9 +3023,12 @@ mod tests {
         // entirely from the prefetched bytes, with no back-fill range read.
         let (buffer, channel_id) = summary_mcap_with_channel();
         let mut reader = object_store_memory_reader_with_tail(buffer, 0);
-        let summary = super::read_summary_from_remote(&mut reader, super::SourceOptions::default())
-            .expect("summary read")
-            .expect("summary should be present");
+        let summary_bytes =
+            super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
+                .expect("summary read")
+                .expect("summary should be present");
+        let summary =
+            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
         assert!(summary.summary.channels.contains_key(&channel_id));
     }
 
@@ -3107,9 +3050,12 @@ mod tests {
         assert!(tail_start <= footer_start as u64);
 
         let mut reader = object_store_memory_reader_with_tail(buffer, tail_start);
-        let summary = super::read_summary_from_remote(&mut reader, super::SourceOptions::default())
-            .expect("summary read with back-fill")
-            .expect("summary should be present");
+        let summary_bytes =
+            super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
+                .expect("summary read with back-fill")
+                .expect("summary should be present");
+        let summary =
+            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
         assert!(summary.summary.channels.contains_key(&channel_id));
     }
 
@@ -3122,11 +3068,14 @@ mod tests {
             ..TestHttpServer::new(body)
         }
         .serve();
-        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
-            .expect("remote summary should use range GET, not HEAD")
+        let mut source =
+            crate::byte_source::open_byte_source(Path::new(&url), super::SourceOptions::default())
+                .expect("remote summary should use range GET, not HEAD");
+        let summary = crate::byte_source::read_summary(source.as_mut())
+            .expect("remote summary read")
             .expect("summary should be present");
 
-        assert!(remote.summary().channels.contains_key(&channel_id));
+        assert!(summary.channels.contains_key(&channel_id));
     }
 
     #[test]
@@ -3137,10 +3086,16 @@ mod tests {
         let (buffer, channel_id) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let (url, requests) = serve_http_bounded_only(body);
-        let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
+        let mut reader = super::open_remote_range_reader(Path::new(&url))
             .expect("bounded-only server should open without a scan")
-            .expect("summary should be present");
-        assert!(remote.summary().channels.contains_key(&channel_id));
+            .expect("range support");
+        let summary_bytes =
+            super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
+                .expect("summary read")
+                .expect("summary should be present");
+        let summary =
+            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
+        assert!(summary.summary.channels.contains_key(&channel_id));
         assert_eq!(
             requests.load(Ordering::SeqCst),
             3,
