@@ -126,6 +126,51 @@ TEST_CASE("internal::Parse*()", "[reader]") {
   }
 }
 
+TEST_CASE("McapReader::ParseChunk()", "[reader]") {
+  // Builds the body of a Chunk record (the bytes after opcode + record length).
+  const auto makeUncompressedChunk = [](uint64_t uncompressedSize,
+                                        const std::vector<std::byte>& records) {
+    std::vector<std::byte> data;
+    const auto putU32 = [&](uint32_t v) {
+      for (int i = 0; i < 4; ++i) {
+        data.push_back(std::byte((v >> (8 * i)) & 0xff));
+      }
+    };
+    const auto putU64 = [&](uint64_t v) {
+      for (int i = 0; i < 8; ++i) {
+        data.push_back(std::byte((v >> (8 * i)) & 0xff));
+      }
+    };
+    putU64(0);                         // messageStartTime
+    putU64(0);                         // messageEndTime
+    putU64(uncompressedSize);          // uncompressedSize
+    putU32(0);                         // uncompressedCrc
+    putU32(0);                         // compression string length (empty == uncompressed)
+    putU64(uint64_t(records.size()));  // compressedSize
+    data.insert(data.end(), records.begin(), records.end());
+    return data;
+  };
+  const std::vector<std::byte> records = {std::byte(1), std::byte(2), std::byte(3)};
+
+  SECTION("rejects an uncompressed chunk whose declared sizes disagree") {
+    auto data = makeUncompressedChunk(999, records);
+    mcap::Record record{mcap::OpCode::Chunk, data.size(), data.data()};
+    mcap::Chunk chunk;
+    const auto status = mcap::McapReader::ParseChunk(record, &chunk);
+    REQUIRE(status.code == mcap::StatusCode::DecompressionSizeMismatch);
+  }
+
+  SECTION("accepts an uncompressed chunk whose declared sizes agree") {
+    auto data = makeUncompressedChunk(records.size(), records);
+    mcap::Record record{mcap::OpCode::Chunk, data.size(), data.data()};
+    mcap::Chunk chunk;
+    const auto status = mcap::McapReader::ParseChunk(record, &chunk);
+    REQUIRE(status.ok());
+    REQUIRE(chunk.uncompressedSize == records.size());
+    REQUIRE(chunk.compressedSize == records.size());
+  }
+}
+
 TEST_CASE("McapWriter::write()", "[writer]") {
   SECTION("uint8_t") {
     mcap::BufferWriter output;

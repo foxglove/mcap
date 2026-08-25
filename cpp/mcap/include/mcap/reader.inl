@@ -923,6 +923,15 @@ Status McapReader::ParseChunk(const Record& record, Chunk* chunk) {
     const auto msg = internal::StrCat("invalid Chunk.records length: ", chunk->compressedSize);
     return Status{StatusCode::InvalidRecord, msg};
   }
+  // An uncompressed chunk stores its records verbatim, so the declared uncompressed size must
+  // match the compressed size. Without this check, decompressChunk() would trust uncompressedSize
+  // to bound a copy out of a buffer only compressedSize bytes long, reading out of bounds.
+  if (chunk->compression.empty() && chunk->uncompressedSize != chunk->compressedSize) {
+    const auto msg = internal::StrCat("uncompressed chunk declares uncompressed size ",
+                                      chunk->uncompressedSize, " but carries ",
+                                      chunk->compressedSize, " bytes");
+    return Status{StatusCode::DecompressionSizeMismatch, msg};
+  }
   // records
   chunk->records = record.data + offset;
 
