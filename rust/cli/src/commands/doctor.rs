@@ -3,17 +3,19 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result};
 
+use crate::byte_source::{self, ByteSource};
 use crate::cli::DoctorCommand;
 use crate::context::CommandContext;
 use crate::source;
 
 pub fn run(ctx: &CommandContext, args: DoctorCommand) -> Result<()> {
-    let mcap = source::load_path(
-        &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()),
-    )?;
+    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let mut input = byte_source::open_byte_source(Some(&args.file), source_options)?;
+    // Doctor always walks the full file (and may re-read indexed chunks), so remote
+    // inputs need an explicit opt-in even when range requests are available.
+    source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
 
-    let diagnosis = diagnose_mcap(&mcap, args.strict_message_order);
+    let diagnosis = diagnose_byte_source(input.as_mut(), args.strict_message_order)?;
     for warning in &diagnosis.warnings {
         eprintln!("Warning: {warning}");
     }
@@ -65,13 +67,22 @@ struct Doctor {
     duplicate_channel_warning_ids: BTreeSet<u16>,
 }
 
-fn diagnose_mcap(mcap: &[u8], strict_message_order: bool) -> Diagnosis {
+fn diagnose_byte_source(
+    source: &mut dyn ByteSource,
+    strict_message_order: bool,
+) -> Result<Diagnosis> {
     let mut doctor = Doctor::new(strict_message_order);
-    doctor.scan_top_level(mcap);
+    doctor.scan_top_level(source)?;
     doctor.finalize_record_presence();
-    doctor.validate_chunk_indexes(mcap);
+    doctor.validate_chunk_indexes(source)?;
     doctor.validate_statistics();
-    doctor.diagnosis
+    Ok(doctor.diagnosis)
+}
+
+#[cfg(test)]
+fn diagnose_mcap(mcap: &[u8], strict_message_order: bool) -> Diagnosis {
+    let mut source = byte_source::MemorySource::new(mcap.to_vec());
+    diagnose_byte_source(&mut source, strict_message_order).expect("diagnose should not I/O-fail")
 }
 
 impl Doctor {
@@ -109,16 +120,20 @@ impl Doctor {
         self.diagnosis.errors.push(message.into());
     }
 
-    fn scan_top_level(&mut self, mcap: &[u8]) {
+    fn scan_top_level(&mut self, source: &mut dyn ByteSource) -> Result<()> {
+        let record_length_limit = source
+            .size()?
+            .and_then(|size| usize::try_from(size).ok())
+            .unwrap_or(usize::MAX);
         let mut reader = mcap::sans_io::LinearReader::new_with_options(
             mcap::sans_io::LinearReaderOptions::default()
                 .with_emit_chunks(true)
                 .with_validate_chunk_crcs(true)
                 .with_validate_data_section_crc(true)
                 .with_validate_summary_section_crc(true)
-                .with_record_length_limit(mcap.len()),
+                .with_record_length_limit(record_length_limit),
         );
-        let mut remaining = mcap;
+        let mut pos = 0u64;
         let mut next_record_offset = mcap::MAGIC.len() as u64;
 
         while let Some(event) = reader.next_event() {
@@ -133,11 +148,12 @@ impl Doctor {
                     break;
                 }
                 Ok(mcap::sans_io::LinearReadEvent::ReadRequest(need)) => {
-                    let read = need.min(remaining.len());
-                    let dst = reader.insert(read);
-                    dst.copy_from_slice(&remaining[..read]);
-                    reader.notify_read(read);
-                    remaining = &remaining[read..];
+                    let data = source.read_at(pos, need)?;
+                    let buf = reader.insert(need);
+                    let n = data.len().min(buf.len());
+                    buf[..n].copy_from_slice(&data[..n]);
+                    reader.notify_read(n);
+                    pos = pos.saturating_add(n as u64);
                 }
                 Ok(mcap::sans_io::LinearReadEvent::Record { opcode, data }) => {
                     let record_offset = next_record_offset;
@@ -156,6 +172,7 @@ impl Doctor {
                 }
             }
         }
+        Ok(())
     }
 
     fn handle_top_level_record(&mut self, record: mcap::records::Record<'_>, offset: u64) {
@@ -534,7 +551,7 @@ impl Doctor {
         }
     }
 
-    fn validate_chunk_indexes(&mut self, mcap: &[u8]) {
+    fn validate_chunk_indexes(&mut self, source: &mut dyn ByteSource) -> Result<()> {
         let chunk_indexes: Vec<(u64, mcap::records::ChunkIndex)> = self
             .chunk_indexes
             .iter()
@@ -570,7 +587,7 @@ impl Doctor {
                 }
             }
 
-            match read_record_at_offset(mcap, chunk_offset) {
+            match read_record_at_offset(source, chunk_offset) {
                 Ok(raw_record) => {
                     if raw_record.opcode != mcap::records::op::CHUNK {
                         self.error(format!(
@@ -590,7 +607,7 @@ impl Doctor {
                         continue;
                     }
 
-                    let parsed = mcap::parse_record(raw_record.opcode, raw_record.body);
+                    let parsed = mcap::parse_record(raw_record.opcode, &raw_record.body);
                     let Ok(mcap::records::Record::Chunk { header, .. }) = parsed else {
                         self.error(format!(
                             "Chunk index points to offset {} but encountered error parsing the chunk at that offset",
@@ -638,6 +655,7 @@ impl Doctor {
                 }
             }
         }
+        Ok(())
     }
 
     fn validate_statistics(&mut self) {
@@ -691,34 +709,32 @@ impl Doctor {
     }
 }
 
-struct RawRecordRef<'a> {
+struct RawRecord {
     opcode: u8,
     length: u64,
-    body: &'a [u8],
+    body: Vec<u8>,
 }
 
-fn read_record_at_offset<'a>(mcap: &'a [u8], offset: u64) -> Result<RawRecordRef<'a>> {
-    let offset = usize::try_from(offset).context("record offset out of range")?;
-    if offset + 9 > mcap.len() {
+fn read_record_at_offset(source: &mut dyn ByteSource, offset: u64) -> Result<RawRecord> {
+    let header = source.read_at(offset, 9)?;
+    if header.len() < 9 {
         anyhow::bail!("record header extends beyond file");
     }
-    let opcode = mcap[offset];
+    let opcode = header[0];
     let length = u64::from_le_bytes(
-        mcap[offset + 1..offset + 9]
+        header[1..9]
             .try_into()
             .expect("slice length for record len"),
     );
-    let end = offset
-        .checked_add(9)
-        .and_then(|start| start.checked_add(usize::try_from(length).ok()?))
-        .context("record length overflow")?;
-    if end > mcap.len() {
+    let body_len = usize::try_from(length).context("record length overflow")?;
+    let body = source.read_at(offset + 9, body_len)?;
+    if body.len() != body_len {
         anyhow::bail!("record extends beyond file");
     }
-    Ok(RawRecordRef {
+    Ok(RawRecord {
         opcode,
         length,
-        body: &mcap[offset + 9..end],
+        body,
     })
 }
 
