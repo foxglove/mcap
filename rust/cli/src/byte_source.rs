@@ -413,6 +413,25 @@ pub fn open_byte_source_for_scan(
     open_byte_source(path, options)
 }
 
+/// Spools stdin to a tempfile and opens it as a random-access [`ByteSource`], for commands that
+/// may seek. Commands that only scan forward should use [`SequentialSource::stdin`] instead.
+pub fn open_stdin_byte_source() -> Result<Box<dyn ByteSource>> {
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        bail!("{PLEASE_SUPPLY_FILE}");
+    }
+    let mut temp_file = tempfile::Builder::new()
+        .prefix("mcap-cli-stdin-input-")
+        .tempfile()
+        .context("failed to create temporary file for stdin input")?;
+    std::io::copy(&mut stdin.lock(), temp_file.as_file_mut())
+        .context("failed to read input from stdin")?;
+    Ok(Box::new(LocalFileSource::from_temp_file(
+        temp_file,
+        PathBuf::from("<stdin>"),
+    )?))
+}
+
 fn open_remote_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dyn ByteSource>> {
     match open_remote_range_reader(path)? {
         Some(reader) => Ok(Box::new(RemoteRangeSource::new(reader))),
