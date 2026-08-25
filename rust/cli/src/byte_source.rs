@@ -174,35 +174,6 @@ impl ByteSource for MemorySource {
     }
 }
 
-/// Pure stdin. Not seekable; [`read_at`] always errors.
-///
-/// Prefer [`open_byte_source`] with `path: None`, which spools stdin to a tempfile
-/// and returns a seekable [`LocalFileSource`].
-#[allow(dead_code)] // Documented non-seekable source; production paths spool via open_byte_source.
-pub struct StdinSource;
-
-impl ByteSource for StdinSource {
-    fn size(&self) -> Result<Option<u64>> {
-        Ok(None)
-    }
-
-    fn is_remote(&self) -> bool {
-        false
-    }
-
-    fn display_name(&self) -> String {
-        "<stdin>".to_string()
-    }
-
-    fn read_at(&mut self, _offset: u64, _len: usize) -> Result<Vec<u8>> {
-        bail!("stdin is not seekable; spool to a temporary file before random-access reads");
-    }
-
-    fn is_seekable(&self) -> bool {
-        false
-    }
-}
-
 /// Open a path, remote URL, or stdin as a [`ByteSource`].
 ///
 /// - `None` spools stdin to a tempfile (seek+read, no mmap).
@@ -397,14 +368,5 @@ mod tests {
             }
         }
         assert_eq!(messages, 1);
-    }
-
-    #[test]
-    fn stdin_source_rejects_random_access() {
-        let mut source = StdinSource;
-        assert!(!source.is_seekable());
-        assert!(source.size().expect("size").is_none());
-        let err = source.read_at(0, 1).expect_err("stdin read_at");
-        assert!(err.to_string().contains("not seekable"));
     }
 }

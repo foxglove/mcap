@@ -28,9 +28,7 @@ fn metadata_indexes(
         Some(parsed) => parsed,
         None => {
             source::require_remote_scan_for_linear(source, source_options)?;
-            return Ok(
-                parse::parse_mcap_linear_from_byte_source(source, header)?.metadata_indexes,
-            );
+            return Ok(parse::parse_mcap_linear_from_byte_source(source, header)?.metadata_indexes);
         }
     };
     let missing_requested_name = !parsed
@@ -215,7 +213,9 @@ mod tests {
             .iter()
             .any(|index| index.name == "missing");
         assert!(missing_requested_name);
-        assert!(!(missing_requested_name && parsed.summary_available && parsed.statistics.is_none()));
+        assert!(
+            !(missing_requested_name && parsed.summary_available && parsed.statistics.is_none())
+        );
     }
 
     #[test]

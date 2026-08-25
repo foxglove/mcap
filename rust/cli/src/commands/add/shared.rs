@@ -70,8 +70,8 @@ pub(crate) fn amend_mcap_file(
 
     let backup_path = make_tail_backup_path(file)?;
     let (layout, mut existing_summary) = {
-        let mut readable = fs::File::open(file)
-            .with_context(|| format!("failed to open '{}'", file.display()))?;
+        let mut readable =
+            fs::File::open(file).with_context(|| format!("failed to open '{}'", file.display()))?;
         let mut contents = Vec::new();
         readable
             .read_to_end(&mut contents)

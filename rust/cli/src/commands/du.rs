@@ -143,10 +143,9 @@ fn collect_usage_approximate(source: &mut dyn ByteSource) -> Result<Option<Usage
     if total_file_size >= minimum_file_size {
         let footer_start = total_file_size - MCAP_MAGIC_SIZE - FOOTER_RECORD_SIZE;
         if footer_start > summary_start {
-            usage.record_kind_size.insert(
-                "summary section".to_string(),
-                footer_start - summary_start,
-            );
+            usage
+                .record_kind_size
+                .insert("summary section".to_string(), footer_start - summary_start);
         }
     }
 
