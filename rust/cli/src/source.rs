@@ -1660,8 +1660,9 @@ mod tests {
         let mut reader = super::open_remote_range_reader(Path::new(&url))
             .expect("remote open")
             .expect("range support");
-        let err = super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
-            .expect_err("oversized remote summary should require scan opt-in");
+        let err =
+            super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
+                .expect_err("oversized remote summary should require scan opt-in");
         let message = format!("{err:#}");
         assert!(message.contains("Remote summary section"));
         assert!(message.contains("--allow-remote-scan"));
