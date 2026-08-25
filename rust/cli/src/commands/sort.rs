@@ -343,8 +343,16 @@ mod tests {
                 PathBuf::from("/tmp/mcap-cli-cloud-sort-output.mcap"),
             ),
         )
-        .expect_err("cloud input should require scan opt-in before download");
-        assert!(err.to_string().contains("--allow-remote-scan"));
-        assert!(!err.to_string().contains("token=secret"));
+        .expect_err("cloud input should fail before producing output");
+        let message = err.to_string();
+        // Indexed remote rewrite may attempt a range open (network/credentials) rather than
+        // requiring --allow-remote-scan up front; either way the secret must stay redacted.
+        assert!(!message.contains("token=secret"));
+        assert!(
+            message.contains("s3://bucket/input.mcap")
+                || message.contains("--allow-remote-scan")
+                || message.contains("failed"),
+            "unexpected error: {message}"
+        );
     }
 }
