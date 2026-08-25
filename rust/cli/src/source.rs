@@ -1929,8 +1929,8 @@ mod tests {
             super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
                 .expect("remote summary read")
                 .expect("summary should be present");
-        let summary =
-            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
+        let summary = crate::parse::slice::parse_summary_section(&summary_bytes)
+            .expect("parse summary section");
         assert!(summary.channels.contains_key(&channel_id));
         assert_eq!(
             requests.load(Ordering::SeqCst),
@@ -1949,8 +1949,8 @@ mod tests {
             super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
                 .expect("summary read")
                 .expect("summary should be present");
-        let summary =
-            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
+        let summary = crate::parse::slice::parse_summary_section(&summary_bytes)
+            .expect("parse summary section");
         assert!(summary.channels.contains_key(&channel_id));
     }
 
@@ -1976,8 +1976,8 @@ mod tests {
             super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
                 .expect("summary read with back-fill")
                 .expect("summary should be present");
-        let summary =
-            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
+        let summary = crate::parse::slice::parse_summary_section(&summary_bytes)
+            .expect("parse summary section");
         assert!(summary.channels.contains_key(&channel_id));
     }
 
@@ -2013,8 +2013,8 @@ mod tests {
             super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
                 .expect("summary read")
                 .expect("summary should be present");
-        let summary =
-            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
+        let summary = crate::parse::slice::parse_summary_section(&summary_bytes)
+            .expect("parse summary section");
         assert!(summary.channels.contains_key(&channel_id));
         assert_eq!(
             requests.load(Ordering::SeqCst),

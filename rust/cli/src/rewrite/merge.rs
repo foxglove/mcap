@@ -1347,7 +1347,7 @@ mod tests {
         .expect("merge");
 
         // The inputs' `test-recorder/0.0` library is overwritten with the CLI's own identity.
-        let library = crate::parse::read_header(&merged)
+        let library = crate::parse::slice::read_header(&merged)
             .expect("read header")
             .expect("header present")
             .library;

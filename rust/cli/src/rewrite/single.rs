@@ -1379,7 +1379,7 @@ mod tests {
         };
         // The CLI is the writer of the output, so it stamps its own identity, not the source's.
         let output = run_filter(&input, &opts);
-        let library = crate::parse::read_header(&output)
+        let library = crate::parse::slice::read_header(&output)
             .expect("read header")
             .expect("header present")
             .library;
