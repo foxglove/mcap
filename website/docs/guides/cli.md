@@ -70,9 +70,11 @@ Options:
           [possible values: auto, always, never]
 
       --allow-remote-scan
-          Allow whole-file scans or downloads of remote inputs.
+          Allow unbounded remote transfer or a full linear scan of remote inputs.
 
-          Applies to http(s):// and object-store URLs (s3://, s3a://, gs://, az://, abfs://). Small bounded indexed reads work without this flag.
+          Applies to http(s):// and object-store URLs (s3://, s3a://, gs://, az://, abfs://). Small
+          bounded indexed reads work without this flag. With this flag, commands may transfer an
+          entire remote object (via range requests or a full download) to scan or rewrite it.
 
       --time-format <TIME_FORMAT>
           How to render timestamps in command output
@@ -289,14 +291,20 @@ metadata:    0
 
 <!-- cspell: enable -->
 
-Indexed reads use the summary index at the end of the file to fetch only the bytes they need, minimizing latency and data transfer. Commands that only need indexed data — such as `info`, `list`, and single-record `get` — work against remote files without any extra flags.
+Indexed reads use the summary index at the end of the file to fetch only the bytes they need, minimizing latency and data transfer. Commands that only need indexed data — such as `info`, `list`, single-record `get`, and indexed `filter` / `cat` of selected topics — work against remote files without any extra flags. They issue HTTP range requests (or equivalent object-store ranged reads) for the summary and for each selected chunk.
 
 #### Allowing full remote scans
 
-Some operations must read or download the entire remote file: commands that rewrite a file (`filter`, `merge`, `convert`, `recover`) and any command that falls back to a linear scan (for example a remote file with no summary section, a server that does not support range requests, or `cat` reading message payloads). These require the `--allow-remote-scan` flag to opt in to the larger transfer:
+Some operations still need an unbounded remote transfer: a linear scan of an unindexed file, a server that ignores `Range`, `convert` of a remote `.bag`/`.db3` (which must be spooled to a local path for sqlite), or `recover` of a remote input. These require the `--allow-remote-scan` flag:
 
 ```
-mcap filter --allow-remote-scan gs://your-remote-bucket/demo.mcap -o filtered.mcap -y /tf
+mcap filter --allow-remote-scan gs://your-remote-bucket/unindexed.mcap -o filtered.mcap -y /tf
+```
+
+Indexed topic filters on remote objects that support range requests do **not** need the flag:
+
+```
+mcap filter gs://your-remote-bucket/demo.mcap -o filtered.mcap -y /tf
 ```
 
 #### Credentials
