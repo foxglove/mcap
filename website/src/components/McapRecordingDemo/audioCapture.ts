@@ -1,5 +1,3 @@
-// cspell:ignore Millis
-
 import { fromMillis } from "@foxglove/rostime";
 import { RawAudio } from "@foxglove/schemas";
 

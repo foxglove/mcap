@@ -7,8 +7,6 @@ sidebar_label: Rosbag2 Storage Plugins
 _[James Smith](https://github.com/james-rms)_<br/>
 _November 2022_
 
-<!-- cspell:words ramdisk mebibytes rosdep nocrc nochunking pluggable robotec middlewares fastrtps LPDDR aarch -->
-
 ## Context
 
 The [ROS 2 bag recording framework](https://github.com/ros2/rosbag2) supports pluggable storage layers, allowing users to choose different storage formats and recording libraries. When a user installs ROS 2 for the first time, they get a storage plugin by default which records bags with [SQLite](https://sqlite.org). This document compares write performance of the SQLite plugin against the [MCAP storage plugin](https://github.com/ros-tooling/rosbag2_storage_mcap).

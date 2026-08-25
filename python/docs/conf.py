@@ -9,6 +9,6 @@ html_show_copyright = False
 
 extensions = [
     "sphinx.ext.autodoc",
-    "sphinx.ext.viewcode",  # cspell:disable-line
+    "sphinx.ext.viewcode",
     "sphinx_mdinclude",
 ]

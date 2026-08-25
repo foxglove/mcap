@@ -30,7 +30,7 @@ func getSchema(rosType string, directories []string) ([]byte, error) {
 	for _, dir := range directories {
 		schemaIndexPath := path.Join(
 			dir, "share", "ament_index",
-			"resource_index", "rosidl_interfaces", rosPkg, // cspell:disable-line
+			"resource_index", "rosidl_interfaces", rosPkg,
 		)
 		schemaIndex, err := os.ReadFile(schemaIndexPath)
 		if err != nil {

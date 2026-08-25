@@ -3,7 +3,7 @@ import struct Foundation.Data
 // iOS seems to lack CRC intrinsics
 // See also: https://stackoverflow.com/questions/45625725/does-clang-lack-crc32-for-armv8-aarch64
 #if (arch(arm) || arch(arm64)) && !os(iOS)
-  import _Builtin_intrinsics.arm.acle // cspell:disable-line
+  import _Builtin_intrinsics.arm.acle
 #endif
 
 // swiftlint:disable identifier_name

@@ -1,5 +1,3 @@
-// cspell:word annexb, bitstream
-
 type VideoStreamParams = {
   /** Video element to attach to the camera */
   video: HTMLVideoElement;

@@ -1,6 +1,5 @@
 """tests for the McapReader implementations."""
 
-# cspell:words getbuffer
 import json
 import os
 from io import BytesIO
