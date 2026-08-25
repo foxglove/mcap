@@ -134,22 +134,19 @@ impl ByteSource for RemoteRangeSource {
 }
 
 /// In-memory bytes, mainly for unit tests.
-#[allow(dead_code)] // Constructed from #[cfg(test)] modules across the crate.
+#[cfg(test)]
 pub struct MemorySource {
     data: Vec<u8>,
 }
 
+#[cfg(test)]
 impl MemorySource {
     pub fn new(data: impl Into<Vec<u8>>) -> Self {
         Self { data: data.into() }
     }
-
-    #[allow(dead_code)] // Handy for tests that compare against a known buffer.
-    pub fn as_slice(&self) -> &[u8] {
-        &self.data
-    }
 }
 
+#[cfg(test)]
 impl ByteSource for MemorySource {
     fn size(&self) -> Result<Option<u64>> {
         Ok(Some(self.data.len() as u64))
@@ -164,7 +161,12 @@ impl ByteSource for MemorySource {
     }
 
     fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>> {
-        read_slice_at(&self.data, offset, len)
+        if len == 0 || offset as usize >= self.data.len() {
+            return Ok(Vec::new());
+        }
+        let start = offset as usize;
+        let end = start.saturating_add(len).min(self.data.len());
+        Ok(self.data[start..end].to_vec())
     }
 
     fn is_seekable(&self) -> bool {
@@ -279,15 +281,6 @@ fn read_file_at(file: &mut File, size: u64, offset: u64, len: usize) -> Result<V
     file.read_exact(&mut buf)
         .context("failed to read from local file")?;
     Ok(buf)
-}
-
-fn read_slice_at(data: &[u8], offset: u64, len: usize) -> Result<Vec<u8>> {
-    if len == 0 || offset as usize >= data.len() {
-        return Ok(Vec::new());
-    }
-    let start = offset as usize;
-    let end = start.saturating_add(len).min(data.len());
-    Ok(data[start..end].to_vec())
 }
 
 #[cfg(test)]
