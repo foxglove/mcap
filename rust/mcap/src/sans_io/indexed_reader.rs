@@ -329,6 +329,12 @@ impl IndexedReader {
         let slot = &mut self.chunk_slots[slot_idx];
         match chunk_index.compression.as_str() {
             "" => {
+                if compressed_data.len() != uncompressed_size {
+                    return Err(McapError::DecompressionError(format!(
+                        "uncompressed chunk size mismatch: expected {uncompressed_size}, got {}",
+                        compressed_data.len()
+                    )));
+                }
                 slot.buf.resize(uncompressed_size, 0);
                 slot.buf[..].copy_from_slice(compressed_data);
             }
@@ -661,6 +667,34 @@ mod tests {
         }
         writer.finish().expect("failed on finish");
         writer.into_inner().into_inner()
+    }
+
+    #[test]
+    fn test_uncompressed_chunk_size_mismatch_errors() {
+        let mcap = make_mcap(None, &[&[(1, 10)]]);
+        let mut summary = crate::Summary::read(&mcap)
+            .expect("summary reading should succeed")
+            .expect("there should be a summary");
+        // For an uncompressed chunk the writer sets compressed_size == uncompressed_size.
+        // Make the declared uncompressed size disagree with the chunk data length.
+        for ci in summary.chunk_indexes.iter_mut() {
+            ci.uncompressed_size += 1;
+        }
+        let mut reader = IndexedReader::new(&summary).expect("reader construction should not fail");
+        let mut saw_request = false;
+        while let Some(event) = reader.next_event() {
+            match event.expect("indexed reader failed") {
+                IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                    saw_request = true;
+                    let chunk_data = &mcap[offset as usize..][..length];
+                    let result = reader.insert_chunk_record_data(offset, chunk_data);
+                    assert!(matches!(result, Err(McapError::DecompressionError(_))));
+                    break;
+                }
+                IndexedReadEvent::Message { .. } => {}
+            }
+        }
+        assert!(saw_request, "expected a chunk read request");
     }
 
     fn read_mcap(options: IndexedReaderOptions, mcap: &[u8]) -> Vec<(u16, u64)> {
