@@ -1578,11 +1578,13 @@ mod tests {
         }
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let url = serve_http_with_headers(body, true, &[("Content-Encoding", "gzip")]);
-        let err = crate::byte_source::open_byte_source(
+        let err = match crate::byte_source::open_byte_source(
             Some(Path::new(&url)),
             super::SourceOptions::default(),
-        )
-        .expect_err("gzip-encoded range probe should fail");
+        ) {
+            Ok(_) => panic!("gzip-encoded range probe should fail"),
+            Err(err) => err,
+        };
         let message = format!("{err:#}");
         assert!(message.contains("MCAP remote reads require identity encoding"));
     }
@@ -1629,11 +1631,13 @@ mod tests {
         let (buffer, _) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
         let (url, _requests) = serve_http_with_options(body, true, &[], false, true, false);
-        let err = crate::byte_source::open_byte_source(
+        let err = match crate::byte_source::open_byte_source(
             Some(Path::new(&url)),
             super::SourceOptions::default(),
-        )
-        .expect_err("unknown range total should surface as an error, not a bogus size");
+        ) {
+            Ok(_) => panic!("unknown range total should surface as an error, not a bogus size"),
+            Err(err) => err,
+        };
         let message = format!("{err:#}");
         assert!(message.contains("Failed while fetching range from"));
     }
