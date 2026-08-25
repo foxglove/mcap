@@ -48,7 +48,7 @@ fn attachment_indexes(
         None => {
             source::require_remote_scan_for_linear(source, source_options)?;
             return Ok(
-                parse::parse_mcap_linear_from_byte_source(source, header)?.attachment_indexes,
+                parse::parse_mcap_linear_from_byte_source(source, header)?.attachment_indexes
             );
         }
     };
@@ -263,7 +263,9 @@ mod tests {
             .any(|index| index.name == "missing");
         assert!(missing_requested_name);
         // Without summary_available, the get path must not force a rescan.
-        assert!(!(missing_requested_name && parsed.summary_available && parsed.statistics.is_none()));
+        assert!(
+            !(missing_requested_name && parsed.summary_available && parsed.statistics.is_none())
+        );
     }
 
     #[test]

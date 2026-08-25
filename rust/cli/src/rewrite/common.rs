@@ -398,8 +398,7 @@ where
         mcap::sans_io::LinearReaderOptions::default().with_emit_chunks(true),
         |opcode, data| {
             if opcode == mcap::records::op::METADATA {
-                if let mcap::records::Record::Metadata(metadata) =
-                    mcap::parse_record(opcode, data)?
+                if let mcap::records::Record::Metadata(metadata) = mcap::parse_record(opcode, data)?
                 {
                     visit(metadata)?;
                 }

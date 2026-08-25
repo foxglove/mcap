@@ -24,7 +24,7 @@ fn attachment_indexes(
         None => {
             source::require_remote_scan_for_linear(source, source_options)?;
             return Ok(
-                parse::parse_mcap_linear_from_byte_source(source, header)?.attachment_indexes,
+                parse::parse_mcap_linear_from_byte_source(source, header)?.attachment_indexes
             );
         }
     };
