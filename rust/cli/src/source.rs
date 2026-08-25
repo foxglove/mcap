@@ -294,6 +294,7 @@ pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
     Ok(InputData::Mapped(map_file(path)?))
 }
 
+#[allow(dead_code)] // Still used by commands that mmap whole files; rewrite uses ByteSource.
 pub fn load_input(file: Option<&Path>, options: SourceOptions) -> Result<InputData> {
     if let Some(path) = file {
         return load_path(path, options);
