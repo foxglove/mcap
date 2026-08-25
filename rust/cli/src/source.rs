@@ -8,7 +8,6 @@ use anyhow::{bail, Context, Result};
 use binrw::BinRead;
 use futures_util::TryStreamExt;
 use mcap::records::{self, Record};
-use memmap2::Mmap;
 use object_store::{
     path::Path as ObjectStorePath, Attribute, BackoffConfig, ClientConfigKey, GetOptions, GetRange,
     ObjectStore, ObjectStoreExt, ObjectStoreScheme, RetryConfig,
@@ -59,42 +58,6 @@ const _: () = assert!(
 // Any delivered bytes reset the budget, so only a dead connection exhausts it.
 const REMOTE_DOWNLOAD_NO_PROGRESS_ATTEMPTS: usize = 5;
 
-pub enum InputData {
-    Mapped(Mmap),
-    TempMapped {
-        mmap: Mmap,
-        // Keep the temporary file alive for at least as long as the mmap. Fields drop in
-        // declaration order, so this is dropped after `mmap`.
-        #[allow(dead_code)]
-        temp_file: NamedTempFile,
-    },
-}
-
-impl std::fmt::Debug for InputData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InputData")
-            .field("len", &self.as_slice().len())
-            .finish()
-    }
-}
-
-impl std::ops::Deref for InputData {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        self.as_slice()
-    }
-}
-
-impl InputData {
-    pub fn as_slice(&self) -> &[u8] {
-        match self {
-            InputData::Mapped(mmap) => mmap.as_ref(),
-            InputData::TempMapped { mmap, .. } => mmap.as_ref(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SourceOptions {
     pub allow_remote_scan: bool,
@@ -138,35 +101,29 @@ impl MaterializedInput {
 }
 
 pub struct RemoteMcap {
-    #[allow(dead_code)] // Used by tests; remaining commands (doctor/recover) still to port.
+    #[allow(dead_code)] // Used by tests.
     reader: RemoteRangeReader,
     summary: mcap::Summary,
     omitted_channels: BTreeMap<u16, String>,
 }
 
 impl RemoteMcap {
-    #[allow(dead_code)] // Used by tests; remaining commands still to port.
+    #[allow(dead_code)] // Used by tests.
     pub fn summary(&self) -> &mcap::Summary {
         &self.summary
     }
 
     /// Channels the summary named but could not define, by id (see
     /// [`parse::ParsedSummary::omitted_channels`]).
-    #[allow(dead_code)] // Used by tests; remaining commands still to port.
+    #[allow(dead_code)] // Used by tests.
     pub fn omitted_channels(&self) -> &BTreeMap<u16, String> {
         &self.omitted_channels
     }
 
-    #[allow(dead_code)] // Used by tests; remaining commands still to port.
+    #[allow(dead_code)] // Used by tests.
     pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         self.reader.read_range(offset, length)
     }
-}
-
-pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
-    let file =
-        std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
-    unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
 }
 
 pub fn ensure_distinct_local_input_output(input: &Path, output: &Path) -> Result<()> {
@@ -329,18 +286,6 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     parse::parse_mcap_linear_from_byte_source(source.as_mut(), header)
 }
 
-pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
-    if is_remote_url(path) {
-        let materialized = materialize_input(path, options)?;
-        let mmap = map_file(materialized.path())?;
-        let temp_file = materialized
-            .temp_file
-            .expect("remote materialized input should have a temp file");
-        return Ok(InputData::TempMapped { temp_file, mmap });
-    }
-    Ok(InputData::Mapped(map_file(path)?))
-}
-
 pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<MaterializedInput> {
     if !is_remote_url(path) {
         return Ok(MaterializedInput {
@@ -377,7 +322,7 @@ pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<Material
     })
 }
 
-#[allow(dead_code)] // Used by tests; remaining commands (doctor/recover) still to port.
+#[allow(dead_code)] // Used by tests.
 pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Option<RemoteMcap>> {
     if !is_remote_url(path) {
         return Ok(None);
@@ -1712,7 +1657,7 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
 
-    use super::load_path;
+    use super::materialize_input;
     use crate::render::human_bytes;
     use mcap::records;
     use object_store::ObjectStoreExt;
@@ -2200,8 +2145,9 @@ mod tests {
     #[test]
     fn remote_errors_redact_query_strings() {
         let url = "http://127.0.0.1:1/demo.mcap?X-Amz-Signature=secret-token";
-        let err = load_path(Path::new(url), super::SourceOptions::default())
-            .expect_err("remote scan rejection should report redacted URL");
+        let err = materialize_input(Path::new(url), super::SourceOptions::default())
+            .err()
+            .expect("remote scan rejection should report redacted URL");
         assert!(!err.to_string().contains("secret-token"));
         assert!(!err.to_string().contains("X-Amz-Signature"));
     }
@@ -2209,8 +2155,9 @@ mod tests {
     #[test]
     fn remote_errors_redact_userinfo() {
         let url = "http://AKIA:secret@127.0.0.1:1/demo.mcap";
-        let err = load_path(Path::new(url), super::SourceOptions::default())
-            .expect_err("remote scan rejection should report redacted URL");
+        let err = materialize_input(Path::new(url), super::SourceOptions::default())
+            .err()
+            .expect("remote scan rejection should report redacted URL");
         assert!(!err.to_string().contains("AKIA"));
         assert!(!err.to_string().contains("secret"));
         assert!(err.to_string().contains("http://127.0.0.1:1/demo.mcap"));
@@ -2219,18 +2166,20 @@ mod tests {
     #[test]
     fn remote_http_input_requires_remote_scan_opt_in() {
         let url = serve_http(b"hello remote", true);
-        let err = load_path(Path::new(&url), super::SourceOptions::default())
-            .expect_err("remote full read should require opt-in");
+        let err = materialize_input(Path::new(&url), super::SourceOptions::default())
+            .err()
+            .expect("remote full read should require opt-in");
         assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
     #[test]
     fn remote_object_store_input_requires_remote_scan_opt_in_before_network() {
-        let err = load_path(
+        let err = materialize_input(
             Path::new("s3://bucket/demo.mcap?X-Amz-Signature=secret-token"),
             super::SourceOptions::default(),
         )
-        .expect_err("cloud remote full read should require opt-in");
+        .err()
+        .expect("cloud remote full read should require opt-in");
         assert!(err.to_string().contains("--allow-remote-scan"));
         assert!(!err.to_string().contains("secret-token"));
         assert!(!err.to_string().contains("X-Amz-Signature"));
@@ -2239,9 +2188,12 @@ mod tests {
     #[test]
     fn remote_http_input_reads_entire_file() {
         let url = serve_http(b"hello remote", true);
-        let input =
-            load_path(Path::new(&url), super::SourceOptions::new(true)).expect("remote read");
-        assert_eq!(input.as_slice(), b"hello remote");
+        let input = materialize_input(Path::new(&url), super::SourceOptions::new(true))
+            .expect("remote read");
+        assert_eq!(
+            std::fs::read(input.path()).expect("read materialized"),
+            b"hello remote"
+        );
     }
 
     #[test]
@@ -2653,8 +2605,9 @@ mod tests {
     #[test]
     fn remote_http_input_rejects_gzip_content_encoding() {
         let url = serve_http_with_headers(b"hello remote", false, &[("Content-Encoding", "gzip")]);
-        let err = load_path(Path::new(&url), super::SourceOptions::new(true))
-            .expect_err("gzip-encoded remote read should fail");
+        let err = materialize_input(Path::new(&url), super::SourceOptions::new(true))
+            .err()
+            .expect("gzip-encoded remote read should fail");
         let message = format!("{err:#}");
         assert!(message.contains("MCAP remote reads require identity encoding"));
     }
