@@ -34,10 +34,12 @@ pub struct ParsedMcap {
     pub metadata_indexes: Vec<records::MetadataIndex>,
 }
 
+#[allow(dead_code)] // Slice-based parse API kept for unit tests.
 pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
     parse_mcap_with_scan_fallback(mcap, false)
 }
 
+#[allow(dead_code)] // Slice-based parse API kept for unit tests.
 pub fn parse_mcap_with_scan_fallback(
     mcap: &[u8],
     scan_without_statistics: bool,
@@ -114,6 +116,215 @@ pub(crate) fn parsed_mcap_from_summary_section(
     Ok(out)
 }
 
+/// Convert a library [`mcap::Summary`] (from [`SummaryReader`] / [`ByteSource`]) into [`ParsedMcap`].
+pub(crate) fn parsed_mcap_from_library_summary(
+    header: Option<records::Header>,
+    summary: &mcap::Summary,
+) -> ParsedMcap {
+    let mut out = ParsedMcap {
+        header,
+        summary_available: true,
+        statistics: summary.stats.clone(),
+        chunk_indexes: summary.chunk_indexes.clone(),
+        attachment_indexes: summary.attachment_indexes.clone(),
+        metadata_indexes: summary.metadata_indexes.clone(),
+        ..ParsedMcap::default()
+    };
+    for schema in summary.schemas.values() {
+        out.schemas.insert(
+            schema.id,
+            ParsedSchema {
+                header: records::SchemaHeader {
+                    id: schema.id,
+                    name: schema.name.clone(),
+                    encoding: schema.encoding.clone(),
+                },
+                data: schema.data.clone().into_owned(),
+            },
+        );
+    }
+    for channel in summary.channels.values() {
+        out.channels.insert(
+            channel.id,
+            records::Channel {
+                id: channel.id,
+                schema_id: channel.schema.as_ref().map(|s| s.id).unwrap_or(0),
+                topic: channel.topic.clone(),
+                message_encoding: channel.message_encoding.clone(),
+                metadata: channel.metadata.clone(),
+            },
+        );
+    }
+    out
+}
+
+/// Prefer [`SummaryReader`]; on [`mcap::McapError::UnknownSchema`] fall back to parsing the raw
+/// summary section (channels/schemas as records, without resolving Arc links).
+pub(crate) fn try_parsed_mcap_from_summary(
+    source: &mut dyn crate::byte_source::ByteSource,
+    header: Option<records::Header>,
+) -> Result<Option<ParsedMcap>> {
+    match crate::byte_source::read_summary(source) {
+        Ok(Some(summary)) => Ok(Some(parsed_mcap_from_library_summary(header, &summary))),
+        Ok(None) => Ok(None),
+        Err(err) if is_unknown_schema_error(&err) => {
+            read_raw_summary_section(source)?
+                .map(|bytes| parsed_mcap_from_summary_section(header, &bytes))
+                .transpose()
+        }
+        Err(err) => Err(err),
+    }
+}
+
+fn read_raw_summary_section(
+    source: &mut dyn crate::byte_source::ByteSource,
+) -> Result<Option<Vec<u8>>> {
+    let Some(size) = source.size()? else {
+        return Ok(None);
+    };
+    if size < FOOTER_RECORD_AND_END_MAGIC_LEN as u64 + mcap::MAGIC.len() as u64 {
+        return Ok(None);
+    }
+    let footer_offset = size
+        .checked_sub(FOOTER_RECORD_AND_END_MAGIC_LEN as u64)
+        .context("file too short for footer")?;
+    let footer_bytes = source.read_at(footer_offset, FOOTER_RECORD_LEN)?;
+    if footer_bytes.len() != FOOTER_RECORD_LEN || footer_bytes[0] != records::op::FOOTER {
+        return Ok(None);
+    }
+    let summary_start = u64::from_le_bytes(footer_bytes[9..17].try_into().expect("8 bytes"));
+    if summary_start == 0 || summary_start >= footer_offset {
+        return Ok(None);
+    }
+    let summary_len = usize::try_from(footer_offset - summary_start)
+        .context("summary section length out of range")?;
+    let bytes = source.read_at(summary_start, summary_len)?;
+    if bytes.len() != summary_len {
+        bail!("short read for summary section");
+    }
+    Ok(Some(bytes))
+}
+
+fn is_unknown_schema_error(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<mcap::McapError>()
+            .is_some_and(|e| matches!(e, mcap::McapError::UnknownSchema(_, _)))
+    })
+}
+
+pub(crate) fn parse_mcap_linear_from_byte_source(
+    source: &mut dyn crate::byte_source::ByteSource,
+    header: Option<records::Header>,
+) -> Result<ParsedMcap> {
+    let mut out = ParsedMcap {
+        header,
+        message_count: Some(0),
+        attachment_count: Some(0),
+        metadata_count: Some(0),
+        ..ParsedMcap::default()
+    };
+    scan_top_level_records_from_byte_source(source, |record, offset, length| {
+        if let Record::Chunk { header, data } = record {
+            for nested_record in mcap::read::ChunkReader::new(header, data.as_ref())? {
+                collect_record(&mut out, nested_record?, None)?;
+            }
+        } else {
+            collect_record(&mut out, record, Some((offset, length)))?;
+        }
+        Ok(())
+    })?;
+    Ok(out)
+}
+
+pub(crate) fn collect_attachment_indexes_from_byte_source(
+    source: &mut dyn crate::byte_source::ByteSource,
+) -> Result<Vec<records::AttachmentIndex>> {
+    let mut indexes = Vec::new();
+    scan_top_level_records_from_byte_source(source, |record, offset, length| {
+        if let Record::Attachment { header, data, .. } = record {
+            indexes.push(records::AttachmentIndex {
+                offset,
+                length,
+                log_time: header.log_time,
+                create_time: header.create_time,
+                data_size: data.len() as u64,
+                name: header.name,
+                media_type: header.media_type,
+            });
+        }
+        Ok(())
+    })?;
+    Ok(indexes)
+}
+
+pub(crate) fn collect_metadata_indexes_from_byte_source(
+    source: &mut dyn crate::byte_source::ByteSource,
+) -> Result<Vec<records::MetadataIndex>> {
+    let mut indexes = Vec::new();
+    scan_top_level_records_from_byte_source(source, |record, offset, length| {
+        if let Record::Metadata(metadata) = record {
+            indexes.push(records::MetadataIndex {
+                offset,
+                length,
+                name: metadata.name,
+            });
+        }
+        Ok(())
+    })?;
+    Ok(indexes)
+}
+
+fn scan_top_level_records_from_byte_source<F>(
+    source: &mut dyn crate::byte_source::ByteSource,
+    mut process: F,
+) -> Result<()>
+where
+    F: FnMut(Record<'_>, u64, u64) -> Result<()>,
+{
+    use mcap::sans_io::{LinearReadEvent, LinearReader, LinearReaderOptions};
+
+    if !source.is_seekable() {
+        bail!("linear MCAP scan requires a seekable byte source");
+    }
+
+    let record_limit = source
+        .size()?
+        .and_then(|size| usize::try_from(size).ok())
+        .unwrap_or(usize::MAX);
+    let mut reader = LinearReader::new_with_options(
+        LinearReaderOptions::default()
+            .with_emit_chunks(true)
+            .with_record_length_limit(record_limit),
+    );
+    let mut pos = 0u64;
+    let mut next_record_offset = mcap::MAGIC.len() as u64;
+
+    while let Some(event) = reader.next_event() {
+        match event? {
+            LinearReadEvent::ReadRequest(need) => {
+                let data = source.read_at(pos, need)?;
+                let buf = reader.insert(need);
+                let n = data.len().min(buf.len());
+                buf[..n].copy_from_slice(&data[..n]);
+                reader.notify_read(n);
+                pos = pos.saturating_add(n as u64);
+            }
+            LinearReadEvent::Record { opcode, data } => {
+                let record_offset = next_record_offset;
+                let record_length = RECORD_PREFIX_LEN + data.len() as u64;
+                next_record_offset += record_length;
+                process(
+                    mcap::parse_record(opcode, data)?,
+                    record_offset,
+                    record_length,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
     let mut out = ParsedMcap {
         header,
@@ -136,6 +347,7 @@ fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<Par
     Ok(out)
 }
 
+#[allow(dead_code)] // Slice-based helper kept for unit tests.
 pub(crate) fn collect_attachment_indexes_linear(
     mcap: &[u8],
 ) -> Result<Vec<records::AttachmentIndex>> {
@@ -157,6 +369,7 @@ pub(crate) fn collect_attachment_indexes_linear(
     Ok(indexes)
 }
 
+#[allow(dead_code)] // Slice-based helper kept for unit tests.
 pub(crate) fn collect_metadata_indexes_linear(mcap: &[u8]) -> Result<Vec<records::MetadataIndex>> {
     let mut indexes = Vec::new();
     scan_top_level_records(mcap, |record, offset, length| {
@@ -196,6 +409,7 @@ pub(crate) fn warn_index_scan(record_kind: &str) {
     eprintln!("Warning: {record_kind} indexes incomplete or unavailable; full scan may be slow.");
 }
 
+#[allow(dead_code)] // Used by the slice-based parse helpers above.
 fn scan_top_level_records<F>(mcap: &[u8], mut process: F) -> Result<()>
 where
     F: FnMut(Record<'_>, u64, u64) -> Result<()>,
@@ -347,6 +561,7 @@ fn increment_map_count(counts: &mut BTreeMap<u16, u64>, channel_id: u16) -> Resu
 
 // TODO: keep this in sync with mcap::sans_io::SummaryReader and mcap::read::ChannelAccumulator.
 // A future mcap crate range-summary API should replace this CLI-local parser.
+#[allow(dead_code)] // Used by read_summary_from_remote / tests.
 pub(crate) fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
     let mut out = mcap::Summary::default();
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
@@ -458,6 +673,7 @@ pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'
     Ok(attachment)
 }
 
+#[allow(dead_code)] // Slice convenience; ByteSource callers use collect_chunk_definitions_from_record_bytes.
 pub(crate) fn collect_chunk_definitions_from_mcap(
     mcap: &[u8],
     index: &records::ChunkIndex,
