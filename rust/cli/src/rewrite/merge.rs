@@ -165,7 +165,8 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
     }
 
     // A merge reads message data from every input, so remote inputs need the scan opt-in. Refuse
-    // from the paths before opening any source, so no request is sent.
+    // from the paths before opening any source, so no request is sent. With it, remote inputs
+    // are read by range rather than downloaded whole.
     for path in opts.files.iter().filter(|path| source::is_remote_url(path)) {
         source::require_remote_scan_allowed(path, source_options)?;
     }
@@ -173,7 +174,7 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
     let mut sources = Vec::with_capacity(opts.files.len());
     let mut inputs = Vec::with_capacity(opts.files.len());
     for path in &opts.files {
-        let source = byte_source::open_materialized_byte_source(path, source_options)
+        let source = byte_source::open_byte_source(path, source_options)
             .map_err(|err| explain_open_file_limit(err, sources.len(), opts.files.len()))?;
         inputs.push(InputRef {
             name: source::redacted_display(path),
