@@ -170,7 +170,14 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
     }
 
     let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
-    merge_inputs(&inputs, &mut sources, sink, &opts, disable_seeking, source_options)
+    merge_inputs(
+        &inputs,
+        &mut sources,
+        sink,
+        &opts,
+        disable_seeking,
+        source_options,
+    )
 }
 
 fn merge_inputs<W: Write + Seek>(
@@ -1276,11 +1283,10 @@ mod tests {
         .expect("count"));
 
         summary.stats.as_mut().expect("stats present").message_count += 1;
-        assert!(!common::summary_indexes_all_messages(
-            &mut MemorySource::new(input),
-            &summary
-        )
-        .expect("count"));
+        assert!(
+            !common::summary_indexes_all_messages(&mut MemorySource::new(input), &summary)
+                .expect("count")
+        );
     }
 
     #[test]

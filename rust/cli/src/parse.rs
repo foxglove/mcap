@@ -167,11 +167,9 @@ pub(crate) fn try_parsed_mcap_from_summary(
     match crate::byte_source::read_summary(source) {
         Ok(Some(summary)) => Ok(Some(parsed_mcap_from_library_summary(header, &summary))),
         Ok(None) => Ok(None),
-        Err(err) if is_unknown_schema_error(&err) => {
-            read_raw_summary_section(source)?
-                .map(|bytes| parsed_mcap_from_summary_section(header, &bytes))
-                .transpose()
-        }
+        Err(err) if is_unknown_schema_error(&err) => read_raw_summary_section(source)?
+            .map(|bytes| parsed_mcap_from_summary_section(header, &bytes))
+            .transpose(),
         Err(err) => Err(err),
     }
 }
@@ -561,7 +559,7 @@ fn increment_map_count(counts: &mut BTreeMap<u16, u64>, channel_id: u16) -> Resu
 
 // TODO: keep this in sync with mcap::sans_io::SummaryReader and mcap::read::ChannelAccumulator.
 // A future mcap crate range-summary API should replace this CLI-local parser.
-#[allow(dead_code)] // Used by read_summary_from_remote / tests.
+#[allow(dead_code)] // Slice-based helper kept for unit tests.
 pub(crate) fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
     let mut out = mcap::Summary::default();
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();

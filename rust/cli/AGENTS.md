@@ -13,14 +13,14 @@ clap parses arguments, `dispatch` (in `commands.rs`) routes to a per-command han
 
 A few modules carry more than their name implies:
 
-| Module          | Responsibility                                                                                                                                                                       |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `cli.rs`        | clap `Args`/`Command` definitions, plus shared value parsers — reuse these for new args instead of rolling your own.                                                                 |
-| `byte_source.rs`| Random-access byte sources (`LocalFileSource`, `RemoteRangeSource`, `MemorySource`) and sans-io drivers. Local files use seek+read (no mmap); remotes prefer HTTP range requests.   |
-| `source.rs`     | Remote URL helpers, summary/index range reads, `materialize_input` (path spool for convert), and `--allow-remote-scan` gating. Command I/O prefers `byte_source` over whole-file loads. |
-| `parse.rs`      | `ParsedMcap` plus summary-first / linear-scan parsing and the exact-record parsers used by remote range reads.                                                                       |
-| `context.rs`    | `CommandContext`, the global options (verbosity, color, `allow_remote_scan`, `time_format`) threaded into every handler.                                                             |
-| `build.rs`      | Resolves commit sha (git rev-parse or export-subst) into `GIT_SHORT_SHA` env var.                                                                                                    |
+| Module           | Responsibility                                                                                                                                                                          |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cli.rs`         | clap `Args`/`Command` definitions, plus shared value parsers — reuse these for new args instead of rolling your own.                                                                    |
+| `byte_source.rs` | Random-access byte sources (`LocalFileSource`, `RemoteRangeSource`, `MemorySource`) and sans-io drivers. Local files use seek+read (no mmap); remotes prefer HTTP range requests.       |
+| `source.rs`      | Remote URL helpers, summary/index range reads, `materialize_input` (path spool for convert), and `--allow-remote-scan` gating. Command I/O prefers `byte_source` over whole-file loads. |
+| `parse.rs`       | `ParsedMcap` plus summary-first / linear-scan parsing and the exact-record parsers used by remote range reads.                                                                          |
+| `context.rs`     | `CommandContext`, the global options (verbosity, color, `allow_remote_scan`, `time_format`) threaded into every handler.                                                                |
+| `build.rs`       | Resolves commit sha (git rev-parse or export-subst) into `GIT_SHORT_SHA` env var.                                                                                                       |
 
 ## Conventions
 

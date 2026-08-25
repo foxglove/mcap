@@ -1947,7 +1947,10 @@ mod tests {
         );
 
         let stats = analyze_output(&output.into_inner());
-        assert_eq!(stats.topic_counts.get("camera_a").copied().unwrap_or(0), 100);
+        assert_eq!(
+            stats.topic_counts.get("camera_a").copied().unwrap_or(0),
+            100
+        );
         assert!(!stats.topic_counts.contains_key("camera_b"));
         assert!(!stats.topic_counts.contains_key("radar_a"));
     }
