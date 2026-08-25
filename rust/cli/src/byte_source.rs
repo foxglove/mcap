@@ -3,8 +3,6 @@
 //! Local files use seek+read (no mmap). Remote URLs prefer HTTP range requests.
 //! Stdin is spooled to a temp file when opened through [`open_byte_source`].
 
-#![allow(dead_code)] // Some sources/helpers are test-only or awaiting remaining command ports.
-
 mod drivers;
 
 pub use drivers::{for_each_linear_record, read_header, read_summary, service_indexed_chunk};
@@ -136,6 +134,7 @@ impl ByteSource for RemoteRangeSource {
 }
 
 /// In-memory bytes, mainly for unit tests.
+#[allow(dead_code)] // Constructed from #[cfg(test)] modules across the crate.
 pub struct MemorySource {
     data: Vec<u8>,
 }
@@ -177,6 +176,7 @@ impl ByteSource for MemorySource {
 ///
 /// Prefer [`open_byte_source`] with `path: None`, which spools stdin to a tempfile
 /// and returns a seekable [`LocalFileSource`].
+#[allow(dead_code)] // Documented non-seekable source; production paths spool via open_byte_source.
 pub struct StdinSource;
 
 impl ByteSource for StdinSource {

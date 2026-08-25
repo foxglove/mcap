@@ -1,4 +1,4 @@
-use std::io::{IsTerminal as _, SeekFrom};
+use std::io::SeekFrom;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -6,7 +6,6 @@ use anyhow::{bail, Context, Result};
 use binrw::BinRead;
 use futures_util::TryStreamExt;
 use mcap::records::{self, Record};
-use memmap2::Mmap;
 use object_store::{
     path::Path as ObjectStorePath, Attribute, GetOptions, GetRange, ObjectStore, ObjectStoreExt,
 };
@@ -30,44 +29,6 @@ const REMOTE_SUMMARY_TAIL_BYTES: u64 = 250_000;
 // Guards aggregate remote reads that should stay index-like (summary bytes, or
 // multiple metadata records selected from indexes) from becoming unexpectedly large.
 pub(crate) const MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN: u64 = 100_000_000;
-
-pub enum InputData {
-    Mapped(Mmap),
-    TempMapped {
-        mmap: Mmap,
-        // Keep the temporary file alive for at least as long as the mmap. Fields drop in
-        // declaration order, so this is dropped after `mmap`.
-        #[allow(dead_code)]
-        temp_file: NamedTempFile,
-    },
-    Buffered(Vec<u8>),
-}
-
-impl std::fmt::Debug for InputData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("InputData")
-            .field("len", &self.as_slice().len())
-            .finish()
-    }
-}
-
-impl std::ops::Deref for InputData {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        self.as_slice()
-    }
-}
-
-impl InputData {
-    pub fn as_slice(&self) -> &[u8] {
-        match self {
-            InputData::Mapped(mmap) => mmap.as_ref(),
-            InputData::TempMapped { mmap, .. } => mmap.as_ref(),
-            InputData::Buffered(buf) => buf.as_slice(),
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SourceOptions {
@@ -107,47 +68,21 @@ impl MaterializedInput {
 }
 
 pub struct RemoteMcap {
-    #[allow(dead_code)] // Used by tests; remaining commands (doctor/recover) still to port.
+    #[allow(dead_code)] // Used by tests.
     reader: RemoteRangeReader,
     summary: mcap::Summary,
 }
 
 impl RemoteMcap {
-    #[allow(dead_code)] // Used by tests; remaining commands still to port.
+    #[allow(dead_code)] // Used by tests.
     pub fn summary(&self) -> &mcap::Summary {
         &self.summary
     }
 
-    #[allow(dead_code)] // Used by tests; remaining commands still to port.
+    #[allow(dead_code)] // Used by tests.
     pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         self.reader.read_range(offset, length)
     }
-}
-
-pub(crate) enum StreamingInput {
-    Local(std::fs::File),
-    Stdin(std::io::Stdin),
-    RemoteMaterialized {
-        file: std::fs::File,
-        #[allow(dead_code)]
-        temp_file: NamedTempFile,
-    },
-}
-
-impl std::io::Read for StreamingInput {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            StreamingInput::Local(file) => file.read(buf),
-            StreamingInput::Stdin(stdin) => stdin.read(buf),
-            StreamingInput::RemoteMaterialized { file, .. } => file.read(buf),
-        }
-    }
-}
-
-pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
-    let file =
-        std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
-    unsafe { Mmap::map(&file) }.with_context(|| format!("couldn't map '{}'", path.display()))
 }
 
 pub fn ensure_distinct_local_input_output(input: &Path, output: &Path) -> Result<()> {
@@ -234,10 +169,6 @@ fn local_paths_have_same_file_id(_input: &Path, _output: &Path) -> Result<bool> 
     Ok(false)
 }
 
-pub fn open_seekable_mcap_source(path: &Path) -> Result<std::fs::File> {
-    std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))
-}
-
 pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<ParsedMcap> {
     if is_remote_url(path) {
         let mut stats_scan_fallback = false;
@@ -315,83 +246,6 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     parse::parse_mcap_linear_from_byte_source(source.as_mut(), header)
 }
 
-pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
-    if is_remote_url(path) {
-        let materialized = materialize_input(path, options)?;
-        let mmap = map_file(materialized.path())?;
-        let temp_file = materialized
-            .temp_file
-            .expect("remote materialized input should have a temp file");
-        return Ok(InputData::TempMapped { temp_file, mmap });
-    }
-    Ok(InputData::Mapped(map_file(path)?))
-}
-
-#[allow(dead_code)] // Still used by commands that mmap whole files; rewrite uses ByteSource.
-pub fn load_input(file: Option<&Path>, options: SourceOptions) -> Result<InputData> {
-    if let Some(path) = file {
-        return load_path(path, options);
-    }
-
-    let stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        bail!("{PLEASE_SUPPLY_FILE}");
-    }
-
-    read_stdin_to_mapped_input(&mut stdin.lock())
-}
-
-/// Spool a non-seekable stdin stream to a temporary file and memory-map it instead of
-/// buffering the whole input in a `Vec`, so piping an arbitrarily large MCAP keeps
-/// process memory bounded (the OS pages a disk-backed mapping on demand).
-///
-/// The temp file lives in `$TMPDIR` (else `/tmp`); if that is a tmpfs — common on modern
-/// Linux — the spool stays in RAM and the paging benefit is lost, so point `$TMPDIR` at
-/// real storage for very large inputs. Mirrors the remote `materialize_input` path.
-fn read_stdin_to_mapped_input(reader: &mut impl std::io::Read) -> Result<InputData> {
-    let mut temp_file = tempfile::Builder::new()
-        .prefix("mcap-cli-stdin-input-")
-        .tempfile()
-        .context("failed to create temporary file for stdin input")?;
-    let bytes_copied = std::io::copy(reader, temp_file.as_file_mut())
-        .context("failed to read input from stdin")?;
-    std::io::Write::flush(temp_file.as_file_mut())
-        .context("failed to flush temporary stdin input file")?;
-    if bytes_copied == 0 {
-        // memmap2 refuses to map a zero-length file, so fall back to an empty buffer.
-        // Callers then get the usual empty-input MCAP parse error.
-        return Ok(InputData::Buffered(Vec::new()));
-    }
-    let mmap = map_file(temp_file.path())?;
-    Ok(InputData::TempMapped { temp_file, mmap })
-}
-
-pub(crate) fn open_streaming_input(
-    file: Option<&Path>,
-    options: SourceOptions,
-) -> Result<StreamingInput> {
-    if let Some(path) = file {
-        if is_remote_url(path) {
-            // Remote clients are async, while recover's reader pipeline is synchronous.
-            // Materializing keeps the recovery path simple and consistently gated by
-            // `--allow-remote-scan` in `materialize_input`.
-            let materialized = materialize_input(path, options)?;
-            let file = open_seekable_mcap_source(materialized.path())?;
-            let temp_file = materialized
-                .temp_file
-                .expect("remote streaming input should have a temp file");
-            return Ok(StreamingInput::RemoteMaterialized { file, temp_file });
-        }
-        return Ok(StreamingInput::Local(open_seekable_mcap_source(path)?));
-    }
-
-    let stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        bail!("{PLEASE_SUPPLY_FILE}");
-    }
-    Ok(StreamingInput::Stdin(stdin))
-}
-
 pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<MaterializedInput> {
     if !is_remote_url(path) {
         return Ok(MaterializedInput {
@@ -421,7 +275,7 @@ pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<Material
     })
 }
 
-#[allow(dead_code)] // Used by tests; remaining commands (doctor/recover) still to port.
+#[allow(dead_code)] // Used by tests.
 pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Option<RemoteMcap>> {
     if !is_remote_url(path) {
         return Ok(None);
@@ -1298,7 +1152,7 @@ mod tests {
     use std::sync::Arc;
     use std::thread;
 
-    use super::load_path;
+    use super::materialize_input;
     use crate::render::human_bytes;
     use mcap::records;
     use object_store::ObjectStoreExt;
@@ -1382,29 +1236,6 @@ mod tests {
 
         super::ensure_distinct_local_input_output(&input, &output)
             .expect("missing input should be left to command open errors");
-    }
-
-    #[test]
-    fn stdin_input_is_spooled_to_temp_file_and_mapped() {
-        let (buffer, _) = summary_mcap_with_channel();
-        let mut reader = std::io::Cursor::new(buffer.clone());
-        let input = super::read_stdin_to_mapped_input(&mut reader).expect("stdin spool");
-        assert!(
-            matches!(input, super::InputData::TempMapped { .. }),
-            "non-empty stdin should be memory-mapped from a temp file, not buffered in RAM"
-        );
-        assert_eq!(input.as_slice(), buffer.as_slice());
-    }
-
-    #[test]
-    fn empty_stdin_input_falls_back_to_empty_buffer() {
-        let mut reader = std::io::Cursor::new(Vec::new());
-        let input = super::read_stdin_to_mapped_input(&mut reader).expect("empty stdin spool");
-        assert!(
-            matches!(input, super::InputData::Buffered(ref buf) if buf.is_empty()),
-            "empty stdin cannot be mmap'd and should fall back to an empty buffer"
-        );
-        assert!(input.as_slice().is_empty());
     }
 
     fn serve_http(body: &'static [u8], supports_ranges: bool) -> String {
@@ -1668,7 +1499,7 @@ mod tests {
     #[test]
     fn remote_errors_redact_query_strings() {
         let url = "http://127.0.0.1:1/demo.mcap?X-Amz-Signature=secret-token";
-        let err = load_path(Path::new(url), super::SourceOptions::default())
+        let err = materialize_input(Path::new(url), super::SourceOptions::default())
             .expect_err("remote scan rejection should report redacted URL");
         assert!(!err.to_string().contains("secret-token"));
         assert!(!err.to_string().contains("X-Amz-Signature"));
@@ -1677,7 +1508,7 @@ mod tests {
     #[test]
     fn remote_errors_redact_userinfo() {
         let url = "http://AKIA:secret@127.0.0.1:1/demo.mcap";
-        let err = load_path(Path::new(url), super::SourceOptions::default())
+        let err = materialize_input(Path::new(url), super::SourceOptions::default())
             .expect_err("remote scan rejection should report redacted URL");
         assert!(!err.to_string().contains("AKIA"));
         assert!(!err.to_string().contains("secret"));
@@ -1687,14 +1518,14 @@ mod tests {
     #[test]
     fn remote_http_input_requires_remote_scan_opt_in() {
         let url = serve_http(b"hello remote", true);
-        let err = load_path(Path::new(&url), super::SourceOptions::default())
+        let err = materialize_input(Path::new(&url), super::SourceOptions::default())
             .expect_err("remote full read should require opt-in");
         assert!(err.to_string().contains("--allow-remote-scan"));
     }
 
     #[test]
     fn remote_object_store_input_requires_remote_scan_opt_in_before_network() {
-        let err = load_path(
+        let err = materialize_input(
             Path::new("s3://bucket/demo.mcap?X-Amz-Signature=secret-token"),
             super::SourceOptions::default(),
         )
@@ -1708,14 +1539,17 @@ mod tests {
     fn remote_http_input_reads_entire_file() {
         let url = serve_http(b"hello remote", true);
         let input =
-            load_path(Path::new(&url), super::SourceOptions::new(true)).expect("remote read");
-        assert_eq!(input.as_slice(), b"hello remote");
+            materialize_input(Path::new(&url), super::SourceOptions::new(true)).expect("remote read");
+        assert_eq!(
+            std::fs::read(input.path()).expect("read materialized"),
+            b"hello remote"
+        );
     }
 
     #[test]
     fn remote_http_input_rejects_gzip_content_encoding() {
         let url = serve_http_with_headers(b"hello remote", false, &[("Content-Encoding", "gzip")]);
-        let err = load_path(Path::new(&url), super::SourceOptions::new(true))
+        let err = materialize_input(Path::new(&url), super::SourceOptions::new(true))
             .expect_err("gzip-encoded remote read should fail");
         let message = format!("{err:#}");
         assert!(message.contains("MCAP remote reads require identity encoding"));
