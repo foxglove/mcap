@@ -258,3 +258,57 @@ func TestParseSchema(t *testing.T) {
 		})
 	}
 }
+
+func TestParseChunk(t *testing.T) {
+	records := []byte{1, 2, 3}
+	makeChunk := func(uncompressedSize uint64, compression string, recordsLength uint64, records []byte) []byte {
+		return flatten(
+			encodedUint64(0),                // message start time
+			encodedUint64(0),                // message end time
+			encodedUint64(uncompressedSize), // uncompressed size
+			encodedUint32(0),                // uncompressed CRC
+			prefixedString(compression),     // compression
+			encodedUint64(recordsLength),    // records length
+			records,
+		)
+	}
+	cases := []struct {
+		assertion string
+		input     []byte
+		wantErr   bool
+	}{
+		{
+			"uncompressed chunk with matching sizes is accepted",
+			makeChunk(uint64(len(records)), "", uint64(len(records)), records),
+			false,
+		},
+		{
+			"uncompressed chunk with mismatched sizes is rejected, not crashing",
+			makeChunk(999, "", uint64(len(records)), records),
+			true,
+		},
+		{
+			"records length exceeding the buffer is rejected, not crashing",
+			makeChunk(uint64(len(records)), "", 9999, records),
+			true,
+		},
+		{
+			"records length above int range is rejected, not crashing",
+			makeChunk(uint64(len(records)), "", 1<<63, records),
+			true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.assertion, func(t *testing.T) {
+			chunk, err := ParseChunk(c.input)
+			if c.wantErr {
+				require.Error(t, err)
+				assert.Nil(t, chunk)
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, chunk)
+				assert.Equal(t, records, chunk.Records)
+			}
+		})
+	}
+}
