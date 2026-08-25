@@ -13,13 +13,14 @@ clap parses arguments, `dispatch` (in `commands.rs`) routes to a per-command han
 
 A few modules carry more than their name implies:
 
-| Module       | Responsibility                                                                                                                                                         |
-| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cli.rs`     | clap `Args`/`Command` definitions, plus shared value parsers — reuse these for new args instead of rolling your own.                                                   |
-| `source.rs`  | Input abstraction over local files (memory-mapped) and remote object stores. Owns summary/index range reads, remote materialization, and `--allow-remote-scan` gating. |
-| `parse.rs`   | `ParsedMcap` plus summary-first / linear-scan parsing and the exact-record parsers used by remote range reads.                                                         |
-| `context.rs` | `CommandContext`, the global options (verbosity, color, `allow_remote_scan`, `time_format`) threaded into every handler.                                               |
-| `build.rs`   | Resolves commit sha (git rev-parse or export-subst) into `GIT_SHORT_SHA` env var.                                                                                      |
+| Module          | Responsibility                                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `cli.rs`        | clap `Args`/`Command` definitions, plus shared value parsers — reuse these for new args instead of rolling your own.                                                                 |
+| `byte_source.rs`| Random-access byte sources (`LocalFileSource`, `RemoteRangeSource`, `MemorySource`) and sans-io drivers. Local files use seek+read (no mmap); remotes prefer HTTP range requests.   |
+| `source.rs`     | Remote URL helpers, summary/index range reads, `materialize_input` (path spool for convert), and `--allow-remote-scan` gating. Command I/O prefers `byte_source` over whole-file loads. |
+| `parse.rs`      | `ParsedMcap` plus summary-first / linear-scan parsing and the exact-record parsers used by remote range reads.                                                                       |
+| `context.rs`    | `CommandContext`, the global options (verbosity, color, `allow_remote_scan`, `time_format`) threaded into every handler.                                                             |
+| `build.rs`      | Resolves commit sha (git rev-parse or export-subst) into `GIT_SHORT_SHA` env var.                                                                                                    |
 
 ## Conventions
 
@@ -34,7 +35,7 @@ When adding a command that can complete despite losing data, return `CommandOutc
 
 ### Remote inputs
 
-Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://`/`abfs://`) are handled in `source.rs` via `object_store`. Bounded, indexed reads — a summary-section read, or a single attachment/metadata range read under the no-opt-in caps — are allowed without a flag. Any command that would scan or download an entire remote file requires the global `--allow-remote-scan` flag; gate new whole-file remote reads behind `SourceOptions::allow_remote_scan` accordingly.
+Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://`/`abfs://`) are handled via `object_store` (`source.rs` helpers + `byte_source` range reads). Bounded, indexed reads — a summary-section read, or a single attachment/metadata range read under the no-opt-in caps — are allowed without a flag. Any command that would linearly scan or transfer an entire remote object requires the global `--allow-remote-scan` flag (this is an unbounded remote transfer / scan opt-in, not specifically “download to a temp file”). Gate new whole-file remote reads behind `SourceOptions::allow_remote_scan` / `require_remote_scan_for_linear` accordingly. `convert` still uses `materialize_input` because ROS bag/db3 inputs need a local filesystem path for sqlite.
 
 ### Output and logging
 

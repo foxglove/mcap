@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{Seek, Write};
+use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -62,13 +62,23 @@ pub(crate) fn amend_mcap_file(
     attachments: &[AttachmentToAdd],
     metadata: &[records::Metadata],
 ) -> Result<()> {
+    if crate::source::is_remote_url(file) {
+        bail!(
+            "add only supports local files; remote inputs are not supported for in-place amendment"
+        );
+    }
+
     let backup_path = make_tail_backup_path(file)?;
     let (layout, mut existing_summary) = {
-        let mapped = crate::source::map_file(file)
+        let mut readable = fs::File::open(file)
+            .with_context(|| format!("failed to open '{}'", file.display()))?;
+        let mut contents = Vec::new();
+        readable
+            .read_to_end(&mut contents)
             .with_context(|| format!("failed to read '{}'", file.display()))?;
-        let layout = parse_existing_layout(&mapped)?;
+        let layout = parse_existing_layout(&contents)?;
         let tail_start = layout.old_data_end_offset as usize;
-        let tail = mapped
+        let tail = contents
             .get(tail_start..)
             .with_context(|| format!("data end offset out of range for '{}'", file.display()))?;
         fs::write(&backup_path, tail)
@@ -80,7 +90,7 @@ pub(crate) fn amend_mcap_file(
         backup_file
             .sync_all()
             .with_context(|| format!("failed to sync tail backup '{}'", backup_path.display()))?;
-        let summary = collect_existing_summary(&mapped)?;
+        let summary = collect_existing_summary(&contents)?;
         (layout, summary)
     };
 
