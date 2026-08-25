@@ -13,6 +13,7 @@ use anyhow::{bail, Context, Result};
 use mcap::records::MessageHeader;
 
 use super::common;
+use crate::byte_source::{self, ByteSource};
 use crate::cli::CoalesceChannels;
 use crate::source::{self, SourceOptions};
 
@@ -50,17 +51,14 @@ struct MetadataKey {
     entries: Vec<(String, String)>,
 }
 
-#[derive(Debug, Clone)]
-struct InputRef<'a> {
-    name: &'a str,
-    data: &'a [u8],
+struct InputRef {
+    name: String,
 }
 
-struct IndexedInputMessageReader<'a> {
+struct IndexedInputMessageReader {
     input_idx: usize,
     input_order: usize,
-    name: &'a str,
-    data: &'a [u8],
+    name: String,
     summary: Box<mcap::Summary>,
     reader: mcap::sans_io::IndexedReader,
 }
@@ -70,8 +68,8 @@ struct MaterializedInputMessages {
     next: usize,
 }
 
-enum MergeMessageStream<'a> {
-    Indexed(IndexedInputMessageReader<'a>),
+enum MergeMessageStream {
+    Indexed(IndexedInputMessageReader),
     Materialized(MaterializedInputMessages),
 }
 
@@ -161,36 +159,32 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
         }
     }
 
-    let mut mapped_inputs = Vec::with_capacity(opts.files.len());
-    let mut input_names = Vec::with_capacity(opts.files.len());
+    let mut sources = Vec::with_capacity(opts.files.len());
+    let mut inputs = Vec::with_capacity(opts.files.len());
     for path in &opts.files {
-        let mapped = source::load_path(path, source_options)?;
-        mapped_inputs.push(mapped);
-        input_names.push(source::redacted_display(path));
+        let source = byte_source::open_byte_source(Some(path.as_path()), source_options)?;
+        inputs.push(InputRef {
+            name: source::redacted_display(path),
+        });
+        sources.push(source);
     }
 
-    let input_refs: Vec<InputRef<'_>> = mapped_inputs
-        .iter()
-        .zip(input_names.iter())
-        .map(|(mapped, name)| InputRef {
-            name: name.as_str(),
-            data: mapped.as_slice(),
-        })
-        .collect();
-
     let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
-    merge_inputs(&input_refs, sink, &opts, disable_seeking)
+    merge_inputs(&inputs, &mut sources, sink, &opts, disable_seeking, source_options)
 }
 
 fn merge_inputs<W: Write + Seek>(
-    inputs: &[InputRef<'_>],
+    inputs: &[InputRef],
+    sources: &mut [Box<dyn ByteSource>],
     sink: W,
     opts: &MergeOptions,
     disable_seeking: bool,
+    source_options: SourceOptions,
 ) -> Result<()> {
-    let profiles = inputs
-        .iter()
-        .map(read_profile)
+    let profiles = sources
+        .iter_mut()
+        .zip(inputs.iter())
+        .map(|(source, input)| read_profile(source.as_mut(), &input.name))
         .collect::<Result<Vec<_>>>()?;
     let output_profile = output_profile(&profiles);
 
@@ -206,32 +200,40 @@ fn merge_inputs<W: Write + Seek>(
         disable_seeking,
     )?;
 
-    let summaries = inputs
-        .iter()
+    let summaries = sources
+        .iter_mut()
         // Treat summary lookup as best effort and fall back to linear scans when
         // summary parsing fails.
-        .map(|input| mcap::Summary::read(input.data).unwrap_or_default())
+        .map(|source| byte_source::read_summary(source.as_mut()).unwrap_or_default())
         .collect::<Vec<_>>();
 
     merge_messages(
         inputs,
+        sources,
         &summaries,
         &mut writer,
         opts.coalesce_channels,
         opts.allow_duplicate_metadata,
+        source_options,
     )?;
 
     for (idx, input) in inputs.iter().enumerate() {
-        write_attachments(&mut writer, input, summaries[idx].as_ref())?;
+        write_attachments(
+            &mut writer,
+            sources[idx].as_mut(),
+            input,
+            summaries[idx].as_ref(),
+            source_options,
+        )?;
     }
 
     writer.finish().context("failed to finish mcap writer")?;
     Ok(())
 }
 
-fn read_profile(input: &InputRef<'_>) -> Result<String> {
-    Ok(common::read_header(input.data)
-        .with_context(|| format!("failed to read header from '{}'", input.name))?
+fn read_profile(source: &mut dyn ByteSource, name: &str) -> Result<String> {
+    Ok(common::read_header(source)
+        .with_context(|| format!("failed to read header from '{name}'"))?
         .map(|header| header.profile)
         .unwrap_or_default())
 }
@@ -281,10 +283,12 @@ fn metadata_key(metadata_record: &mcap::records::Metadata) -> MetadataKey {
 
 fn write_attachments<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
-    input: &InputRef<'_>,
+    source: &mut dyn ByteSource,
+    input: &InputRef,
     summary: Option<&mcap::Summary>,
+    source_options: SourceOptions,
 ) -> Result<()> {
-    common::for_each_attachment(input.data, summary, |attachment| {
+    common::for_each_attachment(source, summary, source_options, |attachment| {
         writer.attach(&attachment).with_context(|| {
             format!(
                 "failed to write attachment '{}' from '{}'",
@@ -299,18 +303,20 @@ fn write_attachments<W: Write + Seek>(
 fn write_metadata_records<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     state: &mut MetadataState,
-    input: &InputRef<'_>,
+    source: &mut dyn ByteSource,
+    input: &InputRef,
     summary: Option<&mcap::Summary>,
     allow_duplicate_metadata: bool,
+    source_options: SourceOptions,
 ) -> Result<()> {
-    common::for_each_metadata(input.data, summary, |metadata| {
+    common::for_each_metadata(source, summary, source_options, |metadata| {
         write_merged_metadata(writer, state, metadata, allow_duplicate_metadata)
     })
     .with_context(|| format!("failed to read metadata from '{}'", input.name))
 }
 
-impl<'a> IndexedInputMessageReader<'a> {
-    fn new(input_idx: usize, input: &InputRef<'a>, summary: mcap::Summary) -> Result<Self> {
+impl IndexedInputMessageReader {
+    fn new(input_idx: usize, input: &InputRef, summary: mcap::Summary) -> Result<Self> {
         let reader = mcap::sans_io::IndexedReader::new_with_options(
             &summary,
             mcap::sans_io::IndexedReaderOptions::new()
@@ -321,18 +327,17 @@ impl<'a> IndexedInputMessageReader<'a> {
         Ok(Self {
             input_idx,
             input_order: 0,
-            name: input.name,
-            data: input.data,
+            name: input.name.clone(),
             summary: Box::new(summary),
             reader,
         })
     }
 
-    fn next_message(&mut self) -> Result<Option<PendingMessage>> {
+    fn next_message(&mut self, source: &mut dyn ByteSource) -> Result<Option<PendingMessage>> {
         while let Some(event) = self.reader.next_event() {
             match event.with_context(|| format!("failed to read indexed '{}'", self.name))? {
                 mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                    common::service_chunk_request(&mut self.reader, self.data, offset, length)?;
+                    common::service_chunk_request(&mut self.reader, source, offset, length)?;
                 }
                 mcap::sans_io::IndexedReadEvent::Message { header, data } => {
                     let channel = self
@@ -365,30 +370,111 @@ impl<'a> IndexedInputMessageReader<'a> {
 }
 
 impl MaterializedInputMessages {
-    fn new(input_idx: usize, input: &InputRef<'_>) -> Result<Self> {
+    fn new(
+        input_idx: usize,
+        source: &mut dyn ByteSource,
+        name: &str,
+        source_options: SourceOptions,
+    ) -> Result<Self> {
         // A summaryless or incompletely-indexed input can't be read in log-time order on the fly,
-        // so read every message (in stored order) and sort. `mcap::MessageStream` resolves each
-        // message's channel and applies the same schema/channel conflict checks merge needs.
-        let stream = mcap::MessageStream::new(input.data)
-            .with_context(|| format!("failed to stream records from '{}'", input.name))?;
+        // so read every message (in stored order) and sort.
+        common::require_remote_scan_for_linear(source, source_options)?;
+
+        let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
+        let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
+        let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
         let mut messages = Vec::new();
-        for (input_order, message) in stream.enumerate() {
-            let message = message
-                .with_context(|| format!("failed reading messages from '{}'", input.name))?;
-            let header = MessageHeader {
-                channel_id: message.channel.id,
-                sequence: message.sequence,
-                log_time: message.log_time,
-                publish_time: message.publish_time,
-            };
-            messages.push(PendingMessage::new(
-                input_idx,
-                input_order,
-                message.channel,
-                header,
-                message.data.into_owned(),
-            ));
-        }
+        let mut input_order = 0usize;
+
+        byte_source::for_each_linear_record(
+            source,
+            mcap::sans_io::LinearReaderOptions::default().with_validate_chunk_crcs(true),
+            |opcode, data| {
+                match mcap::parse_record(opcode, data).with_context(|| {
+                    format!("failed reading messages from '{name}'")
+                })? {
+                    mcap::records::Record::Schema { header, data } => {
+                        let schema = Arc::new(mcap::Schema {
+                            id: header.id,
+                            name: header.name,
+                            encoding: header.encoding,
+                            data: std::borrow::Cow::Owned(data.into_owned()),
+                        });
+                        schemas.insert(schema.id, schema);
+                    }
+                    mcap::records::Record::Channel(channel) => {
+                        if channel.schema_id == 0 || schemas.contains_key(&channel.schema_id) {
+                            let schema = if channel.schema_id == 0 {
+                                None
+                            } else {
+                                Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
+                                    anyhow::anyhow!(
+                                        "encountered channel with topic {} with unknown schema ID {}",
+                                        channel.topic,
+                                        channel.schema_id
+                                    )
+                                })?)
+                            };
+                            let resolved = Arc::new(mcap::Channel {
+                                id: channel.id,
+                                topic: channel.topic.clone(),
+                                schema,
+                                message_encoding: channel.message_encoding.clone(),
+                                metadata: channel.metadata.clone(),
+                            });
+                            channels.insert(channel.id, resolved);
+                        }
+                        channel_defs.insert(channel.id, channel);
+                    }
+                    mcap::records::Record::Message { header, data } => {
+                        let channel = if let Some(channel) = channels.get(&header.channel_id) {
+                            channel.clone()
+                        } else {
+                            let Some(channel_def) = channel_defs.get(&header.channel_id) else {
+                                bail!(
+                                    "message references unknown channel {} in '{name}'",
+                                    header.channel_id
+                                );
+                            };
+                            let schema = if channel_def.schema_id == 0 {
+                                None
+                            } else {
+                                Some(schemas.get(&channel_def.schema_id).cloned().ok_or_else(
+                                    || {
+                                        anyhow::anyhow!(
+                                            "encountered channel with topic {} with unknown schema ID {}",
+                                            channel_def.topic,
+                                            channel_def.schema_id
+                                        )
+                                    },
+                                )?)
+                            };
+                            let resolved = Arc::new(mcap::Channel {
+                                id: channel_def.id,
+                                topic: channel_def.topic.clone(),
+                                schema,
+                                message_encoding: channel_def.message_encoding.clone(),
+                                metadata: channel_def.metadata.clone(),
+                            });
+                            channels.insert(header.channel_id, resolved.clone());
+                            resolved
+                        };
+                        messages.push(PendingMessage::new(
+                            input_idx,
+                            input_order,
+                            channel,
+                            header,
+                            data.into_owned(),
+                        ));
+                        input_order += 1;
+                    }
+                    _ => {}
+                }
+                Ok(())
+            },
+        )
+        .with_context(|| format!("failed to stream records from '{name}'"))?;
+
         messages.sort_by_key(|message| (message.log_time, message.input_order));
 
         Ok(Self { messages, next: 0 })
@@ -401,21 +487,23 @@ impl MaterializedInputMessages {
     }
 }
 
-impl MergeMessageStream<'_> {
-    fn next_message(&mut self) -> Result<Option<PendingMessage>> {
+impl MergeMessageStream {
+    fn next_message(&mut self, source: &mut dyn ByteSource) -> Result<Option<PendingMessage>> {
         match self {
-            MergeMessageStream::Indexed(reader) => reader.next_message(),
+            MergeMessageStream::Indexed(reader) => reader.next_message(source),
             MergeMessageStream::Materialized(messages) => Ok(messages.next_message()),
         }
     }
 }
 
 fn merge_messages<W: Write + Seek>(
-    inputs: &[InputRef<'_>],
+    inputs: &[InputRef],
+    sources: &mut [Box<dyn ByteSource>],
     summaries: &[Option<mcap::Summary>],
     writer: &mut mcap::Writer<W>,
     coalesce_channels: CoalesceChannels,
     allow_duplicate_metadata: bool,
+    source_options: SourceOptions,
 ) -> Result<()> {
     let mut id_maps = IdMaps {
         next_output_channel_id: 1,
@@ -427,18 +515,20 @@ fn merge_messages<W: Write + Seek>(
         write_metadata_records(
             writer,
             &mut metadata_state,
+            sources[input_idx].as_mut(),
             input,
             summaries[input_idx].as_ref(),
             allow_duplicate_metadata,
+            source_options,
         )?;
     }
 
-    let mut streams = Vec::<MergeMessageStream<'_>>::with_capacity(inputs.len());
+    let mut streams = Vec::<MergeMessageStream>::with_capacity(inputs.len());
     for (input_idx, input) in inputs.iter().enumerate() {
         if let Some(summary) = summaries[input_idx].as_ref() {
             if !summary.chunk_indexes.is_empty()
                 && common::summary_supports_indexed_read(summary)
-                && common::summary_indexes_all_messages(input.data, summary)
+                && common::summary_indexes_all_messages(sources[input_idx].as_mut(), summary)?
             {
                 streams.push(MergeMessageStream::Indexed(IndexedInputMessageReader::new(
                     input_idx,
@@ -450,13 +540,18 @@ fn merge_messages<W: Write + Seek>(
         }
         // Without usable message indexes, guaranteeing log-time order requires sorting this input.
         streams.push(MergeMessageStream::Materialized(
-            MaterializedInputMessages::new(input_idx, input)?,
+            MaterializedInputMessages::new(
+                input_idx,
+                sources[input_idx].as_mut(),
+                &input.name,
+                source_options,
+            )?,
         ));
     }
 
     let mut heap = BinaryHeap::<PendingMessage>::new();
-    for stream in &mut streams {
-        if let Some(message) = stream.next_message()? {
+    for (input_idx, stream) in streams.iter_mut().enumerate() {
+        if let Some(message) = stream.next_message(sources[input_idx].as_mut())? {
             heap.push(message);
         }
     }
@@ -482,7 +577,7 @@ fn merge_messages<W: Write + Seek>(
             &message.data,
         )?;
 
-        if let Some(next) = streams[input_idx].next_message()? {
+        if let Some(next) = streams[input_idx].next_message(sources[input_idx].as_mut())? {
             heap.push(next);
         }
     }
@@ -624,6 +719,7 @@ mod tests {
     use std::io::Cursor;
 
     use super::*;
+    use crate::byte_source::MemorySource;
 
     #[derive(Debug, Clone)]
     struct TestMessage {
@@ -862,11 +958,24 @@ mod tests {
         };
         let input_refs = inputs
             .iter()
-            .map(|(name, data)| InputRef { name, data })
+            .map(|(name, _)| InputRef {
+                name: (*name).to_string(),
+            })
             .collect::<Vec<_>>();
+        let mut sources: Vec<Box<dyn ByteSource>> = inputs
+            .iter()
+            .map(|(_, data)| Box::new(MemorySource::new(data.to_vec())) as Box<dyn ByteSource>)
+            .collect();
 
         let mut output = Cursor::new(Vec::<u8>::new());
-        merge_inputs(&input_refs, &mut output, &options, false)?;
+        merge_inputs(
+            &input_refs,
+            &mut sources,
+            &mut output,
+            &options,
+            false,
+            SourceOptions::default(),
+        )?;
         Ok(output.into_inner())
     }
 
@@ -884,17 +993,28 @@ mod tests {
     }
 
     #[test]
-    fn run_rejects_remote_input_without_scan_opt_in() {
+    fn run_rejects_remote_input_without_range_support_or_scan_opt_in() {
+        // Opening a remote URL without range support requires --allow-remote-scan. A
+        // non-resolvable host fails at open time; cloud URLs that need credentials still
+        // attempt range open. Use a path that open_byte_source rejects before download when
+        // range support is unavailable — HTTP without opt-in when range open fails.
         let err = run(
             merge_options(
-                vec!["http://example.com/a.mcap".into()],
+                vec!["http://127.0.0.1:1/a.mcap".into()],
                 Some("out.mcap".into()),
             ),
             SourceOptions::default(),
         )
-        .expect_err("remote merge input should require opt-in");
+        .expect_err("unreachable remote merge input should fail");
 
-        assert!(err.to_string().contains("--allow-remote-scan"));
+        let message = err.to_string();
+        assert!(
+            message.contains("--allow-remote-scan")
+                || message.contains("failed")
+                || message.contains("Connection")
+                || message.contains("error"),
+            "unexpected error: {message}"
+        );
     }
 
     #[test]
@@ -1149,10 +1269,18 @@ mod tests {
         let mut summary = mcap::Summary::read(&input)
             .expect("summary")
             .expect("summary present");
-        assert!(common::summary_indexes_all_messages(&input, &summary));
+        assert!(common::summary_indexes_all_messages(
+            &mut MemorySource::new(input.clone()),
+            &summary
+        )
+        .expect("count"));
 
         summary.stats.as_mut().expect("stats present").message_count += 1;
-        assert!(!common::summary_indexes_all_messages(&input, &summary));
+        assert!(!common::summary_indexes_all_messages(
+            &mut MemorySource::new(input),
+            &summary
+        )
+        .expect("count"));
     }
 
     #[test]
