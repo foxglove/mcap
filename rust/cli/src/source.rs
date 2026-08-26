@@ -547,13 +547,15 @@ impl ObjectStoreSource {
         // ~/.aws/credentials, profiles, and SSO work like they do for the
         // `aws` CLI; other stores keep object_store's env-var mechanisms.
         let result = if matches!(remote_url.url.scheme(), "s3" | "s3a") {
-            crate::aws_credentials::build_s3_store(&runtime, &remote_url.url, remote_url.options())
+            crate::sdk_s3::build_s3_store(&runtime, &remote_url.url, remote_url.options())
         } else {
             object_store::parse_url_opts(&remote_url.url, remote_url.options())
         };
-        let (store, object_path) = result.with_context(|| {
-            format!(
-                "failed to configure remote store for {}",
+        // object_store errors repeat their source in Display, so flatten to a
+        // single message instead of letting the anyhow chain print it twice.
+        let (store, object_path) = result.map_err(|err| {
+            anyhow::anyhow!(
+                "failed to configure remote store for {}: {err}",
                 remote_url.display_url
             )
         })?;
