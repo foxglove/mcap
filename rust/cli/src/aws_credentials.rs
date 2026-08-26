@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use aws_config::default_provider::credentials::DefaultCredentialsChain;
+use aws_config::imds::region::ImdsRegionProvider;
 use aws_config::meta::region::ProvideRegion as _;
 use aws_config::profile::ProfileFileRegionProvider;
 use aws_config::provider_config::ProviderConfig;
@@ -57,15 +58,33 @@ fn options_have_region(options: &[(String, String)]) -> bool {
     })
 }
 
-// Only the profile-file lookup is needed here: an env-var region reaches the
-// builder through `options`, and the EC2/IMDS region case keeps working via
-// the credentials chain rather than this lookup.
+// An env-var region reaches the builder through `options`, so this lookup
+// covers the remaining sources the aws CLI consults: ~/.aws/config, then EC2
+// instance metadata. The IMDS probe runs only when nothing else set a region
+// and honors AWS_EC2_METADATA_DISABLED; a single attempt keeps the off-EC2
+// worst case to about a second (its connect timeout), while on EC2 the first
+// attempt answers in milliseconds.
 async fn default_chain_region() -> Option<String> {
-    ProfileFileRegionProvider::builder()
-        .build()
-        .region()
-        .await
-        .map(|region| region.to_string())
+    let profile = ProfileFileRegionProvider::builder().build();
+    let imds_client = aws_config::imds::Client::builder()
+        .configure(&sdk_provider_config())
+        .max_attempts(1)
+        .build();
+    let imds = ImdsRegionProvider::builder()
+        .configure(&sdk_provider_config())
+        .imds_client(imds_client)
+        .build();
+    region_from_providers(&profile, &imds).await
+}
+
+async fn region_from_providers(
+    profile: &ProfileFileRegionProvider,
+    imds: &ImdsRegionProvider,
+) -> Option<String> {
+    if let Some(region) = profile.region().await {
+        return Some(region.to_string());
+    }
+    imds.region().await.map(|region| region.to_string())
 }
 
 // The SDK needs an HTTP client for its network-backed providers (SSO, STS,
@@ -297,6 +316,112 @@ mod tests {
         assert!(
             head.contains("AKIAFROMFILE"),
             "request should be SigV4-signed with the file profile's key id, got:\n{head}"
+        );
+    }
+
+    // Minimal IMDSv2 endpoint: answers the token PUT, then serves the
+    // region path. Returns the URL and a served-request counter.
+    fn serve_fake_imds(
+        region: &'static str,
+    ) -> (String, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use std::io::{BufRead as _, BufReader, Write as _};
+        use std::net::TcpListener;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake imds");
+        let addr = listener.local_addr().expect("addr");
+        let requests = std::sync::Arc::new(AtomicUsize::new(0));
+        let server_requests = requests.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().take(8) {
+                let stream = stream.expect("accept");
+                let mut reader = BufReader::new(stream);
+                let mut request_line = String::new();
+                if reader.read_line(&mut request_line).is_err() || request_line.is_empty() {
+                    continue;
+                }
+                loop {
+                    let mut line = String::new();
+                    if reader.read_line(&mut line).is_err() || line == "\r\n" || line.is_empty() {
+                        break;
+                    }
+                }
+                server_requests.fetch_add(1, Ordering::SeqCst);
+                // Token responses must echo a TTL header or the client
+                // rejects them.
+                let (body, extra_headers) = if request_line.starts_with("PUT") {
+                    (
+                        "fake-imds-token",
+                        "x-aws-ec2-metadata-token-ttl-seconds: 21600\r\n",
+                    )
+                } else {
+                    (region, "")
+                };
+                let mut stream = reader.into_inner();
+                stream
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n{extra_headers}Connection: close\r\n\r\n{body}",
+                            body.len()
+                        )
+                        .as_bytes(),
+                    )
+                    .expect("write imds response");
+            }
+        });
+        (format!("http://{addr}"), requests)
+    }
+
+    fn profile_region_provider(
+        config_contents: &str,
+    ) -> (ProfileFileRegionProvider, tempfile::NamedTempFile) {
+        let mut file = tempfile::NamedTempFile::new().expect("temp config file");
+        file.write_all(config_contents.as_bytes())
+            .expect("write config");
+        let files = EnvConfigFiles::builder()
+            .with_file(EnvConfigFileKind::Config, file.path())
+            .build();
+        (
+            ProfileFileRegionProvider::builder()
+                .profile_files(files)
+                .build(),
+            file,
+        )
+    }
+
+    fn imds_region_provider(endpoint: &str) -> ImdsRegionProvider {
+        let client = aws_config::imds::Client::builder()
+            .configure(&sdk_provider_config())
+            .endpoint(endpoint)
+            .expect("imds endpoint")
+            .max_attempts(1)
+            .build();
+        ImdsRegionProvider::builder()
+            .configure(&sdk_provider_config())
+            .imds_client(client)
+            .build()
+    }
+
+    #[test]
+    fn region_falls_back_to_imds_when_profile_has_none() {
+        let (imds_url, _requests) = serve_fake_imds("us-west-2");
+        let (profile, _file) = profile_region_provider("");
+        let imds = imds_region_provider(&imds_url);
+        let region = test_runtime().block_on(super::region_from_providers(&profile, &imds));
+        assert_eq!(region.as_deref(), Some("us-west-2"));
+    }
+
+    #[test]
+    fn profile_region_wins_without_touching_imds() {
+        let (imds_url, requests) = serve_fake_imds("us-west-2");
+        let (profile, _file) = profile_region_provider("[default]\nregion = eu-west-3\n");
+        let imds = imds_region_provider(&imds_url);
+        let region = test_runtime().block_on(super::region_from_providers(&profile, &imds));
+        assert_eq!(region.as_deref(), Some("eu-west-3"));
+        assert_eq!(
+            requests.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "IMDS should not be consulted when the profile defines a region"
         );
     }
 
