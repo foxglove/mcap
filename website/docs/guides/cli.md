@@ -313,6 +313,14 @@ If no region is configured in your environment or `~/.aws/config`, pass it expli
 AWS_REGION=eu-north-1 mcap info s3://my-bucket/demo.mcap
 ```
 
+To read a public bucket without any credentials, request unsigned access:
+
+```
+AWS_SKIP_SIGNATURE=true AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
+```
+
+`AWS_ENDPOINT` (S3-compatible stores such as MinIO), `AWS_VIRTUAL_HOSTED_STYLE_REQUEST`, and `AWS_REQUEST_PAYER` (requester-pays buckets) are also honored; other S3 tuning variables are ignored with a warning.
+
 For GCS and Azure Blob Storage, credentials are read from the standard environment variables for each backend (`GOOGLE_*` and `AZURE_*`).
 
 ### File Diagnostics
