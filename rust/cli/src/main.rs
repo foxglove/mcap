@@ -1,3 +1,4 @@
+mod aws_credentials;
 mod cli;
 mod commands;
 mod context;

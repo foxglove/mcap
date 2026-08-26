@@ -542,17 +542,23 @@ impl ObjectStoreSource {
     }
 
     fn open_remote(remote_url: RemoteUrl) -> Result<Self> {
-        let (store, object_path) =
-            object_store::parse_url_opts(&remote_url.url, remote_url.options()).with_context(
-                || {
-                    format!(
-                        "failed to configure remote store for {}",
-                        remote_url.display_url
-                    )
-                },
-            )?;
+        let runtime = object_store_runtime()?;
+        // S3 credentials resolve through the AWS SDK default chain so
+        // ~/.aws/credentials, profiles, and SSO work like they do for the
+        // `aws` CLI; other stores keep object_store's env-var mechanisms.
+        let result = if matches!(remote_url.url.scheme(), "s3" | "s3a") {
+            crate::aws_credentials::build_s3_store(&runtime, &remote_url.url, remote_url.options())
+        } else {
+            object_store::parse_url_opts(&remote_url.url, remote_url.options())
+        };
+        let (store, object_path) = result.with_context(|| {
+            format!(
+                "failed to configure remote store for {}",
+                remote_url.display_url
+            )
+        })?;
         Ok(Self {
-            runtime: object_store_runtime()?,
+            runtime,
             store: Arc::from(store),
             path: object_path,
             display_url: remote_url.display_url,
