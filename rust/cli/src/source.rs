@@ -32,23 +32,20 @@ const REMOTE_SUMMARY_TAIL_BYTES: u64 = 250_000;
 // Guards aggregate remote reads that should stay index-like (summary bytes, or
 // multiple metadata records selected from indexes) from becoming unexpectedly large.
 pub(crate) const MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN: u64 = 100_000_000;
-// Whole-file downloads issue ranged GETs of this size. object_store's retry
-// budget (default 180s) starts when each GET is issued, and a connection lost
-// mid-body resumes from the last byte received instead of restarting the
-// whole object.
+// Ranged GET size for whole-file downloads. Each part gets a fresh
+// object_store retry budget, and a dropped connection resumes at the last
+// byte received.
 const REMOTE_DOWNLOAD_CHUNK_BYTES: u64 = 64 * 1024 * 1024;
-// object_store's default 30s timeout covers connect through the entire body.
-// Each download GET gets a long overall timeout so an in-progress transfer is
-// not killed; a stalled connection is detected by REMOTE_DOWNLOAD_STALL_TIMEOUT.
+// object_store's default 30s timeout spans the entire response body, killing
+// long transfers. Downloads get an effectively unlimited one instead; stalls
+// are caught by REMOTE_DOWNLOAD_STALL_TIMEOUT.
 const REMOTE_DOWNLOAD_REQUEST_TIMEOUT: &str = "7days";
 const REMOTE_DOWNLOAD_STALL_TIMEOUT: Duration = Duration::from_secs(120);
-// Bounds waiting for the response head of each download GET. Sits above
-// object_store's 180s retry budget so those retries can finish. Does not apply
-// to an in-progress body (that's REMOTE_DOWNLOAD_STALL_TIMEOUT).
+// Bounds waiting for each download GET's response head; sits above
+// object_store's 180s retry budget so internal retries can finish.
 const REMOTE_DOWNLOAD_RESPONSE_TIMEOUT: Duration = Duration::from_secs(240);
-// Consecutive body failures with no forward progress before a chunked download
-// gives up. Attempts that deliver any bytes reset the budget, so this only
-// bounds a connection that is persistently dead, not one that is merely flaky.
+// Consecutive zero-progress attempts before a chunked download gives up.
+// Any delivered bytes reset the budget, so only a dead connection exhausts it.
 const REMOTE_DOWNLOAD_NO_PROGRESS_ATTEMPTS: usize = 5;
 
 pub enum InputData {
@@ -520,8 +517,7 @@ impl RemoteUrl {
     fn store_options(&self, access: RemoteAccess) -> Vec<(String, String)> {
         let mut options = self.options();
         if matches!(access, RemoteAccess::Download) {
-            // Last-wins in parse_url_opts, so this overrides any env timeout
-            // (for example AWS_TIMEOUT) on the whole-file download path.
+            // Last-wins in parse_url_opts: overrides any env timeout (e.g. AWS_TIMEOUT).
             options.push((
                 ClientConfigKey::Timeout.as_ref().to_string(),
                 REMOTE_DOWNLOAD_REQUEST_TIMEOUT.to_string(),
@@ -809,9 +805,8 @@ impl ObjectStoreSource {
                     }
                     match result {
                         Ok(()) if written > 0 => continue,
-                        // A complete zero-byte body with more bytes expected:
-                        // treat it like a dropped connection and re-request the
-                        // same range.
+                        // An empty body with more bytes expected: retry like
+                        // a dropped connection.
                         Ok(()) => anyhow::anyhow!(
                             "failed to read remote input {}: download made no progress",
                             self.display_url
@@ -839,10 +834,8 @@ impl ObjectStoreSource {
     }
 
     /// Issue the ranged GET that resumes a chunked download at `range`. Failures
-    /// are retryable — they leave the object re-fetchable from the same offset,
-    /// and the head request itself carries object_store's internal retry budget —
-    /// except a precondition failure, where the pinned ETag no longer matches and
-    /// every retry would fail the same way.
+    /// are retryable except a precondition failure: the pinned ETag no longer
+    /// matches, so every retry would fail the same way.
     fn resume_chunk_get(
         &self,
         range: std::ops::Range<u64>,
@@ -877,15 +870,13 @@ impl ObjectStoreSource {
                 concise_remote_operation_error("reading remote input from", &self.display_url, err)
             })?;
         let mut progress = DownloadProgress::new(response.meta.size);
-        // Without range support there is no way to resume mid-body, so any
-        // failure is terminal here.
+        // Without ranges there is no way to resume mid-body; any failure is terminal.
         let (_, result) = self.stream_get_to_writer(response, writer, &mut progress);
         result.map_err(DownloadError::into_error)
     }
 
-    /// Stream one GET response to `writer`. Always reports bytes written so the
-    /// caller can advance the download offset past partial progress, alongside
-    /// how the stream ended.
+    /// Stream one GET response to `writer`, reporting bytes written even on
+    /// failure so the caller can resume past partial progress.
     fn stream_get_to_writer(
         &self,
         response: object_store::GetResult,
@@ -934,11 +925,9 @@ impl ObjectStoreSource {
     }
 }
 
-// How one download GET — its head request or its body stream — failed:
-// `Retryable` failures (network errors, stalls, transient head errors) leave
-// the remote object re-fetchable from the current offset; `Fatal` ones (local
-// write errors, invalid content encoding, an ETag precondition mismatch)
-// would fail the same way again.
+// How a download GET failed: `Retryable` failures (network errors, stalls)
+// leave the object re-fetchable from the current offset; `Fatal` ones (local
+// write errors, ETag mismatch) would fail identically on retry.
 enum DownloadError {
     Retryable(anyhow::Error),
     Fatal(anyhow::Error),
@@ -978,8 +967,7 @@ impl DownloadProgress {
         }
     }
 
-    // Print a standalone line, first terminating the in-place progress line so
-    // the two don't overwrite each other.
+    // Print a standalone line without corrupting the in-place progress line.
     fn note(&self, message: &str) {
         if self.tty && self.written > 0 {
             eprintln!();
@@ -1167,9 +1155,8 @@ fn remote_range_not_supported(err: &object_store::Error) -> bool {
     matches!(err, object_store::Error::NotSupported { .. })
 }
 
-// Empty objects reject `bytes=0..N` as unsatisfiable (HTTP 416). Fall back to
-// an unranged GET. Match the parsed status, not a raw "416" substring — retry
-// error text can include request ids that happen to contain those digits.
+// Empty objects reject `bytes=0..N` with HTTP 416. Match the parsed status,
+// not a "416" substring — error text can contain request ids with those digits.
 fn remote_range_unsatisfiable(err: &object_store::Error) -> bool {
     object_store_error_status(err).is_some_and(|status| status.starts_with("416"))
 }
@@ -1926,10 +1913,9 @@ mod tests {
         (format!("http://{addr}/demo.mcap"), request_count)
     }
 
-    // A range-supporting server that truncates the body of the first
-    // `truncated_bodies` GET responses to `truncated_len` of the promised
-    // length before closing the connection, like a connection dropped
-    // mid-transfer. Headers always promise the full range.
+    // A range-supporting server that truncates the first `truncated_bodies` GET
+    // bodies to `truncated_len` of the promised length, like a connection dropped
+    // mid-transfer.
     fn serve_http_truncating_bodies(
         body: &'static [u8],
         truncated_bodies: usize,
@@ -1992,8 +1978,8 @@ mod tests {
                 }
                 if remaining_truncations > 0 {
                     remaining_truncations -= 1;
-                    // Closing with fewer bytes than Content-Length promised
-                    // makes the client observe a body error.
+                    // Fewer bytes than Content-Length promised: the client
+                    // sees a body error.
                     stream
                         .write_all(&content[..truncated_len(content.len())])
                         .expect("write truncated body");
@@ -2005,9 +1991,8 @@ mod tests {
         (format!("http://{addr}/demo.mcap"), request_count)
     }
 
-    // A range-supporting server that responds to the request at 0-based
-    // connection index `failing_index` with `status`, serving every other
-    // request normally.
+    // A range-supporting server that responds to the 0-based `failing_index`th
+    // request with `status` and serves every other request normally.
     fn serve_http_failing_request(
         body: &'static [u8],
         failing_index: usize,
