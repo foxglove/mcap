@@ -372,12 +372,71 @@ export class McapIndexedReader {
       validateCrcs?: boolean;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
+    const { validateCrcs } = args;
+
+    // Holds the decompressed chunk data for "active" chunks. Items are added below when a chunk
+    // cursor becomes active (i.e. when we first need to access messages from the chunk) and removed
+    // when the cursor is removed from the heap.
+    const chunkViewCache = new Map<bigint, DataView>();
+    const chunkReader = new Reader(new DataView(new ArrayBuffer(0)));
+    for await (const [logTime, offset, cursor] of this.#mergeMessageOffsets(args)) {
+      let chunkView = chunkViewCache.get(cursor.chunkIndex.chunkStartOffset);
+      if (!chunkView) {
+        chunkView = await this.#loadChunkData(cursor.chunkIndex, {
+          validateCrcs: validateCrcs ?? true,
+        });
+        chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
+      }
+
+      if (offset >= BigInt(chunkView.byteLength)) {
+        throw this.#errorWithLibrary(
+          `Message offset beyond chunk bounds (log time ${logTime}, offset ${offset}, chunk data length ${chunkView.byteLength}) in chunk at offset ${cursor.chunkIndex.chunkStartOffset}`,
+        );
+      }
+      chunkReader.reset(chunkView, Number(offset));
+      const record = parseRecord(chunkReader, validateCrcs ?? true);
+      if (!record) {
+        throw this.#errorWithLibrary(
+          `Unable to parse record at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset}`,
+        );
+      }
+      if (record.type !== "Message") {
+        throw this.#errorWithLibrary(
+          `Unexpected record type ${record.type} in message index (time ${logTime}, offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
+        );
+      }
+      if (record.logTime !== logTime) {
+        throw this.#errorWithLibrary(
+          `Message log time ${record.logTime} did not match message index entry (${logTime} at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
+        );
+      }
+      yield record;
+
+      // Once a cursor is exhausted its chunk data is no longer needed and can be released. This
+      // mirrors the pop in #mergeMessageOffsets, which runs right after this iteration resumes it.
+      if (!cursor.hasMoreMessages()) {
+        chunkViewCache.delete(cursor.chunkIndex.chunkStartOffset);
+      }
+    }
+  }
+
+  /**
+   * Walks the chunk message indexes in merged (time-sorted) order, loading each chunk's message
+   * indexes on demand but never reading or decoding chunk payloads. Yields `[logTime, offset,
+   * cursor]` for every message; consumers that need the message body load and parse the chunk data
+   * themselves via the yielded cursor's chunk index.
+   */
+  async *#mergeMessageOffsets(args: {
+    topics?: readonly string[];
+    startTime?: bigint;
+    endTime?: bigint;
+    reverse?: boolean;
+  }): AsyncGenerator<[logTime: bigint, offset: bigint, cursor: ChunkCursor], void, void> {
     const {
       topics,
       startTime = this.#messageStartTime,
       endTime = this.#messageEndTime,
       reverse = false,
-      validateCrcs,
     } = args;
 
     if (startTime == undefined || endTime == undefined) {
@@ -417,11 +476,6 @@ export class McapIndexedReader {
       }
     }
 
-    // Holds the decompressed chunk data for "active" chunks. Items are added below when a chunk
-    // cursor becomes active (i.e. when we first need to access messages from the chunk) and removed
-    // when the cursor is removed from the heap.
-    const chunkViewCache = new Map<bigint, DataView>();
-    const chunkReader = new Reader(new DataView(new ArrayBuffer(0)));
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
@@ -434,38 +488,8 @@ export class McapIndexedReader {
         continue;
       }
 
-      let chunkView = chunkViewCache.get(cursor.chunkIndex.chunkStartOffset);
-      if (!chunkView) {
-        chunkView = await this.#loadChunkData(cursor.chunkIndex, {
-          validateCrcs: validateCrcs ?? true,
-        });
-        chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
-      }
-
       const [logTime, offset] = cursor.popMessage();
-      if (offset >= BigInt(chunkView.byteLength)) {
-        throw this.#errorWithLibrary(
-          `Message offset beyond chunk bounds (log time ${logTime}, offset ${offset}, chunk data length ${chunkView.byteLength}) in chunk at offset ${cursor.chunkIndex.chunkStartOffset}`,
-        );
-      }
-      chunkReader.reset(chunkView, Number(offset));
-      const record = parseRecord(chunkReader, validateCrcs ?? true);
-      if (!record) {
-        throw this.#errorWithLibrary(
-          `Unable to parse record at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset}`,
-        );
-      }
-      if (record.type !== "Message") {
-        throw this.#errorWithLibrary(
-          `Unexpected record type ${record.type} in message index (time ${logTime}, offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
-        );
-      }
-      if (record.logTime !== logTime) {
-        throw this.#errorWithLibrary(
-          `Message log time ${record.logTime} did not match message index entry (${logTime} at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
-        );
-      }
-      yield record;
+      yield [logTime, offset, cursor];
 
       if (cursor.hasMoreMessages()) {
         // There is no need to reorganize the heap when chunks are ordered and not overlapping.
@@ -475,8 +499,25 @@ export class McapIndexedReader {
         }
       } else {
         chunkCursors.pop();
-        chunkViewCache.delete(cursor.chunkIndex.chunkStartOffset);
       }
+    }
+  }
+
+  /**
+   * Like {@link readMessages}, but only reads message indexes (never chunk payloads) and yields the
+   * log time of each message in merged time order. This makes it cheap to build a per-topic
+   * timestamp index without decoding message bodies.
+   */
+  async *readMessageTimestamps(
+    args: {
+      topics?: readonly string[];
+      startTime?: bigint;
+      endTime?: bigint;
+      reverse?: boolean;
+    } = {},
+  ): AsyncGenerator<bigint, void, void> {
+    for await (const [logTime] of this.#mergeMessageOffsets(args)) {
+      yield logTime;
     }
   }
 
