@@ -1,4 +1,3 @@
-mod aws_credentials;
 mod cli;
 mod commands;
 mod context;
@@ -6,6 +5,7 @@ mod logsetup;
 mod parse;
 mod render;
 mod rewrite;
+mod sdk_s3;
 mod source;
 
 use std::process::ExitCode;

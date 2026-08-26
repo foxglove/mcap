@@ -301,11 +301,19 @@ mcap filter --allow-remote-scan gs://your-remote-bucket/demo.mcap -o filtered.mc
 
 #### Credentials
 
-Credentials are read from the standard environment variables for each backend (`AWS_*` for S3, `GOOGLE_*` for GCS, and `AZURE_*` for Azure Blob Storage). When reading from S3 you must also specify the region of the bucket:
+For S3, credentials and the bucket region resolve exactly like the `aws` CLI: environment variables, `~/.aws/credentials` and `~/.aws/config` (honoring `AWS_PROFILE`), SSO sessions, `credential_process`, and EC2/ECS instance credentials, in that order. If your default profile is configured, no environment variables are needed:
 
 ```
-AWS_REGION=eu-north-1 mcap info s3://my-public-bucket/demo.mcap
+mcap info s3://my-bucket/demo.mcap
 ```
+
+If no region is configured in your environment or `~/.aws/config`, pass it explicitly:
+
+```
+AWS_REGION=eu-north-1 mcap info s3://my-bucket/demo.mcap
+```
+
+For GCS and Azure Blob Storage, credentials are read from the standard environment variables for each backend (`GOOGLE_*` and `AZURE_*`).
 
 ### File Diagnostics
 
