@@ -10,13 +10,20 @@
 //!
 //! Read paths only (`get_opts`/`head`): the CLI never writes to remote
 //! stores, so every mutating method returns `NotImplemented`.
+//!
+//! Of object_store's `AWS_*` options this backend honors `AWS_ENDPOINT`,
+//! `AWS_VIRTUAL_HOSTED_STYLE_REQUEST`, `AWS_SKIP_SIGNATURE` (unsigned reads
+//! of public buckets), and `AWS_REQUEST_PAYER`; setting another recognized
+//! object_store key prints a warning instead of being silently ignored.
 
 use async_trait::async_trait;
 use aws_sdk_s3::error::SdkError;
+use aws_sdk_s3::types::RequestPayer;
 use futures_util::stream::BoxStream;
 use futures_util::StreamExt as _;
 use object_store::aws::AmazonS3ConfigKey;
 use object_store::path::Path as ObjectStorePath;
+use object_store::ClientConfigKey;
 use object_store::{
     Attribute, Attributes, GetOptions, GetRange, GetResult, GetResultPayload, ListResult,
     MultipartUpload, ObjectMeta, ObjectStore, ObjectStoreScheme, PutMultipartOptions, PutOptions,
@@ -45,23 +52,52 @@ pub fn build_s3_store(
 
     let mut endpoint = None;
     let mut virtual_hosted_style = None;
+    let mut skip_signature = false;
+    let mut request_payer = false;
     for (key, value) in options {
         match key.to_ascii_lowercase().parse::<AmazonS3ConfigKey>() {
             Ok(AmazonS3ConfigKey::Endpoint) => endpoint = Some(value),
             Ok(AmazonS3ConfigKey::VirtualHostedStyleRequest) => {
-                virtual_hosted_style = Some(value.eq_ignore_ascii_case("true"))
+                virtual_hosted_style = Some(config_truthy(&value))
             }
-            // Region and credentials env vars are read by the SDK chain
-            // itself; everything else is object_store-specific.
-            _ => {}
+            Ok(AmazonS3ConfigKey::SkipSignature) => skip_signature = config_truthy(&value),
+            Ok(AmazonS3ConfigKey::RequestPayer) => request_payer = config_truthy(&value),
+            // The SDK chain reads these env vars itself.
+            Ok(
+                AmazonS3ConfigKey::AccessKeyId
+                | AmazonS3ConfigKey::SecretAccessKey
+                | AmazonS3ConfigKey::Token
+                | AmazonS3ConfigKey::Region
+                | AmazonS3ConfigKey::DefaultRegion
+                | AmazonS3ConfigKey::WebIdentityTokenFile
+                | AmazonS3ConfigKey::RoleArn
+                | AmazonS3ConfigKey::RoleSessionName
+                | AmazonS3ConfigKey::ContainerCredentialsRelativeUri
+                | AmazonS3ConfigKey::ContainerCredentialsFullUri
+                | AmazonS3ConfigKey::ContainerAuthorizationTokenFile,
+            ) => {}
+            // The SDK does not gate plain-HTTP endpoints.
+            Ok(AmazonS3ConfigKey::Client(ClientConfigKey::AllowHttp)) => {}
+            // Recognized object_store option this backend does not support:
+            // say so instead of silently changing behavior.
+            Ok(_) => {
+                eprintln!("Warning: ignoring {key}: not supported for s3:// reads");
+            }
+            // Not an object_store config key (e.g. AWS_PROFILE): the SDK
+            // reads what it understands from the environment directly.
+            Err(_) => {}
         }
     }
 
     let client = runtime.block_on(async {
-        let sdk_config = aws_config::defaults(aws_config::BehaviorVersion::latest())
-            .http_client(ring_http_client())
-            .load()
-            .await;
+        let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .http_client(ring_http_client());
+        if skip_signature {
+            // AWS_SKIP_SIGNATURE=true: send unsigned requests (public
+            // buckets), like object_store did.
+            loader = loader.no_credentials();
+        }
+        let sdk_config = loader.load().await;
         let mut builder = aws_sdk_s3::config::Builder::from(&sdk_config);
         if sdk_config.region().is_none() {
             if endpoint.is_some() {
@@ -91,7 +127,22 @@ pub fn build_s3_store(
         Ok(aws_sdk_s3::Client::from_conf(builder.build()))
     })?;
 
-    Ok((Box::new(SdkS3Store { client, bucket }), object_path))
+    Ok((
+        Box::new(SdkS3Store {
+            client,
+            bucket,
+            request_payer,
+        }),
+        object_path,
+    ))
+}
+
+// Mirrors object_store's boolean config parsing ("1"/"true"/"on"/"yes"/"y").
+fn config_truthy(value: &str) -> bool {
+    matches!(
+        value.to_ascii_lowercase().as_str(),
+        "1" | "true" | "on" | "yes" | "y"
+    )
 }
 
 // The SDK's HTTP client on the `ring` crypto backend: the default `aws-lc`
@@ -108,6 +159,8 @@ fn ring_http_client() -> aws_smithy_runtime_api::client::http::SharedHttpClient 
 struct SdkS3Store {
     client: aws_sdk_s3::Client,
     bucket: String,
+    // Send `x-amz-request-payer: requester` (requester-pays buckets).
+    request_payer: bool,
 }
 
 impl std::fmt::Display for SdkS3Store {
@@ -137,6 +190,9 @@ impl ObjectStore for SdkS3Store {
             .get_object()
             .bucket(&self.bucket)
             .key(location.as_ref());
+        if self.request_payer {
+            request = request.request_payer(RequestPayer::Requester);
+        }
         let ranged = options.range.is_some();
         if let Some(range) = &options.range {
             request = request.range(http_range_header(range));
@@ -242,11 +298,15 @@ impl ObjectStore for SdkS3Store {
 
 impl SdkS3Store {
     async fn head_result(&self, location: &ObjectStorePath) -> object_store::Result<GetResult> {
-        let response = self
+        let mut request = self
             .client
             .head_object()
             .bucket(&self.bucket)
-            .key(location.as_ref())
+            .key(location.as_ref());
+        if self.request_payer {
+            request = request.request_payer(RequestPayer::Requester);
+        }
+        let response = request
             .send()
             .await
             .map_err(|err| map_sdk_error(location, err))?;
@@ -454,21 +514,75 @@ mod tests {
         }
     }
 
-    fn test_store(endpoint: &str) -> SdkS3Store {
-        let config = aws_sdk_s3::config::Builder::new()
+    fn test_store_config(endpoint: &str, signed: bool, request_payer: bool) -> SdkS3Store {
+        let mut builder = aws_sdk_s3::config::Builder::new()
             .behavior_version(aws_config::BehaviorVersion::latest())
-            .credentials_provider(SharedCredentialsProvider::new(Credentials::new(
-                "AKIATEST", "secret", None, None, "test",
-            )))
             .region(Region::new("us-east-2"))
             .endpoint_url(endpoint)
             .force_path_style(true)
-            .http_client(ring_http_client())
-            .build();
-        SdkS3Store {
-            client: aws_sdk_s3::Client::from_conf(config),
-            bucket: "test-bucket".to_string(),
+            .http_client(ring_http_client());
+        if signed {
+            builder = builder.credentials_provider(SharedCredentialsProvider::new(
+                Credentials::new("AKIATEST", "secret", None, None, "test"),
+            ));
         }
+        SdkS3Store {
+            client: aws_sdk_s3::Client::from_conf(builder.build()),
+            bucket: "test-bucket".to_string(),
+            request_payer,
+        }
+    }
+
+    fn test_store(endpoint: &str) -> SdkS3Store {
+        test_store_config(endpoint, true, false)
+    }
+
+    #[test]
+    fn unsigned_store_sends_no_authorization_header() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let server = serve_fake_s3(body, None);
+        // No credentials provider, like build_s3_store with
+        // AWS_SKIP_SIGNATURE=true (`no_credentials()`).
+        let store = test_store_config(&server.url, false, false);
+        test_runtime()
+            .block_on(store.get_opts(
+                &ObjectStorePath::from("demo.mcap"),
+                GetOptions {
+                    range: Some(GetRange::Bounded(0..8)),
+                    ..GetOptions::default()
+                },
+            ))
+            .expect("unsigned ranged get");
+        let heads = server.heads.lock().expect("lock heads");
+        assert!(
+            heads
+                .iter()
+                .all(|head| !head.to_ascii_lowercase().contains("authorization:")),
+            "unsigned request should carry no Authorization header, got:\n{heads:?}"
+        );
+    }
+
+    #[test]
+    fn request_payer_get_carries_requester_header() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let server = serve_fake_s3(body, None);
+        let store = test_store_config(&server.url, true, true);
+        test_runtime()
+            .block_on(store.get_opts(
+                &ObjectStorePath::from("demo.mcap"),
+                GetOptions {
+                    range: Some(GetRange::Bounded(0..8)),
+                    ..GetOptions::default()
+                },
+            ))
+            .expect("requester-pays ranged get");
+        let heads = server.heads.lock().expect("lock heads");
+        assert!(
+            heads.iter().all(|head| head
+                .to_ascii_lowercase()
+                .contains("x-amz-request-payer: requester")),
+            "request should carry x-amz-request-payer, got:\n{heads:?}"
+        );
     }
 
     #[test]
