@@ -66,12 +66,13 @@ fn options_have_region(options: &[(String, String)]) -> bool {
 // attempt answers in milliseconds.
 async fn default_chain_region() -> Option<String> {
     let profile = ProfileFileRegionProvider::builder().build();
+    let config = sdk_provider_config();
     let imds_client = aws_config::imds::Client::builder()
-        .configure(&sdk_provider_config())
+        .configure(&config)
         .max_attempts(1)
         .build();
     let imds = ImdsRegionProvider::builder()
-        .configure(&sdk_provider_config())
+        .configure(&config)
         .imds_client(imds_client)
         .build();
     region_from_providers(&profile, &imds).await
@@ -91,14 +92,21 @@ async fn region_from_providers(
 // IMDS). Supply one on the `ring` crypto backend: the default `aws-lc`
 // backend compiles a C library via cmake, which the release cross-builds
 // don't have, and `object_store`'s reqwest already uses `ring` anyway.
+// Built once and cloned (the clone shares the underlying client), so TLS
+// roots load a single time across the region lookup and credentials chain.
 fn sdk_provider_config() -> ProviderConfig {
-    ProviderConfig::default().with_http_client(
-        aws_smithy_http_client::Builder::new()
-            .tls_provider(aws_smithy_http_client::tls::Provider::Rustls(
-                aws_smithy_http_client::tls::rustls_provider::CryptoMode::Ring,
-            ))
-            .build_https(),
-    )
+    static CONFIG: std::sync::OnceLock<ProviderConfig> = std::sync::OnceLock::new();
+    CONFIG
+        .get_or_init(|| {
+            ProviderConfig::default().with_http_client(
+                aws_smithy_http_client::Builder::new()
+                    .tls_provider(aws_smithy_http_client::tls::Provider::Rustls(
+                        aws_smithy_http_client::tls::rustls_provider::CryptoMode::Ring,
+                    ))
+                    .build_https(),
+            )
+        })
+        .clone()
 }
 
 /// `object_store` credential provider backed by an AWS SDK provider —
