@@ -217,6 +217,39 @@ jobs:
       - run: docker run -t --rm -v $(pwd):/work ghcr.io/nicklockwood/swiftformat:0.58.6 --lint /work
       - run: swift build
       - run: swift test
+
+  kotoba:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: kotoba
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+      - name: Install kotoba v0.7.2
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_dir="$RUNNER_TEMP/kotoba-v0.7.2"
+          cli_dir="$RUNNER_TEMP/kotoba-cli"
+          mkdir -p "$release_dir" "$cli_dir"
+          curl -L --fail --silent --show-error \
+            -o "$release_dir/kotoba-linux-amd64.tar.gz" \
+            https://github.com/kotoba-lang/kotoba/releases/download/v0.7.2/kotoba-linux-amd64.tar.gz
+          curl -L --fail --silent --show-error \
+            -o "$release_dir/kotoba-linux-amd64.tar.gz.sha256" \
+            https://github.com/kotoba-lang/kotoba/releases/download/v0.7.2/kotoba-linux-amd64.tar.gz.sha256
+          (cd "$release_dir" && sha256sum -c kotoba-linux-amd64.tar.gz.sha256)
+          tar -xzf "$release_dir/kotoba-linux-amd64.tar.gz" -C "$cli_dir"
+          echo "$cli_dir" >> "$GITHUB_PATH"
+      - name: Compile wasm and run fixtures
+        run: scripts/ci.sh
+
   typescript:
     runs-on: ubuntu-latest
 

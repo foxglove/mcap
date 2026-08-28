@@ -1,0 +1,114 @@
+;; Vendored foxglove NoData conformance bytes plus encode/decode checks.
+;; Each test-* is 1 pass / 0 fail. Fresh instantiateKotoba per export (fuel 512).
+;; CI does not fetch testdata or talk to the network.
+
+(defn test-opcodes [] :i64
+  (if (and (= (op-header) 1)
+           (and (= (op-footer) 2)
+                (and (= (op-data-end) 15)
+                     (= (magic-size) 8))))
+    1
+    0))
+
+(defn test-magic-leading [] :i64
+  (if (magic-ok? (golden-nodata) 0) 1 0))
+
+(defn test-magic-trailing [] :i64
+  (if (magic-ok? (golden-nodata) 67) 1 0))
+
+(defn test-golden-len [] :i64
+  (if (= (blob-len (golden-nodata)) 75) 1 0))
+
+(defn test-reject-bad-magic [] :i64
+  (let [bad (document-vector-conj (document []) (document [0 77 67 65 80 48 13 10]))]
+    (if (not (magic-ok? bad 0)) 1 0)))
+
+(defn test-header-opcode [] :i64
+  (if (= (blob-at (golden-nodata) 8) 1) 1 0))
+
+(defn test-header-len [] :i64
+  (if (= (get-u64le (golden-nodata) 9) 8) 1 0))
+
+(defn test-header-empty-strings [] :i64
+  (if (and (= (get-u32le (golden-nodata) 17) 0)
+           (= (get-u32le (golden-nodata) 21) 0))
+    1
+    0))
+
+(defn test-data-end-opcode [] :i64
+  (if (= (blob-at (golden-nodata) 25) 15) 1 0))
+
+(defn test-data-end-crc [] :i64
+  (if (= (get-u32le (golden-nodata) 34) 3959079795) 1 0))
+
+(defn test-footer-opcode [] :i64
+  (if (= (blob-at (golden-nodata) 38) 2) 1 0))
+
+(defn test-footer-crc [] :i64
+  (if (= (get-u32le (golden-nodata) 63) 1875167664) 1 0))
+
+(defn test-decode-nodata [] :i64
+  (let [m (decode-file (golden-nodata))]
+    (if (and (decode-ok? m)
+             (= (decode-data-crc m) 3959079795))
+      1
+      0)))
+
+(defn test-decode-rejects-short [] :i64
+  (if (not (decode-ok? (decode-file (magic)))) 1 0))
+
+(defn test-encode-header [] :i64
+  (let [h (encode-header "" "")]
+    (if (and (= (blob-len h) 17)
+             (and (= (blob-at h 0) 1)
+                  (and (= (get-u64le h 1) 8)
+                       (and (= (get-u32le h 9) 0)
+                            (= (get-u32le h 13) 0)))))
+      1
+      0)))
+
+(defn test-encode-header-ascii [] :i64
+  (let [h (encode-header "x" "mcap")]
+    (if (and (= (blob-at h 0) 1)
+             (and (= (get-u32le h 9) 1)
+                  (and (= (blob-at h 13) 120)
+                       (and (= (get-u32le h 14) 4)
+                            (= (blob-at h 18) 109)))))
+      1
+      0)))
+
+(defn test-encode-data-end [] :i64
+  (let [d (encode-data-end 3959079795)]
+    (if (and (= (blob-len d) 13)
+             (and (= (blob-at d 0) 15)
+                  (and (= (get-u64le d 1) 4)
+                       (= (get-u32le d 9) 3959079795))))
+      1
+      0)))
+
+(defn test-encode-footer [] :i64
+  (let [f (encode-footer 0 0 1875167664)]
+    (if (and (= (blob-len f) 29)
+             (and (= (blob-at f 0) 2)
+                  (= (get-u64le f 1) 20)))
+      1
+      0)))
+
+(defn test-blob-concat [] :i64
+  (if (= (blob-len (blob-concat (magic) (magic))) 16) 1 0))
+
+(defn test-encode-matches-data-end [] :i64
+  (let [d (encode-data-end 3959079795)
+        g (golden-nodata)]
+    (if (and (= (blob-at d 0) 15)
+             (= (get-u32le d 9) (get-u32le g 34)))
+      1
+      0)))
+
+(defn test-roundtrip-header [] :i64
+  (let [h (encode-header "" "")
+        g (golden-nodata)]
+    (if (and (= (blob-at h 0) (blob-at g 8))
+             (= (get-u64le h 1) (get-u64le g 9)))
+      1
+      0)))

@@ -23,6 +23,7 @@ MCAP libraries are provided in the following languages. For guidance on each lan
 | JavaScript/TypeScript | [readme](./typescript) | [API docs](https://mcap.dev/docs/typescript)                    | `@mcap/core` | [![](https://shields.io/npm/v/@mcap/core)](https://www.npmjs.com/package/@mcap/core) |
 | Swift                 | [readme](./swift)      | [API docs](https://mcap.dev/docs/swift/documentation/mcap)      |              | see [releases](https://github.com/foxglove/mcap/releases)                            |
 | Rust                  | [readme](./rust)       | [API docs](https://mcap.dev/docs/rust/mcap)                     | `mcap`       | [![](https://shields.io/crates/v/mcap)](https://crates.io/crates/mcap)               |
+| Kotoba                | [readme](./kotoba)     | v1 in-language codec (magic, Header, DataEnd, Footer)           |              | not packaged; compile `.kotoba` → wasm with kotoba CLI v0.7.2                        |
 
 ## CLI
 

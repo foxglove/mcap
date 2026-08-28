@@ -1,0 +1,2 @@
+(defn main [] :i64
+  (if (magic-ok? (golden-nodata) 0) 1 0))

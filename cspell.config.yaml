@@ -8,6 +8,8 @@ ignorePaths:
   - go.sum
   - intervaltree.hpp
   - testdata
+  - "*.kotoba"
+  - kotoba/testdata
   - CMakeLists.txt
   - Makefile
   - build
@@ -80,6 +82,8 @@ words:
   - issubdtype
   - jsonschema
   - kaitai
+  - kotoba
+  - instantiateKotoba
   - libmcap
   - magick
   - matplotlib
@@ -190,6 +194,7 @@ overrides:
 
   - filename: "(AGENTS.md|README.md|pyproject.toml|setup.cfg)"
     words:
+      - kotoba
       - pypi
       - pyright
       - pytest

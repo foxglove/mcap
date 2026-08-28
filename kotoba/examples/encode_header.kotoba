@@ -1,0 +1,2 @@
+(defn main [] :i64
+  (blob-len (encode-header "" "")))

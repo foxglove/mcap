@@ -1,0 +1,287 @@
+(ns mcap
+  (:export [magic-size op-header op-footer op-data-end chunk-cap
+            magic blob-len blob-at magic-ok?
+            get-u8 get-u16le get-u32le get-u64le
+            encode-header encode-data-end encode-footer encode-file blob-concat
+            decode-ok? decode-profile-len decode-library-len
+            decode-data-crc decode-summary-start decode-summary-offset-start
+            decode-summary-crc
+            golden-nodata]))
+
+;; v1 MCAP codec in Kotoba.
+;; In-language only: no FFI, no host filesystem, no network.
+;; Wire bytes are chunked document vectors (compiler document vectors cap at 32).
+;; Integers are i64. This build does not use floating point.
+;; Header profile/library are ASCII in v1 (code point == byte).
+;; CRC32 fields are parsed, not computed.
+
+(defn magic-size [] :i64 8)
+(defn op-header [] :i64 1)
+(defn op-footer [] :i64 2)
+(defn op-data-end [] :i64 15)
+(defn chunk-cap [] :i64 32)
+
+(defn box-i64 [n :i64] :document
+  (document-edn-read (string-from-i64 n)))
+
+(defn parse-i64 [s :string i :i64 n :i64 acc :i64] :i64
+  (if (>= i n)
+    acc
+    (let [c (string-code-point-at s i)]
+      (if (and (>= c 48) (<= c 57))
+        (parse-i64 s (+ i 1) n (+ (* acc 10) (- c 48)))
+        acc))))
+
+(defn doc-i64 [d :document] :i64
+  (let [s (document-edn-print d)
+        n (string-length s)]
+    (cond
+      (= n 1) (- (string-code-point-at s 0) 48)
+      (= n 2) (+ (* (- (string-code-point-at s 0) 48) 10)
+                 (- (string-code-point-at s 1) 48))
+      (= n 3) (+ (* (- (string-code-point-at s 0) 48) 100)
+                 (+ (* (- (string-code-point-at s 1) 48) 10)
+                    (- (string-code-point-at s 2) 48)))
+      :else (parse-i64 s 0 n 0))))
+
+(defn wr-make [chunks :document last :document] :document
+  (document-assoc (document-assoc (document {}) :chunks chunks) :last last))
+
+(defn wr-new [] :document
+  (wr-make (document []) (document [])))
+
+(defn wr-chunks [w :document] :document
+  (option-or (document-get w :chunks) (document [])))
+
+(defn wr-last [w :document] :document
+  (option-or (document-get w :last) (document [])))
+
+(defn wr-append [w :document n :i64] :document
+  (let [last (wr-last w)]
+    (if (>= (document-count last) 32)
+      (wr-make
+       (document-vector-conj (wr-chunks w) last)
+       (document-vector-conj (document []) (box-i64 n)))
+      (wr-make
+       (wr-chunks w)
+       (document-vector-conj last (box-i64 n))))))
+
+(defn wr-finish [w :document] :document
+  (if (= (document-count (wr-last w)) 0)
+    (wr-chunks w)
+    (document-vector-conj (wr-chunks w) (wr-last w))))
+
+(defn blob-len-walk [blob :document ci :i64 acc :i64] :i64
+  (if (>= ci (document-count blob))
+    acc
+    (let [ch (option-or (document-vector-at blob ci) (document []))]
+      (blob-len-walk blob (+ ci 1) (+ acc (document-count ch))))))
+
+(defn blob-len [blob :document] :i64
+  (blob-len-walk blob 0 0))
+
+(defn blob-at-walk [blob :document ci :i64 remain :i64] :i64
+  (if (>= ci (document-count blob))
+    0
+    (let [ch (option-or (document-vector-at blob ci) (document []))
+          n (document-count ch)]
+      (if (< remain n)
+        (doc-i64 (option-or (document-vector-at ch remain) (box-i64 0)))
+        (blob-at-walk blob (+ ci 1) (- remain n))))))
+
+(defn blob-at [blob :document i :i64] :i64
+  (let [ch0 (option-or (document-vector-at blob 0) (document []))
+        n0 (document-count ch0)]
+    (if (< i n0)
+      (doc-i64 (option-or (document-vector-at ch0 i) (box-i64 0)))
+      (blob-at-walk blob 1 (- i n0)))))
+
+(defn append-chunks [dst :document src :document i :i64 n :i64] :document
+  (if (>= i n)
+    dst
+    (append-chunks
+     (document-vector-conj dst (option-or (document-vector-at src i) (document [])))
+     src (+ i 1) n)))
+
+(defn blob-concat [a :document b :document] :document
+  (append-chunks a b 0 (document-count b)))
+
+(defn magic-chunk [] :document
+  (document [137 77 67 65 80 48 13 10]))
+
+(defn magic [] :document
+  (document-vector-conj (document []) (magic-chunk)))
+
+(defn magic-ok? [blob :document i :i64] :bool
+  (and (= (blob-at blob i) 137)
+       (and (= (blob-at blob (+ i 1)) 77)
+            (and (= (blob-at blob (+ i 2)) 67)
+                 (and (= (blob-at blob (+ i 3)) 65)
+                      (and (= (blob-at blob (+ i 4)) 80)
+                           (and (= (blob-at blob (+ i 5)) 48)
+                                (and (= (blob-at blob (+ i 6)) 13)
+                                     (= (blob-at blob (+ i 7)) 10)))))))))
+
+(defn get-u8 [blob :document i :i64] :i64
+  (blob-at blob i))
+
+(defn get-u16le [blob :document i :i64] :i64
+  (+ (blob-at blob i) (* (blob-at blob (+ i 1)) 256)))
+
+(defn get-u32le [blob :document i :i64] :i64
+  (let [b0 (blob-at blob i)
+        b1 (blob-at blob (+ i 1))
+        b2 (blob-at blob (+ i 2))
+        b3 (blob-at blob (+ i 3))]
+    (+ b0 (+ (* b1 256) (+ (* b2 65536) (* b3 16777216))))))
+
+(defn get-u64le [blob :document i :i64] :i64
+  (let [lo (get-u32le blob i)
+        hi (get-u32le blob (+ i 4))]
+    (+ lo (* hi 4294967296))))
+
+(defn put-u8 [w :document n :i64] :document
+  (wr-append w (bit-and n 255)))
+
+(defn put-u16le [w :document n :i64] :document
+  (put-u8 (put-u8 w (bit-and n 255)) (bit-and (quot n 256) 255)))
+
+(defn put-u32le [w :document n :i64] :document
+  (put-u8
+   (put-u8
+    (put-u8
+     (put-u8 w (bit-and n 255))
+     (bit-and (quot n 256) 255))
+    (bit-and (quot n 65536) 255))
+   (bit-and (quot n 16777216) 255)))
+
+(defn put-u64le [w :document n :i64] :document
+  (put-u32le (put-u32le w (bit-and n 4294967295)) (quot n 4294967296)))
+
+(defn put-ascii [w :document s :string i :i64 n :i64] :document
+  (if (>= i n)
+    w
+    (put-ascii (wr-append w (string-code-point-at s i)) s (+ i 1) n)))
+
+(defn put-string [w :document s :string] :document
+  (let [n (string-length s)]
+    (put-ascii (put-u32le w n) s 0 n)))
+
+(defn encode-record [op :i64 content :document] :document
+  (blob-concat
+   (wr-finish (put-u64le (put-u8 (wr-new) op) (blob-len content)))
+   content))
+
+(defn encode-header [profile :string library :string] :document
+  (encode-record 1 (wr-finish (put-string (put-string (wr-new) profile) library))))
+
+(defn encode-data-end [crc :i64] :document
+  (encode-record 15 (wr-finish (put-u32le (wr-new) crc))))
+
+(defn encode-footer [summary-start :i64 summary-offset-start :i64 summary-crc :i64] :document
+  (encode-record
+   2
+   (wr-finish
+    (put-u32le
+     (put-u64le (put-u64le (wr-new) summary-start) summary-offset-start)
+     summary-crc))))
+
+(defn encode-file [profile :string library :string data-crc :i64 summary-crc :i64] :document
+  (blob-concat
+   (blob-concat
+    (blob-concat
+     (blob-concat (magic) (encode-header profile library))
+     (encode-data-end data-crc))
+    (encode-footer 0 0 summary-crc))
+   (magic)))
+
+(defn file-ok [profile-len :i64 library-len :i64 data-crc :i64 summary-crc :i64] :document
+  (document-assoc
+   (document-assoc
+    (document-assoc
+     (document-assoc
+      (document-assoc
+       (document-assoc (document {}) :ok (box-i64 1))
+       :profile-len (box-i64 profile-len))
+      :library-len (box-i64 library-len))
+     :data-section-crc (box-i64 data-crc))
+    :summary-crc (box-i64 summary-crc))
+   :summary-start (box-i64 0)))
+
+(defn file-fail [] :document
+  (document-assoc (document {}) :ok (box-i64 0)))
+
+(defn doc-field [m :document k :keyword] :i64
+  (doc-i64 (option-or (document-get m k) (box-i64 0))))
+
+(defn decode-ok? [m :document] :bool
+  (= (doc-field m :ok) 1))
+
+(defn decode-profile-len [m :document] :i64
+  (doc-field m :profile-len))
+
+(defn decode-library-len [m :document] :i64
+  (doc-field m :library-len))
+
+(defn decode-data-crc [m :document] :i64
+  (doc-field m :data-section-crc))
+
+(defn decode-summary-start [m :document] :i64
+  (doc-field m :summary-start))
+
+(defn decode-summary-offset-start [m :document] :i64
+  (doc-field m :summary-offset-start))
+
+(defn decode-summary-crc [m :document] :i64
+  (doc-field m :summary-crc))
+
+(defn decode-footer-at [blob :document foot-i :i64 plen :i64 llen :i64 data-crc :i64] :document
+  (let [flen (get-u64le blob (+ foot-i 1))
+        sstart (get-u64le blob (+ foot-i 9))
+        soff (get-u64le blob (+ foot-i 17))
+        scrc (get-u32le blob (+ foot-i 25))]
+    (if (and (= (blob-at blob foot-i) 2)
+             (and (= flen 20) (and (= sstart 0) (= soff 0))))
+      (file-ok plen llen data-crc scrc)
+      (file-fail))))
+
+(defn decode-data-at [blob :document data-i :i64 plen :i64 llen :i64] :document
+  (let [dlen (get-u64le blob (+ data-i 1))
+        dcrc (get-u32le blob (+ data-i 9))
+        foot-i (+ (+ data-i 9) dlen)]
+    (if (= (blob-at blob data-i) 15)
+      (decode-footer-at blob foot-i plen llen dcrc)
+      (file-fail))))
+
+(defn decode-header-at [blob :document] :document
+  (let [hlen (get-u64le blob 9)
+        plen (get-u32le blob 17)
+        after-profile (+ 21 plen)
+        llen (get-u32le blob after-profile)
+        data-i (+ 17 hlen)]
+    (if (= (blob-at blob 8) 1)
+      (decode-data-at blob data-i plen llen)
+      (file-fail))))
+
+(defn decode-file [blob :document] :document
+  (if (< (blob-len blob) 75)
+    (file-fail)
+    (if (not (magic-ok? blob 0))
+      (file-fail)
+      (decode-header-at blob))))
+
+(defn golden-chunk0 [] :document
+  (document [137 77 67 65 80 48 13 10 1 8 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 15 4 0 0 0 0 0]))
+
+(defn golden-chunk1 [] :document
+  (document [0 0 115 195 250 235 2 20 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 176]))
+
+(defn golden-chunk2 [] :document
+  (document [201 196 111 137 77 67 65 80 48 13 10]))
+
+(defn golden-nodata [] :document
+  (document-vector-conj
+   (document-vector-conj
+    (document-vector-conj (document []) (golden-chunk0))
+    (golden-chunk1))
+   (golden-chunk2)))
