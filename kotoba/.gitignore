@@ -1,2 +1,2 @@
 *.wasm
-*.mjs
+/tmp
