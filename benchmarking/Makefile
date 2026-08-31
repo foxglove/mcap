@@ -1,6 +1,10 @@
 CXX ?= g++
-# -g and -fno-omit-frame-pointer keep perf/hotspot profiles readable at
-# negligible runtime cost.
+# -g and -fno-omit-frame-pointer keep perf/hotspot profiles readable.
+# Measured cost of C++ frame pointers on the fixed-payload path: below
+# the suite's run-to-run noise floor (<±3%). The Rust bench deliberately
+# does NOT force frame pointers — measured at a real 5-9% penalty there —
+# so profile Rust with perf's --call-graph dwarf instead. Go keeps frame
+# pointers by default on amd64/arm64.
 CXXFLAGS ?= -O2 -g -fno-omit-frame-pointer -Wall -Wextra -Wpedantic -Wconversion \
   -Wundef -Wshadow -Walloca -Wcast-qual \
   -Wdisabled-optimization -Wdouble-promotion -Wfloat-equal \

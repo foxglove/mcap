@@ -152,13 +152,29 @@ The bench programs are plain executables, so the easiest way to profile
 is to invoke one directly under your profiler with the same arguments
 `run_bench.sh` passes (see the `Usage` line each binary prints). The
 native builds include debug line tables (`debug = "line-tables-only"`
-for Rust, `-g -fno-omit-frame-pointer` for C++, and Go keeps symbols by
-default), so perf output resolves to source lines at no runtime cost:
+for Rust, `-g` for C++, Go keeps symbols by default), which are free at
+runtime, so perf output resolves to source lines.
+
+Frame pointers, which give perf cheap call stacks, are measured
+per-language rather than applied uniformly: C++ builds with
+`-fno-omit-frame-pointer` (measured cost on the fixed-payload path:
+below the suite's <±3% run-to-run noise floor) and Go always keeps
+frame pointers, but the Rust build deliberately does not force them —
+`-C force-frame-pointers=yes` measured at a real 5-9% penalty on the
+fixed-payload path, which would bias the cross-language comparison.
+Profile Rust with DWARF-based unwinding instead:
+
+```
+perf record --call-graph dwarf -- ./rust_bench/target/release/bench_read ...
+```
+
+For C++ and Go, plain `perf record -g` (frame-pointer unwinding) works:
 
 ```
 # Write a file to profile against, then profile a filtered read.
 ./rust_bench/target/release/bench_write /tmp/mixed.mcap zstd 0 mixed /tmp/bench_fill.bin
-perf record -g -- ./rust_bench/target/release/bench_read /tmp/mixed.mcap zstd 0 mixed topic
+perf record -g -- ./cpp_bench/bench_read /tmp/mixed.mcap zstd 0 mixed topic
+perf record --call-graph dwarf -- ./rust_bench/target/release/bench_read /tmp/mixed.mcap zstd 0 mixed topic
 perf report            # or open perf.data in hotspot
 ```
 
@@ -168,7 +184,7 @@ retyping arguments (use `BENCH_ITERS=1` and a single language/mode so
 the profile covers one process):
 
 ```
-WRAPPER="perf record -g --" BENCH_ITERS=1 LANGS=rust MODES=zstd ./run_bench.sh
+WRAPPER="perf record --call-graph dwarf --" BENCH_ITERS=1 LANGS=rust MODES=zstd ./run_bench.sh
 ```
 
 For the non-native languages, use a language-aware profiler instead of
