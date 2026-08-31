@@ -89,43 +89,12 @@ pub fn build_s3_store(
         }
     }
 
-    let client = runtime.block_on(async {
-        let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
-            .http_client(ring_http_client());
-        if skip_signature {
-            // AWS_SKIP_SIGNATURE=true: send unsigned requests (public
-            // buckets), like object_store did.
-            loader = loader.no_credentials();
-        }
-        let sdk_config = loader.load().await;
-        let mut builder = aws_sdk_s3::config::Builder::from(&sdk_config);
-        if sdk_config.region().is_none() {
-            if endpoint.is_some() {
-                // S3-compatible endpoints (MinIO etc.) still need a region
-                // string for SigV4 but typically ignore its value; match
-                // object_store's default.
-                builder = builder.region(aws_sdk_s3::config::Region::new("us-east-1"));
-            } else {
-                // Without a region every request fails with an opaque
-                // dispatch error; fail up front with the fix instead.
-                return Err(object_store::Error::Generic {
-                    store: "S3",
-                    source: "no AWS region configured: set AWS_REGION or add a region to \
-                             ~/.aws/config"
-                        .into(),
-                });
-            }
-        }
-        if let Some(endpoint) = endpoint {
-            // A custom endpoint defaults to path-style, like object_store.
-            builder = builder
-                .endpoint_url(endpoint)
-                .force_path_style(!virtual_hosted_style.unwrap_or(false));
-        } else if virtual_hosted_style == Some(false) {
-            builder = builder.force_path_style(true);
-        }
-        Ok(aws_sdk_s3::Client::from_conf(builder.build()))
-    })?;
+    let client = runtime.block_on(sdk_s3_client(
+        skip_signature,
+        endpoint,
+        virtual_hosted_style,
+        None,
+    ))?;
 
     Ok((
         Box::new(SdkS3Store {
@@ -135,6 +104,55 @@ pub fn build_s3_store(
         }),
         object_path,
     ))
+}
+
+/// Load the SDK config and build the S3 client. `region_override` bypasses
+/// the SDK's region chain (env, ~/.aws, IMDS) — production passes `None`;
+/// tests pin a region so this stays hermetic.
+async fn sdk_s3_client(
+    skip_signature: bool,
+    endpoint: Option<String>,
+    virtual_hosted_style: Option<bool>,
+    region_override: Option<aws_sdk_s3::config::Region>,
+) -> object_store::Result<aws_sdk_s3::Client> {
+    let mut loader =
+        aws_config::defaults(aws_config::BehaviorVersion::latest()).http_client(ring_http_client());
+    if skip_signature {
+        // AWS_SKIP_SIGNATURE=true: send unsigned requests (public
+        // buckets), like object_store did.
+        loader = loader.no_credentials();
+    }
+    if let Some(region) = region_override {
+        loader = loader.region(region);
+    }
+    let sdk_config = loader.load().await;
+    let mut builder = aws_sdk_s3::config::Builder::from(&sdk_config);
+    if sdk_config.region().is_none() {
+        if endpoint.is_some() {
+            // S3-compatible endpoints (MinIO etc.) still need a region
+            // string for SigV4 but typically ignore its value; match
+            // object_store's default.
+            builder = builder.region(aws_sdk_s3::config::Region::new("us-east-1"));
+        } else {
+            // Without a region every request fails with an opaque
+            // dispatch error; fail up front with the fix instead.
+            return Err(object_store::Error::Generic {
+                store: "S3",
+                source: "no AWS region configured: set AWS_REGION or add a region to \
+                         ~/.aws/config"
+                    .into(),
+            });
+        }
+    }
+    if let Some(endpoint) = endpoint {
+        // A custom endpoint defaults to path-style, like object_store.
+        builder = builder
+            .endpoint_url(endpoint)
+            .force_path_style(!virtual_hosted_style.unwrap_or(false));
+    } else if virtual_hosted_style == Some(false) {
+        builder = builder.force_path_style(true);
+    }
+    Ok(aws_sdk_s3::Client::from_conf(builder.build()))
 }
 
 // Mirrors object_store's boolean config parsing ("1"/"true"/"on"/"yes"/"y").
@@ -514,18 +532,16 @@ mod tests {
         }
     }
 
-    fn test_store_config(endpoint: &str, signed: bool, request_payer: bool) -> SdkS3Store {
-        let mut builder = aws_sdk_s3::config::Builder::new()
+    fn test_store_config(endpoint: &str, request_payer: bool) -> SdkS3Store {
+        let builder = aws_sdk_s3::config::Builder::new()
             .behavior_version(aws_config::BehaviorVersion::latest())
             .region(Region::new("us-east-2"))
             .endpoint_url(endpoint)
             .force_path_style(true)
-            .http_client(ring_http_client());
-        if signed {
-            builder = builder.credentials_provider(SharedCredentialsProvider::new(
-                Credentials::new("AKIATEST", "secret", None, None, "test"),
-            ));
-        }
+            .http_client(ring_http_client())
+            .credentials_provider(SharedCredentialsProvider::new(Credentials::new(
+                "AKIATEST", "secret", None, None, "test",
+            )));
         SdkS3Store {
             client: aws_sdk_s3::Client::from_conf(builder.build()),
             bucket: "test-bucket".to_string(),
@@ -534,16 +550,31 @@ mod tests {
     }
 
     fn test_store(endpoint: &str) -> SdkS3Store {
-        test_store_config(endpoint, true, false)
+        test_store_config(endpoint, false)
     }
 
     #[test]
-    fn unsigned_store_sends_no_authorization_header() {
+    fn skip_signature_loader_path_sends_unsigned_requests() {
         let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
         let server = serve_fake_s3(body, None);
-        // No credentials provider, like build_s3_store with
-        // AWS_SKIP_SIGNATURE=true (`no_credentials()`).
-        let store = test_store_config(&server.url, false, false);
+        // Exercise the production construction — `no_credentials()` on the
+        // config loader, then `Builder::from(&sdk_config)` — not merely a
+        // client built without a credentials provider. Only the region is
+        // pinned, to keep the SDK's region chain (env, ~/.aws, IMDS) out of
+        // the test.
+        let client = test_runtime()
+            .block_on(sdk_s3_client(
+                true,
+                Some(server.url.clone()),
+                None,
+                Some(Region::new("us-east-2")),
+            ))
+            .expect("build unsigned client");
+        let store = SdkS3Store {
+            client,
+            bucket: "test-bucket".to_string(),
+            request_payer: false,
+        };
         test_runtime()
             .block_on(store.get_opts(
                 &ObjectStorePath::from("demo.mcap"),
@@ -555,9 +586,10 @@ mod tests {
             .expect("unsigned ranged get");
         let heads = server.heads.lock().expect("lock heads");
         assert!(
-            heads
-                .iter()
-                .all(|head| !head.to_ascii_lowercase().contains("authorization:")),
+            !heads.is_empty()
+                && heads
+                    .iter()
+                    .all(|head| !head.to_ascii_lowercase().contains("authorization:")),
             "unsigned request should carry no Authorization header, got:\n{heads:?}"
         );
     }
@@ -566,7 +598,7 @@ mod tests {
     fn request_payer_get_carries_requester_header() {
         let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
         let server = serve_fake_s3(body, None);
-        let store = test_store_config(&server.url, true, true);
+        let store = test_store_config(&server.url, true);
         test_runtime()
             .block_on(store.get_opts(
                 &ObjectStorePath::from("demo.mcap"),
