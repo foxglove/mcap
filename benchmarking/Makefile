@@ -31,10 +31,14 @@ python_bench:
 	@test -f python_bench/bench_read.py || (echo "ERROR: python_bench/bench_read.py not found" >&2; exit 1)
 	@test -f gen_blob.py || (echo "ERROR: gen_blob.py not found" >&2; exit 1)
 
-cpp_bench/bench_write: cpp_bench/bench_write.cpp
+# The benches compile the header-only mcap library directly, so they must be
+# rebuilt when it changes, not just when the bench source changes.
+MCAP_CPP_HEADERS = $(wildcard ../cpp/mcap/include/mcap/*)
+
+cpp_bench/bench_write: cpp_bench/bench_write.cpp $(MCAP_CPP_HEADERS)
 	$(CXX) $(CXXFLAGS) cpp_bench/bench_write.cpp -o cpp_bench/bench_write -llz4 -lzstd
 
-cpp_bench/bench_read: cpp_bench/bench_read.cpp
+cpp_bench/bench_read: cpp_bench/bench_read.cpp $(MCAP_CPP_HEADERS)
 	$(CXX) $(CXXFLAGS) cpp_bench/bench_read.cpp -o cpp_bench/bench_read -llz4 -lzstd
 
 rust_bench: rust_bench/src/bin/bench_write.rs rust_bench/src/bin/bench_read.rs rust_bench/Cargo.toml
