@@ -335,8 +335,11 @@ impl IndexedReader {
                         compressed_data.len()
                     )));
                 }
-                slot.buf.resize(uncompressed_size, 0);
-                slot.buf[..].copy_from_slice(compressed_data);
+                // The length is already known to equal uncompressed_size, so copy the data in
+                // directly rather than resize()-ing (which zero-fills the buffer first) and then
+                // overwriting every byte.
+                slot.buf.clear();
+                slot.buf.extend_from_slice(compressed_data);
             }
             #[cfg(feature = "zstd")]
             "zstd" => {

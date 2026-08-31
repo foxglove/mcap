@@ -163,7 +163,20 @@ func ParseChunk(buf []byte) (*Chunk, error) {
 	}
 	recordsLength, offset, err := getUint64(buf, offset)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read compression: %w", err)
+		return nil, fmt.Errorf("failed to read records length: %w", err)
+	}
+	// Compare in uint64 space to avoid int overflow, and to keep int(recordsLength) in range for
+	// the slice expression below.
+	if recordsLength > uint64(len(buf)-offset) {
+		return nil, fmt.Errorf("chunk records length %d exceeds remaining chunk bytes %d",
+			recordsLength, len(buf)-offset)
+	}
+	// An uncompressed chunk stores its records verbatim, so its declared uncompressed size must
+	// match the records it carries. Without this check, the indexed reader trusts UncompressedSize
+	// to size its decompression buffer and silently reads stale data past the copied records.
+	if compression == "" && uncompressedSize != recordsLength {
+		return nil, fmt.Errorf("uncompressed chunk declares uncompressed size %d but carries %d bytes",
+			uncompressedSize, recordsLength)
 	}
 	records := buf[offset : offset+int(recordsLength)]
 	return &Chunk{
