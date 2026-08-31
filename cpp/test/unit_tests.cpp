@@ -7,6 +7,7 @@
 #include <array>
 #include <cstdio>
 #include <numeric>
+#include <vector>
 
 #if defined _WIN32 || defined __CYGWIN__
 #  include <io.h>
@@ -99,6 +100,57 @@ TEST_CASE("internal::crc32", "[writer]") {
                                       data.size() - split);
     REQUIRE(mcap::internal::crc32Final(crc) == 2280057893);
   }
+}
+
+TEST_CASE("internal::crc32 bulk paths match byte-at-a-time reference", "[writer]") {
+  // Byte-at-a-time reference using only the first 256 table entries, so it
+  // exercises none of the 8-byte tabular or SIMD bulk code under test.
+  const auto reference = [](uint32_t crc, const std::byte* data, size_t len) {
+    for (size_t i = 0; i < len; i++) {
+      crc = mcap::internal::CRC32_TABLE[(crc ^ uint8_t(data[i])) & 0xff] ^ (crc >> 8);
+    }
+    return crc;
+  };
+
+  // Deterministic pseudo-random fill.
+  std::vector<std::byte> buf(8 + 4093);
+  uint32_t seed = 12345;
+  for (auto& b : buf) {
+    seed = seed * 1664525u + 1013904223u;
+    b = std::byte(seed >> 24);
+  }
+
+  // Lengths straddling the dispatch thresholds of crc32Update (<= 8
+  // byte-at-a-time, < 64 8-byte tabular, >= 64 SIMD where available), at
+  // several alignments since the SIMD path uses 16-byte loads.
+  const size_t lengths[] = {0, 1, 7, 8, 9, 15, 16, 63, 64, 65, 79, 80, 127, 128, 129, 1024, 4093};
+  for (size_t align = 0; align < 8; align++) {
+    for (size_t length : lengths) {
+      CAPTURE(align, length);
+      const std::byte* data = buf.data() + align;
+      const uint32_t expected =
+        mcap::internal::crc32Final(reference(mcap::internal::CRC32_INIT, data, length));
+      REQUIRE(mcap::internal::crc32Final(
+                mcap::internal::crc32Update(mcap::internal::CRC32_INIT, data, length)) == expected);
+
+      // Streaming across a split must match the one-shot result.
+      const size_t split = length / 3;
+      uint32_t crc = mcap::internal::CRC32_INIT;
+      crc = mcap::internal::crc32Update(crc, data, split);
+      crc = mcap::internal::crc32Update(crc, data + split, length - split);
+      REQUIRE(mcap::internal::crc32Final(crc) == expected);
+    }
+  }
+
+  // Known-answer test long enough for the bulk paths: eight copies of the
+  // classic "123456789" input.
+  std::array<std::byte, 72> kat;
+  for (size_t i = 0; i < kat.size(); i++) {
+    kat[i] = std::byte("123456789"[i % 9]);
+  }
+  REQUIRE(mcap::internal::crc32Final(mcap::internal::crc32Update(mcap::internal::CRC32_INIT,
+                                                                 kat.data(), kat.size())) ==
+          0x8811a440);
 }
 
 #if defined(__linux__)
