@@ -113,23 +113,15 @@ $ source <(mcap completion bash)
 
 Convert a ROS 1 bag file to mcap:
 
-<!-- cspell: disable -->
-
 ```
 $ mcap convert demo.bag demo.mcap
 ```
 
-<!-- cspell: enable -->
-
 Convert a ROS 2 db3 file to mcap:
-
-<!-- cspell: disable -->
 
 ```
 $ mcap convert demo.db3 demo.mcap
 ```
-
-<!-- cspell: enable -->
 
 The `mcap` CLI dispatches on the input file extension (`.bag` for ROS 1, `.db3` for ROS 2) and reads ROS 2 `.db3` files using the message definitions embedded in the file. ROS 2 Iron and later embed message definitions when recording, so these files convert without a sourced workspace.
 
@@ -138,8 +130,6 @@ Bags recorded before ROS 2 Iron do not contain embedded message definitions and 
 ### File summarization
 
 Report summary statistics on an MCAP file:
-
-<!-- cspell: disable -->
 
 ```
 $ mcap info demo.mcap
@@ -167,8 +157,6 @@ channels:    7
 attachments: 0
 metadata:    0
 ```
-
-<!-- cspell: enable -->
 
 ### Indexed reading
 
@@ -258,8 +246,6 @@ message).
 
 The `mcap` CLI can read files over **HTTP(S)** and from object stores: **Amazon S3** (`s3://`, `s3a://`), **Google Cloud Storage** (`gs://`), and **Azure Blob Storage** (`az://`, `azure://`, `adl://`, `abfs://`, `abfss://`):
 
-<!-- cspell: disable -->
-
 ```
 $ mcap info gs://your-remote-bucket/demo.mcap
 library:     mcap-cli/0.3.0 mcap-rust/0.25.0
@@ -286,8 +272,6 @@ channels:    7
 attachments: 0
 metadata:    0
 ```
-
-<!-- cspell: enable -->
 
 Indexed reads use the summary index at the end of the file to fetch only the bytes they need, minimizing latency and data transfer. Commands that only need indexed data — such as `info`, `list`, and single-record `get` — work against remote files without any extra flags.
 

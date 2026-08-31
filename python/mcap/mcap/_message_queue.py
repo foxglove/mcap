@@ -111,7 +111,7 @@ class InsertOrderQueue(_MessageQueue):
         self._q.append(item)
 
     def pop(self) -> QueueItem:
-        return self._q.popleft()  # cspell:disable-line
+        return self._q.popleft()
 
     def __len__(self) -> int:
         return len(self._q)

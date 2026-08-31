@@ -339,7 +339,7 @@ class Writer:
             summary_crc = zlib.crc32(summary_data)
             summary_crc = zlib.crc32(
                 struct.pack(
-                    "<BQQQ",  # cspell:disable-line
+                    "<BQQQ",
                     Opcode.FOOTER,
                     8 + 8 + 4,
                     0 if summary_length == 0 else summary_start,

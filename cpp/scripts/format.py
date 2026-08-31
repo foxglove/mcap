@@ -35,8 +35,8 @@ def main(dirs: List[str], fix: bool):
                         orig,
                         stdout,
                         fromfile=path,
-                        tofile=f"clang-format {path}",  # cspell:disable-line
-                        lineterm="",  # cspell:disable-line
+                        tofile=f"clang-format {path}",
+                        lineterm="",
                     )
                     had_diff = False
                     for line in diff:

@@ -175,7 +175,7 @@ func TestChunkedReadWrite(t *testing.T) {
 				MessageEncoding: "ros1",
 				SchemaID:        1,
 				Metadata: map[string]string{
-					"callerid": "100", // cspell:disable-line
+					"callerid": "100",
 				},
 			}))
 			require.NoError(t, w.WriteChannel(&Channel{
@@ -467,7 +467,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 		Topic:           "/test",
 		MessageEncoding: "ros1",
 		Metadata: map[string]string{
-			"callerid": "100", // cspell:disable-line
+			"callerid": "100",
 		},
 	})
 	require.NoError(t, err)

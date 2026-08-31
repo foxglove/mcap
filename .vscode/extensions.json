@@ -6,7 +6,6 @@
     "orta.vscode-jest",
     "ms-vscode.cpptools-extension-pack",
     "ms-vscode-remote.vscode-remote-extensionpack",
-    "streetsidesoftware.code-spell-checker",
     "ms-python.flake8"
   ]
 }

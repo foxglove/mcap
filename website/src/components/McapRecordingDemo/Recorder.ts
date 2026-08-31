@@ -1,5 +1,3 @@
-// cspell:word millis
-
 import { Time, fromNanoSec } from "@foxglove/rostime";
 import {
   CompressedImage,

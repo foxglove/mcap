@@ -1,5 +1,3 @@
-// cspell:word millis
-
 import Link from "@docusaurus/Link";
 import cx from "classnames";
 import React, { useRef } from "react";

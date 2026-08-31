@@ -210,7 +210,7 @@ if (process.env.NODE_ENV === "production") {
     tagName: "script",
     attributes: {
       src: "https://cdn.usefathom.com/script.js",
-      "data-site": "RULHQVMR", // cspell:disable-line
+      "data-site": "RULHQVMR",
       "data-spa": "history",
       defer: "defer",
     },

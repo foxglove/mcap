@@ -2,8 +2,6 @@
 
 ## Example writer
 
-<!-- cspell: disable -->
-
 ```cpp
 #define MCAP_IMPLEMENTATION  // Define this in exactly one .cpp file
 #include <mcap/writer.hpp>
@@ -58,8 +56,6 @@ int main() {
   writer.close();
 }
 ```
-
-<!-- cspell: enable -->
 
 ## Building
 
@@ -131,7 +127,7 @@ before including the library.
 1. Once the version number has been updated, create and push a git tag named `releases/cpp/vX.Y.Z` matching the new version number.
 1. Make a pull request to [conan-io/conan-center-index](https://github.com/conan-io/conan-center-index) to update the [mcap recipe](https://github.com/conan-io/conan-center-index/tree/master/recipes/mcap):
    - Update [`config.yml`](https://github.com/conan-io/conan-center-index/blob/master/recipes/mcap/config.yml) to add the new version.
-   - Update [`all/conandata.yml`](https://github.com/conan-io/conan-center-index/blob/master/recipes/mcap/all/conandata.yml) to add an entry pointing at the tarball from the new release tag. <!-- cspell: word conandata -->
+   - Update [`all/conandata.yml`](https://github.com/conan-io/conan-center-index/blob/master/recipes/mcap/all/conandata.yml) to add an entry pointing at the tarball from the new release tag.
    - Follow the instructions for [developing recipes locally](https://github.com/conan-io/conan-center-index/blob/master/docs/developing_recipes_locally.md) to test the recipe.
    - Examples of previous changes to the mcap recipe: https://github.com/conan-io/conan-center-index/commits/master/recipes/mcap
 

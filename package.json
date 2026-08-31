@@ -19,7 +19,6 @@
     "docs:swift:start": "swift package --disable-sandbox preview-documentation --target MCAP",
     "typedoc": "yarn typescript:build && typedoc --out __docs__/typescript --options typescript/typedoc.json",
     "start": "yarn workspace website start",
-    "spellcheck": "cspell --relative '**'",
     "tsc:all": "tsc --build --incremental --verbose $(git ls-files -- 'tsconfig*.json' '**/tsconfig*.json')",
     "typescript:test": "yarn jest --config typescript/jest.config.json",
     "typescript:build": "yarn workspace @mcap/core build && yarn workspace @mcap/support build && yarn workspace @mcap/nodejs build && yarn workspace @mcap/browser build",
@@ -31,7 +30,6 @@
   "devDependencies": {
     "@eslint/config-helpers": "0.7.0",
     "@types/node": "20.19.43",
-    "cspell": "8.19.4",
     "globals": "17.9.0",
     "jest": "29.7.0",
     "prettier": "3.1.0",
