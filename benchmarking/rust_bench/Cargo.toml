@@ -12,3 +12,5 @@ libc = "0.2"
 [profile.release]
 opt-level = 3
 lto = true
+# Line tables make perf/hotspot profiles readable at no runtime cost.
+debug = "line-tables-only"

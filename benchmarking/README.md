@@ -122,12 +122,58 @@ The benchmark runner accepts environment variables:
 | `MIXED_MODES`        | `unchunked chunked zstd lz4`      | Compression modes for mixed-payload benchmarks                          |
 | `FILTER_COMPRESSION` | `chunked zstd`                    | Compression modes for filtered read benchmarks                          |
 | `FILTER_MODES`       | `topic timerange topic_timerange` | Filter types to benchmark                                               |
+| `LANGS`              | `rust go python cpp typescript`   | Languages to benchmark                                                  |
+| `WRAPPER`            | (empty)                           | Command prefixed to every bench invocation (e.g. `perf record -g --`)   |
 
 Example: run a quick benchmark with fewer messages and iterations:
 
 ```
 NUM_MESSAGES=10000 BENCH_ITERS=2 ./run_bench.sh
 ```
+
+### Running a single language
+
+`LANGS` restricts the run to a subset of languages, and the preflight
+check only requires the selected languages to be built:
+
+```
+make rust_bench
+LANGS=rust ./run_bench.sh
+```
+
+Note that the cross-language payload-CRC and message-count checks
+compare whatever languages ran, so a single-language run trivially
+passes them — run the full suite before trusting cross-language
+conclusions.
+
+### Profiling
+
+The bench programs are plain executables, so the easiest way to profile
+is to invoke one directly under your profiler with the same arguments
+`run_bench.sh` passes (see the `Usage` line each binary prints). The
+native builds include debug line tables (`debug = "line-tables-only"`
+for Rust, `-g -fno-omit-frame-pointer` for C++, and Go keeps symbols by
+default), so perf output resolves to source lines at no runtime cost:
+
+```
+# Write a file to profile against, then profile a filtered read.
+./rust_bench/target/release/bench_write /tmp/mixed.mcap zstd 0 mixed /tmp/bench_fill.bin
+perf record -g -- ./rust_bench/target/release/bench_read /tmp/mixed.mcap zstd 0 mixed topic
+perf report            # or open perf.data in hotspot
+```
+
+Alternatively, `WRAPPER` prefixes a command onto every bench invocation
+the harness makes, which is handy for one-shot profiling without
+retyping arguments (use `BENCH_ITERS=1` and a single language/mode so
+the profile covers one process):
+
+```
+WRAPPER="perf record -g --" BENCH_ITERS=1 LANGS=rust MODES=zstd ./run_bench.sh
+```
+
+For the non-native languages, use a language-aware profiler instead of
+perf: `py-spy record -- python3 python_bench/bench_read.py ...` for
+Python, and `node --cpu-prof` (or `0x`) with `tsx` for TypeScript.
 
 ### Output
 

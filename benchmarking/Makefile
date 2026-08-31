@@ -1,5 +1,7 @@
 CXX ?= g++
-CXXFLAGS ?= -O2 -Wall -Wextra -Wpedantic -Wconversion \
+# -g and -fno-omit-frame-pointer keep perf/hotspot profiles readable at
+# negligible runtime cost.
+CXXFLAGS ?= -O2 -g -fno-omit-frame-pointer -Wall -Wextra -Wpedantic -Wconversion \
   -Wundef -Wshadow -Walloca -Wcast-qual \
   -Wdisabled-optimization -Wdouble-promotion -Wfloat-equal \
   -Wformat-signedness -Winit-self -Wmissing-include-dirs -Wmultichar \

@@ -7,6 +7,10 @@ PAYLOAD_SIZE="${PAYLOAD_SIZE:-100}"
 BENCH_ITERS="${BENCH_ITERS:-5}"
 BENCH_DIR="${BENCH_DIR:-/tmp}"
 MODES="${MODES:-unchunked chunked zstd lz4}"
+LANGS="${LANGS:-rust go python cpp typescript}"
+# Optional command prefixed to every bench invocation, e.g. for profiling:
+#   WRAPPER="perf record -g --" BENCH_ITERS=1 LANGS=rust ./run_bench.sh
+WRAPPER="${WRAPPER:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 RESULTS_FILE="${BENCH_DIR}/bench_results.tsv"
@@ -31,37 +35,46 @@ TSX="${TSX:-npx tsx}"
 TS_WRITE="${SCRIPT_DIR}/typescript_bench/bench_write.ts"
 TS_READ="${SCRIPT_DIR}/typescript_bench/bench_read.ts"
 
-# Verify binaries exist
-for bin in "$RUST_WRITE" "$RUST_READ" "$GO_WRITE" "$GO_READ" "$CPP_WRITE" "$CPP_READ"; do
-  if [ ! -x "$bin" ]; then
-    echo "ERROR: Binary not found or not executable: $bin" >&2
+require_bin() {
+  if [ ! -x "$1" ]; then
+    echo "ERROR: Binary not found or not executable: $1" >&2
     echo "Run 'make all' first." >&2
     exit 1
   fi
+}
+
+require_file() {
+  if [ ! -f "$1" ]; then
+    echo "ERROR: Script not found: $1" >&2
+    echo "Run 'make all' first." >&2
+    exit 1
+  fi
+}
+
+# Verify benchmarks exist for the selected languages only, so a single
+# language can be run without building the others.
+for lang in $LANGS; do
+  case "$lang" in
+    rust)       require_bin "$RUST_WRITE"; require_bin "$RUST_READ" ;;
+    go)         require_bin "$GO_WRITE"; require_bin "$GO_READ" ;;
+    cpp)        require_bin "$CPP_WRITE"; require_bin "$CPP_READ" ;;
+    python)     require_file "$PY_WRITE"; require_file "$PY_READ" ;;
+    typescript) require_file "$TS_WRITE"; require_file "$TS_READ" ;;
+    *)          echo "ERROR: unknown language in LANGS: $lang" >&2; exit 1 ;;
+  esac
 done
 
-# Verify Python scripts exist
-for script in "$PY_WRITE" "$PY_READ" "${SCRIPT_DIR}/gen_blob.py"; do
-  if [ ! -f "$script" ]; then
-    echo "ERROR: Python script not found: $script" >&2
-    echo "Run 'make all' first." >&2
-    exit 1
-  fi
-done
-
-# Verify TypeScript scripts exist
-for script in "$TS_WRITE" "$TS_READ"; do
-  if [ ! -f "$script" ]; then
-    echo "ERROR: TypeScript script not found: $script" >&2
-    echo "Run 'make all' first." >&2
-    exit 1
-  fi
-done
+# gen_blob.py is always needed to generate the shared payload blob.
+require_file "${SCRIPT_DIR}/gen_blob.py"
 
 echo "=== MCAP Cross-Language Benchmark ==="
 echo "Messages: ${NUM_MESSAGES}, Payload: ${PAYLOAD_SIZE} bytes, Iterations: ${BENCH_ITERS}"
 echo "Output dir: ${BENCH_DIR}"
 echo "Modes: ${MODES}"
+echo "Languages: ${LANGS}"
+if [ -n "$WRAPPER" ]; then
+  echo "Wrapper: ${WRAPPER}"
+fi
 echo ""
 
 # Generate the shared payload blob (deterministic; reused if present)
@@ -131,15 +144,15 @@ check_filter_counts() {
 # Clear results file
 > "$RESULTS_FILE"
 
-LANGS="rust go python cpp typescript"
-
-# Set write_cmd and read_cmd for a given language.
+# Set write_cmd and read_cmd for a given language. The python commands use
+# `env` for PYTHONPATH (rather than a bare env-assignment prefix) so that
+# WRAPPER can be prepended to any command.
 set_lang_cmds() {
   local lang="$1"
   case "$lang" in
     rust)       write_cmd="$RUST_WRITE"; read_cmd="$RUST_READ" ;;
     go)         write_cmd="$GO_WRITE"; read_cmd="$GO_READ" ;;
-    python)     write_cmd="PYTHONPATH=$INTEROP_PYPATH $PYTHON $PY_WRITE"; read_cmd="PYTHONPATH=$INTEROP_PYPATH $PYTHON $PY_READ" ;;
+    python)     write_cmd="env PYTHONPATH=$INTEROP_PYPATH $PYTHON $PY_WRITE"; read_cmd="env PYTHONPATH=$INTEROP_PYPATH $PYTHON $PY_READ" ;;
     cpp)        write_cmd="$CPP_WRITE"; read_cmd="$CPP_READ" ;;
     typescript) write_cmd="$TSX $TS_WRITE"; read_cmd="$TSX $TS_READ" ;;
     *)          echo "unknown lang: $lang" >&2; exit 1 ;;
@@ -159,12 +172,12 @@ for mode in $MODES; do
 
     for iter in $(seq 1 "$BENCH_ITERS"); do
       echo -n "  ${lang}/${mode} write iter ${iter}/${BENCH_ITERS}..."
-      result=$(eval "$write_cmd" "$outfile" "$mode" "$NUM_MESSAGES" "$PAYLOAD_SIZE" "$BLOB_FILE")
+      result=$(eval "$WRAPPER" "$write_cmd" "$outfile" "$mode" "$NUM_MESSAGES" "$PAYLOAD_SIZE" "$BLOB_FILE")
       echo "$result" >> "$RESULTS_FILE"
       echo " done"
 
       echo -n "  ${lang}/${mode} read  iter ${iter}/${BENCH_ITERS}..."
-      result=$(eval "$read_cmd" "$outfile" "$mode" "$NUM_MESSAGES" "$PAYLOAD_SIZE")
+      result=$(eval "$WRAPPER" "$read_cmd" "$outfile" "$mode" "$NUM_MESSAGES" "$PAYLOAD_SIZE")
       echo "$result" >> "$RESULTS_FILE"
       echo " done"
     done
@@ -332,12 +345,12 @@ for mode in $MIXED_MODES; do
 
     for iter in $(seq 1 "$BENCH_ITERS"); do
       echo -n "  ${lang}/mixed-${mode} write iter ${iter}/${BENCH_ITERS}..."
-      result=$(eval "$write_cmd" "$outfile" "$mode" 0 mixed "$BLOB_FILE")
+      result=$(eval "$WRAPPER" "$write_cmd" "$outfile" "$mode" 0 mixed "$BLOB_FILE")
       echo "$result" >> "$MIXED_RESULTS_FILE"
       echo " done"
 
       echo -n "  ${lang}/mixed-${mode} read  iter ${iter}/${BENCH_ITERS}..."
-      result=$(eval "$read_cmd" "$outfile" "$mode" 0 mixed)
+      result=$(eval "$WRAPPER" "$read_cmd" "$outfile" "$mode" 0 mixed)
       echo "$result" >> "$MIXED_RESULTS_FILE"
       echo " done"
     done
@@ -419,7 +432,7 @@ for compression in $FILTER_COMPRESSION; do
     for filter in $FILTER_MODES; do
       for iter in $(seq 1 "$BENCH_ITERS"); do
         echo -n "  ${lang}/${compression}/${filter} read iter ${iter}/${BENCH_ITERS}..."
-        result=$(eval "$read_cmd" "$outfile" "${compression}-${filter}" 0 mixed "$filter")
+        result=$(eval "$WRAPPER" "$read_cmd" "$outfile" "${compression}-${filter}" 0 mixed "$filter")
         echo "$result" >> "$FILTER_RESULTS_FILE"
         echo " done"
       done
