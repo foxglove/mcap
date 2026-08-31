@@ -20,6 +20,35 @@
 #  endif
 #endif
 
+// Hardware-accelerated CRC32 for AArch64, with runtime CPU detection. Unlike
+// x86, AArch64 has dedicated CRC32 instructions for this exact polynomial
+// (FEAT_CRC32, mandatory since ARMv8.1), so no folding math is needed.
+// Little-endian only: the crc32x instruction consumes its 64-bit operand as
+// little-endian data bytes.
+#if defined(__aarch64__) && defined(__AARCH64EL__) && (defined(__GNUC__) || defined(__clang__))
+#  define MCAP_CRC32_ARM 1
+#  include <cstring>
+#  if defined(__clang__)
+// clang's arm_acle.h only declares the CRC32 intrinsics when the whole
+// translation unit targets +crc, so use the always-available builtins.
+#    define MCAP_CRC32_ARM_TARGET __attribute__((target("crc")))
+#    define MCAP_CRC32_ARM_CRC32B __builtin_arm_crc32b
+#    define MCAP_CRC32_ARM_CRC32D __builtin_arm_crc32d
+#  else
+#    include <arm_acle.h>
+#    define MCAP_CRC32_ARM_TARGET __attribute__((target("+crc")))
+#    define MCAP_CRC32_ARM_CRC32B __crc32b
+#    define MCAP_CRC32_ARM_CRC32D __crc32d
+#  endif
+#  if defined(__linux__)
+#    include <asm/hwcap.h>
+#    include <sys/auxv.h>
+#    ifndef HWCAP_CRC32
+#      define HWCAP_CRC32 (1UL << 7)
+#    endif
+#  endif
+#endif
+
 namespace mcap::internal {
 
 /**
@@ -196,6 +225,51 @@ inline bool cpuSupportsPclmul() {
 }
 #endif
 
+#ifdef MCAP_CRC32_ARM
+/**
+ * Update a streaming CRC32 calculation using the AArch64 CRC32 instructions,
+ * which implement this exact polynomial in hardware, 8 bytes per instruction.
+ * Requires FEAT_CRC32 (check cpuSupportsArmCrc() first).
+ */
+MCAP_CRC32_ARM_TARGET inline uint32_t crc32UpdateArm(const uint32_t prev,
+                                                     const std::byte* const data,
+                                                     const size_t length) {
+  uint32_t r = prev;
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
+  size_t remaining = length;
+  // Unaligned loads are fine on AArch64; std::memcpy compiles to a plain ldr.
+  while (remaining >= 8) {
+    uint64_t v;
+    std::memcpy(&v, p, 8);
+    r = MCAP_CRC32_ARM_CRC32D(r, v);
+    p += 8;
+    remaining -= 8;
+  }
+  while (remaining > 0) {
+    r = MCAP_CRC32_ARM_CRC32B(r, *p);
+    p++;
+    remaining--;
+  }
+  return r;
+}
+
+inline bool cpuSupportsArmCrc() {
+#if defined(__ARM_FEATURE_CRC32)
+  // The whole build already targets +crc, so support is guaranteed.
+  return true;
+#elif defined(__linux__)
+  static const bool supported = (getauxval(AT_HWCAP) & HWCAP_CRC32) != 0;
+  return supported;
+#elif defined(__APPLE__)
+  // FEAT_CRC32 is present on every Apple AArch64 CPU (Apple A10 and later,
+  // including all Apple Silicon Macs).
+  return true;
+#else
+  return false;
+#endif
+}
+#endif
+
 /**
  * Update a streaming CRC32 calculation.
  *
@@ -216,6 +290,12 @@ inline uint32_t crc32Update(const uint32_t prev, const std::byte* const data, co
 #ifdef MCAP_CRC32_PCLMUL
   if (length >= 64 && cpuSupportsPclmul()) {
     return crc32UpdatePclmul(prev, data, length);
+  }
+#endif
+
+#ifdef MCAP_CRC32_ARM
+  if (length >= 64 && cpuSupportsArmCrc()) {
+    return crc32UpdateArm(prev, data, length);
   }
 #endif
 
