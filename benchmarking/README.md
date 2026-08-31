@@ -178,11 +178,9 @@ so they divide by 1024 on macOS. TypeScript's
 platforms by libuv. New benches must follow the same convention: emit KB,
 normalize at the source. Every write bench holds the 16 MB payload blob
 resident, so write RSS numbers include that constant equally across
-languages. Unfiltered read benches stream the file rather than buffering
-it wholesale, so read RSS reflects the library, not the harness; the one
-exception is the Rust filtered-read path, which loads the whole file
-because its indexed reader operates on byte slices — filtered results do
-not feed the memory table.
+languages. Read benches stream the file rather than buffering it
+wholesale, so read RSS reflects the library, not the harness — filtered
+results do not feed the memory table.
 
 ## Payload data
 

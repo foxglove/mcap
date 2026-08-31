@@ -1,8 +1,9 @@
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::time::Instant;
 
 use mcap::sans_io::indexed_reader::{IndexedReadEvent, IndexedReader, IndexedReaderOptions};
 use mcap::sans_io::linear_reader::{LinearReadEvent, LinearReader};
+use mcap::sans_io::summary_reader::{SummaryReadEvent, SummaryReader};
 
 /// ru_maxrss is KB on Linux but bytes on macOS; normalize to KB.
 fn peak_rss_kb() -> libc::c_long {
@@ -73,13 +74,26 @@ fn main() {
             }
         }
         Some(filter_mode) => {
-            // The indexed reader operates on byte slices, so the filtered
-            // path buffers the whole file. Filtered results do not feed
-            // the memory table.
-            let buf = std::fs::read(filename).expect("Failed to read file");
-            let summary = mcap::Summary::read(&buf)
-                .expect("Failed to read summary")
-                .expect("No summary found in file");
+            // Read the summary and the matching chunks through the sans-io
+            // readers so only the bytes the filter needs are pulled from the
+            // file, matching the C++ and Go benchmarks.
+            let mut file = std::fs::File::open(filename).expect("Failed to open file");
+            let mut summary_reader = SummaryReader::new();
+            while let Some(event) = summary_reader.next_event() {
+                match event.expect("Failed to read summary") {
+                    SummaryReadEvent::ReadRequest(need) => {
+                        let written = file
+                            .read(summary_reader.insert(need))
+                            .expect("Failed to read file");
+                        summary_reader.notify_read(written);
+                    }
+                    SummaryReadEvent::SeekRequest(to) => {
+                        let pos = file.seek(to).expect("Failed to seek file");
+                        summary_reader.notify_seeked(pos);
+                    }
+                }
+            }
+            let summary = summary_reader.finish().expect("No summary found in file");
 
             let options = match filter_mode {
                 "topic" => IndexedReaderOptions::new().include_topics(vec!["/imu"]),
@@ -98,12 +112,17 @@ fn main() {
 
             let mut reader = IndexedReader::new_with_options(&summary, options)
                 .expect("Failed to create indexed reader");
+            let mut chunk_buf = Vec::new();
             while let Some(event) = reader.next_event() {
                 match event.expect("Failed to read event") {
                     IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                        let chunk_data = &buf[offset as usize..][..length];
+                        file.seek(SeekFrom::Start(offset))
+                            .expect("Failed to seek file");
+                        chunk_buf.resize(length, 0);
+                        file.read_exact(&mut chunk_buf)
+                            .expect("Failed to read file");
                         reader
-                            .insert_chunk_record_data(offset, chunk_data)
+                            .insert_chunk_record_data(offset, &chunk_buf)
                             .expect("Failed to insert chunk data");
                     }
                     IndexedReadEvent::Message { header: _, data } => {
