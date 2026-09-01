@@ -2,6 +2,53 @@
 #include <cstddef>
 #include <cstdint>
 
+// Hardware-accelerated CRC32 for x86_64 via PCLMULQDQ carryless multiply,
+// with runtime CPU detection. The SSE4.2 crc32 instruction is not usable
+// here (it hardwires the Castagnoli polynomial); PCLMULQDQ folding works for
+// the zlib polynomial MCAP uses. GCC and clang compile the kernel with a
+// per-function target attribute; MSVC compiles vector intrinsics without any
+// special flags, so it only needs the __cpuid-based dispatch.
+#if (defined(__x86_64__) || defined(_M_X64)) && \
+  (defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER))
+#  define MCAP_CRC32_PCLMUL 1
+#  include <immintrin.h>
+#  if defined(__GNUC__) || defined(__clang__)
+#    define MCAP_CRC32_PCLMUL_TARGET __attribute__((target("pclmul,sse4.1")))
+#  else
+#    define MCAP_CRC32_PCLMUL_TARGET
+#    include <intrin.h>
+#  endif
+#endif
+
+// Hardware-accelerated CRC32 for AArch64, with runtime CPU detection. Unlike
+// x86, AArch64 has dedicated CRC32 instructions for this exact polynomial
+// (FEAT_CRC32, mandatory since ARMv8.1), so no folding math is needed.
+// Little-endian only: the crc32x instruction consumes its 64-bit operand as
+// little-endian data bytes.
+#if defined(__aarch64__) && defined(__AARCH64EL__) && (defined(__GNUC__) || defined(__clang__))
+#  define MCAP_CRC32_ARM 1
+#  include <cstring>
+#  if defined(__clang__)
+// clang's arm_acle.h only declares the CRC32 intrinsics when the whole
+// translation unit targets +crc, so use the always-available builtins.
+#    define MCAP_CRC32_ARM_TARGET __attribute__((target("crc")))
+#    define MCAP_CRC32_ARM_CRC32B __builtin_arm_crc32b
+#    define MCAP_CRC32_ARM_CRC32D __builtin_arm_crc32d
+#  else
+#    include <arm_acle.h>
+#    define MCAP_CRC32_ARM_TARGET __attribute__((target("+crc")))
+#    define MCAP_CRC32_ARM_CRC32B __crc32b
+#    define MCAP_CRC32_ARM_CRC32D __crc32d
+#  endif
+#  if defined(__linux__)
+#    include <asm/hwcap.h>
+#    include <sys/auxv.h>
+#    ifndef HWCAP_CRC32
+#      define HWCAP_CRC32 (1UL << 7)
+#    endif
+#  endif
+#endif
+
 namespace mcap::internal {
 
 /**
@@ -65,6 +112,164 @@ static constexpr CRC32Table<0xedb88320, 8> CRC32_TABLE;
  */
 static constexpr uint32_t CRC32_INIT = 0xffffffff;
 
+#ifdef MCAP_CRC32_PCLMUL
+/**
+ * Update a streaming CRC32 calculation using PCLMULQDQ folding, following
+ * "Fast CRC Computation for Generic Polynomials Using PCLMULQDQ Instruction"
+ * (Gopal et al., Intel, 2009). Fold constants match the zlib/Linux kernel
+ * implementations of this CRC. Requires `length >= 64` and a CPU with
+ * PCLMULQDQ and SSE4.1 (check cpuSupportsPclmul() first).
+ */
+MCAP_CRC32_PCLMUL_TARGET inline uint32_t crc32UpdatePclmul(const uint32_t prev,
+                                                           const std::byte* const data,
+                                                           const size_t length) {
+  alignas(16) static const uint64_t K1K2[2] = {0x0154442bd4, 0x01c6e41596};
+  alignas(16) static const uint64_t K3K4[2] = {0x01751997d0, 0x00ccaa009e};
+  alignas(16) static const uint64_t K5K0[2] = {0x0163cd6124, 0x0000000000};
+  alignas(16) static const uint64_t POLY[2] = {0x01db710641, 0x01f7011641};
+
+  const __m128i* buf = reinterpret_cast<const __m128i*>(data);
+  size_t remaining = length;
+
+  // Load the initial 64 bytes into four 128-bit accumulators and fold the
+  // previous CRC state into the lowest lane.
+  __m128i x1 = _mm_loadu_si128(buf + 0);
+  __m128i x2 = _mm_loadu_si128(buf + 1);
+  __m128i x3 = _mm_loadu_si128(buf + 2);
+  __m128i x4 = _mm_loadu_si128(buf + 3);
+  x1 = _mm_xor_si128(x1, _mm_cvtsi32_si128(static_cast<int>(prev)));
+  buf += 4;
+  remaining -= 64;
+
+  // Fold 64 bytes at a time.
+  __m128i k = _mm_load_si128(reinterpret_cast<const __m128i*>(K1K2));
+  while (remaining >= 64) {
+    const __m128i x5 = _mm_clmulepi64_si128(x1, k, 0x00);
+    const __m128i x6 = _mm_clmulepi64_si128(x2, k, 0x00);
+    const __m128i x7 = _mm_clmulepi64_si128(x3, k, 0x00);
+    const __m128i x8 = _mm_clmulepi64_si128(x4, k, 0x00);
+    x1 = _mm_clmulepi64_si128(x1, k, 0x11);
+    x2 = _mm_clmulepi64_si128(x2, k, 0x11);
+    x3 = _mm_clmulepi64_si128(x3, k, 0x11);
+    x4 = _mm_clmulepi64_si128(x4, k, 0x11);
+    x1 = _mm_xor_si128(_mm_xor_si128(x1, x5), _mm_loadu_si128(buf + 0));
+    x2 = _mm_xor_si128(_mm_xor_si128(x2, x6), _mm_loadu_si128(buf + 1));
+    x3 = _mm_xor_si128(_mm_xor_si128(x3, x7), _mm_loadu_si128(buf + 2));
+    x4 = _mm_xor_si128(_mm_xor_si128(x4, x8), _mm_loadu_si128(buf + 3));
+    buf += 4;
+    remaining -= 64;
+  }
+
+  // Fold the four accumulators into one.
+  k = _mm_load_si128(reinterpret_cast<const __m128i*>(K3K4));
+  __m128i x5 = _mm_clmulepi64_si128(x1, k, 0x00);
+  x1 = _mm_clmulepi64_si128(x1, k, 0x11);
+  x1 = _mm_xor_si128(_mm_xor_si128(x1, x5), x2);
+  x5 = _mm_clmulepi64_si128(x1, k, 0x00);
+  x1 = _mm_clmulepi64_si128(x1, k, 0x11);
+  x1 = _mm_xor_si128(_mm_xor_si128(x1, x5), x3);
+  x5 = _mm_clmulepi64_si128(x1, k, 0x00);
+  x1 = _mm_clmulepi64_si128(x1, k, 0x11);
+  x1 = _mm_xor_si128(_mm_xor_si128(x1, x5), x4);
+
+  // Fold remaining 16-byte blocks.
+  while (remaining >= 16) {
+    x5 = _mm_clmulepi64_si128(x1, k, 0x00);
+    x1 = _mm_clmulepi64_si128(x1, k, 0x11);
+    x1 = _mm_xor_si128(_mm_xor_si128(x1, x5), _mm_loadu_si128(buf));
+    buf += 1;
+    remaining -= 16;
+  }
+
+  // Fold 128 bits to 64 bits.
+  const __m128i mask32 = _mm_setr_epi32(~0, 0, ~0, 0);
+  __m128i t = _mm_clmulepi64_si128(x1, k, 0x10);
+  x1 = _mm_srli_si128(x1, 8);
+  x1 = _mm_xor_si128(x1, t);
+  k = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(K5K0));
+  t = _mm_srli_si128(x1, 4);
+  x1 = _mm_and_si128(x1, mask32);
+  x1 = _mm_clmulepi64_si128(x1, k, 0x00);
+  x1 = _mm_xor_si128(x1, t);
+
+  // Barrett reduction from 64 bits to the final 32-bit CRC state.
+  k = _mm_load_si128(reinterpret_cast<const __m128i*>(POLY));
+  t = _mm_and_si128(x1, mask32);
+  t = _mm_clmulepi64_si128(t, k, 0x10);
+  t = _mm_and_si128(t, mask32);
+  t = _mm_clmulepi64_si128(t, k, 0x00);
+  x1 = _mm_xor_si128(x1, t);
+  uint32_t r = static_cast<uint32_t>(_mm_extract_epi32(x1, 1));
+
+  // Process the tail (< 16 bytes) with the lookup table.
+  const std::byte* tail = reinterpret_cast<const std::byte*>(buf);
+  for (size_t i = 0; i < remaining; i++) {
+    r = CRC32_TABLE[(r ^ uint8_t(tail[i])) & 0xff] ^ (r >> 8);
+  }
+  return r;
+}
+
+inline bool cpuSupportsPclmul() {
+#  if defined(_MSC_VER) && !defined(__clang__)
+  static const bool supported = [] {
+    int info[4] = {0, 0, 0, 0};
+    __cpuid(info, 1);
+    // CPUID.1:ECX bit 1 = PCLMULQDQ, bit 19 = SSE4.1
+    return (info[2] & (1 << 1)) != 0 && (info[2] & (1 << 19)) != 0;
+  }();
+#  else
+  static const bool supported =
+    __builtin_cpu_supports("pclmul") && __builtin_cpu_supports("sse4.1");
+#  endif
+  return supported;
+}
+#endif
+
+#ifdef MCAP_CRC32_ARM
+/**
+ * Update a streaming CRC32 calculation using the AArch64 CRC32 instructions,
+ * which implement this exact polynomial in hardware, 8 bytes per instruction.
+ * Requires FEAT_CRC32 (check cpuSupportsArmCrc() first).
+ */
+MCAP_CRC32_ARM_TARGET inline uint32_t crc32UpdateArm(const uint32_t prev,
+                                                     const std::byte* const data,
+                                                     const size_t length) {
+  uint32_t r = prev;
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
+  size_t remaining = length;
+  // Unaligned loads are fine on AArch64; std::memcpy compiles to a plain ldr.
+  while (remaining >= 8) {
+    uint64_t v;
+    std::memcpy(&v, p, 8);
+    r = MCAP_CRC32_ARM_CRC32D(r, v);
+    p += 8;
+    remaining -= 8;
+  }
+  while (remaining > 0) {
+    r = MCAP_CRC32_ARM_CRC32B(r, *p);
+    p++;
+    remaining--;
+  }
+  return r;
+}
+
+inline bool cpuSupportsArmCrc() {
+#  if defined(__ARM_FEATURE_CRC32)
+  // The whole build already targets +crc, so support is guaranteed.
+  return true;
+#  elif defined(__linux__)
+  static const bool supported = (getauxval(AT_HWCAP) & HWCAP_CRC32) != 0;
+  return supported;
+#  elif defined(__APPLE__)
+  // FEAT_CRC32 is present on every Apple AArch64 CPU (Apple A10 and later,
+  // including all Apple Silicon Macs).
+  return true;
+#  else
+  return false;
+#  endif
+}
+#endif
+
 /**
  * Update a streaming CRC32 calculation.
  *
@@ -81,6 +286,18 @@ inline uint32_t crc32Update(const uint32_t prev, const std::byte* const data, co
     }
     return r;
   }
+
+#ifdef MCAP_CRC32_PCLMUL
+  if (length >= 64 && cpuSupportsPclmul()) {
+    return crc32UpdatePclmul(prev, data, length);
+  }
+#endif
+
+#ifdef MCAP_CRC32_ARM
+  if (length >= 64 && cpuSupportsArmCrc()) {
+    return crc32UpdateArm(prev, data, length);
+  }
+#endif
 
   // Process 8 bytes (2 uint32s) at a time.
   size_t offset = 0;
