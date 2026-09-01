@@ -148,9 +148,8 @@ TEST_CASE("internal::crc32 bulk paths match byte-at-a-time reference", "[writer]
   for (size_t i = 0; i < kat.size(); i++) {
     kat[i] = std::byte("123456789"[i % 9]);
   }
-  REQUIRE(mcap::internal::crc32Final(mcap::internal::crc32Update(mcap::internal::CRC32_INIT,
-                                                                 kat.data(), kat.size())) ==
-          0x8811a440);
+  REQUIRE(mcap::internal::crc32Final(mcap::internal::crc32Update(
+            mcap::internal::CRC32_INIT, kat.data(), kat.size())) == 0x8811a440);
 }
 
 #if defined(__linux__)
