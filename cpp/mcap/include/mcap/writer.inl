@@ -758,6 +758,15 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
   uint64_t compressedSize = uncompressedSize;
   const std::byte* compressedData = chunkData.data();
 
+  // Computed before end() so data()/size() unambiguously refer to the
+  // uncompressed buffer. One pass over the full buffer is roughly 2x faster
+  // than updating the CRC on each write, which is dominated by small
+  // (1-8 byte) record fields.
+  const uint32_t uncompressedCrc =
+    options_.noChunkCRC ? 0
+                        : internal::crc32Final(internal::crc32Update(
+                            internal::CRC32_INIT, chunkData.data(), chunkData.size()));
+
   if (options_.forceCompression || uncompressedSize >= MIN_COMPRESSION_SIZE) {
     // Flush any in-progress compression stream
     chunkData.end();
@@ -773,12 +782,6 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
   }
 
   const auto compressionStr = internal::CompressionString(compression);
-  // One pass over the full buffer is roughly 2x faster than updating the CRC
-  // on each write, which is dominated by small (1-8 byte) record fields.
-  const uint32_t uncompressedCrc =
-    options_.noChunkCRC ? 0
-                        : internal::crc32Final(internal::crc32Update(
-                            internal::CRC32_INIT, chunkData.data(), chunkData.size()));
 
   // Write the chunk
   const uint64_t chunkStartOffset = output.size();

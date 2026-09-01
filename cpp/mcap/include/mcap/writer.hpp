@@ -209,8 +209,9 @@ public:
 
   /**
    * @brief Called when the writer wants to close the current output Chunk.
-   * After this call, `data()` and `size()` should return the data and size of
-   * the compressed data.
+   * After this call, `compressedData()` and `compressedSize()` should return
+   * the data and size of the compressed data. `data()` and `size()` must
+   * continue to return the uncompressed data, which must remain valid.
    */
   virtual void end() override = 0;
   /**
