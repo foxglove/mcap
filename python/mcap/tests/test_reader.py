@@ -88,7 +88,7 @@ def test_time_range(reader_cls: AnyReaderSubclass):
         start = int(40)
         end = int(43)
         for schema, channel, message in reader.iter_messages(
-            start_time=start, end_time=end
+            starting_at=start, ending_before=end
         ):
             assert isinstance(schema, Schema)
             assert isinstance(channel, Channel)
@@ -98,6 +98,77 @@ def test_time_range(reader_cls: AnyReaderSubclass):
             count += 1
 
         assert count == 1
+
+
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+def test_explicit_time_range_bounds(reader_cls: AnyReaderSubclass):
+    """test the inclusive/exclusive bound spellings with all reader implementations."""
+
+    def count_messages(**kwargs: Any) -> int:
+        with open(DEMO_MCAP, "rb") as f:
+            reader: McapReader = reader_cls(f)
+            return sum(1 for _ in reader.iter_messages(**kwargs))
+
+    # The demo file contains messages at log times 42, 43, and 43.
+    assert count_messages(starting_at=42, ending_before=43) == 1
+    assert count_messages(starting_at=42, ending_at=43) == 3
+    assert count_messages(starting_after=42, ending_at=43) == 2
+    # Equal inclusive bounds select the single matching log time.
+    assert count_messages(starting_at=42, ending_at=42) == 1
+    # At most one bound per side may be provided.
+    with pytest.raises(ValueError, match="starting_after"):
+        count_messages(starting_at=42, starting_after=42)
+    with pytest.raises(ValueError, match="ending_before"):
+        count_messages(ending_at=43, ending_before=43)
+    with pytest.raises(ValueError, match="starting_after"):
+        count_messages(start_time=42, starting_after=42)
+
+
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+def test_max_timestamp_bound(reader_cls: AnyReaderSubclass):
+    """a message logged at the maximum uint64 timestamp is included by default and by
+    an explicit ending_at at that timestamp, while starting_after at that timestamp
+    selects nothing."""
+    buffer = BytesIO()
+    writer = Writer(buffer)
+    writer.start()
+    channel_id = writer.register_channel("/t", "json", 0)
+    for log_time in (3, 2**64 - 1):
+        writer.add_message(
+            channel_id, log_time=log_time, data=b"x", publish_time=log_time
+        )
+    writer.finish()
+
+    def count_messages(**kwargs: Any) -> int:
+        buffer.seek(0)
+        reader: McapReader = reader_cls(buffer)
+        return sum(1 for _ in reader.iter_messages(**kwargs))
+
+    assert count_messages() == 2
+    assert count_messages(ending_at=2**64 - 1) == 2
+    # No log time is strictly after the maximum timestamp.
+    assert count_messages(starting_after=2**64 - 1) == 0
+    # Combining that empty lower bound with an end bound is a valid empty query, not a
+    # crossed-range error, so pagination terminates there instead of raising.
+    assert count_messages(starting_after=2**64 - 1, ending_before=5) == 0
+    # starting_after below the maximum keeps its normal exclusive behavior.
+    assert count_messages(starting_after=3) == 1
+    # A strictly crossed range is a caller error; equal bounds are a valid empty query.
+    with pytest.raises(ValueError, match="end time cannot come before start time"):
+        count_messages(starting_at=10, ending_before=5)
+    assert count_messages(starting_at=5, ending_before=5) == 0
+
+
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+def test_deprecated_time_range_names(reader_cls: AnyReaderSubclass):
+    """the deprecated names warn but keep their exact historical behavior."""
+
+    with open(DEMO_MCAP, "rb") as f:
+        reader: McapReader = reader_cls(f)
+        with pytest.warns(DeprecationWarning, match="start_time is deprecated"):
+            with pytest.warns(DeprecationWarning, match="end_time is deprecated"):
+                count = sum(1 for _ in reader.iter_messages(start_time=42, end_time=43))
+    assert count == 1
 
 
 @pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
@@ -156,8 +227,8 @@ def test_seeking_reader_reads_chunk_index_without_message_index(tmpdir: Path):
     assert all_messages[0][2].data == b'{"sample": "test"}'
     assert len(messages(topics=["sample_topic"])) == 1
     assert len(messages(topics=["other_topic"])) == 0
-    assert len(messages(start_time=43)) == 0
-    assert len(messages(end_time=42)) == 0
+    assert len(messages(starting_at=43)) == 0
+    assert len(messages(ending_before=42)) == 0
 
 
 def write_json_mcap(filepath: Path):

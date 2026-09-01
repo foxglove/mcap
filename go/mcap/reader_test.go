@@ -433,8 +433,8 @@ func TestMessageReading(t *testing.T) {
 						r, err := NewReader(reader)
 						require.NoError(t, err)
 						it, err := r.Messages(
-							AfterNanos(100),
-							BeforeNanos(200),
+							StartingAtNanos(100),
+							EndingBeforeNanos(200),
 							UsingIndex(useIndex),
 						)
 						require.NoError(t, err)
@@ -865,7 +865,7 @@ func TestReadingMessageOrderWithOverlappingChunks(t *testing.T) {
 	require.ErrorIs(t, io.EOF, err)
 }
 
-// Test reading an MCAP with two overlapping chunks, with an AfterNanos filter that causes the
+// Test reading an MCAP with two overlapping chunks, with a StartingAtNanos filter that causes the
 // chunks to be read in reverse order.
 func TestReadingMessageOrderWithFilter(t *testing.T) {
 	buf := &bytes.Buffer{}
@@ -917,7 +917,7 @@ func TestReadingMessageOrderWithFilter(t *testing.T) {
 
 	it, err := reader.Messages(
 		UsingIndex(true),
-		AfterNanos(50),
+		StartingAtNanos(50),
 		InOrder(LogTimeOrder),
 	)
 	require.NoError(t, err)
@@ -939,7 +939,7 @@ func TestReadingMessageOrderWithFilter(t *testing.T) {
 	// now try iterating in reverse
 	reverseIt, err := reader.Messages(
 		UsingIndex(true),
-		AfterNanos(50),
+		StartingAtNanos(50),
 		InOrder(ReverseLogTimeOrder),
 	)
 	require.NoError(t, err)
@@ -1064,7 +1064,7 @@ func TestReadingBigTimestamps(t *testing.T) {
 		assert.Equal(t, uint64(math.MaxUint64-1), info.Statistics.MessageEndTime)
 	})
 	t.Run("message iteration works as expected", func(t *testing.T) {
-		it, err := reader.Messages(AfterNanos(math.MaxUint64-2), BeforeNanos(math.MaxUint64))
+		it, err := reader.Messages(StartingAtNanos(math.MaxUint64-2), EndingBeforeNanos(math.MaxUint64))
 		require.NoError(t, err)
 		count := 0
 		for {
@@ -1079,6 +1079,134 @@ func TestReadingBigTimestamps(t *testing.T) {
 		assert.Equal(t, 1, count)
 	})
 }
+
+func TestExplicitTimeRangeBounds(t *testing.T) {
+	buf := &bytes.Buffer{}
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:   true,
+		ChunkSize: 100,
+	})
+	require.NoError(t, err)
+	require.NoError(t, w.WriteHeader(&Header{}))
+	require.NoError(t, w.WriteSchema(&Schema{ID: 1}))
+	require.NoError(t, w.WriteChannel(&Channel{SchemaID: 1, Topic: "/topic"}))
+	for i := uint64(1); i <= 6; i++ {
+		require.NoError(t, w.WriteMessage(&Message{
+			LogTime: i,
+			Data:    []byte("hello"),
+		}))
+	}
+	require.NoError(t, w.Close())
+
+	logTimes := func(t *testing.T, opts ...ReadOpt) []uint64 {
+		reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+		require.NoError(t, err)
+		defer reader.Close()
+		it, err := reader.Messages(opts...)
+		require.NoError(t, err)
+		var times []uint64
+		for {
+			_, _, msg, err := it.Next(nil)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			require.NoError(t, err)
+			times = append(times, msg.LogTime)
+		}
+		return times
+	}
+
+	// Inclusive and exclusive bounds on both sides.
+	assert.Equal(t, []uint64{3, 4}, logTimes(t, StartingAtNanos(3), EndingBeforeNanos(5)))
+	assert.Equal(t, []uint64{3, 4, 5}, logTimes(t, StartingAtNanos(3), EndingAtNanos(5)))
+	assert.Equal(t, []uint64{4, 5}, logTimes(t, StartingAfterNanos(3), EndingAtNanos(5)))
+	// Equal inclusive bounds select the single matching log time.
+	assert.Equal(t, []uint64{3}, logTimes(t, StartingAtNanos(3), EndingAtNanos(3)))
+	// EndingAtNanos(math.MaxUint64) saturates rather than being truly unbounded.
+	assert.Equal(t, []uint64{1, 2, 3, 4, 5, 6}, logTimes(t, EndingAtNanos(math.MaxUint64)))
+	// EndingAtNanos one below the start resolves to the equal exclusive pair [start, start):
+	// a valid empty range, not a crossing error, in either option order.
+	assert.Empty(t, logTimes(t, StartingAtNanos(3), EndingAtNanos(2)))
+	assert.Empty(t, logTimes(t, EndingAtNanos(2), StartingAtNanos(3)))
+	// A genuinely crossed range still errors, in either option order.
+	crossedErr := func(t *testing.T, opts ...ReadOpt) {
+		reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+		require.NoError(t, err)
+		defer reader.Close()
+		_, err = reader.Messages(opts...)
+		require.ErrorContains(t, err, "end cannot come before start")
+	}
+	crossedErr(t, StartingAtNanos(10), EndingAtNanos(5))
+	crossedErr(t, EndingAtNanos(5), StartingAtNanos(10))
+	// The deprecated options must keep their exact historical behavior.
+	//nolint:staticcheck // intentionally exercising deprecated options
+	assert.Equal(t, []uint64{3, 4}, logTimes(t, AfterNanos(3), BeforeNanos(5)))
+}
+
+func TestMaxTimestampBound(t *testing.T) {
+	buf := &bytes.Buffer{}
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:   true,
+		ChunkSize: 100,
+	})
+	require.NoError(t, err)
+	require.NoError(t, w.WriteHeader(&Header{}))
+	require.NoError(t, w.WriteSchema(&Schema{ID: 1}))
+	require.NoError(t, w.WriteChannel(&Channel{SchemaID: 1, Topic: "/topic"}))
+	for _, logTime := range []uint64{3, math.MaxUint64} {
+		require.NoError(t, w.WriteMessage(&Message{
+			LogTime: logTime,
+			Data:    []byte("hello"),
+		}))
+	}
+	require.NoError(t, w.Close())
+
+	countMessages := func(t *testing.T, opts ...ReadOpt) int {
+		reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+		require.NoError(t, err)
+		defer reader.Close()
+		it, err := reader.Messages(opts...)
+		require.NoError(t, err)
+		count := 0
+		for {
+			_, _, _, err := it.Next(nil)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			require.NoError(t, err)
+			count++
+		}
+		return count
+	}
+
+	// A message logged at exactly math.MaxUint64 cannot be included by the uint64 bound
+	// representation: EndingAtNanos(math.MaxUint64) saturates to an exclusive MaxUint64
+	// bound, the same pre-existing limit as the unfiltered default. Other language
+	// implementations (C++, Python, Rust, TypeScript) include this message; see the
+	// EndingAtNanos documentation.
+	assert.Equal(t, 1, countMessages(t, EndingAtNanos(math.MaxUint64)))
+	assert.Equal(t, 1, countMessages(t))
+	// StartingAfterNanos(math.MaxUint64) yields nothing: no log time is strictly after
+	// math.MaxUint64. The resolved StartNanos saturates to math.MaxUint64, and the message
+	// logged at exactly that time is excluded by the exclusive upper bound as pinned above.
+	assert.Equal(t, 0, countMessages(t, StartingAfterNanos(math.MaxUint64)))
+	// StartingAfterNanos below the maximum keeps its normal exclusive behavior.
+	assert.Equal(t, 1, countMessages(t, StartingAfterNanos(2)))
+	// Combining the after-the-maximum lower bound with an end bound is a valid empty query,
+	// not a crossing error, in either option order: windowed pagination via
+	// StartingAfterNanos(lastLogTime) terminates even at math.MaxUint64. The same exemption
+	// applies to an explicit StartingAtNanos(math.MaxUint64), which also selects nothing.
+	assert.Equal(t, 0, countMessages(t, StartingAfterNanos(math.MaxUint64), EndingBeforeNanos(5)))
+	assert.Equal(t, 0, countMessages(t, EndingBeforeNanos(5), StartingAfterNanos(math.MaxUint64)))
+	assert.Equal(t, 0, countMessages(t, StartingAtNanos(math.MaxUint64), EndingAtNanos(5)))
+	// An ordinary crossed window below the maximum still errors.
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+	defer reader.Close()
+	_, err = reader.Messages(StartingAtNanos(10), EndingBeforeNanos(5))
+	require.ErrorContains(t, err, "end cannot come before start")
+}
+
 func TestUnexpectedTokenOnHeader(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w, err := NewWriter(buf, &WriterOptions{
