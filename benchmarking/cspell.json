@@ -1,0 +1,25 @@
+{
+  "words": [
+    "cdef",
+    "cmds",
+    "fsize",
+    "getrusage",
+    "libc",
+    "liblz",
+    "libuv",
+    "libzstd",
+    "maxrss",
+    "Maxrss",
+    "Mersenne",
+    "randbytes",
+    "Odometry",
+    "outfile",
+    "PYPATH",
+    "PYTHONPATH",
+    "RUSAGE",
+    "rustup",
+    "sres",
+    "syscall",
+    "timerange"
+  ]
+}
