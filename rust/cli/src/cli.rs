@@ -53,10 +53,17 @@ pub struct Args {
 
     /// Allow whole-file scans or downloads of remote inputs.
     ///
-    /// Applies to http(s):// and object-store URLs (s3://, s3a://, gs://, az://, abfs://). Small
+    /// Applies to http(s):// and object store URLs (s3://, s3a://, gs://, az://, abfs://). Small
     /// bounded indexed reads work without this flag.
     #[arg(long, default_value_t = false, global = true)]
     pub allow_remote_scan: bool,
+
+    /// Do not sign requests to S3, GCS, or Azure.
+    ///
+    /// Useful for public buckets. Credentials are not loaded. Without this flag, S3
+    /// reads still fall back to unsigned requests when no credentials are available.
+    #[arg(long, default_value_t = false, global = true)]
+    pub no_sign_request: bool,
 
     /// How to render timestamps in command output
     #[arg(

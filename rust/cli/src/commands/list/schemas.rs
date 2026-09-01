@@ -4,10 +4,8 @@ use crate::{render, source};
 use anyhow::Result;
 
 pub fn run(ctx: &CommandContext, args: ListSchemasCommand) -> Result<()> {
-    let parsed = source::parse_mcap_from_path(
-        &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()),
-    )?;
+    let parsed =
+        source::parse_mcap_from_path(&args.file, source::SourceOptions::from_context(ctx))?;
     render::print_table(&render_schema_rows(&parsed.schemas));
     Ok(())
 }

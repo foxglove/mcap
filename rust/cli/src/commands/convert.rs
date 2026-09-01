@@ -21,7 +21,7 @@ pub fn run(ctx: &CommandContext, args: ConvertCommand) -> Result<()> {
     }
     let materialized_input = crate::source::materialize_input(
         &args.input,
-        crate::source::SourceOptions::new(ctx.allow_remote_scan()),
+        crate::source::SourceOptions::from_context(ctx),
     )?;
     if !is_remote {
         crate::source::ensure_distinct_local_input_output(materialized_input.path(), &args.output)?;

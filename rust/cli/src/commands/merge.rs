@@ -15,10 +15,7 @@ pub fn run(ctx: &CommandContext, args: MergeCommand) -> Result<()> {
     if args.output_file.is_some() {
         warn!("--output-file is deprecated; use --output instead");
     }
-    rewrite::run_merge(
-        build_merge_options(args),
-        SourceOptions::new(ctx.allow_remote_scan()),
-    )
+    rewrite::run_merge(build_merge_options(args), SourceOptions::from_context(ctx))
 }
 
 /// Maps the parsed `merge` CLI arguments onto the engine-facing [`MergeOptions`]. The output path
