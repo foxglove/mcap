@@ -210,17 +210,17 @@ MCAP_CRC32_PCLMUL_TARGET inline uint32_t crc32UpdatePclmul(const uint32_t prev,
 }
 
 inline bool cpuSupportsPclmul() {
-#if defined(_MSC_VER) && !defined(__clang__)
+#  if defined(_MSC_VER) && !defined(__clang__)
   static const bool supported = [] {
     int info[4] = {0, 0, 0, 0};
     __cpuid(info, 1);
     // CPUID.1:ECX bit 1 = PCLMULQDQ, bit 19 = SSE4.1
     return (info[2] & (1 << 1)) != 0 && (info[2] & (1 << 19)) != 0;
   }();
-#else
+#  else
   static const bool supported =
     __builtin_cpu_supports("pclmul") && __builtin_cpu_supports("sse4.1");
-#endif
+#  endif
   return supported;
 }
 #endif
@@ -254,19 +254,19 @@ MCAP_CRC32_ARM_TARGET inline uint32_t crc32UpdateArm(const uint32_t prev,
 }
 
 inline bool cpuSupportsArmCrc() {
-#if defined(__ARM_FEATURE_CRC32)
+#  if defined(__ARM_FEATURE_CRC32)
   // The whole build already targets +crc, so support is guaranteed.
   return true;
-#elif defined(__linux__)
+#  elif defined(__linux__)
   static const bool supported = (getauxval(AT_HWCAP) & HWCAP_CRC32) != 0;
   return supported;
-#elif defined(__APPLE__)
+#  elif defined(__APPLE__)
   // FEAT_CRC32 is present on every Apple AArch64 CPU (Apple A10 and later,
   // including all Apple Silicon Macs).
   return true;
-#else
+#  else
   return false;
-#endif
+#  endif
 }
 #endif
 
