@@ -22,14 +22,31 @@ use crate::source::{
 
 /// Byte-oriented input with optional random access.
 pub trait ByteSource {
-    /// File size in bytes, or `None` when unknown (pure stdin without spooling).
+    /// File size in bytes, or `None` when unknown (streaming inputs without a known length).
     fn size(&self) -> Result<Option<u64>>;
     fn is_remote(&self) -> bool;
     fn display_name(&self) -> String;
-    /// Read `[offset, offset+len)` bytes. `len` may be clamped to EOF.
-    fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>>;
-    /// Whether random access is available (`false` for pure stdin).
+    /// Whether random access is available.
     fn is_seekable(&self) -> bool;
+
+    /// Read up to `dest.len()` bytes at `offset` into `dest`.
+    ///
+    /// Returns the number of bytes read (0 at EOF). Prefer this in sans-io event loops so
+    /// drivers can fill `reader.insert(need)` without an intermediate allocation.
+    fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize>;
+
+    /// Read `[offset, offset+len)` into a new buffer. `len` may be clamped to EOF.
+    ///
+    /// Hot paths should call [`Self::read_into`] instead to reuse caller buffers.
+    fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>> {
+        if len == 0 {
+            return Ok(Vec::new());
+        }
+        let mut buf = vec![0u8; len];
+        let n = self.read_into(offset, &mut buf)?;
+        buf.truncate(n);
+        Ok(buf)
+    }
 }
 
 /// Local file opened for seek+read (not memory-mapped).
@@ -91,12 +108,12 @@ impl ByteSource for LocalFileSource {
         self.path.display().to_string()
     }
 
-    fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>> {
-        read_file_at(&mut self.file, self.size, offset, len)
-    }
-
     fn is_seekable(&self) -> bool {
         true
+    }
+
+    fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
+        read_file_into(&mut self.file, self.size, offset, dest)
     }
 }
 
@@ -124,12 +141,21 @@ impl ByteSource for RemoteRangeSource {
         self.inner.display_url().to_string()
     }
 
-    fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>> {
-        self.inner.read_range(offset, len)
-    }
-
     fn is_seekable(&self) -> bool {
         true
+    }
+
+    fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
+        // object_store range reads return an owned buffer; copy into `dest`.
+        let data = self.inner.read_range(offset, dest.len())?;
+        let n = data.len();
+        dest[..n].copy_from_slice(&data);
+        Ok(n)
+    }
+
+    fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>> {
+        // Skip the trait-default zeroed Vec + second copy of read_range's buffer.
+        self.inner.read_range(offset, len)
     }
 }
 
@@ -160,17 +186,19 @@ impl ByteSource for MemorySource {
         "<memory>".to_string()
     }
 
-    fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>> {
-        if len == 0 || offset as usize >= self.data.len() {
-            return Ok(Vec::new());
-        }
-        let start = offset as usize;
-        let end = start.saturating_add(len).min(self.data.len());
-        Ok(self.data[start..end].to_vec())
-    }
-
     fn is_seekable(&self) -> bool {
         true
+    }
+
+    fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
+        if dest.is_empty() || offset as usize >= self.data.len() {
+            return Ok(0);
+        }
+        let start = offset as usize;
+        let end = start.saturating_add(dest.len()).min(self.data.len());
+        let n = end - start;
+        dest[..n].copy_from_slice(&self.data[start..end]);
+        Ok(n)
     }
 }
 
@@ -240,18 +268,17 @@ fn spool_remote_to_local(path: &Path, options: SourceOptions) -> Result<LocalFil
     LocalFileSource::from_temp_file(temp_file, PathBuf::from(redacted_display(path)))
 }
 
-fn read_file_at(file: &mut File, size: u64, offset: u64, len: usize) -> Result<Vec<u8>> {
-    if len == 0 || offset >= size {
-        return Ok(Vec::new());
+fn read_file_into(file: &mut File, size: u64, offset: u64, dest: &mut [u8]) -> Result<usize> {
+    if dest.is_empty() || offset >= size {
+        return Ok(0);
     }
     let available = (size - offset) as usize;
-    let to_read = len.min(available);
+    let to_read = dest.len().min(available);
     file.seek(SeekFrom::Start(offset))
         .context("failed to seek in local file")?;
-    let mut buf = vec![0u8; to_read];
-    file.read_exact(&mut buf)
+    file.read_exact(&mut dest[..to_read])
         .context("failed to read from local file")?;
-    Ok(buf)
+    Ok(to_read)
 }
 
 #[cfg(test)]
@@ -287,11 +314,13 @@ mod tests {
     }
 
     #[test]
-    fn memory_source_read_at_clamps_to_eof() {
+    fn memory_source_read_into_clamps_to_eof() {
         let mut source = MemorySource::new(vec![1, 2, 3, 4, 5]);
-        assert_eq!(source.read_at(3, 10).expect("read"), vec![4, 5]);
-        assert!(source.read_at(5, 1).expect("past eof").is_empty());
-        assert!(source.read_at(100, 1).expect("far past eof").is_empty());
+        let mut dest = [0u8; 10];
+        assert_eq!(source.read_into(3, &mut dest).expect("read"), 2);
+        assert_eq!(&dest[..2], &[4, 5]);
+        assert_eq!(source.read_into(5, &mut dest[..1]).expect("past eof"), 0);
+        assert_eq!(source.read_at(3, 10).expect("read_at"), vec![4, 5]);
     }
 
     #[test]

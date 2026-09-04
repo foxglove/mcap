@@ -148,10 +148,8 @@ impl Doctor {
                     break;
                 }
                 Ok(mcap::sans_io::LinearReadEvent::ReadRequest(need)) => {
-                    let data = source.read_at(pos, need)?;
                     let buf = reader.insert(need);
-                    let n = data.len().min(buf.len());
-                    buf[..n].copy_from_slice(&data[..n]);
+                    let n = source.read_into(pos, buf)?;
                     reader.notify_read(n);
                     pos = pos.saturating_add(n as u64);
                 }

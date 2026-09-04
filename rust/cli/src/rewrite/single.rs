@@ -1901,15 +1901,15 @@ mod tests {
             "memory://remote-fixture.mcap".into()
         }
 
-        fn read_at(&mut self, offset: u64, len: usize) -> anyhow::Result<Vec<u8>> {
-            let data = self.inner.read_at(offset, len)?;
-            self.bytes_read
-                .fetch_add(data.len(), std::sync::atomic::Ordering::SeqCst);
-            Ok(data)
-        }
-
         fn is_seekable(&self) -> bool {
             true
+        }
+
+        fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> anyhow::Result<usize> {
+            let n = self.inner.read_into(offset, dest)?;
+            self.bytes_read
+                .fetch_add(n, std::sync::atomic::Ordering::SeqCst);
+            Ok(n)
         }
     }
 

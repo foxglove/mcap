@@ -312,8 +312,9 @@ fn recover_records<W: Write + Seek>(
     while let Some(event) = reader.next_event() {
         match event {
             Ok(LinearReadEvent::ReadRequest(need)) => {
-                let data = match input.read_at(pos, need) {
-                    Ok(data) => data,
+                let buf = reader.insert(need);
+                let n = match input.read_into(pos, buf) {
+                    Ok(n) => n,
                     Err(err) if saw_any_record => {
                         warn!("{err:#} -- stopping recovery scan");
                         stats.truncated = true;
@@ -321,13 +322,9 @@ fn recover_records<W: Write + Seek>(
                     }
                     Err(err) => return Err(err).context("failed to read input"),
                 };
-                let read = data.len();
-                if read == 0 && !saw_any_record {
+                if n == 0 && !saw_any_record {
                     return Err(mcap::McapError::UnexpectedEof.into());
                 }
-                let buf = reader.insert(need);
-                let n = read.min(buf.len());
-                buf[..n].copy_from_slice(&data[..n]);
                 reader.notify_read(n);
                 pos = pos.saturating_add(n as u64);
             }
