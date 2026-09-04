@@ -183,7 +183,14 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
     }
 
     let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
-    merge_inputs(&inputs, &mut sources, sink, &opts, disable_seeking)
+    merge_inputs(
+        &inputs,
+        &mut sources,
+        sink,
+        &opts,
+        disable_seeking,
+        source_options,
+    )
 }
 
 /// Every input stays open for the whole merge, so a merge of more inputs than the process's
@@ -216,6 +223,7 @@ fn merge_inputs<W: Write + Seek>(
     sink: W,
     opts: &MergeOptions,
     disable_seeking: bool,
+    source_options: SourceOptions,
 ) -> Result<()> {
     let profiles = sources
         .iter_mut()
@@ -249,6 +257,7 @@ fn merge_inputs<W: Write + Seek>(
         &mut writer,
         opts.coalesce_channels,
         opts.allow_duplicate_metadata,
+        source_options,
     )?;
 
     for (idx, input) in inputs.iter().enumerate() {
@@ -486,6 +495,7 @@ fn merge_messages<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     coalesce_channels: CoalesceChannels,
     allow_duplicate_metadata: bool,
+    source_options: SourceOptions,
 ) -> Result<Vec<bool>> {
     let mut id_maps = IdMaps {
         next_output_channel_id: 1,
@@ -511,6 +521,10 @@ fn merge_messages<W: Write + Seek>(
                 && common::summary_supports_indexed_read(summary)
                 && common::summary_indexes_all_messages(sources[input_idx].as_mut(), summary)?
             {
+                common::require_remote_scan_for_chunks(
+                    sources[input_idx].as_ref(),
+                    source_options,
+                )?;
                 streams.push(MergeMessageStream::Indexed(Box::new(
                     IndexedInputMessageReader::new(input_idx, input, summary.clone())?,
                 )));
@@ -988,7 +1002,14 @@ mod tests {
             .collect();
 
         let mut output = Cursor::new(Vec::<u8>::new());
-        merge_inputs(&input_refs, &mut sources, &mut output, &options, false)?;
+        merge_inputs(
+            &input_refs,
+            &mut sources,
+            &mut output,
+            &options,
+            false,
+            SourceOptions::default(),
+        )?;
         Ok(output.into_inner())
     }
 
