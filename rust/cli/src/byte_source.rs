@@ -46,8 +46,8 @@ pub struct LocalFileSource {
 
 impl LocalFileSource {
     fn open_path(path: &Path) -> Result<Self> {
-        let file = File::open(path)
-            .with_context(|| format!("couldn't open '{}'", path.display()))?;
+        let file =
+            File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
         let size = file
             .metadata()
             .with_context(|| format!("couldn't stat '{}'", path.display()))?
@@ -193,9 +193,7 @@ impl ByteSource for StdinSource {
     }
 
     fn read_at(&mut self, _offset: u64, _len: usize) -> Result<Vec<u8>> {
-        bail!(
-            "stdin is not seekable; spool to a temporary file before random-access reads"
-        );
+        bail!("stdin is not seekable; spool to a temporary file before random-access reads");
     }
 
     fn is_seekable(&self) -> bool {
@@ -224,10 +222,7 @@ pub fn open_byte_source(
     Ok(Box::new(LocalFileSource::open_path(path)?))
 }
 
-fn open_remote_byte_source(
-    path: &Path,
-    options: SourceOptions,
-) -> Result<Box<dyn ByteSource>> {
+fn open_remote_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dyn ByteSource>> {
     match open_remote_range_reader(path)? {
         Some(reader) => Ok(Box::new(RemoteRangeSource::new(reader))),
         None if !options.allow_remote_scan => {
@@ -395,8 +390,7 @@ mod tests {
         let summary = read_summary(&mut source)
             .expect("summary read")
             .expect("summary should exist");
-        let mut reader =
-            mcap::sans_io::IndexedReader::new(&summary).expect("indexed reader");
+        let mut reader = mcap::sans_io::IndexedReader::new(&summary).expect("indexed reader");
         let mut messages = 0usize;
         while let Some(event) = reader.next_event() {
             match event.expect("indexed event") {
