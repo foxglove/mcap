@@ -124,9 +124,13 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome>
     if let (Some(input), Some(output)) = (args.file.as_deref(), args.output.as_deref()) {
         source::ensure_distinct_local_input_output(input, output)?;
     }
-    // Path / URL / stdin all go through ByteSource. Stdin is spooled to a tempfile;
-    // remote inputs use range reads (or a full spool when ranges are unavailable).
-    let mut input = byte_source::open_byte_source(args.file.as_deref(), source_options)?;
+    // Recover is a single forward linear pass, so stdin can stream without spooling.
+    // Remote inputs still use range reads (or a full spool when ranges are unavailable).
+    let mut input = byte_source::open_byte_source_with_access(
+        args.file.as_deref(),
+        source_options,
+        byte_source::AccessMode::Sequential,
+    )?;
     source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
     let compression = resolve_compression(&args.compression)?;
 
@@ -313,8 +317,8 @@ fn recover_records<W: Write + Seek>(
         match event {
             Ok(LinearReadEvent::ReadRequest(need)) => {
                 let buf = reader.insert(need);
-                let n = match input.read_into(pos, buf) {
-                    Ok(n) => n,
+                let read = match input.read_into(pos, buf) {
+                    Ok(read) => read,
                     Err(err) if saw_any_record => {
                         warn!("{err:#} -- stopping recovery scan");
                         stats.truncated = true;
@@ -322,11 +326,11 @@ fn recover_records<W: Write + Seek>(
                     }
                     Err(err) => return Err(err).context("failed to read input"),
                 };
-                if n == 0 && !saw_any_record {
+                if read == 0 && !saw_any_record {
                     return Err(mcap::McapError::UnexpectedEof.into());
                 }
-                reader.notify_read(n);
-                pos = pos.saturating_add(n as u64);
+                reader.notify_read(read);
+                pos = pos.saturating_add(read as u64);
             }
             Ok(LinearReadEvent::Record { opcode, data }) => {
                 saw_any_record = true;

@@ -22,17 +22,25 @@ pub(crate) fn run(args: RewriteOptions, source_options: SourceOptions) -> Result
     let mut input = byte_source::open_byte_source(args.file.as_deref(), source_options)?;
 
     let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
-    filter_to_writer(input.as_mut(), sink, &opts, disable_seeking, source_options)
+    filter_to_writer(
+        &mut input,
+        sink,
+        &opts,
+        disable_seeking,
+        args.file.as_deref(),
+        source_options,
+    )
 }
 
 fn filter_to_writer<W: Write + Seek>(
-    input: &mut dyn ByteSource,
+    input: &mut Box<dyn ByteSource>,
     sink: W,
     opts: &ResolvedOptions,
     disable_seeking: bool,
+    input_path: Option<&std::path::Path>,
     source_options: SourceOptions,
 ) -> Result<()> {
-    let profile = common::read_header(input)?
+    let profile = common::read_header(input.as_mut())?
         .map(|header| header.profile)
         .unwrap_or_default();
     let mut writer = common::create_writer(
@@ -46,32 +54,36 @@ fn filter_to_writer<W: Write + Seek>(
         },
         disable_seeking,
     )?;
-    filter_with_writer(input, &mut writer, opts, source_options)?;
+    filter_with_writer(input, &mut writer, opts, input_path, source_options)?;
     writer.finish().context("failed to finish mcap writer")?;
     Ok(())
 }
 
 fn filter_with_writer<W: Write + Seek>(
-    input: &mut dyn ByteSource,
+    input: &mut Box<dyn ByteSource>,
     writer: &mut mcap::Writer<W>,
     opts: &ResolvedOptions,
+    input_path: Option<&std::path::Path>,
     source_options: SourceOptions,
 ) -> Result<()> {
-    if let Some(summary) = common::read_indexed_summary(input)? {
+    if let Some(summary) = common::read_indexed_summary(input.as_mut())? {
         // An index-only read skips messages that live outside the chunk indexes (loose top-level
         // messages, or chunks missing message-index records). Divert to a lossless linear scan only
         // when the summary *proves* such messages exist; a stats-less indexed file keeps the fast
         // path (its index read is correct, and `--last-per-channel` needs it).
         if !summary.chunk_indexes.is_empty()
-            && !common::summary_has_unindexed_messages(input, &summary)?
+            && !common::summary_has_unindexed_messages(input.as_mut(), &summary)?
         {
             // Message-chunk reads need the same opt-in as on main (summary-only stays unflagged).
-            common::require_remote_scan_for_chunks(input, source_options)?;
-            return filter_indexed(input, &summary, writer, opts, source_options);
+            common::require_remote_scan_for_chunks(input.as_ref(), source_options)?;
+            return filter_indexed(input.as_mut(), &summary, writer, opts, source_options);
         }
     }
-    common::require_remote_scan_for_linear(input, source_options)?;
-    filter_linear(input, writer, opts)
+    common::require_remote_scan_for_linear(input.as_ref(), source_options)?;
+    // Linear rewrite walks the input more than once (metadata, then messages/attachments). Spool a
+    // remote range source so those passes do not re-transfer the object.
+    common::materialize_remote_for_multipass(input, input_path, source_options)?;
+    filter_linear(input.as_mut(), writer, opts)
 }
 
 #[derive(Debug, Clone)]
@@ -369,7 +381,8 @@ fn filter_linear<W: Write + Seek>(
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
-    // Collected during the message pass and written last.
+    // Collected during the message pass and written last. Attachment payloads are held in memory
+    // for the duration of the linear rewrite (peak scales with the sum of selected attachment sizes).
     let mut pending_attachments = Vec::<mcap::Attachment<'static>>::new();
     // Messages buffered for the sorted path. This holds the whole selected message set in memory,
     // so the summaryless ordered path is not memory-bounded.
@@ -529,13 +542,14 @@ mod tests {
     }
 
     fn run_filter(input: &[u8], opts: &ResolvedOptions) -> Vec<u8> {
-        let mut source = MemorySource::new(input.to_vec());
+        let mut source: Box<dyn ByteSource> = Box::new(MemorySource::new(input.to_vec()));
         let mut output = Cursor::new(Vec::new());
         filter_to_writer(
             &mut source,
             &mut output,
             opts,
             false,
+            None,
             SourceOptions::default(),
         )
         .expect("filter should succeed");
@@ -543,13 +557,14 @@ mod tests {
     }
 
     fn filter_bytes(input: &[u8], opts: &ResolvedOptions) -> Result<Vec<u8>> {
-        let mut source = MemorySource::new(input.to_vec());
+        let mut source: Box<dyn ByteSource> = Box::new(MemorySource::new(input.to_vec()));
         let mut output = Cursor::new(Vec::new());
         filter_to_writer(
             &mut source,
             &mut output,
             opts,
             false,
+            None,
             SourceOptions::default(),
         )?;
         Ok(output.into_inner())
@@ -1903,25 +1918,25 @@ mod tests {
             "memory://remote-fixture.mcap".into()
         }
 
-        fn is_seekable(&self) -> bool {
-            true
-        }
-
         fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> anyhow::Result<usize> {
             let n = self.inner.read_into(offset, dest)?;
             self.bytes_read
                 .fetch_add(n, std::sync::atomic::Ordering::SeqCst);
             Ok(n)
         }
+
+        fn is_seekable(&self) -> bool {
+            true
+        }
     }
 
     #[test]
     fn remote_indexed_filter_requires_allow_remote_scan() {
         let input = write_filter_test_input(true, false);
-        let mut source = CountingRemoteSource {
+        let mut source: Box<dyn ByteSource> = Box::new(CountingRemoteSource {
             inner: MemorySource::new(input),
             bytes_read: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
-        };
+        });
 
         let mut opts = include_all_options();
         opts.include_topics = vec![regex::Regex::new("^camera_a$").expect("regex")];
@@ -1934,6 +1949,7 @@ mod tests {
             &mut output,
             &opts,
             false,
+            None,
             SourceOptions::default(),
         )
         .expect_err("indexed remote filter should require --allow-remote-scan");
@@ -1947,10 +1963,10 @@ mod tests {
         let input = write_filter_test_input(true, false);
         let file_len = input.len();
         let bytes_read = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let mut source = CountingRemoteSource {
+        let mut source: Box<dyn ByteSource> = Box::new(CountingRemoteSource {
             inner: MemorySource::new(input),
             bytes_read: bytes_read.clone(),
-        };
+        });
 
         let mut opts = include_all_options();
         opts.include_topics = vec![regex::Regex::new("^camera_a$").expect("regex")];
@@ -1963,6 +1979,7 @@ mod tests {
             &mut output,
             &opts,
             false,
+            None,
             SourceOptions::new(true),
         )
         .expect("indexed remote filter with --allow-remote-scan should succeed");

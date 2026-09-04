@@ -214,10 +214,6 @@ where
 {
     use mcap::sans_io::{LinearReadEvent, LinearReader, LinearReaderOptions};
 
-    if !source.is_seekable() {
-        bail!("linear MCAP scan requires a seekable byte source");
-    }
-
     let record_limit = source
         .size()?
         .and_then(|size| usize::try_from(size).ok())

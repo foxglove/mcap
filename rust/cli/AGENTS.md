@@ -13,14 +13,14 @@ clap parses arguments, `dispatch` (in `commands.rs`) routes to a per-command han
 
 A few modules carry more than their name implies:
 
-| Module           | Responsibility                                                                                                                                                                          |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cli.rs`         | clap `Args`/`Command` definitions, plus shared value parsers — reuse these for new args instead of rolling your own.                                                                    |
-| `byte_source.rs` | Random-access byte sources (`LocalFileSource`, `RemoteRangeSource`, `MemorySource`) and sans-io drivers. Local files use seek+read (no mmap); remotes prefer HTTP range requests.       |
-| `source.rs`      | Remote URL helpers, summary/index range reads, `materialize_input` (path spool for convert), and `--allow-remote-scan` gating. Command I/O prefers `byte_source` over whole-file loads. |
-| `parse.rs`       | `ParsedMcap` plus summary-first / linear-scan parsing and the exact-record parsers used by remote range reads.                                                                          |
-| `context.rs`     | `CommandContext`, the global options (verbosity, color, `allow_remote_scan`, `time_format`) threaded into every handler.                                                                |
-| `build.rs`       | Resolves commit sha (git rev-parse or export-subst) into `GIT_SHORT_SHA` env var.                                                                                                       |
+| Module           | Responsibility                                                                                                                                                                                                                                                                                                |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cli.rs`         | clap `Args`/`Command` definitions, plus shared value parsers — reuse these for new args instead of rolling your own.                                                                                                                                                                                          |
+| `byte_source.rs` | Random-access and sequential byte sources (`LocalFileSource`, `RemoteRangeSource`, `SequentialSource`, `MemorySource`) and sans-io drivers. Local files use seek+read (no mmap); remotes prefer HTTP range requests. Use `AccessMode::Sequential` for single-pass commands so stdin streams without spooling. |
+| `source.rs`      | Remote URL helpers, summary/index range reads, `materialize_input` (path spool for convert), and `--allow-remote-scan` gating. Command I/O prefers `byte_source` over whole-file loads.                                                                                                                       |
+| `parse.rs`       | `ParsedMcap` plus summary-first / linear-scan parsing and the exact-record parsers used by remote range reads.                                                                                                                                                                                                |
+| `context.rs`     | `CommandContext`, the global options (verbosity, color, `allow_remote_scan`, `time_format`) threaded into every handler.                                                                                                                                                                                      |
+| `build.rs`       | Resolves commit sha (git rev-parse or export-subst) into `GIT_SHORT_SHA` env var.                                                                                                                                                                                                                             |
 
 ## Conventions
 
@@ -35,7 +35,14 @@ When adding a command that can complete despite losing data, return `CommandOutc
 
 ### Remote inputs
 
-Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://`/`abfs://`) are handled via `object_store` (`source.rs` helpers + `byte_source` range reads). Bounded, indexed reads — a summary-section read, or a single attachment/metadata range read under the no-opt-in caps — are allowed without a flag. Reading remote message-chunk payloads, a full linear scan, or a whole-object download requires the global `--allow-remote-scan` flag. Gate those paths behind `SourceOptions::allow_remote_scan`, `require_remote_scan_for_linear`, or `require_remote_scan_for_chunks` accordingly. `convert` still uses `materialize_input` because ROS bag/db3 inputs need a local filesystem path for sqlite.
+Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://`/`abfs://`) are handled via `object_store` (`source.rs` helpers + `byte_source` range reads). Bounded, indexed reads — a summary-section read, or a single attachment/metadata range read under the no-opt-in caps — are allowed without a flag. Any command that would read remote message payloads (including indexed `cat` / `filter` / `merge` chunk fetches), linearly scan, or download a whole remote object requires the global `--allow-remote-scan` flag. With the flag set, indexed rewrite still uses range reads for selected chunks; linear / multi-pass remote work materializes once (via `AccessMode::Sequential` or an explicit spool) so passes do not re-transfer. Gate new whole-file or message-payload remote reads behind `SourceOptions::allow_remote_scan` / `require_remote_scan_for_linear` / `require_remote_scan_for_chunks` accordingly. `convert` still uses `materialize_input` because ROS bag/db3 inputs need a local filesystem path for sqlite.
+
+Open inputs with `byte_source::open_byte_source_with_access` and the right `AccessMode`:
+
+- `AccessMode::Sequential` — single forward `LinearReader` pass (e.g. `recover`). Stdin streams; remotes spool once.
+- `AccessMode::Random` (default via `open_byte_source`) — summary and indexed chunk fetches. Remotes keep HTTP ranges when available. Multi-pass linear rewrite opens Random for the indexed attempt, then spools a remote source before the linear passes.
+
+Sans-io event loops should fill `reader.insert(need)` via `ByteSource::read_into` rather than allocating a `Vec` per `ReadRequest`. `LocalFileSource` keeps a 256 KiB readahead window so tiny sequential requests do not each become an `lseek`+`read` syscall.
 
 ### Output and logging
 

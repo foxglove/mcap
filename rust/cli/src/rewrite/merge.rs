@@ -53,6 +53,8 @@ struct MetadataKey {
 
 struct InputRef {
     name: String,
+    /// Local filesystem or remote URL path used to open this input; `None` in in-memory tests.
+    path: Option<std::path::PathBuf>,
 }
 
 struct IndexedInputMessageReader {
@@ -165,6 +167,7 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
         let source = byte_source::open_byte_source(Some(path.as_path()), source_options)?;
         inputs.push(InputRef {
             name: source::redacted_display(path),
+            path: Some(path.clone()),
         });
         sources.push(source);
     }
@@ -209,10 +212,14 @@ fn merge_inputs<W: Write + Seek>(
 
     let summaries = sources
         .iter_mut()
-        // Treat summary lookup as best effort and fall back to linear scans when
-        // summary parsing fails.
-        .map(|source| byte_source::read_summary(source.as_mut()).unwrap_or_default())
-        .collect::<Vec<_>>();
+        .map(|source| match byte_source::read_summary(source.as_mut()) {
+            Ok(summary) => Ok(summary),
+            // A summary that references schemas only defined inside chunks can't be used for an
+            // indexed merge; fall back to the linear path.
+            Err(err) if common::is_unknown_schema_error(&err) => Ok(None),
+            Err(err) => Err(err),
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     merge_messages(
         inputs,
@@ -518,6 +525,30 @@ fn merge_messages<W: Write + Seek>(
     };
     let mut metadata_state = MetadataState::default();
 
+    // Classify each input before any multi-pass work so remotes that need a linear path spool once.
+    let mut use_indexed = vec![false; inputs.len()];
+    for (input_idx, input) in inputs.iter().enumerate() {
+        if let Some(summary) = summaries[input_idx].as_ref() {
+            if !summary.chunk_indexes.is_empty()
+                && common::summary_supports_indexed_read(summary)
+                && common::summary_indexes_all_messages(sources[input_idx].as_mut(), summary)?
+            {
+                common::require_remote_scan_for_chunks(
+                    sources[input_idx].as_ref(),
+                    source_options,
+                )?;
+                use_indexed[input_idx] = true;
+                continue;
+            }
+        }
+        common::require_remote_scan_for_linear(sources[input_idx].as_ref(), source_options)?;
+        common::materialize_remote_for_multipass(
+            &mut sources[input_idx],
+            input.path.as_deref(),
+            source_options,
+        )?;
+    }
+
     for (input_idx, input) in inputs.iter().enumerate() {
         write_metadata_records(
             writer,
@@ -532,22 +563,16 @@ fn merge_messages<W: Write + Seek>(
 
     let mut streams = Vec::<MergeMessageStream>::with_capacity(inputs.len());
     for (input_idx, input) in inputs.iter().enumerate() {
-        if let Some(summary) = summaries[input_idx].as_ref() {
-            if !summary.chunk_indexes.is_empty()
-                && common::summary_supports_indexed_read(summary)
-                && common::summary_indexes_all_messages(sources[input_idx].as_mut(), summary)?
-            {
-                common::require_remote_scan_for_chunks(
-                    sources[input_idx].as_ref(),
-                    source_options,
-                )?;
-                streams.push(MergeMessageStream::Indexed(IndexedInputMessageReader::new(
-                    input_idx,
-                    input,
-                    summary.clone(),
-                )?));
-                continue;
-            }
+        if use_indexed[input_idx] {
+            let summary = summaries[input_idx]
+                .as_ref()
+                .expect("indexed path requires a summary");
+            streams.push(MergeMessageStream::Indexed(IndexedInputMessageReader::new(
+                input_idx,
+                input,
+                summary.clone(),
+            )?));
+            continue;
         }
         // Without usable message indexes, guaranteeing log-time order requires sorting this input.
         streams.push(MergeMessageStream::Materialized(
@@ -971,6 +996,7 @@ mod tests {
             .iter()
             .map(|(name, _)| InputRef {
                 name: (*name).to_string(),
+                path: None,
             })
             .collect::<Vec<_>>();
         let mut sources: Vec<Box<dyn ByteSource>> = inputs
@@ -1005,10 +1031,7 @@ mod tests {
 
     #[test]
     fn run_rejects_remote_input_without_range_support_or_scan_opt_in() {
-        // Opening a remote URL without range support requires --allow-remote-scan. A
-        // non-resolvable host fails at open time; cloud URLs that need credentials still
-        // attempt range open. Use a path that open_byte_source rejects before download when
-        // range support is unavailable — HTTP without opt-in when range open fails.
+        // Opening a remote URL without range support requires --allow-remote-scan.
         let err = run(
             merge_options(
                 vec!["http://127.0.0.1:1/a.mcap".into()],
@@ -1021,11 +1044,17 @@ mod tests {
         let message = err.to_string();
         assert!(
             message.contains("--allow-remote-scan")
-                || message.contains("failed")
                 || message.contains("Connection")
-                || message.contains("error"),
+                || message.contains("os error")
+                || message.contains("error trying to connect")
+                || message.contains("tcp connect error")
+                || message.contains("error sending request")
+                || message.contains("HTTP error"),
             "unexpected error: {message}"
         );
+        // Secrets / query tokens must never appear if present in a URL.
+        assert!(!message.contains("token="));
+        assert!(message.contains("127.0.0.1:1/a.mcap") || message.contains("a.mcap"));
     }
 
     #[test]

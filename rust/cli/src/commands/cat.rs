@@ -250,19 +250,6 @@ fn cat_indexed(
         return Ok(IndexedCatResult::NeedsLinear);
     }
 
-    let has_chunks_without_message_indexes = summary
-        .chunk_indexes
-        .iter()
-        .any(|chunk| chunk.message_index_offsets.is_empty());
-    if source.is_remote() && has_chunks_without_message_indexes && !source_options.allow_remote_scan
-    {
-        bail!(
-            "{}: remote file has chunk indexes without message indexes; reading messages requires opt-in; {}",
-            source.display_name(),
-            source::remote_scan_opt_in_suffix()
-        );
-    }
-
     let needs_in_chunk_definitions = needs_in_chunk_definitions(&summary);
     let mut schemas = summary.schemas.clone();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();

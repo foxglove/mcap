@@ -25,9 +25,6 @@ cargo bench -p mcap-cli --bench commands -- merge/indexed/100KB
 
 ## Workload controls
 
-The default workload is large enough to reduce fixed overhead noise. Override it with environment
-variables for faster local iteration or larger comparison runs:
-
 | Variable                          |                 Default | Description                                              |
 | --------------------------------- | ----------------------: | -------------------------------------------------------- |
 | `MCAP_CLI_BENCH_TOTAL_MB`         |                   `250` | Total generated payload bytes per payload-size case.     |
