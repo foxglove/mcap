@@ -537,6 +537,10 @@ fn merge_messages<W: Write + Seek>(
                 && common::summary_supports_indexed_read(summary)
                 && common::summary_indexes_all_messages(sources[input_idx].as_mut(), summary)?
             {
+                common::require_remote_scan_for_chunks(
+                    sources[input_idx].as_ref(),
+                    source_options,
+                )?;
                 streams.push(MergeMessageStream::Indexed(IndexedInputMessageReader::new(
                     input_idx,
                     input,

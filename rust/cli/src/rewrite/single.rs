@@ -65,6 +65,8 @@ fn filter_with_writer<W: Write + Seek>(
         if !summary.chunk_indexes.is_empty()
             && !common::summary_has_unindexed_messages(input, &summary)?
         {
+            // Message-chunk reads need the same opt-in as on main (summary-only stays unflagged).
+            common::require_remote_scan_for_chunks(input, source_options)?;
             return filter_indexed(input, &summary, writer, opts, source_options);
         }
     }
@@ -1914,7 +1916,32 @@ mod tests {
     }
 
     #[test]
-    fn remote_indexed_filter_uses_range_reads_without_scan_flag() {
+    fn remote_indexed_filter_requires_allow_remote_scan() {
+        let input = write_filter_test_input(true, false);
+        let mut source = CountingRemoteSource {
+            inner: MemorySource::new(input),
+            bytes_read: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        };
+
+        let mut opts = include_all_options();
+        opts.include_topics = vec![regex::Regex::new("^camera_a$").expect("regex")];
+        opts.include_metadata = false;
+        opts.include_attachments = false;
+
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(
+            &mut source,
+            &mut output,
+            &opts,
+            false,
+            SourceOptions::default(),
+        )
+        .expect_err("indexed remote filter should require --allow-remote-scan");
+        assert!(err.to_string().contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn remote_indexed_filter_uses_range_reads_with_scan_flag() {
         use std::sync::atomic::Ordering;
 
         let input = write_filter_test_input(true, false);
@@ -1936,9 +1963,9 @@ mod tests {
             &mut output,
             &opts,
             false,
-            SourceOptions::default(),
+            SourceOptions::new(true),
         )
-        .expect("indexed remote filter should not need --allow-remote-scan");
+        .expect("indexed remote filter with --allow-remote-scan should succeed");
 
         let read = bytes_read.load(Ordering::SeqCst);
         assert!(

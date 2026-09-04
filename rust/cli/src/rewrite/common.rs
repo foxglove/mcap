@@ -352,6 +352,23 @@ pub(crate) fn require_remote_scan_for_linear(
     Ok(())
 }
 
+/// Errors when a remote source would read message-chunk payloads without `--allow-remote-scan`.
+///
+/// Matches main's policy: summary / named-record reads are unflagged; message data is not.
+pub(crate) fn require_remote_scan_for_chunks(
+    source: &dyn ByteSource,
+    options: SourceOptions,
+) -> Result<()> {
+    if source.is_remote() && !options.allow_remote_scan {
+        bail!(
+            "{}: reading remote message chunks requires opt-in; {}",
+            source.display_name(),
+            source::remote_scan_opt_in_suffix()
+        );
+    }
+    Ok(())
+}
+
 /// Visits every metadata record in the input, preferring the summary index and falling back to a
 /// top-level scan when the summary does not index every record (index records are optional, and
 /// statistics may be absent), so no records are dropped. Metadata is never inside a chunk, so the
