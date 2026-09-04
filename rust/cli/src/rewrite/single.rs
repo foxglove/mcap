@@ -30,7 +30,7 @@ pub(crate) fn run(args: RewriteOptions, source_options: SourceOptions) -> Result
     };
 
     let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
-    filter_to_writer(input.as_mut(), sink, &opts, disable_seeking)
+    filter_to_writer(input.as_mut(), sink, &opts, disable_seeking, source_options)
 }
 
 fn filter_to_writer<W: Write + Seek>(
@@ -38,6 +38,7 @@ fn filter_to_writer<W: Write + Seek>(
     sink: W,
     opts: &ResolvedOptions,
     disable_seeking: bool,
+    source_options: SourceOptions,
 ) -> Result<()> {
     let profile = common::read_header(input)?
         .map(|header| header.profile)
@@ -53,7 +54,7 @@ fn filter_to_writer<W: Write + Seek>(
         },
         disable_seeking,
     )?;
-    filter_with_writer(input, &mut writer, opts)?;
+    filter_with_writer(input, &mut writer, opts, source_options)?;
     writer.finish().context("failed to finish mcap writer")?;
     Ok(())
 }
@@ -62,6 +63,7 @@ fn filter_with_writer<W: Write + Seek>(
     input: &mut dyn ByteSource,
     writer: &mut mcap::Writer<W>,
     opts: &ResolvedOptions,
+    source_options: SourceOptions,
 ) -> Result<()> {
     let summary = common::read_indexed_summary(input)?;
     if let Some(summary) = &summary {
@@ -72,6 +74,8 @@ fn filter_with_writer<W: Write + Seek>(
         if !summary.chunk_indexes.is_empty()
             && !common::summary_has_unindexed_messages(input, summary)?
         {
+            // Message-chunk reads need the same opt-in as on main (summary-only stays unflagged).
+            common::require_remote_scan_for_chunks(input, source_options)?;
             return filter_indexed(input, summary, writer, opts);
         }
     }
@@ -524,6 +528,7 @@ mod tests {
     use super::{common, filter_to_writer, MessageOrder, ResolvedOptions};
     use crate::byte_source::{ByteSource, MemorySource};
     use crate::cli::CommonRewriteArgs;
+    use crate::source::SourceOptions;
     use anyhow::Result;
 
     /// Builds rewrite options from the shared CLI args, exercising the engine defaults (CRC on,
@@ -549,7 +554,13 @@ mod tests {
     fn filter_bytes(input: &[u8], opts: &ResolvedOptions) -> Result<Vec<u8>> {
         let mut source = MemorySource::new(input.to_vec());
         let mut output = Cursor::new(Vec::new());
-        filter_to_writer(&mut source, &mut output, opts, false)?;
+        filter_to_writer(
+            &mut source,
+            &mut output,
+            opts,
+            false,
+            SourceOptions::default(),
+        )?;
         Ok(output.into_inner())
     }
 
@@ -713,6 +724,7 @@ mod tests {
             &mut Cursor::new(Vec::new()),
             &include_all_options(),
             false,
+            SourceOptions::default(),
         )
         .expect_err("a corrupt chunk must fail the rewrite");
         assert!(
@@ -2036,7 +2048,32 @@ mod tests {
     }
 
     #[test]
-    fn remote_indexed_filter_uses_range_reads() {
+    fn remote_indexed_filter_requires_allow_remote_scan() {
+        let input = write_filter_test_input(true, false);
+        let mut source = CountingRemoteSource {
+            inner: MemorySource::new(input),
+            bytes_read: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        };
+
+        let mut opts = include_all_options();
+        opts.include_topics = vec![regex::Regex::new("^camera_a$").expect("regex")];
+        opts.include_metadata = false;
+        opts.include_attachments = false;
+
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(
+            &mut source,
+            &mut output,
+            &opts,
+            false,
+            SourceOptions::default(),
+        )
+        .expect_err("indexed remote filter should require --allow-remote-scan");
+        assert!(err.to_string().contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn remote_indexed_filter_uses_range_reads_with_scan_flag() {
         use std::sync::atomic::Ordering;
 
         let input = write_filter_test_input(true, false);
@@ -2053,8 +2090,14 @@ mod tests {
         opts.include_attachments = false;
 
         let mut output = Cursor::new(Vec::new());
-        filter_to_writer(&mut source, &mut output, &opts, false)
-            .expect("indexed remote filter should succeed");
+        filter_to_writer(
+            &mut source,
+            &mut output,
+            &opts,
+            false,
+            SourceOptions::new(true),
+        )
+        .expect("indexed remote filter with --allow-remote-scan should succeed");
 
         let read = bytes_read.load(Ordering::SeqCst);
         assert!(

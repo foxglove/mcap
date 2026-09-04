@@ -9,6 +9,7 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 
 use crate::byte_source::{self, ByteSource};
+use crate::source::{self, SourceOptions};
 
 /// Output encoding for a rewritten MCAP. Both the single-input and merge pipelines build one of
 /// these and hand it to [`create_writer`] so the writer is configured identically.
@@ -306,6 +307,23 @@ fn message_index_count(prefix: &[u8], offset: u64, size: Option<u64>) -> Option<
         return None;
     }
     Some((byte_len / MESSAGE_INDEX_ENTRY_SIZE as u64) as usize)
+}
+
+/// Errors when a remote source would read message-chunk payloads without `--allow-remote-scan`.
+///
+/// Matches main's policy: summary / named-record reads are unflagged; message data is not.
+pub(crate) fn require_remote_scan_for_chunks(
+    source: &dyn ByteSource,
+    options: SourceOptions,
+) -> Result<()> {
+    if source.is_remote() && !options.allow_remote_scan {
+        bail!(
+            "{}: reading remote message chunks requires opt-in; {}",
+            source.display_name(),
+            source::remote_scan_opt_in_suffix()
+        );
+    }
+    Ok(())
 }
 
 /// Visits every metadata record in the input, preferring the summary index and falling back to a
