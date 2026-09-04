@@ -216,7 +216,7 @@ fn cat_indexed(
     sink: &mut OutputSink<impl std::io::Write>,
     source: &mut dyn ByteSource,
     opts: &CatOptions,
-    _source_options: source::SourceOptions,
+    source_options: source::SourceOptions,
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<IndexedCatResult> {
     let summary = match byte_source::read_summary(source) {
@@ -250,6 +250,19 @@ fn cat_indexed(
         return Ok(IndexedCatResult::NeedsLinear);
     }
 
+    let has_chunks_without_message_indexes = summary
+        .chunk_indexes
+        .iter()
+        .any(|chunk| chunk.message_index_offsets.is_empty());
+    if source.is_remote() && has_chunks_without_message_indexes && !source_options.allow_remote_scan
+    {
+        bail!(
+            "{}: remote file has chunk indexes without message indexes; reading messages requires opt-in; {}",
+            source.display_name(),
+            source::remote_scan_opt_in_suffix()
+        );
+    }
+
     let needs_in_chunk_definitions = needs_in_chunk_definitions(&summary);
     let mut schemas = summary.schemas.clone();
     let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
@@ -267,11 +280,41 @@ fn cat_indexed(
 
     let planned_chunks =
         planned_chunk_reads(&summary, opts, &included_topics, needs_in_chunk_definitions);
+    if source.is_remote() && !planned_chunks.is_empty() && !source_options.allow_remote_scan {
+        // When chunk-local definitions must be collected, every chunk is read up front (a
+        // definition can live in a chunk the filter would otherwise skip), so size the warning from
+        // the full set rather than the filtered plan to avoid under-quoting the bytes fetched.
+        let (chunk_count, compressed_bytes) = if needs_in_chunk_definitions {
+            (
+                summary.chunk_indexes.len(),
+                summary
+                    .chunk_indexes
+                    .iter()
+                    .map(|chunk| chunk.compressed_size)
+                    .sum::<u64>(),
+            )
+        } else {
+            (
+                planned_chunks.len(),
+                planned_chunks
+                    .iter()
+                    .map(|chunk| chunk.compressed_size)
+                    .sum::<u64>(),
+            )
+        };
+        bail!(
+            "{}: remote cat would read {} message chunks ({} compressed); {}",
+            source.display_name(),
+            chunk_count,
+            crate::render::human_bytes(compressed_bytes),
+            source::remote_scan_opt_in_suffix()
+        );
+    }
 
     // When channels/schemas are defined only inside chunks, fetch every chunk once up front to
     // collect their definitions, caching the compressed data so the indexed read below doesn't
     // re-fetch. Lazy per-chunk collection would miss a definition in a chunk skipped by a topic or
-    // time filter.
+    // time filter. The remote-scan gate above already required opt-in to reach here.
     let mut chunk_data_cache: HashMap<u64, Vec<u8>> = HashMap::new();
     if needs_in_chunk_definitions && !planned_chunks.is_empty() {
         for chunk_index in &summary.chunk_indexes {
@@ -1909,10 +1952,10 @@ mod tests {
     }
 
     #[test]
-    fn remote_cat_indexed_reads_chunks_without_allow_remote_scan() {
+    fn remote_cat_requires_allow_remote_scan_before_chunk_reads() {
         let body: &'static [u8] = Box::leak(build_multi_topic_mcap().into_boxed_slice());
         let url = serve_http(body);
-        let (broken_pipe, out) = capture_plain(|sink| {
+        let err = capture_plain(|sink| {
             super::cat_file(
                 sink,
                 Path::new(&url),
@@ -1921,7 +1964,26 @@ mod tests {
                 &mut CsvState::default(),
             )
         })
-        .expect("indexed remote cat should work without --allow-remote-scan");
+        .expect_err("remote cat should require opt-in before reading chunks");
+        let message = err.to_string();
+        assert!(message.contains("remote cat would read"));
+        assert!(message.contains("--allow-remote-scan"));
+    }
+
+    #[test]
+    fn remote_cat_indexed_reads_chunks_with_allow_remote_scan() {
+        let body: &'static [u8] = Box::leak(build_multi_topic_mcap().into_boxed_slice());
+        let url = serve_http(body);
+        let (broken_pipe, out) = capture_plain(|sink| {
+            super::cat_file(
+                sink,
+                Path::new(&url),
+                &CatOptions::default(),
+                crate::source::SourceOptions::new(true),
+                &mut CsvState::default(),
+            )
+        })
+        .expect("indexed remote cat with --allow-remote-scan should succeed");
         assert!(!broken_pipe);
         let output = String::from_utf8(out).expect("utf8");
         assert!(output.contains("/camera") || output.contains("/imu") || !output.is_empty());

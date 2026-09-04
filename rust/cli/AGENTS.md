@@ -35,7 +35,7 @@ When adding a command that can complete despite losing data, return `CommandOutc
 
 ### Remote inputs
 
-Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://`/`abfs://`) are handled via `object_store` (`source.rs` helpers + `byte_source` range reads). Bounded, indexed reads — a summary-section read, or a single attachment/metadata range read under the no-opt-in caps — are allowed without a flag. Any command that would linearly scan or transfer an entire remote object requires the global `--allow-remote-scan` flag (this is an unbounded remote transfer / scan opt-in, not specifically “download to a temp file”). Gate new whole-file remote reads behind `SourceOptions::allow_remote_scan` / `require_remote_scan_for_linear` accordingly. `convert` still uses `materialize_input` because ROS bag/db3 inputs need a local filesystem path for sqlite.
+Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://`/`abfs://`) are handled via `object_store` (`source.rs` helpers + `byte_source` range reads). Bounded, indexed reads — a summary-section read, or a single attachment/metadata range read under the no-opt-in caps — are allowed without a flag. Reading remote message-chunk payloads, a full linear scan, or a whole-object download requires the global `--allow-remote-scan` flag. Gate those paths behind `SourceOptions::allow_remote_scan`, `require_remote_scan_for_linear`, or `require_remote_scan_for_chunks` accordingly. `convert` still uses `materialize_input` because ROS bag/db3 inputs need a local filesystem path for sqlite.
 
 ### Output and logging
 
