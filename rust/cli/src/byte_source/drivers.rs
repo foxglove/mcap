@@ -11,11 +11,9 @@ use mcap::sans_io::{
 use super::ByteSource;
 
 /// Read the leading [`Header`](mcap::records::Header) record, if present.
+///
+/// Works on sequential sources: reads forward from offset 0 and does not rewind.
 pub fn read_header(source: &mut dyn ByteSource) -> Result<Option<mcap::records::Header>> {
-    if !source.is_seekable() {
-        bail!("reading the MCAP header requires a seekable byte source");
-    }
-
     let mut reader = LinearReader::new_with_options(LinearReaderOptions::default());
     let mut pos = 0u64;
     while let Some(event) = reader.next_event() {
@@ -39,8 +37,12 @@ pub fn read_header(source: &mut dyn ByteSource) -> Result<Option<mcap::records::
 
 /// Load the MCAP summary section via [`SummaryReader`].
 ///
-/// Returns `Ok(None)` when the file has no summary section.
+/// Returns `Ok(None)` when the file has no summary section, or when the source is not
+/// seekable (summary lives at the end of the file).
 pub fn read_summary(source: &mut dyn ByteSource) -> Result<Option<mcap::Summary>> {
+    if !source.is_seekable() {
+        return Ok(None);
+    }
     let size = source.size()?;
     let options = match size {
         Some(size) => SummaryReaderOptions::default().with_file_size(size),
@@ -89,16 +91,13 @@ pub fn service_indexed_chunk(
 
 /// Walk every top-level record in file order via [`LinearReader`].
 ///
-/// Requires a seekable source. Starts at offset 0 and advances with each read.
+/// Requires only forward reads from offset 0 (seekable and sequential sources both work).
+/// Callers that already consumed bytes from a sequential source must not call this afterwards.
 pub fn for_each_linear_record(
     source: &mut dyn ByteSource,
     options: LinearReaderOptions,
     mut visit: impl FnMut(u8, &[u8]) -> Result<()>,
 ) -> Result<()> {
-    if !source.is_seekable() {
-        bail!("linear record scan requires a seekable byte source");
-    }
-
     let mut reader = LinearReader::new_with_options(options);
     let mut pos = 0u64;
 

@@ -103,31 +103,8 @@ pub(crate) fn open_output(output: Option<&Path>) -> Result<(OutputSink, bool)> {
 /// Reads the leading [`Header`](mcap::records::Header) record, if present. Used to carry the input
 /// profile onto the output.
 pub(crate) fn read_header(source: &mut dyn ByteSource) -> Result<Option<mcap::records::Header>> {
-    use mcap::sans_io::{LinearReadEvent, LinearReader, LinearReaderOptions};
-
-    if !source.is_seekable() {
-        bail!("reading the MCAP header requires a seekable byte source");
-    }
-
-    let mut reader = LinearReader::new_with_options(LinearReaderOptions::default());
-    let mut pos = 0u64;
-    while let Some(event) = reader.next_event() {
-        match event.context("linear reader error")? {
-            LinearReadEvent::ReadRequest(need) => {
-                let buf = reader.insert(need);
-                let n = source.read_into(pos, buf)?;
-                reader.notify_read(n);
-                pos = pos.saturating_add(n as u64);
-            }
-            LinearReadEvent::Record { opcode, data } => {
-                return match mcap::parse_record(opcode, data)? {
-                    mcap::records::Record::Header(header) => Ok(Some(header)),
-                    _ => Ok(None),
-                };
-            }
-        }
-    }
-    Ok(None)
+    // Shared driver fills the sans-io insert buffer via `read_into` (no intermediate Vec).
+    byte_source::read_header(source)
 }
 
 fn incomplete_indexed_summary_error() -> anyhow::Error {
@@ -136,7 +113,7 @@ fn incomplete_indexed_summary_error() -> anyhow::Error {
     )
 }
 
-fn is_unknown_schema_error(err: &anyhow::Error) -> bool {
+pub(crate) fn is_unknown_schema_error(err: &anyhow::Error) -> bool {
     err.chain().any(|cause| {
         cause
             .downcast_ref::<mcap::McapError>()
@@ -366,6 +343,24 @@ pub(crate) fn require_remote_scan_for_chunks(
             source::remote_scan_opt_in_suffix()
         );
     }
+    Ok(())
+}
+
+/// Replace a remote range source with a local spool so multi-pass linear work transfers once.
+pub(crate) fn materialize_remote_for_multipass(
+    source: &mut Box<dyn ByteSource>,
+    path: Option<&std::path::Path>,
+    options: SourceOptions,
+) -> Result<()> {
+    if !source.is_remote() {
+        return Ok(());
+    }
+    let local = if let Some(path) = path {
+        byte_source::spool_remote_to_local(path, options)?
+    } else {
+        byte_source::spool_from_byte_source(source.as_mut())?
+    };
+    *source = Box::new(local);
     Ok(())
 }
 

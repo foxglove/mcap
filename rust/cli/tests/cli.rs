@@ -356,6 +356,30 @@ fn stdin_pipe_cat_csv_errors_on_unknown_topic() {
 }
 
 #[test]
+fn stdin_pipe_recover() {
+    let dir = TempDir::new().unwrap();
+    let out_path = dir.path().join("recovered.mcap");
+    let output = mcap_with_stdin(
+        &[
+            "recover",
+            "-o",
+            path_str(&out_path),
+            "--compression",
+            "none",
+        ],
+        &build_mcap(3),
+    );
+    assert!(
+        output.status.success(),
+        "recover from stdin should succeed; stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(looks_like_mcap(
+        &std::fs::read(&out_path).expect("recover output")
+    ));
+}
+
+#[test]
 fn stdin_pipe_filter() {
     let dir = TempDir::new().unwrap();
     let out_path = dir.path().join("filtered.mcap");

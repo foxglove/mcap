@@ -35,6 +35,9 @@ struct OffsetEntry {
 pub fn run(ctx: &CommandContext, args: DuCommand) -> Result<()> {
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let mut input = byte_source::open_byte_source(Some(&args.file), source_options)?;
+    // `du` always reads message payloads or message indexes for topic sizes — same opt-in as on
+    // main (materialize). Approximate mode still needs the flag for remote inputs.
+    source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
 
     let (usage, used_approximate) = if args.approximate {
         match collect_usage_approximate(input.as_mut())? {
@@ -43,12 +46,10 @@ pub fn run(ctx: &CommandContext, args: DuCommand) -> Result<()> {
                 eprintln!(
                     "Warning: summary/chunk indexes unavailable; falling back to exact du scan."
                 );
-                source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
                 (collect_usage_exact(input.as_mut())?, false)
             }
         }
     } else {
-        source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
         (collect_usage_exact(input.as_mut())?, false)
     };
 

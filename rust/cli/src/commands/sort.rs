@@ -345,13 +345,11 @@ mod tests {
         )
         .expect_err("cloud input should fail before producing output");
         let message = err.to_string();
-        // Indexed remote rewrite may attempt a range open (network/credentials) rather than
-        // requiring --allow-remote-scan up front; either way the secret must stay redacted.
+        // Remotes require --allow-remote-scan before message-chunk reads; credential failures
+        // may also surface first. Either way the secret must stay redacted.
         assert!(!message.contains("token=secret"));
         assert!(
-            message.contains("s3://bucket/input.mcap")
-                || message.contains("--allow-remote-scan")
-                || message.contains("failed"),
+            message.contains("s3://bucket/input.mcap") || message.contains("--allow-remote-scan"),
             "unexpected error: {message}"
         );
     }
