@@ -1,9 +1,10 @@
 import type { IReadable } from "./types.ts";
 
 /**
- * Wraps an {@link IReadable} and caches the bytes returned from `read()` keyed by offset. Reads at
- * an offset that was previously cached return a subarray of the cached buffer instead of calling
- * the underlying readable.
+ * Wraps an {@link IReadable} and caches the bytes returned from `read()` keyed by offset. The
+ * `size` and `options` parameters of `read()` are not part of the cache key. Reads at an offset
+ * that was previously cached return a subarray of the cached buffer instead of calling the
+ * underlying readable.
  *
  * The cache is capped by `maxCacheSizeBytes`; once the cache is full, new reads pass through
  * without being cached. No eviction is performed.
