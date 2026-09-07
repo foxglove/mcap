@@ -5,14 +5,18 @@ import type { IReadable } from "./types.ts";
  * Create a readable that simulates buffer reuse, like some IReadable implementations do.
  * Tracks read calls so tests can verify cache behavior.
  */
-function makeReadable(data: Uint8Array): IReadable & { reads: { offset: bigint; size: bigint }[] } {
+function makeReadable<TReadOptions = unknown>(
+  data: Uint8Array,
+): IReadable<TReadOptions> & {
+  reads: { offset: bigint; size: bigint; options?: TReadOptions }[];
+} {
   const reusableBuffer = new Uint8Array(data.byteLength);
-  const reads: { offset: bigint; size: bigint }[] = [];
+  const reads: { offset: bigint; size: bigint; options?: TReadOptions }[] = [];
   return {
     reads,
     size: async () => BigInt(data.byteLength),
-    read: async (offset, size) => {
-      reads.push({ offset, size });
+    read: async (offset, size, options) => {
+      reads.push({ offset, size, options });
       reusableBuffer.set(
         new Uint8Array(data.buffer, data.byteOffset + Number(offset), Number(size)),
       );
@@ -98,5 +102,15 @@ describe("CachedReadable", () => {
     expect(await cached.size()).toBe(16n);
     expect(await cached.size()).toBe(16n);
     expect(sizeCalls).toBe(1);
+  });
+
+  it("forwards read options to the underlying readable", async () => {
+    const data = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
+    const readable = makeReadable(data);
+    const cached = new CachedReadable(readable, 1024);
+    const readOptions = { label: "test" };
+
+    await cached.read(0n, 4n, readOptions);
+    expect(readable.reads).toEqual([{ offset: 0n, size: 4n, options: readOptions }]);
   });
 });

@@ -140,15 +140,18 @@ export class McapWriter {
    * call, however it does require an eventual call to `end()` to produce a properly indexed MCAP
    * file.
    */
-  static async InitializeForAppending(
-    readWrite: IReadable & ISeekableWriter,
-    options: Omit<McapWriterOptions, "writable" | "startChannelId">,
+  static async InitializeForAppending<TReadOptions = unknown>(
+    readWrite: IReadable<TReadOptions> & ISeekableWriter,
+    options: Omit<McapWriterOptions, "writable" | "startChannelId"> & {
+      readOptions?: TReadOptions;
+    },
   ): Promise<McapWriter> {
-    const reader = await McapIndexedReader.Initialize({ readable: readWrite });
+    const { readOptions, ...writerOptions } = options;
+    const reader = await McapIndexedReader.Initialize({ readable: readWrite, readOptions });
     await readWrite.seek(reader.dataEndOffset);
     await readWrite.truncate();
 
-    const writer = new McapWriter({ ...options, writable: readWrite });
+    const writer = new McapWriter({ ...writerOptions, writable: readWrite });
     writer.#appendMode = true;
     writer.#dataSectionCrc =
       // Invert the CRC value so we can continue updating it with new data; it will be inverted

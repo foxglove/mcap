@@ -8,8 +8,8 @@ import { MCAP_MAGIC } from "./constants.ts";
 import { parseMagic, parseRecord } from "./parse.ts";
 import type { DecompressHandlers, IReadable, TypedMcapRecords } from "./types.ts";
 
-type McapIndexedReaderArgs = {
-  readable: IReadable;
+type McapIndexedReaderArgs<TReadOptions = unknown> = {
+  readable: IReadable<TReadOptions>;
   chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
   metadataIndexes: readonly TypedMcapRecords["MetadataIndex"][];
@@ -33,7 +33,7 @@ type McapIndexedReaderArgs = {
   messageIndexCacheSizeBytes?: number;
 };
 
-export class McapIndexedReader {
+export class McapIndexedReader<TReadOptions = unknown> {
   readonly chunkIndexes: readonly TypedMcapRecords["ChunkIndex"][];
   readonly attachmentIndexes: readonly TypedMcapRecords["AttachmentIndex"][];
   readonly metadataIndexes: readonly TypedMcapRecords["MetadataIndex"][] = [];
@@ -47,8 +47,8 @@ export class McapIndexedReader {
   readonly dataEndOffset: bigint;
   readonly dataSectionCrc?: number;
 
-  #readable: IReadable;
-  #messageIndexReadable: IReadable;
+  #readable: IReadable<TReadOptions>;
+  #messageIndexReadable: IReadable<TReadOptions>;
   #decompressHandlers?: DecompressHandlers;
 
   #messageStartTime: bigint | undefined;
@@ -56,7 +56,7 @@ export class McapIndexedReader {
   #attachmentStartTime: bigint | undefined;
   #attachmentEndTime: bigint | undefined;
 
-  private constructor(args: McapIndexedReaderArgs) {
+  private constructor(args: McapIndexedReaderArgs<TReadOptions>) {
     this.#readable = args.readable;
     this.chunkIndexes = args.chunkIndexes;
     this.attachmentIndexes = args.attachmentIndexes;
@@ -103,12 +103,13 @@ export class McapIndexedReader {
     return new Error(`${message} [library=${this.header.library}]`);
   }
 
-  static async Initialize({
+  static async Initialize<TReadOptions = unknown>({
     readable,
     decompressHandlers,
     messageIndexCacheSizeBytes,
+    readOptions,
   }: {
-    readable: IReadable;
+    readable: IReadable<TReadOptions>;
 
     /**
      * When a compressed chunk is encountered, the entry in `decompressHandlers` corresponding to the
@@ -124,7 +125,11 @@ export class McapIndexedReader {
      * that later queries against different channels can be served from the cache.
      */
     messageIndexCacheSizeBytes?: number;
-  }): Promise<McapIndexedReader> {
+    /**
+     * Opaque options passed to each `readable.read()` call during initialization.
+     */
+    readOptions?: TReadOptions;
+  }): Promise<McapIndexedReader<TReadOptions>> {
     const size = await readable.size();
 
     let header: TypedMcapRecords["Header"];
@@ -133,6 +138,7 @@ export class McapIndexedReader {
       const headerPrefix = await readable.read(
         0n,
         BigInt(MCAP_MAGIC.length + /* Opcode.HEADER */ 1 + /* record content length */ 8),
+        readOptions,
       );
       const headerPrefixView = new DataView(
         headerPrefix.buffer,
@@ -147,7 +153,11 @@ export class McapIndexedReader {
       const headerReadLength =
         /* Opcode.HEADER */ 1n + /* record content length */ 8n + headerContentLength;
 
-      const headerRecord = await readable.read(BigInt(MCAP_MAGIC.length), headerReadLength);
+      const headerRecord = await readable.read(
+        BigInt(MCAP_MAGIC.length),
+        headerReadLength,
+        readOptions,
+      );
       headerEndOffset = BigInt(MCAP_MAGIC.length) + headerReadLength;
       const headerReader = new Reader(
         new DataView(headerRecord.buffer, headerRecord.byteOffset, headerRecord.byteLength),
@@ -190,7 +200,7 @@ export class McapIndexedReader {
         throw errorWithLibrary(`File size (${size}) is too small to be valid MCAP`);
       }
       footerOffset = size - footerAndMagicReadLength;
-      const footerBuffer = await readable.read(footerOffset, footerAndMagicReadLength);
+      const footerBuffer = await readable.read(footerOffset, footerAndMagicReadLength, readOptions);
 
       footerAndMagicView = new DataView(
         footerBuffer.buffer,
@@ -260,6 +270,7 @@ export class McapIndexedReader {
     const dataEndAndSummarySection = await readable.read(
       dataEndOffset,
       footerOffset - dataEndOffset,
+      readOptions,
     );
     if (footer.summaryCrc !== 0) {
       let summaryCrc = crc32Init();
@@ -345,7 +356,7 @@ export class McapIndexedReader {
       throw errorWithLibrary(`${indexReader.bytesRemaining()} bytes remaining in index section`);
     }
 
-    return new McapIndexedReader({
+    return new McapIndexedReader<TReadOptions>({
       readable,
       chunkIndexes,
       attachmentIndexes,
@@ -370,6 +381,7 @@ export class McapIndexedReader {
       endTime?: bigint;
       reverse?: boolean;
       validateCrcs?: boolean;
+      readOptions?: TReadOptions;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
     const {
@@ -378,6 +390,7 @@ export class McapIndexedReader {
       endTime = this.#messageEndTime,
       reverse = false,
       validateCrcs,
+      readOptions,
     } = args;
 
     if (startTime == undefined || endTime == undefined) {
@@ -425,7 +438,7 @@ export class McapIndexedReader {
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
-        await cursor.loadMessageIndexes(this.#messageIndexReadable);
+        await cursor.loadMessageIndexes(this.#messageIndexReadable, readOptions);
         if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);
         } else {
@@ -438,6 +451,7 @@ export class McapIndexedReader {
       if (!chunkView) {
         chunkView = await this.#loadChunkData(cursor.chunkIndex, {
           validateCrcs: validateCrcs ?? true,
+          readOptions,
         });
         chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
       }
@@ -483,15 +497,20 @@ export class McapIndexedReader {
   async *readMetadata(
     args: {
       name?: string;
+      readOptions?: TReadOptions;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Metadata"], void, void> {
-    const { name } = args;
+    const { name, readOptions } = args;
 
     for (const metadataIndex of this.metadataIndexes) {
       if (name != undefined && metadataIndex.name !== name) {
         continue;
       }
-      const metadataData = await this.#readable.read(metadataIndex.offset, metadataIndex.length);
+      const metadataData = await this.#readable.read(
+        metadataIndex.offset,
+        metadataIndex.length,
+        readOptions,
+      );
       const metadataReader = new Reader(
         new DataView(metadataData.buffer, metadataData.byteOffset, metadataData.byteLength),
       );
@@ -514,6 +533,7 @@ export class McapIndexedReader {
       startTime?: bigint;
       endTime?: bigint;
       validateCrcs?: boolean;
+      readOptions?: TReadOptions;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Attachment"], void, void> {
     const {
@@ -522,6 +542,7 @@ export class McapIndexedReader {
       startTime = this.#attachmentStartTime,
       endTime = this.#attachmentEndTime,
       validateCrcs,
+      readOptions,
     } = args;
 
     if (startTime == undefined || endTime == undefined) {
@@ -541,6 +562,7 @@ export class McapIndexedReader {
       const attachmentData = await this.#readable.read(
         attachmentIndex.offset,
         attachmentIndex.length,
+        readOptions,
       );
       const attachmentReader = new Reader(
         new DataView(attachmentData.buffer, attachmentData.byteOffset, attachmentData.byteLength),
@@ -559,11 +581,12 @@ export class McapIndexedReader {
 
   async #loadChunkData(
     chunkIndex: TypedMcapRecords["ChunkIndex"],
-    options?: { validateCrcs: boolean },
+    options?: { validateCrcs: boolean; readOptions?: TReadOptions },
   ): Promise<DataView> {
     const chunkData = await this.#readable.read(
       chunkIndex.chunkStartOffset,
       chunkIndex.chunkLength,
+      options?.readOptions,
     );
     const chunkReader = new Reader(
       new DataView(chunkData.buffer, chunkData.byteOffset, chunkData.byteLength),

@@ -135,8 +135,11 @@ export type DecompressHandlers = {
 
 /**
  * IReadable describes a random-access reader interface.
+ *
+ * `TReadOptions` is an opaque value that the caller passes to each `read()` call.
+ * A custom implementation can use it for per-read data.
  */
-export interface IReadable {
+export interface IReadable<TReadOptions = unknown> {
   size(): Promise<bigint>;
-  read(offset: bigint, size: bigint): Promise<Uint8Array>;
+  read(offset: bigint, size: bigint, options?: TReadOptions): Promise<Uint8Array>;
 }

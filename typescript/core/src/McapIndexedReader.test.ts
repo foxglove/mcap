@@ -1357,4 +1357,115 @@ describe("McapIndexedReader", () => {
     const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
     await expect(collect(reader.readMessages())).resolves.toEqual([message1, message2]);
   });
+
+  it("passes readOptions to readable.read()", async () => {
+    const channel: TypedMcapRecord = {
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "a",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const message: TypedMcapRecords["Message"] = {
+      type: "Message",
+      channelId: channel.id,
+      sequence: 1,
+      logTime: 1n,
+      publishTime: 0n,
+      data: new Uint8Array(),
+    };
+
+    const chunk = new ChunkBuilder({ useMessageIndex: true });
+    chunk.addChannel(channel);
+    chunk.addMessage(message);
+
+    const metadata = {
+      name: "meta",
+      metadata: new Map([["k", "v"]]),
+    };
+    const attachment = {
+      name: "file",
+      logTime: 1n,
+      createTime: 2n,
+      mediaType: "text/plain",
+      data: new Uint8Array([1, 2, 3]),
+    };
+
+    const builder = new McapRecordBuilder();
+    builder.writeMagic();
+    builder.writeHeader({ profile: "", library: "" });
+    const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [
+      writeChunkWithMessageIndexes(builder, chunk),
+    ];
+    const metadataOffset = BigInt(builder.length);
+    const metadataLength = builder.writeMetadata(metadata);
+    const attachmentOffset = BigInt(builder.length);
+    const attachmentLength = builder.writeAttachment(attachment);
+    builder.writeDataEnd({ dataSectionCrc: 0 });
+
+    const summaryStart = BigInt(builder.length);
+    builder.writeChannel(channel);
+    for (const index of chunkIndexes) {
+      builder.writeChunkIndex(index);
+    }
+    builder.writeMetadataIndex({
+      offset: metadataOffset,
+      length: metadataLength,
+      name: metadata.name,
+    });
+    builder.writeAttachmentIndex({
+      offset: attachmentOffset,
+      length: attachmentLength,
+      logTime: attachment.logTime,
+      createTime: attachment.createTime,
+      dataSize: BigInt(attachment.data.byteLength),
+      name: attachment.name,
+      mediaType: attachment.mediaType,
+    });
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeMagic();
+
+    const receivedOptions: unknown[] = [];
+    const underlyingReadable = makeReadable(builder.buffer);
+    const recordingReadable = {
+      size: underlyingReadable.size.bind(underlyingReadable),
+      read: async (offset: bigint, size: bigint, options?: unknown) => {
+        receivedOptions.push(options);
+        return await underlyingReadable.read(offset, size);
+      },
+    };
+
+    const initializeOptions = { label: "init" };
+    const reader = await McapIndexedReader.Initialize({
+      readable: recordingReadable,
+      readOptions: initializeOptions,
+    });
+    expect(receivedOptions.length).toBeGreaterThan(0);
+    expect(receivedOptions.every((options) => options === initializeOptions)).toBe(true);
+
+    receivedOptions.length = 0;
+    const readMessagesOptions = { label: "messages" };
+    await expect(
+      collect(reader.readMessages({ readOptions: readMessagesOptions })),
+    ).resolves.toEqual([message]);
+    expect(receivedOptions.length).toBeGreaterThan(0);
+    expect(receivedOptions.every((options) => options === readMessagesOptions)).toBe(true);
+
+    receivedOptions.length = 0;
+    const readMetadataOptions = { label: "metadata" };
+    await expect(
+      collect(reader.readMetadata({ readOptions: readMetadataOptions })),
+    ).resolves.toEqual([{ ...metadata, type: "Metadata" }]);
+    expect(receivedOptions.length).toBeGreaterThan(0);
+    expect(receivedOptions.every((options) => options === readMetadataOptions)).toBe(true);
+
+    receivedOptions.length = 0;
+    const readAttachmentsOptions = { label: "attachments" };
+    await expect(
+      collect(reader.readAttachments({ readOptions: readAttachmentsOptions })),
+    ).resolves.toEqual([{ ...attachment, type: "Attachment" }]);
+    expect(receivedOptions.length).toBeGreaterThan(0);
+    expect(receivedOptions.every((options) => options === readAttachmentsOptions)).toBe(true);
+  });
 });
