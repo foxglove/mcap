@@ -1357,4 +1357,70 @@ describe("McapIndexedReader", () => {
     const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
     await expect(collect(reader.readMessages())).resolves.toEqual([message1, message2]);
   });
+
+  it("passes readOptions to readable.read()", async () => {
+    const channel: TypedMcapRecord = {
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "a",
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    };
+    const message: TypedMcapRecords["Message"] = {
+      type: "Message",
+      channelId: channel.id,
+      sequence: 1,
+      logTime: 1n,
+      publishTime: 0n,
+      data: new Uint8Array(),
+    };
+
+    const chunk = new ChunkBuilder({ useMessageIndex: true });
+    chunk.addChannel(channel);
+    chunk.addMessage(message);
+
+    const builder = new McapRecordBuilder();
+    builder.writeMagic();
+    builder.writeHeader({ profile: "", library: "" });
+    const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [
+      writeChunkWithMessageIndexes(builder, chunk),
+    ];
+    builder.writeDataEnd({ dataSectionCrc: 0 });
+
+    const summaryStart = BigInt(builder.length);
+    builder.writeChannel(channel);
+    for (const index of chunkIndexes) {
+      builder.writeChunkIndex(index);
+    }
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeMagic();
+
+    const receivedOptions: unknown[] = [];
+    const underlyingReadable = makeReadable(builder.buffer);
+    const recordingReadable = {
+      size: underlyingReadable.size.bind(underlyingReadable),
+      read: async (offset: bigint, size: bigint, options?: unknown) => {
+        receivedOptions.push(options);
+        return await underlyingReadable.read(offset, size);
+      },
+    };
+
+    const initializeOptions = { label: "init" };
+    const reader = await McapIndexedReader.Initialize({
+      readable: recordingReadable,
+      readOptions: initializeOptions,
+    });
+    expect(receivedOptions.length).toBeGreaterThan(0);
+    expect(receivedOptions.every((options) => options === initializeOptions)).toBe(true);
+
+    receivedOptions.length = 0;
+    const readMessagesOptions = { label: "messages" };
+    await expect(
+      collect(reader.readMessages({ readOptions: readMessagesOptions })),
+    ).resolves.toEqual([message]);
+    expect(receivedOptions.length).toBeGreaterThan(0);
+    expect(receivedOptions.every((options) => options === readMessagesOptions)).toBe(true);
+  });
+
 });

@@ -117,7 +117,10 @@ export class ChunkCursor {
     return this.#orderedMessageOffsets != undefined;
   }
 
-  async loadMessageIndexes(readable: IReadable): Promise<void> {
+  async loadMessageIndexes<TReadOptions>(
+    readable: IReadable<TReadOptions>,
+    readOptions?: TReadOptions,
+  ): Promise<void> {
     const reverse = this.#reverse;
     let messageIndexStartOffset: bigint | undefined;
     let relevantMessageIndexStartOffset: bigint | undefined;
@@ -146,6 +149,7 @@ export class ChunkCursor {
     const messageIndexes = await readable.read(
       relevantMessageIndexStartOffset,
       messageIndexEndOffset - relevantMessageIndexStartOffset,
+      readOptions,
     );
     const messageIndexesView = new DataView(
       messageIndexes.buffer,

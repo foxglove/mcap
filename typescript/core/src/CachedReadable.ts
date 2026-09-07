@@ -11,11 +11,11 @@ import type { IReadable } from "./types.ts";
  * Note: reads are cached by *exact* offset. A read that partially overlaps a cached range but
  * starts at a different offset will miss.
  */
-export class CachedReadable implements IReadable {
+export class CachedReadable<TReadOptions = unknown> implements IReadable<TReadOptions> {
   /**
    * The underlying source of the data to be cached.
    */
-  #readable: IReadable;
+  #readable: IReadable<TReadOptions>;
   /**
    * Cached data. Indexed by offset request and stored as a Uint8Array.
    * If the requested size is less than the cached data, the cached data is returned as a subarray.
@@ -35,7 +35,7 @@ export class CachedReadable implements IReadable {
    */
   #size: bigint | undefined;
 
-  constructor(readable: IReadable, maxCacheSizeBytes: number) {
+  constructor(readable: IReadable<TReadOptions>, maxCacheSizeBytes: number) {
     this.#readable = readable;
     this.#maxCacheSizeBytes = maxCacheSizeBytes;
   }
@@ -47,14 +47,14 @@ export class CachedReadable implements IReadable {
     return this.#size;
   }
 
-  async read(offset: bigint, size: bigint): Promise<Uint8Array> {
+  async read(offset: bigint, size: bigint, options?: TReadOptions): Promise<Uint8Array> {
     const requestedSize = Number(size);
     const cached = this.#cache.get(offset);
     if (cached != undefined && cached.byteLength >= requestedSize) {
       return cached.byteLength === requestedSize ? cached : cached.subarray(0, requestedSize);
     }
 
-    const data = await this.#readable.read(offset, size);
+    const data = await this.#readable.read(offset, size, options);
 
     // The underlying readable is allowed to reuse its backing buffer across reads, so we must copy
     // the bytes before storing them in the cache.
