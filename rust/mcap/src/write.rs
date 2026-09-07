@@ -1199,7 +1199,13 @@ impl<W: Write + Seek> Writer<W> {
             writer,
             &Record::DataEnd(records::DataEnd { data_section_crc }),
         )?;
-        write_summary_and_footer_magic(writer, &summary, &self.options)?;
+        write_summary_and_footer_magic(
+            writer,
+            &summary,
+            &self.all_schema_ids,
+            &self.all_channel_ids,
+            &self.options,
+        )?;
         Ok(summary)
     }
 
@@ -1293,39 +1299,10 @@ impl<W: Write + Seek> Drop for Writer<W> {
 fn write_summary_and_footer_magic<W: Write + Seek>(
     writer: &mut W,
     summary: &Summary,
+    schema_ids: &BTreeMap<u16, u16>,
+    channel_ids: &BTreeMap<u16, u16>,
     options: &WriteOptions,
 ) -> McapResult<()> {
-    let mut all_channels: Vec<_> = summary
-        .channels
-        .iter()
-        .map(|(&id, channel)| {
-            let schema_id = channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0);
-            records::Channel {
-                id,
-                schema_id,
-                topic: channel.topic.clone(),
-                message_encoding: channel.message_encoding.clone(),
-                metadata: channel.metadata.clone(),
-            }
-        })
-        .collect();
-    // Summary uses HashMaps for fast lookup, so impose a stable order when serializing it.
-    all_channels.sort_unstable_by_key(|channel| channel.id);
-
-    let mut schemas: Vec<_> = summary.schemas.iter().collect();
-    schemas.sort_unstable_by_key(|(&id, _)| id);
-    let all_schemas: Vec<_> = schemas
-        .into_iter()
-        .map(|(&id, schema)| Record::Schema {
-            header: records::SchemaHeader {
-                id,
-                name: schema.name.clone(),
-                encoding: schema.encoding.clone(),
-            },
-            data: schema.data.clone(),
-        })
-        .collect();
-
     let summary_start = writer.stream_position()?;
     let summary_offset_start;
     // Let's get a CRC of the summary section.
@@ -1341,10 +1318,24 @@ fn write_summary_and_footer_magic<W: Write + Seek>(
     }
 
     // Write all schemas.
-    if options.repeat_schemas && !all_schemas.is_empty() {
+    if options.repeat_schemas && !schema_ids.is_empty() {
         let schemas_start: u64 = summary_start;
-        for schema in all_schemas.iter() {
-            write_record(&mut ccw, schema)?;
+        for &id in schema_ids.keys() {
+            let schema = summary
+                .schemas
+                .get(&id)
+                .expect("all schema IDs must be present in the summary");
+            write_record(
+                &mut ccw,
+                &Record::Schema {
+                    header: records::SchemaHeader {
+                        id,
+                        name: schema.name.clone(),
+                        encoding: schema.encoding.clone(),
+                    },
+                    data: schema.data.clone(),
+                },
+            )?;
         }
         summary_end = posit(&mut ccw)?;
         offsets.push(records::SummaryOffset {
@@ -1355,10 +1346,24 @@ fn write_summary_and_footer_magic<W: Write + Seek>(
     }
 
     // Write all channels.
-    if options.repeat_channels && !all_channels.is_empty() {
+    if options.repeat_channels && !channel_ids.is_empty() {
         let channels_start = summary_end;
-        for channel in all_channels {
-            write_record(&mut ccw, &Record::Channel(channel))?;
+        for &id in channel_ids.keys() {
+            let channel = summary
+                .channels
+                .get(&id)
+                .expect("all channel IDs must be present in the summary");
+            let schema_id = channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0);
+            write_record(
+                &mut ccw,
+                &Record::Channel(records::Channel {
+                    id,
+                    schema_id,
+                    topic: channel.topic.clone(),
+                    message_encoding: channel.message_encoding.clone(),
+                    metadata: channel.metadata.clone(),
+                }),
+            )?;
         }
         summary_end = posit(&mut ccw)?;
         offsets.push(records::SummaryOffset {
