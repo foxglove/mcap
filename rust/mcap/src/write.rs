@@ -1199,7 +1199,13 @@ impl<W: Write + Seek> Writer<W> {
             writer,
             &Record::DataEnd(records::DataEnd { data_section_crc }),
         )?;
-        write_summary_and_footer_magic(writer, &summary, &self.options)?;
+        write_summary_and_footer_magic(
+            writer,
+            &summary,
+            &self.all_schema_ids,
+            &self.all_channel_ids,
+            &self.options,
+        )?;
         Ok(summary)
     }
 
@@ -1293,35 +1299,10 @@ impl<W: Write + Seek> Drop for Writer<W> {
 fn write_summary_and_footer_magic<W: Write + Seek>(
     writer: &mut W,
     summary: &Summary,
+    schema_ids: &BTreeMap<u16, u16>,
+    channel_ids: &BTreeMap<u16, u16>,
     options: &WriteOptions,
 ) -> McapResult<()> {
-    let all_channels: Vec<_> = summary
-        .channels
-        .iter()
-        .map(|(&id, channel)| {
-            let schema_id = channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0);
-            records::Channel {
-                id,
-                schema_id,
-                topic: channel.topic.clone(),
-                message_encoding: channel.message_encoding.clone(),
-                metadata: channel.metadata.clone(),
-            }
-        })
-        .collect();
-    let all_schemas: Vec<_> = summary
-        .schemas
-        .iter()
-        .map(|(&id, schema)| Record::Schema {
-            header: records::SchemaHeader {
-                id,
-                name: schema.name.clone(),
-                encoding: schema.encoding.clone(),
-            },
-            data: schema.data.clone(),
-        })
-        .collect();
-
     let summary_start = writer.stream_position()?;
     let summary_offset_start;
     // Let's get a CRC of the summary section.
@@ -1337,10 +1318,24 @@ fn write_summary_and_footer_magic<W: Write + Seek>(
     }
 
     // Write all schemas.
-    if options.repeat_schemas && !all_schemas.is_empty() {
+    if options.repeat_schemas && !schema_ids.is_empty() {
         let schemas_start: u64 = summary_start;
-        for schema in all_schemas.iter() {
-            write_record(&mut ccw, schema)?;
+        for &id in schema_ids.keys() {
+            let schema = summary
+                .schemas
+                .get(&id)
+                .expect("all schema IDs must be present in the summary");
+            write_record(
+                &mut ccw,
+                &Record::Schema {
+                    header: records::SchemaHeader {
+                        id,
+                        name: schema.name.clone(),
+                        encoding: schema.encoding.clone(),
+                    },
+                    data: schema.data.clone(),
+                },
+            )?;
         }
         summary_end = posit(&mut ccw)?;
         offsets.push(records::SummaryOffset {
@@ -1351,10 +1346,24 @@ fn write_summary_and_footer_magic<W: Write + Seek>(
     }
 
     // Write all channels.
-    if options.repeat_channels && !all_channels.is_empty() {
+    if options.repeat_channels && !channel_ids.is_empty() {
         let channels_start = summary_end;
-        for channel in all_channels {
-            write_record(&mut ccw, &Record::Channel(channel))?;
+        for &id in channel_ids.keys() {
+            let channel = summary
+                .channels
+                .get(&id)
+                .expect("all channel IDs must be present in the summary");
+            let schema_id = channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0);
+            write_record(
+                &mut ccw,
+                &Record::Channel(records::Channel {
+                    id,
+                    schema_id,
+                    topic: channel.topic.clone(),
+                    message_encoding: channel.message_encoding.clone(),
+                    metadata: channel.metadata.clone(),
+                }),
+            )?;
         }
         summary_end = posit(&mut ccw)?;
         offsets.push(records::SummaryOffset {
@@ -2047,6 +2056,43 @@ mod tests {
         assert!(summary.attachment_indexes.is_empty());
         assert!(summary.metadata_indexes.is_empty());
         assert_eq!(summary.chunk_indexes.len(), 1);
+    }
+
+    #[test]
+    fn summary_schemas_and_channels_are_sorted_by_id() {
+        let file = Cursor::new(Vec::new());
+        let mut writer = WriteOptions::new()
+            .use_chunks(false)
+            .create(file)
+            .expect("failed to construct writer");
+
+        for id in [8, 3, 13, 1, 5, 2, 11, 6, 4, 12, 7, 10, 9] {
+            writer
+                .add_schema_with_id(id, &format!("schema {id}"), "jsonschema", &[])
+                .expect("failed to add schema");
+            writer
+                .add_channel_with_id(id, id, &format!("topic {id}"), "json", &BTreeMap::new())
+                .expect("failed to add channel");
+        }
+
+        writer.finish().expect("failed to finish writer");
+        let data = writer.into_inner().into_inner();
+        let mut in_summary = false;
+        let mut schema_ids = Vec::new();
+        let mut channel_ids = Vec::new();
+
+        for record in LinearReader::new(&data).expect("failed to construct reader") {
+            match record.expect("failed to read record") {
+                Record::DataEnd(_) => in_summary = true,
+                Record::Schema { header, .. } if in_summary => schema_ids.push(header.id),
+                Record::Channel(channel) if in_summary => channel_ids.push(channel.id),
+                _ => {}
+            }
+        }
+
+        let expected_ids: Vec<_> = (1..=13).collect();
+        assert_eq!(schema_ids, expected_ids);
+        assert_eq!(channel_ids, expected_ids);
     }
 
     #[test]
