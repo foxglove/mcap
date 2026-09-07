@@ -1295,7 +1295,7 @@ fn write_summary_and_footer_magic<W: Write + Seek>(
     summary: &Summary,
     options: &WriteOptions,
 ) -> McapResult<()> {
-    let all_channels: Vec<_> = summary
+    let mut all_channels: Vec<_> = summary
         .channels
         .iter()
         .map(|(&id, channel)| {
@@ -1309,9 +1309,13 @@ fn write_summary_and_footer_magic<W: Write + Seek>(
             }
         })
         .collect();
-    let all_schemas: Vec<_> = summary
-        .schemas
-        .iter()
+    // Summary uses HashMaps for fast lookup, so impose a stable order when serializing it.
+    all_channels.sort_unstable_by_key(|channel| channel.id);
+
+    let mut schemas: Vec<_> = summary.schemas.iter().collect();
+    schemas.sort_unstable_by_key(|(&id, _)| id);
+    let all_schemas: Vec<_> = schemas
+        .into_iter()
         .map(|(&id, schema)| Record::Schema {
             header: records::SchemaHeader {
                 id,
@@ -2047,6 +2051,43 @@ mod tests {
         assert!(summary.attachment_indexes.is_empty());
         assert!(summary.metadata_indexes.is_empty());
         assert_eq!(summary.chunk_indexes.len(), 1);
+    }
+
+    #[test]
+    fn summary_schemas_and_channels_are_sorted_by_id() {
+        let file = Cursor::new(Vec::new());
+        let mut writer = WriteOptions::new()
+            .use_chunks(false)
+            .create(file)
+            .expect("failed to construct writer");
+
+        for id in [8, 3, 13, 1, 5, 2, 11, 6, 4, 12, 7, 10, 9] {
+            writer
+                .add_schema_with_id(id, &format!("schema {id}"), "jsonschema", &[])
+                .expect("failed to add schema");
+            writer
+                .add_channel_with_id(id, id, &format!("topic {id}"), "json", &BTreeMap::new())
+                .expect("failed to add channel");
+        }
+
+        writer.finish().expect("failed to finish writer");
+        let data = writer.into_inner().into_inner();
+        let mut in_summary = false;
+        let mut schema_ids = Vec::new();
+        let mut channel_ids = Vec::new();
+
+        for record in LinearReader::new(&data).expect("failed to construct reader") {
+            match record.expect("failed to read record") {
+                Record::DataEnd(_) => in_summary = true,
+                Record::Schema { header, .. } if in_summary => schema_ids.push(header.id),
+                Record::Channel(channel) if in_summary => channel_ids.push(channel.id),
+                _ => {}
+            }
+        }
+
+        let expected_ids: Vec<_> = (1..=13).collect();
+        assert_eq!(schema_ids, expected_ids);
+        assert_eq!(channel_ids, expected_ids);
     }
 
     #[test]
