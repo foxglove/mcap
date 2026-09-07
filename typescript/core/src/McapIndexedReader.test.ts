@@ -1380,12 +1380,28 @@ describe("McapIndexedReader", () => {
     chunk.addChannel(channel);
     chunk.addMessage(message);
 
+    const metadata = {
+      name: "meta",
+      metadata: new Map([["k", "v"]]),
+    };
+    const attachment = {
+      name: "file",
+      logTime: 1n,
+      createTime: 2n,
+      mediaType: "text/plain",
+      data: new Uint8Array([1, 2, 3]),
+    };
+
     const builder = new McapRecordBuilder();
     builder.writeMagic();
     builder.writeHeader({ profile: "", library: "" });
     const chunkIndexes: TypedMcapRecords["ChunkIndex"][] = [
       writeChunkWithMessageIndexes(builder, chunk),
     ];
+    const metadataOffset = BigInt(builder.length);
+    const metadataLength = builder.writeMetadata(metadata);
+    const attachmentOffset = BigInt(builder.length);
+    const attachmentLength = builder.writeAttachment(attachment);
     builder.writeDataEnd({ dataSectionCrc: 0 });
 
     const summaryStart = BigInt(builder.length);
@@ -1393,6 +1409,20 @@ describe("McapIndexedReader", () => {
     for (const index of chunkIndexes) {
       builder.writeChunkIndex(index);
     }
+    builder.writeMetadataIndex({
+      offset: metadataOffset,
+      length: metadataLength,
+      name: metadata.name,
+    });
+    builder.writeAttachmentIndex({
+      offset: attachmentOffset,
+      length: attachmentLength,
+      logTime: attachment.logTime,
+      createTime: attachment.createTime,
+      dataSize: BigInt(attachment.data.byteLength),
+      name: attachment.name,
+      mediaType: attachment.mediaType,
+    });
     builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
     builder.writeMagic();
 
@@ -1421,6 +1451,21 @@ describe("McapIndexedReader", () => {
     ).resolves.toEqual([message]);
     expect(receivedOptions.length).toBeGreaterThan(0);
     expect(receivedOptions.every((options) => options === readMessagesOptions)).toBe(true);
-  });
 
+    receivedOptions.length = 0;
+    const readMetadataOptions = { label: "metadata" };
+    await expect(
+      collect(reader.readMetadata({ readOptions: readMetadataOptions })),
+    ).resolves.toEqual([{ ...metadata, type: "Metadata" }]);
+    expect(receivedOptions.length).toBeGreaterThan(0);
+    expect(receivedOptions.every((options) => options === readMetadataOptions)).toBe(true);
+
+    receivedOptions.length = 0;
+    const readAttachmentsOptions = { label: "attachments" };
+    await expect(
+      collect(reader.readAttachments({ readOptions: readAttachmentsOptions })),
+    ).resolves.toEqual([{ ...attachment, type: "Attachment" }]);
+    expect(receivedOptions.length).toBeGreaterThan(0);
+    expect(receivedOptions.every((options) => options === readAttachmentsOptions)).toBe(true);
+  });
 });
