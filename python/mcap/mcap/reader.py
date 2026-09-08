@@ -16,7 +16,7 @@ from typing import (
     Union,
 )
 
-from ._message_queue import make_message_queue
+from ._message_queue import MessageTuple, make_message_queue
 from .data_stream import ReadDataStream, RecordBuilder
 from .decoder import DecoderFactory
 from .exceptions import DecoderNotFoundError, McapError
@@ -312,8 +312,10 @@ class SeekingReader(McapReader):
         while message_queue:
             next_item = message_queue.pop()
             if isinstance(next_item, ChunkIndex):
-                self._stream.seek(next_item.chunk_start_offset + 1 + 8, io.SEEK_SET)
+                chunk_start_offset = next_item.chunk_start_offset
+                self._stream.seek(chunk_start_offset + 1 + 8, io.SEEK_SET)
                 chunk = Chunk.read(ReadDataStream(self._stream))
+                messages: List[MessageTuple] = []
                 for index, record in enumerate(
                     breakup_chunk(chunk, validate_crc=self._validate_crcs)
                 ):
@@ -329,13 +331,12 @@ class SeekingReader(McapReader):
                             schema = None
                         else:
                             schema = summary.schemas[channel.schema_id]
-                        message_queue.push(
-                            (
-                                (schema, channel, record),
-                                next_item.chunk_start_offset,
-                                index,
-                            )
+                        messages.append(
+                            ((schema, channel, record), chunk_start_offset, index)
                         )
+                # Queued together so that the queue can keep them as one sorted run
+                # rather than heaping each message on its own.
+                message_queue.push_chunk_messages(chunk_start_offset, messages)
             else:
                 yield next_item[0]
 
