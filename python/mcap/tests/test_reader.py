@@ -491,3 +491,45 @@ def test_reverse_order_with_back_to_back_chunks(tmpdir: Path):
     forward = _read(filepath)
     assert [sequence for _, _, sequence in forward] == list(range(200))
     assert _read(filepath, reverse=True) == list(reversed(forward))
+
+
+class CountingBytesIO(BytesIO):
+    """A BytesIO that records how many bytes have been read out of it."""
+
+    def __init__(self, data: bytes):
+        super().__init__(data)
+        self.bytes_read = 0
+
+    def read(self, size: Union[int, None] = -1) -> bytes:
+        data = super().read(size)
+        self.bytes_read += len(data)
+        return data
+
+
+def test_file_order_yields_before_reading_every_chunk(tmpdir: Path):
+    """in file order a chunk's messages come out as soon as that chunk is read.
+
+    Holding them instead means the first message costs a read of the whole file,
+    and every message in the file is resident by the time it arrives.
+    """
+    filepath = Path(tmpdir) / "many_chunks.mcap"
+    _write_ordering_mcap(
+        filepath, [(f"/topic{i % 2}", i * 10) for i in range(2000)], chunk_size=512
+    )
+    raw = filepath.read_bytes()
+
+    with open(filepath, "rb") as f:
+        summary = SeekingReader(f).get_summary()
+    assert summary is not None
+    assert len(summary.chunk_indexes) > 10
+
+    def bytes_read(take_all: bool) -> int:
+        stream = CountingBytesIO(raw)
+        messages = SeekingReader(stream).iter_messages(log_time_order=False)
+        if take_all:
+            assert len(list(messages)) == 2000
+        else:
+            next(messages)
+        return stream.bytes_read
+
+    assert bytes_read(take_all=False) < bytes_read(take_all=True)
