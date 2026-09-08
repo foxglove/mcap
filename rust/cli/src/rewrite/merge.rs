@@ -4,6 +4,7 @@
 //! unique to merging live here (cross-input schema/channel remapping and coalescing, metadata
 //! deduplication, and the k-way merge heap).
 use std::cmp::Ordering;
+use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
 use std::io::{Seek, Write};
 use std::path::PathBuf;
@@ -384,11 +385,11 @@ impl MaterializedInputMessages {
         source_options: SourceOptions,
     ) -> Result<Self> {
         // A summaryless or incompletely-indexed input can't be read in log-time order on the fly,
-        // so read every message (in stored order) and sort.
+        // so read every message (in stored order) and sort. Match `mcap::MessageStream`: resolve
+        // each message's channel and apply the same schema/channel conflict checks.
         common::require_remote_scan_for_linear(source, source_options)?;
 
         let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
-        let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
         let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
         let mut messages = Vec::new();
         let mut input_order = 0usize;
@@ -397,74 +398,22 @@ impl MaterializedInputMessages {
             source,
             mcap::sans_io::LinearReaderOptions::default().with_validate_chunk_crcs(true),
             |opcode, data| {
-                match mcap::parse_record(opcode, data).with_context(|| {
-                    format!("failed reading messages from '{name}'")
-                })? {
+                match mcap::parse_record(opcode, data)
+                    .with_context(|| format!("failed reading messages from '{name}'"))?
+                {
                     mcap::records::Record::Schema { header, data } => {
-                        let schema = Arc::new(mcap::Schema {
-                            id: header.id,
-                            name: header.name,
-                            encoding: header.encoding,
-                            data: std::borrow::Cow::Owned(data.into_owned()),
-                        });
-                        schemas.insert(schema.id, schema);
+                        add_schema_record(&mut schemas, header, data)?;
                     }
                     mcap::records::Record::Channel(channel) => {
-                        if channel.schema_id == 0 || schemas.contains_key(&channel.schema_id) {
-                            let schema = if channel.schema_id == 0 {
-                                None
-                            } else {
-                                Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
-                                    anyhow::anyhow!(
-                                        "encountered channel with topic {} with unknown schema ID {}",
-                                        channel.topic,
-                                        channel.schema_id
-                                    )
-                                })?)
-                            };
-                            let resolved = Arc::new(mcap::Channel {
-                                id: channel.id,
-                                topic: channel.topic.clone(),
-                                schema,
-                                message_encoding: channel.message_encoding.clone(),
-                                metadata: channel.metadata.clone(),
-                            });
-                            channels.insert(channel.id, resolved);
-                        }
-                        channel_defs.insert(channel.id, channel);
+                        add_channel_record(&mut channels, &schemas, channel)?;
                     }
                     mcap::records::Record::Message { header, data } => {
-                        let channel = if let Some(channel) = channels.get(&header.channel_id) {
-                            channel.clone()
-                        } else {
-                            let Some(channel_def) = channel_defs.get(&header.channel_id) else {
-                                bail!(
-                                    "message references unknown channel {} in '{name}'",
-                                    header.channel_id
-                                );
-                            };
-                            let schema = if channel_def.schema_id == 0 {
-                                None
-                            } else {
-                                Some(schemas.get(&channel_def.schema_id).cloned().ok_or_else(
-                                    || {
-                                        anyhow::anyhow!(
-                                            "encountered channel with topic {} with unknown schema ID {}",
-                                            channel_def.topic,
-                                            channel_def.schema_id
-                                        )
-                                    },
-                                )?)
-                            };
-                            let resolved = Arc::new(mcap::Channel {
-                                id: channel_def.id,
-                                topic: channel_def.topic.clone(),
-                                schema,
-                                message_encoding: channel_def.message_encoding.clone(),
-                                metadata: channel_def.metadata.clone(),
-                            });
-                            channels.insert(header.channel_id, resolved.clone());
-                            resolved
+                        let Some(channel) = channels.get(&header.channel_id).cloned() else {
+                            return Err(mcap::McapError::UnknownChannel(
+                                header.sequence,
+                                header.channel_id,
+                            )
+                            .into());
                         };
                         messages.push(PendingMessage::new(
                             input_idx,
@@ -700,6 +649,83 @@ fn reserve_next_channel_id(id_maps: &mut IdMaps) -> Result<u16> {
     Ok(id)
 }
 
+/// Same rules as `mcap::read::ChannelAccumulator::add_schema` (used by `MessageStream`).
+fn add_schema_record(
+    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
+    header: mcap::records::SchemaHeader,
+    data: std::borrow::Cow<'_, [u8]>,
+) -> Result<()> {
+    if header.id == 0 {
+        return Err(mcap::McapError::InvalidSchemaId.into());
+    }
+    match schemas.entry(header.id) {
+        Entry::Occupied(entry) => {
+            let existing = entry.get();
+            if existing.name != header.name
+                || existing.encoding != header.encoding
+                || existing.data.as_ref() != data.as_ref()
+            {
+                return Err(mcap::McapError::ConflictingSchemas(header.name).into());
+            }
+            Ok(())
+        }
+        Entry::Vacant(entry) => {
+            entry.insert(Arc::new(mcap::Schema {
+                id: header.id,
+                name: header.name,
+                encoding: header.encoding,
+                data: std::borrow::Cow::Owned(data.into_owned()),
+            }));
+            Ok(())
+        }
+    }
+}
+
+/// Same rules as `mcap::read::ChannelAccumulator::add_channel` (used by `MessageStream`).
+fn add_channel_record(
+    channels: &mut HashMap<u16, Arc<mcap::Channel<'static>>>,
+    schemas: &HashMap<u16, Arc<mcap::Schema<'static>>>,
+    channel: mcap::records::Channel,
+) -> Result<()> {
+    let schema = if channel.schema_id == 0 {
+        None
+    } else {
+        match schemas.get(&channel.schema_id) {
+            Some(schema) => Some(schema.clone()),
+            None => {
+                return Err(mcap::McapError::UnknownSchema(
+                    channel.topic.clone(),
+                    channel.schema_id,
+                )
+                .into());
+            }
+        }
+    };
+    match channels.entry(channel.id) {
+        Entry::Occupied(entry) => {
+            let existing = entry.get();
+            if existing.topic != channel.topic
+                || existing.schema.as_ref().map(|s| s.id).unwrap_or(0) != channel.schema_id
+                || existing.message_encoding != channel.message_encoding
+                || existing.metadata != channel.metadata
+            {
+                return Err(mcap::McapError::ConflictingChannels(channel.topic).into());
+            }
+            Ok(())
+        }
+        Entry::Vacant(entry) => {
+            entry.insert(Arc::new(mcap::Channel {
+                id: channel.id,
+                topic: channel.topic,
+                schema,
+                message_encoding: channel.message_encoding,
+                metadata: channel.metadata,
+            }));
+            Ok(())
+        }
+    }
+}
+
 fn make_channel_key(
     schema_id: u16,
     topic: &str,
@@ -924,6 +950,31 @@ mod tests {
         record.extend_from_slice(&(body.len() as u64).to_le_bytes());
         record.extend_from_slice(body);
         record
+    }
+
+    fn schema_record(id: u16, name: &str, encoding: &str, data: &[u8]) -> Vec<u8> {
+        let mut body = Vec::new();
+        body.extend_from_slice(&id.to_le_bytes());
+        body.extend_from_slice(&(name.len() as u32).to_le_bytes());
+        body.extend_from_slice(name.as_bytes());
+        body.extend_from_slice(&(encoding.len() as u32).to_le_bytes());
+        body.extend_from_slice(encoding.as_bytes());
+        body.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        body.extend_from_slice(data);
+        wrap_record(mcap::records::op::SCHEMA, &body)
+    }
+
+    fn channel_record(id: u16, schema_id: u16, topic: &str, message_encoding: &str) -> Vec<u8> {
+        let mut body = Vec::new();
+        body.extend_from_slice(&id.to_le_bytes());
+        body.extend_from_slice(&schema_id.to_le_bytes());
+        body.extend_from_slice(&(topic.len() as u32).to_le_bytes());
+        body.extend_from_slice(topic.as_bytes());
+        body.extend_from_slice(&(message_encoding.len() as u32).to_le_bytes());
+        body.extend_from_slice(message_encoding.as_bytes());
+        // Empty metadata map: u32 byte length = 0.
+        body.extend_from_slice(&0u32.to_le_bytes());
+        wrap_record(mcap::records::op::CHANNEL, &body)
     }
 
     fn record_offset(bytes: &[u8], target_opcode: u8) -> usize {
@@ -1259,6 +1310,103 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(ordered_log_times, vec![1, 5, 10]);
+    }
+
+    #[test]
+    fn merge_rejects_conflicting_schema_redefinition_on_summaryless_input() {
+        let base = build_non_indexed_mcap(
+            "profile",
+            &[TestMessage {
+                channel_id: 1,
+                topic: "/left".to_string(),
+                metadata: BTreeMap::new(),
+                log_time: 1,
+                payload: vec![1],
+            }],
+        );
+        // Reuse the first schema id with different content — MessageStream would error.
+        let schema_id = {
+            let offset = record_offset(&base, mcap::records::op::SCHEMA) + 9;
+            u16::from_le_bytes(base[offset..offset + 2].try_into().unwrap())
+        };
+        let conflict = schema_record(schema_id, "example", "jsonschema", br#"{"type":"string"}"#);
+        let mut bytes = base;
+        let data_end_offset = record_offset(&bytes, mcap::records::op::DATA_END);
+        bytes.splice(data_end_offset..data_end_offset, conflict.iter().copied());
+        patch_footer_summary_start(&mut bytes, conflict.len() as u64);
+
+        let err = merge_bytes(&[("bad", bytes.as_slice())], CoalesceChannels::Auto, false)
+            .expect_err("conflicting schema redefinition should fail");
+        assert!(
+            err.chain().any(|cause| cause
+                .downcast_ref::<mcap::McapError>()
+                .is_some_and(|e| matches!(e, mcap::McapError::ConflictingSchemas(_)))),
+            "expected ConflictingSchemas, got {err:#}"
+        );
+    }
+
+    #[test]
+    fn merge_rejects_conflicting_channel_redefinition_on_summaryless_input() {
+        let base = build_non_indexed_mcap(
+            "profile",
+            &[TestMessage {
+                channel_id: 1,
+                topic: "/left".to_string(),
+                metadata: BTreeMap::new(),
+                log_time: 1,
+                payload: vec![1],
+            }],
+        );
+        let schema_id = {
+            let offset = record_offset(&base, mcap::records::op::SCHEMA) + 9;
+            u16::from_le_bytes(base[offset..offset + 2].try_into().unwrap())
+        };
+        let channel_id = {
+            let offset = record_offset(&base, mcap::records::op::CHANNEL) + 9;
+            u16::from_le_bytes(base[offset..offset + 2].try_into().unwrap())
+        };
+        let conflict = channel_record(channel_id, schema_id, "/other", "json");
+        let mut bytes = base;
+        let data_end_offset = record_offset(&bytes, mcap::records::op::DATA_END);
+        bytes.splice(data_end_offset..data_end_offset, conflict.iter().copied());
+        patch_footer_summary_start(&mut bytes, conflict.len() as u64);
+
+        let err = merge_bytes(&[("bad", bytes.as_slice())], CoalesceChannels::Auto, false)
+            .expect_err("conflicting channel redefinition should fail");
+        assert!(
+            err.chain().any(|cause| cause
+                .downcast_ref::<mcap::McapError>()
+                .is_some_and(|e| matches!(e, mcap::McapError::ConflictingChannels(_)))),
+            "expected ConflictingChannels, got {err:#}"
+        );
+    }
+
+    #[test]
+    fn merge_rejects_schema_id_zero_on_summaryless_input() {
+        let base = build_non_indexed_mcap(
+            "profile",
+            &[TestMessage {
+                channel_id: 1,
+                topic: "/left".to_string(),
+                metadata: BTreeMap::new(),
+                log_time: 1,
+                payload: vec![1],
+            }],
+        );
+        let invalid = schema_record(0, "bad", "jsonschema", br#"{"type":"object"}"#);
+        let mut bytes = base;
+        let data_end_offset = record_offset(&bytes, mcap::records::op::DATA_END);
+        bytes.splice(data_end_offset..data_end_offset, invalid.iter().copied());
+        patch_footer_summary_start(&mut bytes, invalid.len() as u64);
+
+        let err = merge_bytes(&[("bad", bytes.as_slice())], CoalesceChannels::Auto, false)
+            .expect_err("schema id 0 should fail");
+        assert!(
+            err.chain().any(|cause| cause
+                .downcast_ref::<mcap::McapError>()
+                .is_some_and(|e| matches!(e, mcap::McapError::InvalidSchemaId))),
+            "expected InvalidSchemaId, got {err:#}"
+        );
     }
 
     #[test]
