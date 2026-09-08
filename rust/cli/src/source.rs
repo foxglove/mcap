@@ -868,6 +868,8 @@ pub(crate) fn require_remote_indexed_read_budget(
     options: SourceOptions,
     description: &str,
 ) -> Result<()> {
+    // Callers must invoke this only for remote inputs. Local indexed reads are uncapped;
+    // `--allow-remote-scan` is a remote-transfer opt-in, not a local size guard.
     if options.allow_remote_scan || total_bytes <= MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN {
         return Ok(());
     }

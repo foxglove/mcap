@@ -200,6 +200,8 @@ overrides:
       - mmap
       - seekable
       - tmpfs
+      - readahead
+      - cgroup
 
   - filename: "python/**/*.rst"
     words:
