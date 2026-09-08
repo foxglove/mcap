@@ -51,6 +51,9 @@ test: dev-image
 test-host:
 	./test/build/Debug/bin/unit-tests
 	./test/build/Debug/bin/unit-tests-nocompress
+	./test/build/Debug/bin/unit-tests-noparallel
+	./test/build/Debug/bin/parallel-reader-test
+	./test/build/Debug/bin/parallel-reader-test-nocompress
 
 .PHONY: hdoc-build
 hdoc-build:
