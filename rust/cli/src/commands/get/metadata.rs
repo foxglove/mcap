@@ -61,7 +61,7 @@ fn merged_metadata_for_name(
     let total_bytes = matching_indexes
         .iter()
         .fold(0u64, |total, index| total.saturating_add(index.length));
-    if matching_indexes.len() > 1 || source.is_remote() {
+    if source.is_remote() {
         source::require_remote_indexed_read_budget(
             total_bytes,
             source_options,

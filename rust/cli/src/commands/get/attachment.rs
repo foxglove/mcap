@@ -21,11 +21,13 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
     let index = select_attachment_index(&indexes, &args.name, args.offset)?;
     let length = usize::try_from(index.length)
         .context("indexed record is too large to read on this platform")?;
-    source::require_remote_indexed_read_budget(
-        index.length,
-        source_options,
-        "remote attachment record",
-    )?;
+    if input.is_remote() {
+        source::require_remote_indexed_read_budget(
+            index.length,
+            source_options,
+            "remote attachment record",
+        )?;
+    }
     let bytes = input.read_at(index.offset, length)?;
     let attachment = parse::parse_attachment_record(&bytes).with_context(|| {
         format!(

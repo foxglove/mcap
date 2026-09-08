@@ -10,8 +10,9 @@ This is a **polyglot library monorepo** for the [MCAP](https://mcap.dev) log fil
 
 **Bounded memory when reading.** Neither the language libraries nor the CLI may read (or force a consumer to read) an entire MCAP file into memory — files can be many GB. Reader memory should scale with the record or chunk being processed, not with the file length: holding one record, chunk, or attachment at a time is fine, but buffering the whole file, or all of its messages, is an out-of-memory foot-gun.
 
-- Memory-map (`mmap`) seekable local files where the language supports it, or have the API consumer supply the bytes (e.g. via their own mmap); use seek + bounded range reads for random access and streaming for sequential scans.
-- When input isn't seekable (e.g. a stdin pipe) or an operation needs random access over a stream (e.g. sorting), spool to a temporary file and mmap it rather than buffering in memory. A tmpfs temp dir keeps the spool resident, though that is typically swap-backed.
+- Prefer seek + bounded range reads (with a modest readahead buffer for sequential scans) or streaming. Do not memory-map whole files by default: under cgroup memory limits, mapped pages can count against the process budget and OOM-kill a reader that maps a multi-GB file into a small limit.
+- API consumers may still supply bytes (including their own mmap) when they control the environment. Library “slice” readers that take `&[u8]` are fine as an opt-in for that case.
+- When input isn't seekable (e.g. a stdin pipe) or an operation needs random access over a stream (e.g. sorting), spool to a temporary file and seek+read it rather than buffering the whole object in memory. A tmpfs temp dir keeps the spool resident, though that is typically swap-backed.
 
 ## General prerequisites
 

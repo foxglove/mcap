@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{Read, Seek, Write};
+use std::io::{Seek, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -70,18 +70,34 @@ pub(crate) fn amend_mcap_file(
 
     let backup_path = make_tail_backup_path(file)?;
     let (layout, mut existing_summary) = {
-        let mut readable =
-            fs::File::open(file).with_context(|| format!("failed to open '{}'", file.display()))?;
-        let mut contents = Vec::new();
-        readable
-            .read_to_end(&mut contents)
-            .with_context(|| format!("failed to read '{}'", file.display()))?;
-        let layout = parse_existing_layout(&contents)?;
-        let tail_start = layout.old_data_end_offset as usize;
-        let tail = contents
-            .get(tail_start..)
-            .with_context(|| format!("data end offset out of range for '{}'", file.display()))?;
-        fs::write(&backup_path, tail)
+        // Seek+read only the tail (DataEnd through EOF). Do not load the whole file into a Vec —
+        // files can be far larger than the summary section this path needs.
+        let mut source = crate::byte_source::LocalFileSource::open_path(file)
+            .with_context(|| format!("failed to open '{}'", file.display()))?;
+        let size = crate::byte_source::ByteSource::size(&source)?
+            .with_context(|| format!("failed to get size of '{}'", file.display()))?;
+        let layout = parse_existing_layout_from_source(&mut source, size)?;
+        let tail_len = usize::try_from(
+            size.checked_sub(layout.old_data_end_offset)
+                .with_context(|| {
+                    format!("data end offset out of range for '{}'", file.display())
+                })?,
+        )
+        .with_context(|| format!("tail length out of range for '{}'", file.display()))?;
+        let tail = crate::byte_source::ByteSource::read_at(
+            &mut source,
+            layout.old_data_end_offset,
+            tail_len,
+        )
+        .with_context(|| format!("failed to read tail of '{}'", file.display()))?;
+        if tail.len() != tail_len {
+            bail!(
+                "short read of tail for '{}' (wanted {tail_len}, got {})",
+                file.display(),
+                tail.len()
+            );
+        }
+        fs::write(&backup_path, &tail)
             .with_context(|| format!("failed to write tail backup '{}'", backup_path.display()))?;
         let backup_file = fs::OpenOptions::new()
             .read(true)
@@ -90,7 +106,7 @@ pub(crate) fn amend_mcap_file(
         backup_file
             .sync_all()
             .with_context(|| format!("failed to sync tail backup '{}'", backup_path.display()))?;
-        let summary = collect_existing_summary(&contents)?;
+        let summary = collect_existing_summary_from_source(&mut source)?;
         (layout, summary)
     };
 
@@ -348,6 +364,7 @@ fn amend_mcap_bytes(
     Ok(output)
 }
 
+#[cfg(test)]
 fn parse_existing_layout(input: &[u8]) -> Result<ExistingLayout> {
     let footer = mcap::read::footer(input).context("failed to read footer")?;
     let footer_start = input
@@ -377,6 +394,140 @@ fn parse_existing_layout(input: &[u8]) -> Result<ExistingLayout> {
     })
 }
 
+fn parse_existing_layout_from_source(
+    source: &mut dyn crate::byte_source::ByteSource,
+    size: u64,
+) -> Result<ExistingLayout> {
+    let min_len = (mcap::MAGIC.len() as u64)
+        .checked_add(FOOTER_RECORD_LEN)
+        .and_then(|n| n.checked_add(mcap::MAGIC.len() as u64))
+        .context("footer length overflow")?;
+    if size < min_len {
+        bail!("input is too short to contain a footer");
+    }
+    let start_magic = crate::byte_source::ByteSource::read_at(source, 0, mcap::MAGIC.len())?;
+    let end_magic = crate::byte_source::ByteSource::read_at(
+        source,
+        size - mcap::MAGIC.len() as u64,
+        mcap::MAGIC.len(),
+    )?;
+    if start_magic.as_slice() != mcap::MAGIC || end_magic.as_slice() != mcap::MAGIC {
+        bail!("bad magic");
+    }
+    let footer_start = size - mcap::MAGIC.len() as u64 - FOOTER_RECORD_LEN;
+    let footer_bytes =
+        crate::byte_source::ByteSource::read_at(source, footer_start, FOOTER_RECORD_LEN as usize)?;
+    if footer_bytes.len() != FOOTER_RECORD_LEN as usize || footer_bytes[0] != op::FOOTER {
+        bail!("failed to read footer");
+    }
+    let footer_len = u64::from_le_bytes(footer_bytes[1..9].try_into().expect("len 8"));
+    if footer_len != 20 {
+        bail!("unexpected footer record length {footer_len}");
+    }
+    let summary_start = u64::from_le_bytes(footer_bytes[9..17].try_into().expect("len 8"));
+    let summary_offset_start = u64::from_le_bytes(footer_bytes[17..25].try_into().expect("len 8"));
+    let summary_crc = u32::from_le_bytes(footer_bytes[25..29].try_into().expect("len 4"));
+    let old_data_end_offset = if summary_start > 0 {
+        summary_start
+            .checked_sub(DATA_END_RECORD_LEN)
+            .context("summary start is before data end record")?
+    } else {
+        footer_start
+            .checked_sub(DATA_END_RECORD_LEN)
+            .context("footer starts before data end record")?
+    };
+    let data_end_bytes = crate::byte_source::ByteSource::read_at(
+        source,
+        old_data_end_offset,
+        DATA_END_RECORD_LEN as usize,
+    )?;
+    if data_end_bytes.len() != DATA_END_RECORD_LEN as usize || data_end_bytes[0] != op::DATA_END {
+        bail!("expected data end record at offset {old_data_end_offset}");
+    }
+    let data_section_crc = u32::from_le_bytes(data_end_bytes[9..13].try_into().expect("len 4"));
+    Ok(ExistingLayout {
+        emit_summary_offsets: summary_offset_start != 0,
+        data_crc_enabled: data_section_crc != 0,
+        summary_crc_enabled: summary_crc != 0,
+        old_data_end_crc: data_section_crc,
+        old_data_end_offset,
+    })
+}
+
+fn existing_summary_from_mcap_summary(summary: mcap::Summary) -> ExistingSummaryData {
+    let mut data = ExistingSummaryData {
+        statistics: summary.stats,
+        channels: BTreeMap::new(),
+        schemas: BTreeMap::new(),
+        chunk_indexes: summary.chunk_indexes,
+        attachment_indexes: summary.attachment_indexes,
+        metadata_indexes: summary.metadata_indexes,
+    };
+    for schema in summary.schemas.values() {
+        let schema = schema.as_ref();
+        data.schemas.insert(
+            schema.id,
+            ParsedSchema {
+                header: records::SchemaHeader {
+                    id: schema.id,
+                    name: schema.name.clone(),
+                    encoding: schema.encoding.clone(),
+                },
+                data: schema.data.clone().into_owned(),
+            },
+        );
+    }
+    for channel in summary.channels.values() {
+        let channel = channel.as_ref();
+        data.channels.insert(
+            channel.id,
+            records::Channel {
+                id: channel.id,
+                schema_id: channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0),
+                topic: channel.topic.clone(),
+                message_encoding: channel.message_encoding.clone(),
+                metadata: channel.metadata.clone(),
+            },
+        );
+    }
+    data
+}
+
+fn collect_existing_summary_from_source(
+    source: &mut dyn crate::byte_source::ByteSource,
+) -> Result<ExistingSummaryData> {
+    if let Some(summary) = crate::byte_source::read_summary(source)? {
+        return Ok(existing_summary_from_mcap_summary(summary));
+    }
+    let mut data = ExistingSummaryData::default();
+    crate::byte_source::for_each_linear_record(
+        source,
+        mcap::sans_io::LinearReaderOptions::default(),
+        |opcode, body| {
+            let record = mcap::parse_record(opcode, body)?;
+            if let Record::Chunk {
+                header: chunk_header,
+                data: chunk_data,
+            } = record
+            {
+                for nested in mcap::read::ChunkReader::new(chunk_header, chunk_data.as_ref())
+                    .context("failed to parse chunk records")?
+                {
+                    collect_record(
+                        &mut data,
+                        nested.context("failed to parse nested chunk record")?,
+                    )?;
+                }
+            } else {
+                collect_record(&mut data, record)?;
+            }
+            Ok(())
+        },
+    )?;
+    Ok(data)
+}
+
+#[cfg(test)]
 fn parse_data_end(input: &[u8], offset: u64) -> Result<records::DataEnd> {
     let start = offset as usize;
     let Some(slice) = input.get(start..) else {
@@ -396,45 +547,10 @@ fn parse_data_end(input: &[u8], offset: u64) -> Result<records::DataEnd> {
     }
 }
 
+#[cfg(test)]
 fn collect_existing_summary(input: &[u8]) -> Result<ExistingSummaryData> {
     if let Some(summary) = mcap::Summary::read(input).context("failed to read summary")? {
-        let mut data = ExistingSummaryData {
-            statistics: summary.stats,
-            channels: BTreeMap::new(),
-            schemas: BTreeMap::new(),
-            chunk_indexes: summary.chunk_indexes,
-            attachment_indexes: summary.attachment_indexes,
-            metadata_indexes: summary.metadata_indexes,
-        };
-
-        for schema in summary.schemas.values() {
-            let schema = schema.as_ref();
-            data.schemas.insert(
-                schema.id,
-                ParsedSchema {
-                    header: records::SchemaHeader {
-                        id: schema.id,
-                        name: schema.name.clone(),
-                        encoding: schema.encoding.clone(),
-                    },
-                    data: schema.data.clone().into_owned(),
-                },
-            );
-        }
-        for channel in summary.channels.values() {
-            let channel = channel.as_ref();
-            data.channels.insert(
-                channel.id,
-                records::Channel {
-                    id: channel.id,
-                    schema_id: channel.schema.as_ref().map(|schema| schema.id).unwrap_or(0),
-                    topic: channel.topic.clone(),
-                    message_encoding: channel.message_encoding.clone(),
-                    metadata: channel.metadata.clone(),
-                },
-            );
-        }
-        return Ok(data);
+        return Ok(existing_summary_from_mcap_summary(summary));
     }
 
     let mut data = ExistingSummaryData::default();
