@@ -99,8 +99,7 @@ func (r *Reader) unindexedIterator(opts *ReadOptions) *unindexedMessageIterator 
 	return &unindexedMessageIterator{
 		lexer:            r.l,
 		topics:           topicMap,
-		start:            opts.StartNanos,
-		end:              opts.EndNanos,
+		bounds:           opts.logTimeBounds(),
 		metadataCallback: opts.MetadataCallback,
 	}
 }
@@ -118,8 +117,7 @@ func (r *Reader) indexedMessageIterator(
 		lexer:            r.l,
 		rs:               r.rs,
 		topics:           topicMap,
-		start:            opts.StartNanos,
-		end:              opts.EndNanos,
+		bounds:           opts.logTimeBounds(),
 		order:            opts.Order,
 		metadataCallback: opts.MetadataCallback,
 	}
@@ -142,6 +140,12 @@ func (r *Reader) Messages(
 		}
 	}
 	options.Finalize()
+	// A strictly crossed time range is a caller error; an empty range is a valid query that
+	// matches nothing. Checking here, after every option has been applied, makes the result
+	// independent of option order.
+	if options.logTimeBounds().isCrossed() {
+		return nil, fmt.Errorf("end cannot come before start")
+	}
 	if options.UseIndex {
 		if rs, ok := r.r.(io.ReadSeeker); ok {
 			r.rs = rs
