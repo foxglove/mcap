@@ -642,15 +642,14 @@ LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem,
                                            const ReadMessageOptions& options) {
   // Check that open() has been successfully called
   if (!dataSource() || dataStart_ == 0) {
-    const Status status{StatusCode::NotOpen};
-    onProblem(status);
-    return LinearMessageView{*this, status, onProblem};
+    onProblem(StatusCode::NotOpen);
+    return LinearMessageView{*this, onProblem};
   }
 
   const auto boundsStatus = options.validate();
   if (!boundsStatus.ok()) {
     onProblem(boundsStatus);
-    return LinearMessageView{*this, boundsStatus, onProblem};
+    return LinearMessageView{*this, onProblem};
   }
   const auto [startOffset, endOffset] = byteRange_(options);
   return LinearMessageView{*this, options, startOffset, endOffset, onProblem};
@@ -1693,14 +1692,6 @@ LinearMessageView::LinearMessageView(McapReader& mcapReader, const ProblemCallba
     , dataEnd_(0)
     , onProblem_(onProblem) {}
 
-LinearMessageView::LinearMessageView(McapReader& mcapReader, const Status& status,
-                                     const ProblemCallback& onProblem)
-    : mcapReader_(mcapReader)
-    , dataStart_(0)
-    , dataEnd_(0)
-    , onProblem_(onProblem)
-    , status_(status) {}
-
 LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStart,
                                      ByteOffset dataEnd, Timestamp startingAt,
                                      Timestamp endingBefore, const ProblemCallback& onProblem)
@@ -1718,10 +1709,6 @@ LinearMessageView::LinearMessageView(McapReader& mcapReader, const ReadMessageOp
     , dataEnd_(dataEnd)
     , readMessageOptions_(options)
     , onProblem_(onProblem) {}
-
-const Status& LinearMessageView::status() const {
-  return status_;
-}
 
 LinearMessageView::Iterator LinearMessageView::begin() {
   if (dataStart_ == dataEnd_ || !mcapReader_.dataSource()) {
