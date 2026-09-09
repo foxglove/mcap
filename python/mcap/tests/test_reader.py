@@ -148,8 +148,7 @@ def test_max_timestamp_bound(reader_cls: AnyReaderSubclass):
     assert count_messages(ending_at=2**64 - 1) == 2
     # No log time is strictly after the maximum timestamp.
     assert count_messages(starting_after=2**64 - 1) == 0
-    # Combining that empty lower bound with an end bound is a valid empty query, not a
-    # crossed-range error, so pagination terminates there instead of raising.
+    # Combining it with an end bound is still an empty query, not a crossed range.
     assert count_messages(starting_after=2**64 - 1, ending_before=5) == 0
     # starting_after below the maximum keeps its normal exclusive behavior.
     assert count_messages(starting_after=3) == 1

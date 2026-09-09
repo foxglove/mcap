@@ -50,11 +50,8 @@ def _resolve_time_range(
 ) -> Tuple[Optional[int], Optional[int]]:
     """Resolve the explicit and deprecated time bounds to an inclusive-start /
     exclusive-end pair, warning on deprecated names and rejecting conflicting bounds
-    and crossed ranges. Log times are integer nanoseconds, so ``starting_after(t)`` is
-    ``starting_at(t + 1)`` and ``ending_at(t)`` is ``ending_before(t + 1)``. A start
-    bound beyond the largest representable log time (``starting_after`` at ``2**64 - 1``)
-    selects nothing and stays a valid empty query rather than a crossed range, so
-    pagination via ``starting_after`` terminates there instead of raising.
+    and crossed ranges. ``starting_after`` at ``2**64 - 1`` is a valid empty query, not
+    a crossed range, so pagination terminates there instead of raising.
     """
     if start_time is not None:
         warnings.warn(

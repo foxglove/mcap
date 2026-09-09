@@ -140,9 +140,8 @@ func (r *Reader) Messages(
 		}
 	}
 	options.Finalize()
-	// A strictly crossed time range is a caller error; an empty range is a valid query that
-	// matches nothing. Checking here, after every option has been applied, makes the result
-	// independent of option order.
+	// A crossed range is an error; an empty range is not. Checking after all options are
+	// applied makes the result independent of option order.
 	if options.logTimeBounds().isCrossed() {
 		return nil, fmt.Errorf("end cannot come before start")
 	}
