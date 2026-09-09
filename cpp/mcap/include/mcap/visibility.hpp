@@ -27,10 +27,7 @@
 #  endif
 #endif
 
-/** Macros to locally suppress deprecation warnings. The library uses these around its own
- *  internal reads of deprecated members, which must keep working to honor callers that still
- *  set them; consumers of the deprecated members get the warnings as usual.
- */
+/** Locally suppress deprecation warnings, for the library's own reads of deprecated members. */
 #if defined(_MSC_VER)
 #  define MCAP_DIAGNOSTIC_PUSH __pragma(warning(push))
 #  define MCAP_DIAGNOSTIC_POP __pragma(warning(pop))

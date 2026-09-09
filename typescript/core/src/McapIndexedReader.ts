@@ -376,10 +376,8 @@ export class McapIndexedReader<TReadOptions = unknown> {
 
   /**
    * Read messages from the file, optionally filtering by topic and log time.
-   * The log time range is expressed with one bound per side: `startingAt`
-   * (inclusive) or `startingAfter` (exclusive), and `endingAt` (inclusive) or
-   * `endingBefore` (exclusive). Providing more than one bound for a side
-   * throws.
+   * Provide at most one lower bound (`startingAt` or `startingAfter`) and one
+   * upper bound (`endingAt` or `endingBefore`).
    */
   async *readMessages(
     args: {
@@ -543,10 +541,8 @@ export class McapIndexedReader<TReadOptions = unknown> {
 
   /**
    * Read attachments from the file, optionally filtering by name, media
-   * type, and log time. The log time range is expressed with one bound per
-   * side: `startingAt` (inclusive) or `startingAfter` (exclusive), and `endingAt`
-   * (inclusive) or `endingBefore` (exclusive). Providing more than one bound
-   * for a side throws.
+   * type, and log time. Provide at most one lower bound (`startingAt` or
+   * `startingAfter`) and one upper bound (`endingAt` or `endingBefore`).
    */
   async *readAttachments(
     args: {
@@ -653,12 +649,9 @@ export class McapIndexedReader<TReadOptions = unknown> {
 }
 
 /**
- * Resolve the explicit (`startingAt`/`startingAfter`/`endingAt`/`endingBefore`) and deprecated
- * (`startTime`/`endTime`) time bounds to the canonical inclusive `startingAt`/`endingAt`
- * pair used internally, throwing if more than one bound is provided for a side or if the
- * provided bounds form a strictly crossed range. Log times are integer nanoseconds, so
- * `startingAfter(t)` is `startingAt(t + 1n)` and `endingBefore(t)` is `endingAt(t - 1n)`.
- * This is the only place the deprecated bounds are read.
+ * Resolve the explicit and deprecated time bounds to the inclusive `startingAt`/`endingAt`
+ * pair used internally, throwing on conflicting bounds or a strictly crossed range. This is
+ * the only place the deprecated bounds are read.
  */
 const MAX_LOG_TIME = 2n ** 64n - 1n;
 
@@ -690,12 +683,9 @@ function resolveInclusiveTimeRange(
   if (args.endingBefore != undefined) {
     endingAt = args.endingBefore - 1n;
   }
-  // A strictly crossed range is a caller error, checked on the provided bounds only: the
-  // defaults below come from the file's own time range, and a bound beyond that range is a
-  // valid (empty) query. Equal exclusive bounds (startingAt === endingAt + 1n) are a valid
-  // empty range, and a start bound beyond the largest representable log time
-  // (startingAfter at 2^64 - 1) selects nothing and stays valid too, so pagination via
-  // startingAfter terminates there instead of throwing.
+  // Only the provided bounds are checked for crossing: the defaults come from the file's own
+  // time range, and a bound beyond it is a valid empty query. So are an empty range and
+  // startingAfter at 2^64 - 1, so pagination terminates there instead of throwing.
   if (
     startingAt != undefined &&
     endingAt != undefined &&

@@ -525,9 +525,7 @@ describe("McapIndexedReader", () => {
       );
       // The deprecated names keep their historical (inclusive) behavior.
       await expect(readWith({ startTime: 10n, endTime: 10n })).resolves.toEqual(expectIndices([0]));
-      // A strictly crossed range throws; equal exclusive bounds are a valid empty query,
-      // and a bound beyond the file's own time range is valid too (the file range must not
-      // leak into crossing detection).
+      // A crossed range throws; an empty range or a bound beyond the file's range does not.
       await expect(readWith({ startingAt: 11n, endingBefore: 10n })).rejects.toThrow(
         "end time cannot come before start time",
       );
@@ -615,8 +613,7 @@ describe("McapIndexedReader", () => {
       // No log time is strictly after the maximum timestamp.
       const collectedAfterMax = await collect(reader.readMessages({ startingAfter: maxTime }));
       expect(collectedAfterMax).toEqual([]);
-      // Combining that empty lower bound with an end bound is a valid empty query, not a
-      // crossed-range error, so pagination terminates there instead of throwing.
+      // Combining it with an end bound is still an empty query, not a crossed range.
       const collectedAfterMaxBounded = await collect(
         reader.readMessages({ startingAfter: maxTime, endingBefore: 5n }),
       );
@@ -1454,8 +1451,7 @@ describe("McapIndexedReader", () => {
       },
     ]);
 
-    // Explicit bounds: attachments have log times 1, 4, and 6. endingAt is inclusive,
-    // endingBefore and startingAfter are exclusive.
+    // Attachments have log times 1, 4, and 6.
     attachments = await collect(reader.readAttachments({ startingAt: 4n, endingAt: 4n }));
     expect(attachments.map((attachment) => attachment.logTime)).toEqual([4n]);
     attachments = await collect(reader.readAttachments({ startingAt: 4n, endingBefore: 6n }));
