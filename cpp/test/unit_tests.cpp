@@ -733,8 +733,7 @@ TEST_CASE("explicit time range bounds", "[reader]") {
     REQUIRE(count == 6);
   }
   {
-    // The deprecated positional overloads keep their exact historical behavior,
-    // including the defaulted end time.
+    // The deprecated positional overloads, including the defaulted end time, are unchanged.
     mcap::McapReader reader;
     requireOk(reader.open(buffer));
     const auto onProblem = [](const mcap::Status& status) {
@@ -755,8 +754,7 @@ TEST_CASE("explicit time range bounds", "[reader]") {
     MCAP_DIAGNOSTIC_POP
   }
   {
-    // With a summary loaded, the linear path narrows its scan to the chunks overlapping the
-    // range and still applies the same membership test to each message.
+    // With a summary loaded, the linear path narrows its scan to the overlapping chunks.
     auto logTimesWithSummary = [&buffer](const mcap::ReadMessageOptions& options) {
       mcap::McapReader reader;
       requireOk(reader.open(buffer));
@@ -861,21 +859,18 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
   };
 
   {
-    // An explicit endingAt(MaxTime) is a true "no upper bound": the message logged at
-    // exactly MaxTime is included.
+    // endingAt(MaxTime) includes the message logged at MaxTime.
     mcap::ReadMessageOptions options;
     options.endingAt(mcap::MaxTime);
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, mcap::MaxTime});
   }
   {
-    // The deprecated endTime default keeps its historical exclusive-MaxTime behavior,
-    // which drops the MaxTime message.
+    // The deprecated endTime default keeps its historical exclusive-MaxTime behavior.
     mcap::ReadMessageOptions options;
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3});
   }
   {
-    // An explicit end bound takes precedence over the deprecated endTime field, including
-    // the explicitly-unbounded endingAt(MaxTime).
+    // An explicit end bound, including endingAt(MaxTime), wins over the deprecated endTime.
     MCAP_DIAGNOSTIC_PUSH
     MCAP_IGNORE_DEPRECATED
     mcap::ReadMessageOptions options;
@@ -885,9 +880,7 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, mcap::MaxTime});
   }
   {
-    // startingAfter(MaxTime) selects nothing: no log time is strictly after MaxTime. It is a
-    // valid (empty) query, not an error, so pagination via startingAfter(lastLogTime)
-    // terminates even when the last message is logged at MaxTime.
+    // startingAfter(MaxTime) matches nothing and is not an error.
     mcap::ReadMessageOptions options;
     options.startingAfter(mcap::MaxTime);
     REQUIRE(!options.includesLogTime(mcap::MaxTime));
@@ -910,8 +903,7 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{});
   }
   {
-    // A later lower bound replaces the empty range. (With no explicit end bound the
-    // deprecated endTime default applies, which drops the MaxTime message as pinned above.)
+    // A later lower bound replaces the empty range; the endTime default still drops MaxTime.
     mcap::ReadMessageOptions options;
     options.startingAfter(mcap::MaxTime).startingAt(3);
     REQUIRE(options.includesLogTime(3));

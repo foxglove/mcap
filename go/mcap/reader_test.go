@@ -1124,8 +1124,7 @@ func TestExplicitTimeRangeBounds(t *testing.T) {
 	assert.Equal(t, []uint64{3}, logTimes(t, StartingAtNanos(3), EndingAtNanos(3)))
 	// EndingAtNanos(math.MaxUint64) means no upper bound.
 	assert.Equal(t, []uint64{1, 2, 3, 4, 5, 6}, logTimes(t, EndingAtNanos(math.MaxUint64)))
-	// EndingAtNanos one below the start is a valid empty range, not a crossing error, in
-	// either option order.
+	// An empty range is not a crossing error, in either option order.
 	assert.Empty(t, logTimes(t, StartingAtNanos(3), EndingAtNanos(2)))
 	assert.Empty(t, logTimes(t, EndingAtNanos(2), StartingAtNanos(3)))
 	// A genuinely crossed range still errors, in either option order.
@@ -1179,11 +1178,9 @@ func TestMaxTimestampBound(t *testing.T) {
 		return count
 	}
 
-	// An explicit EndingAtNanos(math.MaxUint64) is a true "no upper bound": the message
-	// logged at exactly math.MaxUint64 is included.
+	// EndingAtNanos(math.MaxUint64) includes the message logged at math.MaxUint64.
 	assert.Equal(t, 2, countMessages(t, EndingAtNanos(math.MaxUint64)))
-	// The unfiltered default keeps its historical exclusive-MaxUint64 upper bound, which
-	// drops that message.
+	// The unfiltered default keeps its historical exclusive-MaxUint64 upper bound.
 	assert.Equal(t, 1, countMessages(t))
 	// Info() lists every chunk regardless of the default read bounds.
 	infoReader, err := NewReader(bytes.NewReader(buf.Bytes()))
@@ -1192,18 +1189,14 @@ func TestMaxTimestampBound(t *testing.T) {
 	info, err := infoReader.Info()
 	require.NoError(t, err)
 	assert.Len(t, info.ChunkIndexes, 1)
-	// StartingAfterNanos(math.MaxUint64) yields nothing: no log time is strictly after
-	// math.MaxUint64.
+	// StartingAfterNanos(math.MaxUint64) yields nothing and is not an error.
 	assert.Equal(t, 0, countMessages(t, StartingAfterNanos(math.MaxUint64)))
 	// StartingAfterNanos below the maximum keeps its normal exclusive behavior.
 	assert.Equal(t, 1, countMessages(t, StartingAfterNanos(2)))
-	// Combining the after-the-maximum lower bound with an end bound is a valid empty query,
-	// not a crossing error, in either option order: windowed pagination via
-	// StartingAfterNanos(lastLogTime) terminates even at math.MaxUint64.
+	// Combining it with an end bound is still an empty query, in either option order.
 	assert.Equal(t, 0, countMessages(t, StartingAfterNanos(math.MaxUint64), EndingBeforeNanos(5)))
 	assert.Equal(t, 0, countMessages(t, EndingBeforeNanos(5), StartingAfterNanos(math.MaxUint64)))
-	// An inclusive lower bound at the maximum is an ordinary bound, so pairing it with a
-	// lower upper bound is a crossed range, as it is in the other language implementations.
+	// An inclusive lower bound at the maximum is an ordinary bound, so this range is crossed.
 	crossedErr := func(t *testing.T, opts ...ReadOpt) {
 		reader, err := NewReader(bytes.NewReader(buf.Bytes()))
 		require.NoError(t, err)

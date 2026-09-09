@@ -24,17 +24,14 @@ type ReadOptions struct {
 
 	MetadataCallback func(*Metadata) error
 
-	// StartNanos is an inclusive lower bound on message log times: messages with
-	// LogTime >= StartNanos are yielded. A bound set through StartingAtNanos or
-	// StartingAfterNanos takes precedence over this field.
+	// StartNanos is an inclusive lower bound on message log times. A bound set through
+	// StartingAtNanos or StartingAfterNanos takes precedence over it.
 	StartNanos uint64
-	// EndNanos is an exclusive upper bound on message log times: messages with
-	// LogTime < EndNanos are yielded. Zero means no upper bound. A bound set through
-	// EndingAtNanos or EndingBeforeNanos takes precedence over this field.
+	// EndNanos is an exclusive upper bound on message log times; zero means no upper bound. A
+	// bound set through EndingAtNanos or EndingBeforeNanos takes precedence over it.
 	EndNanos uint64
 
-	// Bounds set through the StartingAtNanos/StartingAfterNanos and
-	// EndingAtNanos/EndingBeforeNanos options, exactly as provided.
+	// Bounds set through the StartingAt/StartingAfter/EndingAt/EndingBefore options.
 	lower logTimeBound
 	upper logTimeBound
 }
@@ -54,17 +51,14 @@ type logTimeBound struct {
 	value uint64
 }
 
-// logTimeBounds is the log time range a read is limited to. Membership is tested directly
-// against the provided values, so no inclusive/exclusive conversion or math.MaxUint64
-// special-casing is needed anywhere.
+// logTimeBounds is the log time range a read is limited to, with each bound kept as provided.
 type logTimeBounds struct {
 	lower logTimeBound
 	upper logTimeBound
 }
 
-// logTimeBounds returns the effective bounds: those set through the options, falling back
-// to the StartNanos/EndNanos fields on any side without one. Call Finalize first so the
-// deprecated Start/End fields have been folded into StartNanos/EndNanos.
+// logTimeBounds returns the option-set bounds, falling back to StartNanos/EndNanos on a side
+// without one. Call Finalize first.
 func (ro *ReadOptions) logTimeBounds() logTimeBounds {
 	bounds := logTimeBounds{lower: ro.lower, upper: ro.upper}
 	if bounds.lower.kind == logTimeBoundUnset {
@@ -103,16 +97,13 @@ func (b logTimeBounds) includesLogTime(logTime uint64) bool {
 	return b.lowerBoundIncludes(logTime) && b.upperBoundIncludes(logTime)
 }
 
-// overlapsLogTimes reports whether any log time in the closed interval [first, last] falls
-// inside the range. The iterators use it to skip chunks that cannot hold a matching message.
+// overlapsLogTimes reports whether any log time in [first, last] falls inside the range.
 func (b logTimeBounds) overlapsLogTimes(first, last uint64) bool {
 	return b.lowerBoundIncludes(last) && b.upperBoundIncludes(first)
 }
 
 // isCrossed reports whether the upper bound lies strictly below the lower bound. An empty
-// range, such as StartingAtNanos(5) with EndingBeforeNanos(5) or StartingAfterNanos of
-// math.MaxUint64, is not crossed: it is a valid query that matches nothing. It compares the
-// first log time the lower bound admits with the first log time the upper bound rejects.
+// range, such as StartingAtNanos(5) with EndingBeforeNanos(5), is not crossed.
 func (b logTimeBounds) isCrossed() bool {
 	var firstIncluded uint64
 	switch b.lower.kind {
@@ -190,10 +181,8 @@ func StartingAtNanos(start uint64) ReadOpt {
 }
 
 // StartingAfterNanos limits messages yielded by the reader to those with log times strictly after
-// this timestamp (exclusive lower bound). Passing math.MaxUint64 yields no messages, as no log
-// time is strictly after it; that is a valid empty query, not an error, so windowed pagination
-// via StartingAfterNanos(lastLogTime) terminates even when the last message is logged at
-// math.MaxUint64. A later start option overrides an earlier one.
+// this timestamp (exclusive lower bound). Passing math.MaxUint64 yields nothing and is not an
+// error. A later start option overrides an earlier one.
 func StartingAfterNanos(start uint64) ReadOpt {
 	return func(ro *ReadOptions) error {
 		ro.lower = logTimeBound{kind: logTimeBoundExclusive, value: start}
@@ -202,9 +191,8 @@ func StartingAfterNanos(start uint64) ReadOpt {
 }
 
 // EndingAtNanos limits messages yielded by the reader to those with log times at or before this
-// timestamp (inclusive upper bound). Passing math.MaxUint64 means no upper bound: even a
-// message logged at exactly math.MaxUint64 is yielded. A later end option overrides an earlier
-// one.
+// timestamp (inclusive upper bound). Passing math.MaxUint64 means no upper bound. A later end
+// option overrides an earlier one.
 func EndingAtNanos(end uint64) ReadOpt {
 	return func(ro *ReadOptions) error {
 		ro.upper = logTimeBound{kind: logTimeBoundInclusive, value: end}
@@ -222,10 +210,9 @@ func EndingBeforeNanos(end uint64) ReadOpt {
 }
 
 // AfterNanos limits messages yielded by the reader to those with log times at or after this
-// timestamp. Despite the name, the bound is inclusive: messages logged exactly at this
-// timestamp are yielded.
+// timestamp. Despite the name, the bound is inclusive.
 //
-// Deprecated: use StartingAtNanos, which has the same behavior and says so.
+// Deprecated: use StartingAtNanos, which has the same behavior.
 func AfterNanos(start uint64) ReadOpt {
 	return StartingAtNanos(start)
 }

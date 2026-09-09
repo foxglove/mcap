@@ -1886,10 +1886,8 @@ bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::I
 }
 
 Status ReadMessageOptions::validate() const {
-  // Only a strictly crossed range is an error. An empty range, such as
-  // startingAt(5).endingBefore(5) or startingAfter(MaxTime), is a valid query that matches
-  // nothing. Compare the first log time the lower bound admits with the first log time the
-  // upper bound rejects; the range is crossed when the former comes after the latter.
+  // Only a strictly crossed range is an error; an empty range is valid. Compare the first log
+  // time the lower bound admits with the first one the upper bound rejects.
   MCAP_DIAGNOSTIC_PUSH
   MCAP_IGNORE_DEPRECATED
   Timestamp firstIncluded = startTime;

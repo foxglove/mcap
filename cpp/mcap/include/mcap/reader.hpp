@@ -249,8 +249,8 @@ public:
   /**
    * @brief Only messages with log timestamps greater or equal to startTime will be included.
    *
-   * @deprecated Use the `startingAt()` setter, which has the same (inclusive) behavior, or
-   * `startingAfter()` instead. If the `start` bound is set, it takes precedence over this field.
+   * @deprecated Use `startingAt()` (same behavior) or `startingAfter()`. An explicit bound takes
+   * precedence over this field.
    */
   [[deprecated(
     "use the startingAt() setter (same inclusive behavior) or startingAfter() instead")]]  //
@@ -258,8 +258,8 @@ public:
   /**
    * @brief Only messages with log timestamps less than endTime will be included.
    *
-   * @deprecated Use the `endingBefore()` setter, which has the same (exclusive) behavior, or
-   * `endingAt()` instead. If the `end` bound is set, it takes precedence over this field.
+   * @deprecated Use `endingBefore()` (same behavior) or `endingAt()`. An explicit bound takes
+   * precedence over this field.
    */
   [[deprecated(
     "use the endingBefore() setter (same exclusive behavior) or endingAt() instead")]]  //
@@ -275,10 +275,8 @@ public:
   }
   /**
    * @brief Limit reading to messages with log timestamps strictly after this time (exclusive
-   * lower bound). `startingAfter(MaxTime)` selects nothing, since no log time is strictly
-   * after MaxTime; it is a valid empty query, not an error, so pagination via
-   * `startingAfter(lastLogTime)` terminates even when the last message is logged at MaxTime.
-   * Replaces any previously-set lower bound.
+   * lower bound). `startingAfter(MaxTime)` matches nothing and is not an error. Replaces any
+   * previously-set lower bound.
    */
   ReadMessageOptions& startingAfter(Timestamp time) {
     startAfter_ = time;
@@ -287,8 +285,8 @@ public:
   }
   /**
    * @brief Limit reading to messages with log timestamps at or before this time (inclusive
-   * upper bound). `endingAt(MaxTime)` means no upper bound: even a message logged at exactly
-   * MaxTime is included. Replaces any previously-set upper bound.
+   * upper bound). `endingAt(MaxTime)` means no upper bound. Replaces any previously-set upper
+   * bound.
    */
   ReadMessageOptions& endingAt(Timestamp time) {
     endAt_ = time;
@@ -305,18 +303,14 @@ public:
     return *this;
   }
   /**
-   * @brief Whether a message logged at `logTime` falls inside the requested time range, i.e.
-   * satisfies both the lower bound (`startingAt()`/`startingAfter()`, or the deprecated
-   * `startTime`) and the upper bound (`endingAt()`/`endingBefore()`, or the deprecated
-   * `endTime`). This is the message-level filter the readers apply.
+   * @brief Whether a message logged at `logTime` falls inside the requested time range.
    */
   bool includesLogTime(Timestamp logTime) const {
     return lowerBoundIncludes(logTime) && upperBoundIncludes(logTime);
   }
   /**
    * @brief Whether any log time in the closed interval [`first`, `last`] falls inside the
-   * requested time range. Readers use it to skip chunks whose message time span cannot
-   * contain a matching message.
+   * requested time range. Readers use it to skip chunks.
    */
   bool overlapsLogTimes(Timestamp first, Timestamp last) const {
     return lowerBoundIncludes(last) && upperBoundIncludes(first);
@@ -336,18 +330,14 @@ public:
    */
   ReadOrder readOrder = ReadOrder::FileOrder;
 
-  // Constructors live inside this suppression region because every constructor applies the
-  // deprecated members' default initializers (which counts as a use), and the implicitly
-  // defined copy/move operations have no source location of their own to suppress. The
-  // special members are declared explicitly for the same reason.
+  // Constructors and special members are declared inside this suppression region: their
+  // implicit initialization of the deprecated members counts as a use.
   MCAP_DIAGNOSTIC_PUSH
   MCAP_IGNORE_DEPRECATED
   /**
-   * @brief Construct options with an inclusive start time and exclusive end time. Equivalent
-   * to calling `startingAt(startingAtTime)` and `endingBefore(endingBeforeTime)`.
+   * @brief Equivalent to `startingAt(startingAtTime).endingBefore(endingBeforeTime)`.
    *
-   * @deprecated Positional time bounds cannot state whether each bound is inclusive at the call
-   * site. Use the `startingAt()`/`endingBefore()` setters instead.
+   * @deprecated Use the `startingAt()`/`endingBefore()` setters, which name the kind of bound.
    */
   [[deprecated("use the startingAt()/endingBefore() setters instead")]]  //
   ReadMessageOptions(Timestamp startingAtTime, Timestamp endingBeforeTime)
@@ -363,15 +353,13 @@ public:
   MCAP_DIAGNOSTIC_POP
 
   /**
-   * @brief Validate the configuration. A strictly crossed time range (an upper bound below
-   * the lower bound) is an error; an empty range is a valid query that matches nothing.
+   * @brief Validate the configuration. A crossed time range is an error; an empty one is not.
    */
   Status validate() const;
 
 private:
-  // Whether `logTime` satisfies the lower/upper bound alone. These are the only places the
-  // deprecated startTime/endTime fields are read: each applies only when no explicit bound
-  // was set on its side, so an explicit bound always takes precedence.
+  // One side of the range. The deprecated startTime/endTime apply only when no explicit bound
+  // was set on that side.
   bool lowerBoundIncludes(Timestamp logTime) const;
   bool upperBoundIncludes(Timestamp logTime) const;
 
@@ -463,9 +451,7 @@ public:
    * @param endingBefore Optional end time in nanoseconds (exclusive). Messages
    *   equal to or after this time will not be returned.
    *
-   * @deprecated Positional time bounds cannot state whether each bound is inclusive at the
-   * call site. Use readMessages(const ReadMessageOptions&) with
-   * `startingAt()`/`endingBefore()` instead.
+   * @deprecated Use readMessages(const ReadMessageOptions&) with `startingAt()`/`endingBefore()`.
    */
   [[deprecated(
     "use readMessages(ReadMessageOptions) with startingAt()/endingBefore() instead")]]  //
@@ -486,9 +472,8 @@ public:
    * @param endingBefore Optional end time in nanoseconds (exclusive). Messages
    *   equal to or after this time will not be returned.
    *
-   * @deprecated Positional time bounds cannot state whether each bound is inclusive at the
-   * call site. Use readMessages(onProblem, const ReadMessageOptions&) with
-   * `startingAt()`/`endingBefore()` instead.
+   * @deprecated Use readMessages(onProblem, const ReadMessageOptions&) with
+   * `startingAt()`/`endingBefore()`.
    */
   [[deprecated(
     "use readMessages(onProblem, ReadMessageOptions) with startingAt()/endingBefore() "
@@ -640,9 +625,8 @@ private:
   bool parsedSummary_ = false;
 
   void reset_();
-  // The byte range of the data section that may hold messages matching `options`' time
-  // range: the span of every indexed chunk whose message time span overlaps it. Without a
-  // summary this is the whole data section.
+  // The span of the indexed chunks overlapping `options`' time range, or the whole data
+  // section without a summary.
   std::pair<ByteOffset, ByteOffset> byteRange_(const ReadMessageOptions& options) const;
   Status readSummarySection_(IReadable& reader);
   Status readSummaryFromScan_(IReadable& reader);
