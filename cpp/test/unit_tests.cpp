@@ -651,6 +651,329 @@ TEST_CASE("Message index records", "[writer]") {
   REQUIRE(messageIndexChannelIds[1] == channel2.id);
 }
 
+TEST_CASE("explicit time range bounds", "[reader]") {
+  Buffer buffer;
+
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("test");
+  opts.compression = mcap::Compression::None;
+  writer.open(buffer, opts);
+  mcap::Schema schema("schema", "schemaEncoding", "ab");
+  writer.addSchema(schema);
+  mcap::Channel channel("topic", "messageEncoding", schema.id);
+  writer.addChannel(channel);
+  for (uint64_t t = 1; t <= 6; t++) {
+    WriteMsg(writer, channel.id, 0, t, t, std::vector<std::byte>(8));
+  }
+  writer.close();
+
+  auto logTimes = [&buffer](const mcap::ReadMessageOptions& options) {
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    std::vector<mcap::Timestamp> times;
+    for (const auto& msgView : reader.readMessages(onProblem, options)) {
+      times.push_back(msgView.message.logTime);
+    }
+    return times;
+  };
+
+  {
+    // Inclusive and exclusive bounds on both sides, via the chained setters.
+    mcap::ReadMessageOptions options;
+    options.startingAt(3).endingBefore(5);
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, 4});
+    options.endingAt(5);
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, 4, 5});
+    options.startingAfter(3);
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{4, 5});
+  }
+  {
+    // Each setter replaces any previously-set bound on its side.
+    mcap::ReadMessageOptions options;
+    options.startingAfter(5).endingAt(6);
+    options.startingAt(3);
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, 4, 5, 6});
+    options.endingBefore(5);
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, 4});
+  }
+  {
+    // Equal inclusive bounds select the single matching log time.
+    mcap::ReadMessageOptions options;
+    options.startingAt(3).endingAt(3);
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3});
+  }
+  {
+    // endingAt(MaxTime) means no upper bound.
+    mcap::ReadMessageOptions options;
+    options.endingAt(mcap::MaxTime);
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{1, 2, 3, 4, 5, 6});
+  }
+  {
+    // The deprecated fields keep their exact historical behavior.
+    MCAP_DIAGNOSTIC_PUSH
+    MCAP_IGNORE_DEPRECATED
+    mcap::ReadMessageOptions options;
+    options.startTime = 3;
+    options.endTime = 5;
+    MCAP_DIAGNOSTIC_POP
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, 4});
+  }
+  {
+    // The no-argument overloads read everything.
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    size_t count = 0;
+    for (const auto& msgView : reader.readMessages()) {
+      (void)msgView;
+      count++;
+    }
+    REQUIRE(count == 6);
+  }
+  {
+    // The deprecated positional overloads, including the defaulted end time, are unchanged.
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    MCAP_DIAGNOSTIC_PUSH
+    MCAP_IGNORE_DEPRECATED
+    std::vector<mcap::Timestamp> times;
+    for (const auto& msgView : reader.readMessages(onProblem, 3, 5)) {
+      times.push_back(msgView.message.logTime);
+    }
+    REQUIRE(times == std::vector<mcap::Timestamp>{3, 4});
+    times.clear();
+    for (const auto& msgView : reader.readMessages(onProblem, 3)) {
+      times.push_back(msgView.message.logTime);
+    }
+    REQUIRE(times == std::vector<mcap::Timestamp>{3, 4, 5, 6});
+    MCAP_DIAGNOSTIC_POP
+  }
+  {
+    // With a summary loaded, the linear path narrows its scan to the overlapping chunks.
+    auto logTimesWithSummary = [&buffer](const mcap::ReadMessageOptions& options) {
+      mcap::McapReader reader;
+      requireOk(reader.open(buffer));
+      requireOk(reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan));
+      const auto onProblem = [](const mcap::Status& status) {
+        FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+      };
+      std::vector<mcap::Timestamp> times;
+      for (const auto& msgView : reader.readMessages(onProblem, options)) {
+        times.push_back(msgView.message.logTime);
+      }
+      return times;
+    };
+    mcap::ReadMessageOptions inside;
+    inside.startingAfter(2).endingAt(4);
+    REQUIRE(logTimesWithSummary(inside) == std::vector<mcap::Timestamp>{3, 4});
+    mcap::ReadMessageOptions pastTheEnd;
+    pastTheEnd.startingAfter(6);
+    REQUIRE(logTimesWithSummary(pastTheEnd) == std::vector<mcap::Timestamp>{});
+    mcap::ReadMessageOptions beforeTheStart;
+    beforeTheStart.endingBefore(1);
+    REQUIRE(logTimesWithSummary(beforeTheStart) == std::vector<mcap::Timestamp>{});
+  }
+  {
+    // The membership predicates evaluate the bounds exactly as provided, on both sides.
+    mcap::ReadMessageOptions options;
+    options.startingAfter(3).endingAt(5);
+    REQUIRE(!options.includesLogTime(3));
+    REQUIRE(options.includesLogTime(4));
+    REQUIRE(options.includesLogTime(5));
+    REQUIRE(!options.includesLogTime(6));
+    // A chunk overlaps the range if any log time in its closed span does.
+    REQUIRE(!options.overlapsLogTimes(1, 3));
+    REQUIRE(options.overlapsLogTimes(1, 4));
+    REQUIRE(options.overlapsLogTimes(5, 9));
+    REQUIRE(!options.overlapsLogTimes(6, 9));
+    // The deprecated fields participate only where no explicit bound was set.
+    MCAP_DIAGNOSTIC_PUSH
+    MCAP_IGNORE_DEPRECATED
+    mcap::ReadMessageOptions deprecated;
+    deprecated.startTime = 3;
+    deprecated.endTime = 5;
+    REQUIRE(!deprecated.includesLogTime(2));
+    REQUIRE(deprecated.includesLogTime(3));
+    REQUIRE(deprecated.includesLogTime(4));
+    REQUIRE(!deprecated.includesLogTime(5));
+    deprecated.endingAt(5);
+    REQUIRE(deprecated.includesLogTime(5));
+    MCAP_DIAGNOSTIC_POP
+  }
+  {
+    // A crossing range is rejected; an empty range is not.
+    mcap::ReadMessageOptions options;
+    options.startingAt(5).endingBefore(3);
+    REQUIRE(!options.validate().ok());
+    // readMessages() reports the rejection through the problem callback and yields nothing.
+    std::optional<mcap::Status> reported;
+    const auto onProblem = [&reported](const mcap::Status& status) {
+      reported = status;
+    };
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    auto view = reader.readMessages(onProblem, options);
+    REQUIRE(reported.has_value());
+    REQUIRE(reported->code == mcap::StatusCode::InvalidMessageReadOptions);
+    REQUIRE(view.begin() == view.end());
+    options.startingAt(5).endingBefore(5);
+    requireOk(options.validate());
+    options.startingAt(5).endingAt(4);
+    requireOk(options.validate());
+    options.startingAt(6).endingAt(4);
+    REQUIRE(!options.validate().ok());
+  }
+}
+
+TEST_CASE("maximum timestamp bound", "[reader]") {
+  Buffer buffer;
+
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("test");
+  opts.compression = mcap::Compression::None;
+  writer.open(buffer, opts);
+  mcap::Schema schema("schema", "schemaEncoding", "ab");
+  writer.addSchema(schema);
+  mcap::Channel channel("topic", "messageEncoding", schema.id);
+  writer.addChannel(channel);
+  WriteMsg(writer, channel.id, 0, 3, 3, std::vector<std::byte>(8));
+  WriteMsg(writer, channel.id, 1, mcap::MaxTime, mcap::MaxTime, std::vector<std::byte>(8));
+  writer.close();
+
+  auto logTimes = [&buffer](const mcap::ReadMessageOptions& options) {
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    std::vector<mcap::Timestamp> times;
+    for (const auto& msgView : reader.readMessages(onProblem, options)) {
+      times.push_back(msgView.message.logTime);
+    }
+    return times;
+  };
+
+  {
+    // endingAt(MaxTime) includes the message logged at MaxTime.
+    mcap::ReadMessageOptions options;
+    options.endingAt(mcap::MaxTime);
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, mcap::MaxTime});
+  }
+  {
+    // The deprecated endTime default keeps its historical exclusive-MaxTime behavior.
+    mcap::ReadMessageOptions options;
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3});
+  }
+  {
+    // An explicit end bound, including endingAt(MaxTime), wins over the deprecated endTime.
+    MCAP_DIAGNOSTIC_PUSH
+    MCAP_IGNORE_DEPRECATED
+    mcap::ReadMessageOptions options;
+    options.endTime = 4;
+    options.endingAt(mcap::MaxTime);
+    MCAP_DIAGNOSTIC_POP
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, mcap::MaxTime});
+  }
+  {
+    // startingAfter(MaxTime) matches nothing and is not an error.
+    mcap::ReadMessageOptions options;
+    options.startingAfter(mcap::MaxTime);
+    REQUIRE(!options.includesLogTime(mcap::MaxTime));
+    REQUIRE(!options.overlapsLogTimes(0, mcap::MaxTime));
+    requireOk(options.validate());
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{});
+  }
+  {
+    // Combining it with an end bound is still an empty query, not a crossed range.
+    mcap::ReadMessageOptions options;
+    options.startingAfter(mcap::MaxTime).endingBefore(5);
+    requireOk(options.validate());
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{});
+  }
+  {
+    // The indexed read path yields nothing for the empty range too.
+    mcap::ReadMessageOptions options;
+    options.startingAfter(mcap::MaxTime);
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::LogTimeOrder;
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{});
+  }
+  {
+    // A later lower bound replaces the empty range; the endTime default still drops MaxTime.
+    mcap::ReadMessageOptions options;
+    options.startingAfter(mcap::MaxTime).startingAt(3);
+    REQUIRE(options.includesLogTime(3));
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3});
+  }
+  {
+    // startingAfter below MaxTime keeps its normal exclusive behavior.
+    mcap::ReadMessageOptions options;
+    options.startingAfter(3).endingAt(mcap::MaxTime);
+    REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{mcap::MaxTime});
+  }
+}
+
+TEST_CASE("time range bounds with duplicate log times", "[reader]") {
+  Buffer buffer;
+
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("test");
+  opts.compression = mcap::Compression::None;
+  // A tiny chunk size puts every message in its own chunk, so the duplicates span chunks.
+  opts.chunkSize = 1;
+  writer.open(buffer, opts);
+  mcap::Schema schema("schema", "schemaEncoding", "ab");
+  writer.addSchema(schema);
+  mcap::Channel channel("topic", "messageEncoding", schema.id);
+  writer.addChannel(channel);
+  const std::vector<mcap::Timestamp> written{2, 3, 3, 3, 4};
+  for (const auto t : written) {
+    WriteMsg(writer, channel.id, 0, t, t, std::vector<std::byte>(8));
+  }
+  writer.close();
+
+  {
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    requireOk(reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan));
+    REQUIRE(reader.chunkIndexes().size() == written.size());
+  }
+
+  using ReadOrder = mcap::ReadMessageOptions::ReadOrder;
+  auto logTimes = [&buffer](mcap::ReadMessageOptions options, ReadOrder order) {
+    options.readOrder = order;
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    std::vector<mcap::Timestamp> times;
+    for (const auto& msgView : reader.readMessages(onProblem, options)) {
+      times.push_back(msgView.message.logTime);
+    }
+    return times;
+  };
+
+  for (const auto order :
+       {ReadOrder::FileOrder, ReadOrder::LogTimeOrder, ReadOrder::ReverseLogTimeOrder}) {
+    // Equal inclusive bounds keep every message at that log time, across chunks.
+    mcap::ReadMessageOptions point;
+    point.startingAt(3).endingAt(3);
+    REQUIRE(logTimes(point, order) == std::vector<mcap::Timestamp>{3, 3, 3});
+    // The exclusive spellings drop every one of them.
+    mcap::ReadMessageOptions after;
+    after.startingAfter(3);
+    REQUIRE(logTimes(after, order) == std::vector<mcap::Timestamp>{4});
+    mcap::ReadMessageOptions before;
+    before.endingBefore(3);
+    REQUIRE(logTimes(before, order) == std::vector<mcap::Timestamp>{2});
+  }
+}
+
 #ifndef MCAP_COMPRESSION_NO_LZ4
 TEST_CASE("LZ4 compression", "[reader][writer]") {
   SECTION("Roundtrip") {

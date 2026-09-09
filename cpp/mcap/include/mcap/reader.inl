@@ -587,16 +587,54 @@ Status McapReader::readSummaryFromScan_(IReadable& reader) {
   return StatusCode::Success;
 }
 
-LinearMessageView McapReader::readMessages(Timestamp startTime, Timestamp endTime) {
-  const auto onProblem = [](const Status&) {};
-  return readMessages(onProblem, startTime, endTime);
+bool ReadMessageOptions::lowerBoundIncludes(Timestamp logTime) const {
+  if (startAt_.has_value()) {
+    return logTime >= *startAt_;
+  }
+  if (startAfter_.has_value()) {
+    return logTime > *startAfter_;
+  }
+  MCAP_DIAGNOSTIC_PUSH
+  MCAP_IGNORE_DEPRECATED
+  const Timestamp deprecatedStart = startTime;
+  MCAP_DIAGNOSTIC_POP
+  return logTime >= deprecatedStart;
 }
 
-LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem, Timestamp startTime,
-                                           Timestamp endTime) {
+bool ReadMessageOptions::upperBoundIncludes(Timestamp logTime) const {
+  if (endBefore_.has_value()) {
+    return logTime < *endBefore_;
+  }
+  if (endAt_.has_value()) {
+    return logTime <= *endAt_;
+  }
+  MCAP_DIAGNOSTIC_PUSH
+  MCAP_IGNORE_DEPRECATED
+  const Timestamp deprecatedEnd = endTime;
+  MCAP_DIAGNOSTIC_POP
+  return logTime < deprecatedEnd;
+}
+
+LinearMessageView McapReader::readMessages() {
+  const auto onProblem = [](const Status&) {};
+  return readMessages(onProblem);
+}
+
+LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem) {
+  return readMessages(onProblem, ReadMessageOptions{});
+}
+
+LinearMessageView McapReader::readMessages(Timestamp startingAt, Timestamp endingBefore) {
+  const auto onProblem = [](const Status&) {};
   ReadMessageOptions options;
-  options.startTime = startTime;
-  options.endTime = endTime;
+  options.startingAt(startingAt).endingBefore(endingBefore);
+  return readMessages(onProblem, options);
+}
+
+LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem, Timestamp startingAt,
+                                           Timestamp endingBefore) {
+  ReadMessageOptions options;
+  options.startingAt(startingAt).endingBefore(endingBefore);
   return readMessages(onProblem, options);
 }
 
@@ -608,19 +646,43 @@ LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem,
     return LinearMessageView{*this, onProblem};
   }
 
-  const auto [startOffset, endOffset] = byteRange(options.startTime, options.endTime);
+  const auto boundsStatus = options.validate();
+  if (!boundsStatus.ok()) {
+    onProblem(boundsStatus);
+    return LinearMessageView{*this, onProblem};
+  }
+  const auto [startOffset, endOffset] = byteRange_(options);
   return LinearMessageView{*this, options, startOffset, endOffset, onProblem};
 }
 
-std::pair<ByteOffset, ByteOffset> McapReader::byteRange(Timestamp startTime,
-                                                        Timestamp endTime) const {
+std::pair<ByteOffset, ByteOffset> McapReader::byteRange_(const ReadMessageOptions& options) const {
+  if (!parsedSummary_ || chunkIndexes_.empty()) {
+    return {dataStart_, dataEnd_};
+  }
+
+  ByteOffset dataStart = dataEnd_;
+  ByteOffset dataEnd = dataStart_;
+  for (const auto& chunkIndex : chunkIndexes_) {
+    if (options.overlapsLogTimes(chunkIndex.messageStartTime, chunkIndex.messageEndTime)) {
+      dataStart = std::min(dataStart, chunkIndex.chunkStartOffset);
+      dataEnd = std::max(dataEnd, chunkIndex.chunkStartOffset + chunkIndex.chunkLength);
+    }
+  }
+  if (dataStart >= dataEnd) {
+    return {0, 0};
+  }
+  return {dataStart, dataEnd};
+}
+
+std::pair<ByteOffset, ByteOffset> McapReader::byteRange(Timestamp startingAt,
+                                                        Timestamp endingBefore) const {
   if (!parsedSummary_ || chunkRanges_.empty()) {
     return {dataStart_, dataEnd_};
   }
 
   ByteOffset dataStart = dataEnd_;
   ByteOffset dataEnd = dataStart_;
-  chunkRanges_.visit_overlapping(startTime, endTime, [&](const auto& interval) {
+  chunkRanges_.visit_overlapping(startingAt, endingBefore, [&](const auto& interval) {
     const auto& chunkIndex = interval.value;
     dataStart = std::min(dataStart, chunkIndex.chunkStartOffset);
     dataEnd = std::max(dataEnd, chunkIndex.chunkStartOffset + chunkIndex.chunkLength);
@@ -1631,12 +1693,12 @@ LinearMessageView::LinearMessageView(McapReader& mcapReader, const ProblemCallba
     , onProblem_(onProblem) {}
 
 LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStart,
-                                     ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
-                                     const ProblemCallback& onProblem)
+                                     ByteOffset dataEnd, Timestamp startingAt,
+                                     Timestamp endingBefore, const ProblemCallback& onProblem)
     : mcapReader_(mcapReader)
     , dataStart_(dataStart)
     , dataEnd_(dataEnd)
-    , readMessageOptions_(startTime, endTime)
+    , readMessageOptions_(ReadMessageOptions().startingAt(startingAt).endingBefore(endingBefore))
     , onProblem_(onProblem) {}
 
 LinearMessageView::LinearMessageView(McapReader& mcapReader, const ReadMessageOptions& options,
@@ -1706,10 +1768,7 @@ LinearMessageView::Iterator::Impl::Impl(LinearMessageView& view)
  */
 void LinearMessageView::Iterator::Impl::onMessage(const Message& message, RecordOffset offset) {
   // make sure the message is within the expected time range
-  if (message.logTime < view_.readMessageOptions_.startTime) {
-    return;
-  }
-  if (message.logTime >= view_.readMessageOptions_.endTime) {
+  if (!view_.readMessageOptions_.includesLogTime(message.logTime)) {
     return;
   }
   auto maybeChannel = view_.mcapReader_.channel(message.channelId);
@@ -1827,7 +1886,30 @@ bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::I
 }
 
 Status ReadMessageOptions::validate() const {
-  if (startTime > endTime) {
+  // Only a strictly crossed range is an error; an empty range is valid. Compare the first log
+  // time the lower bound admits with the first one the upper bound rejects.
+  MCAP_DIAGNOSTIC_PUSH
+  MCAP_IGNORE_DEPRECATED
+  Timestamp firstIncluded = startTime;
+  if (startAt_.has_value()) {
+    firstIncluded = *startAt_;
+  } else if (startAfter_.has_value()) {
+    if (*startAfter_ == MaxTime) {
+      return Status();  // nothing is after MaxTime: empty, not crossed
+    }
+    firstIncluded = *startAfter_ + 1;
+  }
+  Timestamp firstExcluded = endTime;
+  if (endBefore_.has_value()) {
+    firstExcluded = *endBefore_;
+  } else if (endAt_.has_value()) {
+    if (*endAt_ == MaxTime) {
+      return Status();  // no upper bound: cannot be crossed
+    }
+    firstExcluded = *endAt_ + 1;
+  }
+  MCAP_DIAGNOSTIC_POP
+  if (firstIncluded > firstExcluded) {
     return Status(StatusCode::InvalidMessageReadOptions, "start time must be before end time");
   }
   return Status();
@@ -1865,12 +1947,8 @@ IndexedMessageReader::IndexedMessageReader(
   }
   // Initialize the read job queue by finding all of the chunks that need to be read from.
   for (const auto& chunkIndex : mcapReader_.chunkIndexes()) {
-    if (chunkIndex.messageStartTime >= options_.endTime) {
-      // chunk starts after requested time range, skip it.
-      continue;
-    }
-    if (chunkIndex.messageEndTime < options_.startTime) {
-      // chunk end before requested time range starts, skip it.
+    if (!options_.overlapsLogTimes(chunkIndex.messageStartTime, chunkIndex.messageEndTime)) {
+      // chunk lies entirely outside the requested time range, skip it.
       continue;
     }
     for (const auto& channelId : selectedChannels_) {
@@ -1967,7 +2045,7 @@ bool IndexedMessageReader::next() {
             }
             if (selectedChannels_.find(messageIndex.channelId) != selectedChannels_.end()) {
               for (const auto& [timestamp, byteOffset] : messageIndex.records) {
-                if (timestamp >= options_.startTime && timestamp < options_.endTime) {
+                if (options_.includesLogTime(timestamp)) {
                   internal::ReadMessageJob job;
                   job.chunkReaderIndex = chunkReaderIndex;
                   job.offset.offset = byteOffset;
