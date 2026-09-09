@@ -3,10 +3,17 @@ members = ["rust/mcap", "rust/cli"]
 resolver = "2"
 
 [profile.release]
-lto = true
-codegen-units = 1
 strip = "symbols"
 panic = "abort"
+
+# Shipped CLI binaries (CI `cli` job). Fat LTO with a single codegen unit
+# shrinks the binary substantially but roughly doubles a clean release build
+# and makes an incremental relink ~5x slower, so it lives in its own profile
+# instead of `release`.
+[profile.dist]
+inherits = "release"
+lto = true
+codegen-units = 1
 
 [profile.bench]
 opt-level = 3
