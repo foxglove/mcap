@@ -1216,6 +1216,68 @@ func TestMaxTimestampBound(t *testing.T) {
 	crossedErr(t, StartingAtNanos(10), EndingBeforeNanos(5))
 }
 
+func TestTimeRangeBoundsWithDuplicateLogTimes(t *testing.T) {
+	buf := &bytes.Buffer{}
+	// A tiny chunk size puts every message in its own chunk, so the duplicates span chunks.
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:   true,
+		ChunkSize: 1,
+	})
+	require.NoError(t, err)
+	require.NoError(t, w.WriteHeader(&Header{}))
+	require.NoError(t, w.WriteSchema(&Schema{ID: 1}))
+	require.NoError(t, w.WriteChannel(&Channel{SchemaID: 1, Topic: "/topic"}))
+	written := []uint64{2, 3, 3, 3, 4}
+	for _, logTime := range written {
+		require.NoError(t, w.WriteMessage(&Message{
+			LogTime: logTime,
+			Data:    []byte("hello"),
+		}))
+	}
+	require.NoError(t, w.Close())
+
+	infoReader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+	defer infoReader.Close()
+	info, err := infoReader.Info()
+	require.NoError(t, err)
+	assert.Len(t, info.ChunkIndexes, len(written))
+
+	logTimes := func(t *testing.T, opts ...ReadOpt) []uint64 {
+		reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+		require.NoError(t, err)
+		defer reader.Close()
+		it, err := reader.Messages(opts...)
+		require.NoError(t, err)
+		var times []uint64
+		for {
+			_, _, msg, err := it.Next(nil)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			require.NoError(t, err)
+			times = append(times, msg.LogTime)
+		}
+		return times
+	}
+	withOrder := func(order []ReadOpt, bounds ...ReadOpt) []ReadOpt {
+		return append(append([]ReadOpt{}, order...), bounds...)
+	}
+
+	for _, order := range [][]ReadOpt{
+		{UsingIndex(false)},
+		{UsingIndex(true), InOrder(FileOrder)},
+		{UsingIndex(true), InOrder(LogTimeOrder)},
+		{UsingIndex(true), InOrder(ReverseLogTimeOrder)},
+	} {
+		// Equal inclusive bounds keep every message at that log time, across chunks.
+		assert.Equal(t, []uint64{3, 3, 3}, logTimes(t, withOrder(order, StartingAtNanos(3), EndingAtNanos(3))...))
+		// The exclusive spellings drop every one of them.
+		assert.Equal(t, []uint64{4}, logTimes(t, withOrder(order, StartingAfterNanos(3))...))
+		assert.Equal(t, []uint64{2}, logTimes(t, withOrder(order, EndingBeforeNanos(3))...))
+	}
+}
+
 func TestLogTimeBounds(t *testing.T) {
 	apply := func(t *testing.T, opts ...ReadOpt) logTimeBounds {
 		options := ReadOptions{EndNanos: math.MaxUint64}

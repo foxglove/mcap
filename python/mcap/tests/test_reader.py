@@ -5,7 +5,7 @@ import json
 import os
 from io import BytesIO
 from pathlib import Path
-from typing import IO, Any, Optional, Tuple, Type, Union
+from typing import IO, Any, Dict, List, Optional, Tuple, Type, Union
 
 import pytest
 
@@ -157,6 +157,41 @@ def test_max_timestamp_bound(reader_cls: AnyReaderSubclass):
     with pytest.raises(ValueError, match="end time cannot come before start time"):
         count_messages(starting_at=10, ending_before=5)
     assert count_messages(starting_at=5, ending_before=5) == 0
+
+
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+def test_time_range_bounds_with_duplicate_log_times(reader_cls: AnyReaderSubclass):
+    """an inclusive bound shared by several messages keeps all of them, even when they
+    span several chunks, while the exclusive spellings drop all of them."""
+    buffer = BytesIO()
+    # A tiny chunk size puts every message in its own chunk, so the duplicates span chunks.
+    writer = Writer(buffer, chunk_size=1)
+    writer.start()
+    channel_id = writer.register_channel("/t", "json", 0)
+    written = [2, 3, 3, 3, 4]
+    for log_time in written:
+        writer.add_message(
+            channel_id, log_time=log_time, data=b"x", publish_time=log_time
+        )
+    writer.finish()
+
+    buffer.seek(0)
+    summary = SeekingReader(buffer).get_summary()
+    assert summary is not None
+    assert len(summary.chunk_indexes) == len(written)
+
+    def log_times(**kwargs: Any) -> List[int]:
+        buffer.seek(0)
+        reader: McapReader = reader_cls(buffer)
+        return [message.log_time for _, _, message in reader.iter_messages(**kwargs)]
+
+    orders: List[Dict[str, Any]] = [{"log_time_order": False}, {"log_time_order": True}]
+    if reader_cls is SeekingReader:
+        orders.append({"log_time_order": True, "reverse": True})
+    for order in orders:
+        assert log_times(starting_at=3, ending_at=3, **order) == [3, 3, 3]
+        assert log_times(starting_after=3, **order) == [4]
+        assert log_times(ending_before=3, **order) == [2]
 
 
 @pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
