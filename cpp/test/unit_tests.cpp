@@ -925,6 +925,63 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
   }
 }
 
+TEST_CASE("time range bounds with duplicate log times", "[reader]") {
+  Buffer buffer;
+
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("test");
+  opts.compression = mcap::Compression::None;
+  // A tiny chunk size puts every message in its own chunk, so the duplicates span chunks.
+  opts.chunkSize = 1;
+  writer.open(buffer, opts);
+  mcap::Schema schema("schema", "schemaEncoding", "ab");
+  writer.addSchema(schema);
+  mcap::Channel channel("topic", "messageEncoding", schema.id);
+  writer.addChannel(channel);
+  const std::vector<mcap::Timestamp> written{2, 3, 3, 3, 4};
+  for (const auto t : written) {
+    WriteMsg(writer, channel.id, 0, t, t, std::vector<std::byte>(8));
+  }
+  writer.close();
+
+  {
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    requireOk(reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan));
+    REQUIRE(reader.chunkIndexes().size() == written.size());
+  }
+
+  using ReadOrder = mcap::ReadMessageOptions::ReadOrder;
+  auto logTimes = [&buffer](mcap::ReadMessageOptions options, ReadOrder order) {
+    options.readOrder = order;
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    std::vector<mcap::Timestamp> times;
+    for (const auto& msgView : reader.readMessages(onProblem, options)) {
+      times.push_back(msgView.message.logTime);
+    }
+    return times;
+  };
+
+  for (const auto order :
+       {ReadOrder::FileOrder, ReadOrder::LogTimeOrder, ReadOrder::ReverseLogTimeOrder}) {
+    // Equal inclusive bounds keep every message at that log time, across chunks.
+    mcap::ReadMessageOptions point;
+    point.startingAt(3).endingAt(3);
+    REQUIRE(logTimes(point, order) == std::vector<mcap::Timestamp>{3, 3, 3});
+    // The exclusive spellings drop every one of them.
+    mcap::ReadMessageOptions after;
+    after.startingAfter(3);
+    REQUIRE(logTimes(after, order) == std::vector<mcap::Timestamp>{4});
+    mcap::ReadMessageOptions before;
+    before.endingBefore(3);
+    REQUIRE(logTimes(before, order) == std::vector<mcap::Timestamp>{2});
+  }
+}
+
 #ifndef MCAP_COMPRESSION_NO_LZ4
 TEST_CASE("LZ4 compression", "[reader][writer]") {
   SECTION("Roundtrip") {

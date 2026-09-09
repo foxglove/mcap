@@ -1078,6 +1078,32 @@ mod tests {
         assert_eq!(&messages, &[(0, u64::MAX)]);
     }
     #[test]
+    fn test_time_range_bounds_with_duplicate_log_times() {
+        // The three messages at log time 3 span three chunks.
+        let mcap = make_mcap(None, &[&[(0, 2), (0, 3)], &[(0, 3)], &[(0, 3), (0, 4)]]);
+        for order in [
+            ReadOrder::File,
+            ReadOrder::LogTime,
+            ReadOrder::ReverseLogTime,
+        ] {
+            let read = |options: IndexedReaderOptions| read_mcap(options.with_order(order), &mcap);
+            // Equal inclusive bounds keep every message at that log time, across chunks.
+            assert_eq!(
+                &read(IndexedReaderOptions::new().starting_at(3).ending_at(3)),
+                &[(0, 3), (0, 3), (0, 3)]
+            );
+            // The exclusive spellings drop every one of them.
+            assert_eq!(
+                &read(IndexedReaderOptions::new().starting_after(3)),
+                &[(0, 4)]
+            );
+            assert_eq!(
+                &read(IndexedReaderOptions::new().ending_before(3)),
+                &[(0, 2)]
+            );
+        }
+    }
+    #[test]
     fn test_crossed_time_range_errors() {
         let mcap = make_mcap(None, &[&[(0, 1), (0, 2), (0, 3)]]);
         let summary = crate::Summary::read(&mcap).unwrap().unwrap();
