@@ -1,6 +1,7 @@
-use std::io::{IsTerminal as _, SeekFrom};
+use std::io::{IsTerminal as _, SeekFrom, Write};
 use std::path::Path;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use binrw::BinRead;
@@ -8,7 +9,8 @@ use futures_util::TryStreamExt;
 use mcap::records::{self, Record};
 use memmap2::Mmap;
 use object_store::{
-    path::Path as ObjectStorePath, Attribute, GetOptions, GetRange, ObjectStore, ObjectStoreExt,
+    path::Path as ObjectStorePath, Attribute, ClientConfigKey, GetOptions, GetRange, ObjectStore,
+    ObjectStoreExt,
 };
 use tempfile::NamedTempFile;
 use url::Url;
@@ -30,6 +32,21 @@ const REMOTE_SUMMARY_TAIL_BYTES: u64 = 250_000;
 // Guards aggregate remote reads that should stay index-like (summary bytes, or
 // multiple metadata records selected from indexes) from becoming unexpectedly large.
 pub(crate) const MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN: u64 = 100_000_000;
+// Ranged GET size for whole-file downloads. Each part gets a fresh
+// object_store retry budget, and a dropped connection resumes at the last
+// byte received.
+const REMOTE_DOWNLOAD_CHUNK_BYTES: u64 = 64 * 1024 * 1024;
+// object_store's default 30s timeout spans the entire response body, killing
+// long transfers. Downloads get an effectively unlimited one instead; stalls
+// are caught by REMOTE_DOWNLOAD_STALL_TIMEOUT.
+const REMOTE_DOWNLOAD_REQUEST_TIMEOUT: &str = "7days";
+const REMOTE_DOWNLOAD_STALL_TIMEOUT: Duration = Duration::from_secs(120);
+// Bounds waiting for each download GET's response head; sits above
+// object_store's 180s retry budget so internal retries can finish.
+const REMOTE_DOWNLOAD_RESPONSE_TIMEOUT: Duration = Duration::from_secs(240);
+// Consecutive zero-progress attempts before a chunked download gives up.
+// Any delivered bytes reset the budget, so only a dead connection exhausts it.
+const REMOTE_DOWNLOAD_NO_PROGRESS_ATTEMPTS: usize = 5;
 
 pub enum InputData {
     Mapped(Mmap),
@@ -497,6 +514,18 @@ impl RemoteUrl {
         self.options_from_env_vars(std::env::vars_os())
     }
 
+    fn store_options(&self, access: RemoteAccess) -> Vec<(String, String)> {
+        let mut options = self.options();
+        if matches!(access, RemoteAccess::Download) {
+            // Last-wins in parse_url_opts: overrides any env timeout (e.g. AWS_TIMEOUT).
+            options.push((
+                ClientConfigKey::Timeout.as_ref().to_string(),
+                REMOTE_DOWNLOAD_REQUEST_TIMEOUT.to_string(),
+            ));
+        }
+        options
+    }
+
     fn options_from_env_vars(
         &self,
         vars: impl IntoIterator<Item = (std::ffi::OsString, std::ffi::OsString)>,
@@ -529,6 +558,12 @@ pub fn remote_or_local_extension(path: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RemoteAccess {
+    Indexed,
+    Download,
+}
+
 struct ObjectStoreSource {
     runtime: Arc<tokio::runtime::Runtime>,
     store: Arc<dyn ObjectStore>,
@@ -537,20 +572,19 @@ struct ObjectStoreSource {
 }
 
 impl ObjectStoreSource {
-    fn open(path: &Path) -> Result<Self> {
-        Self::open_remote(RemoteUrl::parse(path)?)
+    fn open_for_download(path: &Path) -> Result<Self> {
+        Self::open_remote(RemoteUrl::parse(path)?, RemoteAccess::Download)
     }
 
-    fn open_remote(remote_url: RemoteUrl) -> Result<Self> {
+    fn open_remote(remote_url: RemoteUrl, access: RemoteAccess) -> Result<Self> {
         let (store, object_path) =
-            object_store::parse_url_opts(&remote_url.url, remote_url.options()).with_context(
-                || {
+            object_store::parse_url_opts(&remote_url.url, remote_url.store_options(access))
+                .with_context(|| {
                     format!(
                         "failed to configure remote store for {}",
                         remote_url.display_url
                     )
-                },
-            )?;
+                })?;
         Ok(Self {
             runtime: object_store_runtime()?,
             store: Arc::from(store),
@@ -693,6 +727,279 @@ impl ObjectStoreSource {
         let size = self.head_size()?;
         Ok(Some((size, self.bounded_tail(size, tail_bytes)?)))
     }
+
+    /// Download the object to `writer` in ranged parts of `chunk_bytes`.
+    /// Falls back to an unranged GET when the store ignores `Range` or the
+    /// object is empty (unsatisfiable `bytes=0..N`).
+    fn download_to_writer(&self, writer: &mut impl Write, chunk_bytes: u64) -> Result<()> {
+        if chunk_bytes == 0 {
+            bail!("remote download chunk size must be non-zero");
+        }
+        match self.get_opts_for_download(GetOptions {
+            range: Some(GetRange::Bounded(0..chunk_bytes)),
+            ..GetOptions::default()
+        })? {
+            Ok(response) => self.download_chunked(response, writer, chunk_bytes),
+            Err(err) if remote_range_not_supported(&err) || remote_range_unsatisfiable(&err) => {
+                self.download_unranged(writer)
+            }
+            Err(err) => Err(concise_remote_operation_error(
+                "reading remote input from",
+                &self.display_url,
+                err,
+            )),
+        }
+    }
+
+    /// Wait up to `REMOTE_DOWNLOAD_RESPONSE_TIMEOUT` for the response head.
+    /// The outer error is that wait timing out; the inner error is left intact
+    /// so callers can classify range support.
+    fn get_opts_for_download(
+        &self,
+        options: GetOptions,
+    ) -> Result<std::result::Result<object_store::GetResult, object_store::Error>> {
+        self.runtime.block_on(async {
+            match tokio::time::timeout(
+                REMOTE_DOWNLOAD_RESPONSE_TIMEOUT,
+                self.store.get_opts(&self.path, options),
+            )
+            .await
+            {
+                Ok(result) => Ok(result),
+                Err(_) => Err(anyhow::anyhow!(
+                    "failed to read remote input {}: timed out waiting for response ({}s)",
+                    self.display_url,
+                    REMOTE_DOWNLOAD_RESPONSE_TIMEOUT.as_secs()
+                )),
+            }
+        })
+    }
+
+    fn download_chunked(
+        &self,
+        first: object_store::GetResult,
+        writer: &mut impl Write,
+        chunk_bytes: u64,
+    ) -> Result<()> {
+        let total = first.meta.size;
+        let etag = first.meta.e_tag.clone();
+        let mut progress = DownloadProgress::new(total);
+        let mut offset = 0u64;
+        let mut pending = Some(first);
+        let mut attempts_without_progress = 0usize;
+        while offset < total {
+            let response = match pending.take() {
+                Some(response) => Ok(response),
+                None => {
+                    let end = offset.saturating_add(chunk_bytes).min(total);
+                    self.resume_chunk_get(offset..end, &etag)
+                }
+            };
+            let err = match response {
+                Ok(response) => {
+                    let (written, result) =
+                        self.stream_get_to_writer(response, writer, &mut progress);
+                    offset = offset.saturating_add(written);
+                    if written > 0 {
+                        attempts_without_progress = 0;
+                    }
+                    match result {
+                        Ok(()) if written > 0 => continue,
+                        // An empty body with more bytes expected: retry like
+                        // a dropped connection.
+                        Ok(()) => anyhow::anyhow!(
+                            "failed to read remote input {}: download made no progress",
+                            self.display_url
+                        ),
+                        Err(DownloadError::Fatal(err)) => return Err(err),
+                        Err(DownloadError::Retryable(err)) => err,
+                    }
+                }
+                Err(DownloadError::Fatal(err)) => return Err(err),
+                Err(DownloadError::Retryable(err)) => err,
+            };
+            attempts_without_progress += 1;
+            if attempts_without_progress >= REMOTE_DOWNLOAD_NO_PROGRESS_ATTEMPTS {
+                return Err(err.context(format!(
+                    "remote download failed after {attempts_without_progress} attempts with no progress"
+                )));
+            }
+            progress.note(&format!(
+                "Warning: remote download interrupted at {} / {}, retrying: {err:#}",
+                human_bytes(offset),
+                human_bytes(total)
+            ));
+        }
+        Ok(())
+    }
+
+    /// Issue the ranged GET that resumes a chunked download at `range`. Failures
+    /// are retryable except a precondition failure: the pinned ETag no longer
+    /// matches, so every retry would fail the same way.
+    fn resume_chunk_get(
+        &self,
+        range: std::ops::Range<u64>,
+        etag: &Option<String>,
+    ) -> std::result::Result<object_store::GetResult, DownloadError> {
+        match self.get_opts_for_download(GetOptions {
+            range: Some(GetRange::Bounded(range)),
+            if_match: etag.clone(),
+            ..GetOptions::default()
+        }) {
+            Ok(Ok(response)) => Ok(response),
+            Ok(Err(object_store::Error::Precondition { .. })) => {
+                Err(DownloadError::Fatal(anyhow::anyhow!(
+                    "failed to read {}: remote object changed while downloading",
+                    self.display_url
+                )))
+            }
+            Ok(Err(err)) => Err(DownloadError::Retryable(concise_remote_operation_error(
+                "reading remote input from",
+                &self.display_url,
+                err,
+            ))),
+            // The REMOTE_DOWNLOAD_RESPONSE_TIMEOUT wait expired.
+            Err(err) => Err(DownloadError::Retryable(err)),
+        }
+    }
+
+    fn download_unranged(&self, writer: &mut impl Write) -> Result<()> {
+        let response = self
+            .get_opts_for_download(GetOptions::default())?
+            .map_err(|err| {
+                concise_remote_operation_error("reading remote input from", &self.display_url, err)
+            })?;
+        let mut progress = DownloadProgress::new(response.meta.size);
+        // Without ranges there is no way to resume mid-body; any failure is terminal.
+        let (_, result) = self.stream_get_to_writer(response, writer, &mut progress);
+        result.map_err(DownloadError::into_error)
+    }
+
+    /// Stream one GET response to `writer`, reporting bytes written even on
+    /// failure so the caller can resume past partial progress.
+    fn stream_get_to_writer(
+        &self,
+        response: object_store::GetResult,
+        writer: &mut impl Write,
+        progress: &mut DownloadProgress,
+    ) -> (u64, std::result::Result<(), DownloadError>) {
+        if let Err(err) =
+            validate_identity_content_encoding(&response.attributes, &self.display_url)
+        {
+            return (0, Err(DownloadError::Fatal(err)));
+        }
+        let mut written = 0u64;
+        let result = self.runtime.block_on(async {
+            let mut stream = response.into_stream();
+            loop {
+                let Ok(next) =
+                    tokio::time::timeout(REMOTE_DOWNLOAD_STALL_TIMEOUT, stream.try_next()).await
+                else {
+                    return Err(DownloadError::Retryable(anyhow::anyhow!(
+                        "failed to read remote input {}: download stalled (no data for {}s)",
+                        self.display_url,
+                        REMOTE_DOWNLOAD_STALL_TIMEOUT.as_secs()
+                    )));
+                };
+                let bytes = match next {
+                    Ok(Some(bytes)) => bytes,
+                    Ok(None) => break,
+                    Err(err) => {
+                        return Err(DownloadError::Retryable(anyhow::Error::new(err).context(
+                            format!("failed to read remote input {}", self.display_url),
+                        )))
+                    }
+                };
+                if let Err(err) = writer.write_all(bytes.as_ref()) {
+                    return Err(DownloadError::Fatal(anyhow::Error::new(err).context(
+                        format!("failed to write remote input {}", self.display_url),
+                    )));
+                }
+                let n = bytes.len() as u64;
+                written = written.saturating_add(n);
+                progress.add(n);
+            }
+            Ok(())
+        });
+        (written, result)
+    }
+}
+
+// How a download GET failed: `Retryable` failures (network errors, stalls)
+// leave the object re-fetchable from the current offset; `Fatal` ones (local
+// write errors, ETag mismatch) would fail identically on retry.
+enum DownloadError {
+    Retryable(anyhow::Error),
+    Fatal(anyhow::Error),
+}
+
+impl DownloadError {
+    fn into_error(self) -> anyhow::Error {
+        match self {
+            Self::Retryable(err) | Self::Fatal(err) => err,
+        }
+    }
+}
+
+struct DownloadProgress {
+    tty: bool,
+    total: u64,
+    written: u64,
+    last_report: Instant,
+}
+
+impl DownloadProgress {
+    fn new(total: u64) -> Self {
+        Self {
+            tty: std::io::stderr().is_terminal(),
+            total,
+            written: 0,
+            last_report: Instant::now(),
+        }
+    }
+
+    fn add(&mut self, n: u64) {
+        let first = self.written == 0;
+        self.written = self.written.saturating_add(n);
+        if first || self.last_report.elapsed() >= Duration::from_millis(200) {
+            self.report(false);
+            self.last_report = Instant::now();
+        }
+    }
+
+    // Print a standalone line without corrupting the in-place progress line.
+    fn note(&self, message: &str) {
+        if self.tty && self.written > 0 {
+            eprintln!();
+        }
+        eprintln!("{message}");
+        let _ = std::io::stderr().flush();
+    }
+
+    fn report(&self, final_line: bool) {
+        if !self.tty {
+            return;
+        }
+        // Pad so a shorter update erases the tail of a longer previous line.
+        let message = format!(
+            "Downloading {} / {}",
+            human_bytes(self.written),
+            human_bytes(self.total)
+        );
+        eprint!("\r{message:<48}");
+        if final_line {
+            eprintln!();
+        }
+        let _ = std::io::stderr().flush();
+    }
+}
+
+impl Drop for DownloadProgress {
+    fn drop(&mut self) {
+        if self.tty && self.written > 0 {
+            self.report(true);
+        }
+    }
 }
 
 /// The trailing bytes of a remote object fetched in a single request, used to
@@ -717,7 +1024,7 @@ impl RemoteRangeReader {
     fn open(path: &Path) -> Result<Option<Self>> {
         let remote_url = RemoteUrl::parse(path)?;
         let kind = remote_url.kind;
-        let source = ObjectStoreSource::open_remote(remote_url)?;
+        let source = ObjectStoreSource::open_remote(remote_url, RemoteAccess::Indexed)?;
         let Some((size, tail)) = source.read_summary_tail(kind, REMOTE_SUMMARY_TAIL_BYTES)? else {
             return Ok(None);
         };
@@ -848,6 +1155,12 @@ fn remote_range_not_supported(err: &object_store::Error) -> bool {
     matches!(err, object_store::Error::NotSupported { .. })
 }
 
+// Empty objects reject `bytes=0..N` with HTTP 416. Match the parsed status,
+// not a "416" substring — error text can contain request ids with those digits.
+fn remote_range_unsatisfiable(err: &object_store::Error) -> bool {
+    object_store_error_status(err).is_some_and(|status| status.starts_with("416"))
+}
+
 fn concise_remote_stat_error(display_url: &str, err: object_store::Error) -> anyhow::Error {
     if let Some(status) = object_store_error_status(&err) {
         return remote_status_read_error(display_url, &status);
@@ -935,28 +1248,10 @@ pub(crate) fn redacted_display(path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-fn read_remote_input_to_writer(path: &Path, writer: &mut impl std::io::Write) -> Result<()> {
-    let source = ObjectStoreSource::open(path)?;
+fn read_remote_input_to_writer(path: &Path, writer: &mut impl Write) -> Result<()> {
+    let source = ObjectStoreSource::open_for_download(path)?;
     eprintln!("Warning: reading entire remote file {}", source.display_url);
-
-    source.runtime.block_on(async {
-        let response = source.store.get(&source.path).await.map_err(|err| {
-            concise_remote_operation_error("reading remote input from", &source.display_url, err)
-        })?;
-        validate_identity_content_encoding(&response.attributes, &source.display_url)?;
-        let mut stream = response.into_stream();
-        while let Some(bytes) = stream
-            .try_next()
-            .await
-            .with_context(|| format!("failed to read remote input {}", source.display_url))?
-        {
-            std::io::Write::write_all(writer, bytes.as_ref())
-                .with_context(|| format!("failed to write remote input {}", source.display_url))?;
-        }
-        Ok::<(), anyhow::Error>(())
-    })?;
-
-    Ok(())
+    source.download_to_writer(writer, REMOTE_DOWNLOAD_CHUNK_BYTES)
 }
 
 fn object_store_runtime() -> Result<Arc<tokio::runtime::Runtime>> {
@@ -1562,6 +1857,18 @@ mod tests {
                             }
                         });
                 if let (true, Some((start, end))) = (supports_ranges, requested_range) {
+                    if start >= body.len() {
+                        stream
+                            .write_all(
+                                format!(
+                                    "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{}\r\nConnection: close\r\n\r\n",
+                                    body.len()
+                                )
+                                .as_bytes(),
+                            )
+                            .expect("write 416");
+                        continue;
+                    }
                     let end = end.min(body.len().saturating_sub(1));
                     let start = start.min(end);
                     let content = &body[start..=end];
@@ -1600,6 +1907,159 @@ mod tests {
                     if !is_head {
                         stream.write_all(body).expect("write body");
                     }
+                }
+            }
+        });
+        (format!("http://{addr}/demo.mcap"), request_count)
+    }
+
+    // A range-supporting server that truncates the first `truncated_bodies` GET
+    // bodies to `truncated_len` of the promised length, like a connection dropped
+    // mid-transfer.
+    fn serve_http_truncating_bodies(
+        body: &'static [u8],
+        truncated_bodies: usize,
+        truncated_len: fn(usize) -> usize,
+    ) -> (String, Arc<AtomicUsize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("test server addr");
+        let request_count = Arc::new(AtomicUsize::new(0));
+        let server_request_count = request_count.clone();
+        thread::spawn(move || {
+            let mut remaining_truncations = truncated_bodies;
+            for stream in listener.incoming().take(64) {
+                let mut stream = stream.expect("accept test connection");
+                server_request_count.fetch_add(1, Ordering::SeqCst);
+                let mut request = [0u8; 4096];
+                let read = stream.read(&mut request).expect("read request");
+                let request = String::from_utf8_lossy(&request[..read]);
+                let is_head = request.starts_with("HEAD ");
+                let range = request
+                    .lines()
+                    .find_map(|line| line.strip_prefix("Range: bytes="))
+                    .or_else(|| {
+                        request
+                            .lines()
+                            .find_map(|line| line.strip_prefix("range: bytes="))
+                    })
+                    .and_then(|spec| spec.split_once('-'))
+                    .and_then(|(start, end)| {
+                        Some((
+                            start.trim().parse::<usize>().ok()?,
+                            end.trim().parse::<usize>().ok()?,
+                        ))
+                    });
+                let Some((start, end)) = range else {
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write headers");
+                    if !is_head {
+                        stream.write_all(body).expect("write body");
+                    }
+                    continue;
+                };
+                let end = end.min(body.len().saturating_sub(1));
+                let start = start.min(end);
+                let content = &body[start..=end];
+                let response = format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                    content.len(),
+                    body.len(),
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write headers");
+                if is_head {
+                    continue;
+                }
+                if remaining_truncations > 0 {
+                    remaining_truncations -= 1;
+                    // Fewer bytes than Content-Length promised: the client
+                    // sees a body error.
+                    stream
+                        .write_all(&content[..truncated_len(content.len())])
+                        .expect("write truncated body");
+                    continue;
+                }
+                stream.write_all(content).expect("write body");
+            }
+        });
+        (format!("http://{addr}/demo.mcap"), request_count)
+    }
+
+    // A range-supporting server that responds to the 0-based `failing_index`th
+    // request with `status` and serves every other request normally.
+    fn serve_http_failing_request(
+        body: &'static [u8],
+        failing_index: usize,
+        status: &'static str,
+    ) -> (String, Arc<AtomicUsize>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+        let addr = listener.local_addr().expect("test server addr");
+        let request_count = Arc::new(AtomicUsize::new(0));
+        let server_request_count = request_count.clone();
+        thread::spawn(move || {
+            for stream in listener.incoming().take(64) {
+                let mut stream = stream.expect("accept test connection");
+                let index = server_request_count.fetch_add(1, Ordering::SeqCst);
+                let mut request = [0u8; 4096];
+                let read = stream.read(&mut request).expect("read request");
+                let request = String::from_utf8_lossy(&request[..read]);
+                let is_head = request.starts_with("HEAD ");
+                if index == failing_index {
+                    stream
+                        .write_all(
+                            format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                                .as_bytes(),
+                        )
+                        .expect("write failure status");
+                    continue;
+                }
+                let range = request
+                    .lines()
+                    .find_map(|line| line.strip_prefix("Range: bytes="))
+                    .or_else(|| {
+                        request
+                            .lines()
+                            .find_map(|line| line.strip_prefix("range: bytes="))
+                    })
+                    .and_then(|spec| spec.split_once('-'))
+                    .and_then(|(start, end)| {
+                        Some((
+                            start.trim().parse::<usize>().ok()?,
+                            end.trim().parse::<usize>().ok()?,
+                        ))
+                    });
+                let Some((start, end)) = range else {
+                    let response = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write headers");
+                    if !is_head {
+                        stream.write_all(body).expect("write body");
+                    }
+                    continue;
+                };
+                let end = end.min(body.len().saturating_sub(1));
+                let start = start.min(end);
+                let content = &body[start..=end];
+                let response = format!(
+                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                    content.len(),
+                    body.len(),
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("write headers");
+                if !is_head {
+                    stream.write_all(content).expect("write body");
                 }
             }
         });
@@ -1651,6 +2111,144 @@ mod tests {
         let input =
             load_path(Path::new(&url), super::SourceOptions::new(true)).expect("remote read");
         assert_eq!(input.as_slice(), b"hello remote");
+    }
+
+    #[test]
+    fn remote_http_download_uses_ranged_chunks() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let (url, requests) = serve_http_counting(body, true);
+        let mut out = Vec::new();
+        let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+            .expect("open download source");
+        source
+            .download_to_writer(&mut out, 8)
+            .expect("chunked download");
+        assert_eq!(out, body);
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            5,
+            "36-byte body at 8-byte chunks should issue five range requests"
+        );
+    }
+
+    #[test]
+    fn remote_http_download_resumes_after_mid_body_failures() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        // The first two GET bodies are cut off halfway through.
+        let (url, requests) = serve_http_truncating_bodies(body, 2, |len| len / 2);
+        let mut out = Vec::new();
+        let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+            .expect("open download source");
+        source
+            .download_to_writer(&mut out, 8)
+            .expect("download should resume past truncated bodies");
+        assert_eq!(out, body);
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            6,
+            "truncated GETs (0..8 -> 4 bytes, 4..12 -> 4 bytes) then four full chunks"
+        );
+    }
+
+    #[test]
+    fn remote_http_download_gives_up_after_no_progress_attempts() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        // Every GET body is closed before sending any bytes.
+        let (url, requests) = serve_http_truncating_bodies(body, usize::MAX, |_| 0);
+        let mut out = Vec::new();
+        let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+            .expect("open download source");
+        let err = source
+            .download_to_writer(&mut out, 8)
+            .expect_err("download with no progress should give up");
+        assert!(
+            err.to_string().contains("attempts with no progress"),
+            "unexpected error: {err:#}"
+        );
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            super::REMOTE_DOWNLOAD_NO_PROGRESS_ATTEMPTS,
+            "should stop after the no-progress attempt budget"
+        );
+    }
+
+    #[test]
+    fn remote_http_download_retries_transient_resume_head_failure() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        // The second connection is the first resume GET; fail its head request.
+        let (url, requests) = serve_http_failing_request(body, 1, "404 Not Found");
+        let mut out = Vec::new();
+        let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+            .expect("open download source");
+        source
+            .download_to_writer(&mut out, 8)
+            .expect("download should retry a transient resume head failure");
+        assert_eq!(out, body);
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            6,
+            "five range requests plus one retried head failure"
+        );
+    }
+
+    #[test]
+    fn remote_http_download_aborts_when_object_changes_mid_download() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        // A 412 on the resume GET means the pinned ETag no longer matches.
+        let (url, requests) = serve_http_failing_request(body, 1, "412 Precondition Failed");
+        let mut out = Vec::new();
+        let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+            .expect("open download source");
+        let err = source
+            .download_to_writer(&mut out, 8)
+            .expect_err("a precondition failure should abort the download");
+        assert!(
+            err.to_string().contains("remote object changed"),
+            "unexpected error: {err:#}"
+        );
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            2,
+            "a precondition failure should not be retried"
+        );
+    }
+
+    #[test]
+    fn remote_http_download_does_not_retry_local_write_errors() {
+        struct FailingWriter;
+        impl Write for FailingWriter {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("disk full"))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let (url, requests) = serve_http_truncating_bodies(body, 0, |len| len);
+        let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+            .expect("open download source");
+        let err = source
+            .download_to_writer(&mut FailingWriter, 8)
+            .expect_err("local write errors should fail the download");
+        assert!(
+            err.to_string().contains("failed to write remote input"),
+            "unexpected error: {err:#}"
+        );
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            1,
+            "a local write error should not be retried"
+        );
+    }
+
+    #[test]
+    fn remote_http_download_empty_object_falls_back_to_unranged_get() {
+        let url = serve_http(b"", true);
+        let mut out = Vec::new();
+        super::read_remote_input_to_writer(Path::new(&url), &mut out)
+            .expect("empty ranged object should fall back to an unranged GET");
+        assert!(out.is_empty());
     }
 
     #[test]
@@ -1958,9 +2556,10 @@ mod tests {
 
     #[test]
     fn object_store_source_open_uses_url_parser() {
-        let source =
-            super::ObjectStoreSource::open(Path::new("https://example.com/demo.mcap?token=secret"))
-                .expect("HTTP object store URL should parse");
+        let source = super::ObjectStoreSource::open_for_download(Path::new(
+            "https://example.com/demo.mcap?token=secret",
+        ))
+        .expect("HTTP object store URL should parse");
         assert_eq!(source.path.as_ref(), "demo.mcap");
         assert_eq!(source.display_url, "https://example.com/demo.mcap");
     }
@@ -1999,6 +2598,25 @@ mod tests {
                     "account".to_string()
                 ),
             ]
+        );
+    }
+
+    #[test]
+    fn remote_url_options_add_download_request_timeout() {
+        let url = super::RemoteUrl::parse(Path::new("https://example.com/demo.mcap")).expect("url");
+        let download = url.store_options(super::RemoteAccess::Download);
+        assert!(
+            download.iter().any(|(key, value)| key
+                == object_store::ClientConfigKey::Timeout.as_ref()
+                && value == super::REMOTE_DOWNLOAD_REQUEST_TIMEOUT),
+            "download options should set a long request timeout, got {download:?}"
+        );
+        let indexed = url.store_options(super::RemoteAccess::Indexed);
+        assert!(
+            !indexed
+                .iter()
+                .any(|(key, _)| key == object_store::ClientConfigKey::Timeout.as_ref()),
+            "indexed options should keep object_store's default timeout, got {indexed:?}"
         );
     }
 
@@ -2056,6 +2674,22 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn remote_range_unsatisfiable_matches_status_not_body_digits() {
+        let unsatisfiable = object_store::Error::Generic {
+            store: "HTTP",
+            source: "Server returned non-2xx status code: 416 Range Not Satisfiable".into(),
+        };
+        assert!(super::remote_range_unsatisfiable(&unsatisfiable));
+
+        let other = object_store::Error::Generic {
+            store: "HTTP",
+            source: "Server returned non-2xx status code: 400 Bad Request: request-id-416-xyz"
+                .into(),
+        };
+        assert!(!super::remote_range_unsatisfiable(&other));
     }
 
     #[test]
