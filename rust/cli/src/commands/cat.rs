@@ -28,7 +28,7 @@ const PROTOBUF_SERIALIZE_OPTIONS: SerializeOptions =
 pub fn run(ctx: &CommandContext, args: CatCommand) -> Result<CommandOutcome> {
     args.warn_deprecations();
     let opts = CatOptions::from_args(&args, ctx.time_format())?;
-    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let source_options = source::SourceOptions::from_context(ctx);
     let stdout = std::io::stdout();
     let stdout = stdout.lock();
     // CSV uses csv::Writer's own buffer; text/ndjson wrap stdout in a BufWriter.
@@ -1961,7 +1961,10 @@ mod tests {
                 sink,
                 Path::new(&url),
                 &CatOptions::default(),
-                crate::source::SourceOptions::new(true),
+                crate::source::SourceOptions {
+                    allow_remote_scan: true,
+                    ..crate::source::SourceOptions::default()
+                },
                 &mut CsvState::default(),
             )
         })
@@ -1982,7 +1985,10 @@ mod tests {
                 sink,
                 Path::new(&url),
                 &CatOptions::default(),
-                crate::source::SourceOptions::new(true),
+                crate::source::SourceOptions {
+                    allow_remote_scan: true,
+                    ..crate::source::SourceOptions::default()
+                },
                 &mut CsvState::default(),
             )
         })

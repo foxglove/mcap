@@ -5,10 +5,8 @@ use crate::context::CommandContext;
 use crate::{render, source};
 
 pub fn run(ctx: &CommandContext, args: ListChannelsCommand) -> Result<()> {
-    let parsed = source::parse_mcap_from_path(
-        &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()),
-    )?;
+    let parsed =
+        source::parse_mcap_from_path(&args.file, source::SourceOptions::from_context(ctx))?;
     render::print_table(&render_channel_rows(&parsed.channels)?);
     Ok(())
 }

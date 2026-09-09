@@ -1297,6 +1297,7 @@ dependencies = [
  "object_store",
  "prost-reflect",
  "regex",
+ "reqwest",
  "rusqlite",
  "serde_json",
  "simplelog",

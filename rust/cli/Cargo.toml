@@ -30,6 +30,7 @@ prost-reflect = { version = "0.16.4", features = ["serde"] }
 rusqlite = { version = "0.40.1", features = ["bundled"] }
 tempfile = "3.27.0"
 object_store = { version = "0.13.2", features = ["aws", "gcp", "azure", "http"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
 tokio = { version = "1.52.3", features = ["net", "rt", "time"] }
 url = "2.5.8"
 futures-util = "0.3.32"

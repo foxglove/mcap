@@ -5,10 +5,8 @@ use crate::context::CommandContext;
 use crate::{render, source};
 
 pub fn run(ctx: &CommandContext, args: ListChunksCommand) -> Result<()> {
-    let parsed = source::parse_mcap_from_path(
-        &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()),
-    )?;
+    let parsed =
+        source::parse_mcap_from_path(&args.file, source::SourceOptions::from_context(ctx))?;
     render::print_table(&render_chunk_rows(&parsed.chunk_indexes, ctx.time_format()));
     Ok(())
 }

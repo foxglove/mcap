@@ -73,6 +73,7 @@ words:
   - genpy
   - gentools
   - golangci
+  - IMDS
   - infima
   - inputfile
   - intrinsics
@@ -115,6 +116,7 @@ words:
   - rustc
   - rustup
   - Saronic
+  - SSO
   - schemaless
   - serde
   - sfixed

@@ -119,7 +119,7 @@ impl RecoverStats {
 /// - 2: command-line parsing error (owned by clap)
 /// - 3: successful recovery with warning-level data loss (`CommandOutcome::Warnings`)
 pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome> {
-    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let source_options = source::SourceOptions::from_context(ctx);
     if let (Some(input), Some(output)) = (args.file.as_deref(), args.output.as_deref()) {
         source::ensure_distinct_local_input_output(input, output)?;
     }

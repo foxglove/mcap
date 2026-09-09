@@ -5,7 +5,7 @@ use crate::context::CommandContext;
 use crate::{parse, render, source};
 
 pub fn run(ctx: &CommandContext, args: ListAttachmentsCommand) -> Result<()> {
-    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let source_options = source::SourceOptions::from_context(ctx);
     let mut indexes =
         if let Some(remote) = source::try_open_remote_mcap(&args.file, source_options)? {
             remote.summary().attachment_indexes.clone()

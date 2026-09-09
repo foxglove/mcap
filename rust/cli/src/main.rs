@@ -21,6 +21,7 @@ fn run() -> Result<CommandOutcome> {
         args.verbose,
         args.color,
         args.allow_remote_scan,
+        args.no_sign_request,
         args.time_format,
     );
 
@@ -265,6 +266,17 @@ mod tests {
         let args = Args::try_parse_from(["mcap", "info", "--allow-remote-scan", "demo.mcap"])
             .expect("allow remote scan should parse after subcommand");
         assert!(args.allow_remote_scan);
+    }
+
+    #[test]
+    fn parses_global_no_sign_request_flag() {
+        let args = Args::try_parse_from(["mcap", "--no-sign-request", "info", "demo.mcap"])
+            .expect("no-sign-request should parse before subcommand");
+        assert!(args.no_sign_request);
+
+        let args = Args::try_parse_from(["mcap", "info", "--no-sign-request", "demo.mcap"])
+            .expect("no-sign-request should parse after subcommand");
+        assert!(args.no_sign_request);
     }
 
     #[test]
