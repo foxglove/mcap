@@ -275,9 +275,9 @@ public:
   }
   /**
    * @brief Limit reading to messages with log timestamps strictly after this time (exclusive
-   * lower bound). Log times are integer nanoseconds, so this is `startingAt(time + 1)`.
-   * `startingAfter(MaxTime)` selects nothing: no log time is strictly after MaxTime, so the
-   * bounds resolve to the empty range [MaxTime, MaxTime) (see `start()` and `end()`).
+   * lower bound). `startingAfter(MaxTime)` selects nothing, since no log time is strictly
+   * after MaxTime; it is a valid empty query, not an error, so pagination via
+   * `startingAfter(lastLogTime)` terminates even when the last message is logged at MaxTime.
    * Replaces any previously-set lower bound.
    */
   ReadMessageOptions& startingAfter(Timestamp time) {
@@ -287,8 +287,8 @@ public:
   }
   /**
    * @brief Limit reading to messages with log timestamps at or before this time (inclusive
-   * upper bound). Log times are integer nanoseconds, so this is `endingBefore(time + 1)`; an
-   * inclusive end of MaxTime means no upper bound. Replaces any previously-set upper bound.
+   * upper bound). `endingAt(MaxTime)` means no upper bound: even a message logged at exactly
+   * MaxTime is included. Replaces any previously-set upper bound.
    */
   ReadMessageOptions& endingAt(Timestamp time) {
     endAt_ = time;
@@ -305,44 +305,21 @@ public:
     return *this;
   }
   /**
-   * @brief The resolved inclusive lower bound on message log times, or std::nullopt if no
-   * lower bound has been set: only messages with `logTime >= start()` are included. Set it
-   * with `startingAt()` or `startingAfter()`. A lower bound of `startingAfter(MaxTime)`
-   * resolves to the empty range [MaxTime, MaxTime): start() and end() both return MaxTime,
-   * so `start() <= logTime < end()` filtering matches no message and pagination via
-   * `startingAfter(lastLogTime)` terminates even at MaxTime.
+   * @brief Whether a message logged at `logTime` falls inside the requested time range, i.e.
+   * satisfies both the lower bound (`startingAt()`/`startingAfter()`, or the deprecated
+   * `startTime`) and the upper bound (`endingAt()`/`endingBefore()`, or the deprecated
+   * `endTime`). This is the message-level filter the readers apply.
    */
-  std::optional<Timestamp> start() const {
-    if (startAfter_.has_value()) {
-      // Log times are integer nanoseconds, so an exclusive start is the inclusive start + 1,
-      // saturating at MaxTime where it forms the empty range [MaxTime, MaxTime) with end().
-      return (*startAfter_ < MaxTime) ? *startAfter_ + 1 : MaxTime;
-    }
-    return startAt_;
+  bool includesLogTime(Timestamp logTime) const {
+    return lowerBoundIncludes(logTime) && upperBoundIncludes(logTime);
   }
   /**
-   * @brief The resolved exclusive upper bound on message log times, or std::nullopt if the
-   * range is unbounded above: only messages with `logTime < end()` are included. Set it with
-   * `endingAt()` or `endingBefore()`. A lower bound of `startingAfter(MaxTime)` resolves to
-   * the empty range [MaxTime, MaxTime), overriding any end bound here: the intersection of
-   * an empty range with anything is empty.
+   * @brief Whether any log time in the closed interval [`first`, `last`] falls inside the
+   * requested time range. Readers use it to skip chunks whose message time span cannot
+   * contain a matching message.
    */
-  std::optional<Timestamp> end() const {
-    if (startAfter_ == MaxTime) {
-      // No log time is strictly after MaxTime: together with start(), report the empty
-      // range [MaxTime, MaxTime) so plain bound comparisons match no message.
-      return MaxTime;
-    }
-    if (endBefore_.has_value()) {
-      return endBefore_;
-    }
-    if (endAt_.has_value()) {
-      // Log times are integer nanoseconds, so an inclusive end is the exclusive end + 1. An
-      // inclusive end of MaxTime is a true "no upper bound": even a message logged at
-      // exactly MaxTime is included.
-      return (*endAt_ < MaxTime) ? std::optional<Timestamp>(*endAt_ + 1) : std::nullopt;
-    }
-    return std::nullopt;
+  bool overlapsLogTimes(Timestamp first, Timestamp last) const {
+    return lowerBoundIncludes(last) && upperBoundIncludes(first);
   }
   /**
    * @brief If provided, `topicFilter` is called on all topics found in the MCAP file. If
@@ -386,20 +363,18 @@ public:
   MCAP_DIAGNOSTIC_POP
 
   /**
-   * @brief validate the configuration.
+   * @brief Validate the configuration. A strictly crossed time range (an upper bound below
+   * the lower bound) is an error; an empty range is a valid query that matches nothing.
    */
   Status validate() const;
 
-  /**
-   * @brief Returns a copy of these options with the deprecated startTime/endTime fields
-   * folded into the explicit bounds, for callers that still set them. This is the only place
-   * the deprecated fields are read. The deprecated fields apply only when no explicit bound
-   * was provided on their side; an explicit bound — including the explicitly-unbounded
-   * `endingAt(MaxTime)` — always takes precedence.
-   */
-  ReadMessageOptions normalized() const;
-
 private:
+  // Whether `logTime` satisfies the lower/upper bound alone. These are the only places the
+  // deprecated startTime/endTime fields are read: each applies only when no explicit bound
+  // was set on its side, so an explicit bound always takes precedence.
+  bool lowerBoundIncludes(Timestamp logTime) const;
+  bool upperBoundIncludes(Timestamp logTime) const;
+
   // At most one of each pair is set; both empty means no bound was provided on that side.
   std::optional<Timestamp> startAt_;
   std::optional<Timestamp> startAfter_;
@@ -665,6 +640,10 @@ private:
   bool parsedSummary_ = false;
 
   void reset_();
+  // The byte range of the data section that may hold messages matching `options`' time
+  // range: the span of every indexed chunk whose message time span overlaps it. Without a
+  // summary this is the whole data section.
+  std::pair<ByteOffset, ByteOffset> byteRange_(const ReadMessageOptions& options) const;
   Status readSummarySection_(IReadable& reader);
   Status readSummaryFromScan_(IReadable& reader);
 };

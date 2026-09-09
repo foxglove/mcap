@@ -136,17 +136,12 @@ impl IndexedReader {
         summary: &crate::Summary,
         options: IndexedReaderOptions,
     ) -> McapResult<Self> {
-        // Resolved before the include_topics partial move below; start()/end() express even
-        // the empty starting_after(u64::MAX) range as plain bounds ([u64::MAX, u64::MAX)).
-        let resolved_start = options.start();
-        let resolved_end = options.end();
-        if let (Some(start), Some(end)) = (resolved_start, resolved_end) {
-            // A crossed range is a caller error. Equal resolved bounds are a valid empty
-            // range — including the empty starting_after(u64::MAX) range, which resolves
-            // to [u64::MAX, u64::MAX) — so only a strict crossing is rejected.
-            if start > end {
-                return Err(McapError::EndBeforeStart);
-            }
+        // Taken before the include_topics partial move below.
+        let bounds = options.log_time_bounds();
+        // A strictly crossed range is a caller error; an empty range is a valid query that
+        // matches nothing.
+        if bounds.is_crossed() {
+            return Err(McapError::EndBeforeStart);
         }
         let channel_ids = if let Some(include_topics) = options.include_topics {
             let mut set = BTreeSet::new();
@@ -165,15 +160,11 @@ impl IndexedReader {
             .chunk_indexes
             .iter()
             .filter(|chunk_index| {
-                if let Some(start) = resolved_start {
-                    if chunk_index.message_end_time < start {
-                        return false;
-                    }
-                }
-                if let Some(end) = resolved_end {
-                    if chunk_index.message_start_time >= end {
-                        return false;
-                    }
+                if !bounds.overlaps_log_times(
+                    chunk_index.message_start_time,
+                    chunk_index.message_end_time,
+                ) {
+                    return false;
                 }
                 if channel_ids.is_empty() {
                     return true;
@@ -240,8 +231,7 @@ impl IndexedReader {
             cur_chunk_index: 0,
             order: options.order,
             filter: Filter {
-                start: resolved_start,
-                end: resolved_end,
+                bounds,
                 channel_ids,
             },
             record_length_limit: options.record_length_limit,
@@ -431,12 +421,94 @@ impl IndexedReader {
 }
 
 struct Filter {
-    // inclusive log time range start
-    start: Option<u64>,
-    // exclusive log time range end
-    end: Option<u64>,
+    // log time bounds, with the deprecated fields already folded in
+    bounds: LogTimeBounds,
     // If non-empty, only channels with these IDs will be yielded
     channel_ids: BTreeSet<u16>,
+}
+
+/// A lower bound on message log times, exactly as the caller provided it.
+#[derive(Debug, Default, Clone, Copy)]
+enum LowerBound {
+    #[default]
+    Unbounded,
+    /// Inclusive: log times at or after this time.
+    At(u64),
+    /// Exclusive: log times strictly after this time.
+    After(u64),
+}
+
+/// An upper bound on message log times, exactly as the caller provided it.
+#[derive(Debug, Default, Clone, Copy)]
+enum UpperBound {
+    #[default]
+    Unbounded,
+    /// Inclusive: log times at or before this time.
+    At(u64),
+    /// Exclusive: log times strictly before this time.
+    Before(u64),
+}
+
+/// The message log-time bounds of an [`IndexedReaderOptions`]. Membership is tested directly
+/// against the provided values, so no inclusive/exclusive conversion or `u64::MAX`
+/// special-casing is needed anywhere.
+#[derive(Debug, Default, Clone, Copy)]
+struct LogTimeBounds {
+    lower: LowerBound,
+    upper: UpperBound,
+}
+
+impl LogTimeBounds {
+    fn lower_bound_includes(&self, log_time: u64) -> bool {
+        match self.lower {
+            LowerBound::Unbounded => true,
+            LowerBound::At(start) => log_time >= start,
+            LowerBound::After(start) => log_time > start,
+        }
+    }
+
+    fn upper_bound_includes(&self, log_time: u64) -> bool {
+        match self.upper {
+            UpperBound::Unbounded => true,
+            UpperBound::At(end) => log_time <= end,
+            UpperBound::Before(end) => log_time < end,
+        }
+    }
+
+    /// Whether a message logged at `log_time` falls inside the range.
+    fn includes_log_time(&self, log_time: u64) -> bool {
+        self.lower_bound_includes(log_time) && self.upper_bound_includes(log_time)
+    }
+
+    /// Whether any log time in the closed interval `[first, last]` falls inside the range.
+    fn overlaps_log_times(&self, first: u64, last: u64) -> bool {
+        self.lower_bound_includes(last) && self.upper_bound_includes(first)
+    }
+
+    /// Whether the range is strictly crossed (its upper bound lies below its lower bound).
+    /// An empty range, such as `starting_at(5).ending_before(5)` or
+    /// `starting_after(u64::MAX)`, is not crossed: it is a valid query that matches nothing.
+    /// Compares the first log time the lower bound admits with the first log time the upper
+    /// bound rejects.
+    fn is_crossed(&self) -> bool {
+        let first_included = match self.lower {
+            LowerBound::Unbounded => return false,
+            LowerBound::At(start) => start,
+            LowerBound::After(start) => match start.checked_add(1) {
+                Some(first) => first,
+                None => return false, // nothing is after u64::MAX: empty, not crossed
+            },
+        };
+        let first_excluded = match self.upper {
+            UpperBound::Unbounded => return false,
+            UpperBound::Before(end) => end,
+            UpperBound::At(end) => match end.checked_add(1) {
+                Some(first) => first,
+                None => return false, // no upper bound: cannot be crossed
+            },
+        };
+        first_included > first_excluded
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -472,17 +544,9 @@ pub struct IndexedReaderOptions {
         note = "use the ending_before (same exclusive behavior) or ending_at builder instead"
     )]
     pub end: Option<u64>,
-    // Each bound as provided, one per spelling; at most one is set per side, and a
-    // builder-set bound takes precedence over the deprecated field on its side (both are
-    // resolved in start()/end(), the only place the deprecated fields are read). The extreme
-    // values are distinct from an unset bound, so the deprecated fields cannot override
-    // them: end_at == Some(u64::MAX) is an explicitly-unbounded end, and
-    // start_after == Some(u64::MAX) selects nothing — start()/end() resolve it to the empty
-    // range [u64::MAX, u64::MAX), since no inclusive lower bound alone could represent it.
-    start_at: Option<u64>,
-    start_after: Option<u64>,
-    end_at: Option<u64>,
-    end_before: Option<u64>,
+    // Bounds set through the builder methods. A builder-set bound takes precedence over the
+    // deprecated field on its side; see `log_time_bounds`.
+    bounds: LogTimeBounds,
     /// The order in which to yield messages. Defaults to log-time order.
     pub order: ReadOrder,
     /// If Some, only messages on channels with topics contained in this set will be yielded.
@@ -516,33 +580,29 @@ impl IndexedReaderOptions {
     ///
     /// Setting a start bound replaces any previously-set start bound.
     pub fn starting_at(mut self, start: u64) -> Self {
-        self.start_at = Some(start);
-        self.start_after = None;
+        self.bounds.lower = LowerBound::At(start);
         self
     }
 
     /// Configure the reader to yield only messages with log time strictly after this time
     /// (exclusive lower bound).
     ///
-    /// Log times are integer nanoseconds, so this is `starting_at(start + 1)`.
-    /// `starting_after(u64::MAX)` selects nothing: no log time is strictly after `u64::MAX`,
-    /// so the bounds resolve to the empty range `[u64::MAX, u64::MAX)` (see [`Self::start`]
-    /// and [`Self::end`]). Setting a start bound replaces any previously-set start bound.
+    /// `starting_after(u64::MAX)` selects nothing, since no log time is strictly after
+    /// `u64::MAX`; it is a valid empty query, not an error, so pagination via
+    /// `starting_after(last_log_time)` terminates even when the last message is logged at
+    /// `u64::MAX`. Setting a start bound replaces any previously-set start bound.
     pub fn starting_after(mut self, start: u64) -> Self {
-        self.start_after = Some(start);
-        self.start_at = None;
+        self.bounds.lower = LowerBound::After(start);
         self
     }
 
     /// Configure the reader to yield only messages with log time on or before this time
     /// (inclusive upper bound).
     ///
-    /// Log times are integer nanoseconds, so the range `[start, end]` is `[start, end + 1)`;
-    /// passing `u64::MAX` means no upper bound. Setting an end bound replaces any
-    /// previously-set end bound.
+    /// `ending_at(u64::MAX)` means no upper bound: even a message logged at exactly
+    /// `u64::MAX` is yielded. Setting an end bound replaces any previously-set end bound.
     pub fn ending_at(mut self, end: u64) -> Self {
-        self.end_at = Some(end);
-        self.end_before = None;
+        self.bounds.upper = UpperBound::At(end);
         self
     }
 
@@ -551,62 +611,41 @@ impl IndexedReaderOptions {
     ///
     /// Setting an end bound replaces any previously-set end bound.
     pub fn ending_before(mut self, end: u64) -> Self {
-        self.end_before = Some(end);
-        self.end_at = None;
+        self.bounds.upper = UpperBound::Before(end);
         self
     }
 
-    /// The resolved inclusive lower bound on message log times, if any: only messages with
-    /// `log_time >= start` are yielded. Set it with [`Self::starting_at`] or
-    /// [`Self::starting_after`]; the deprecated [`Self::start`] field applies only when no
-    /// builder-set start bound exists. A lower bound of `starting_after(u64::MAX)` resolves
-    /// to the empty range `[u64::MAX, u64::MAX)`: `start()` and `end()` both return
-    /// `Some(u64::MAX)`, so `start <= log_time < end` filtering matches no message and
-    /// pagination via `starting_after(last_log_time)` terminates even at `u64::MAX`.
-    pub fn start(&self) -> Option<u64> {
-        if let Some(start_after) = self.start_after {
-            // Log times are integer nanoseconds, so an exclusive start is the inclusive
-            // start + 1, saturating at u64::MAX where it forms the empty range
-            // [u64::MAX, u64::MAX) with end().
-            return Some(start_after.saturating_add(1));
-        }
-        if self.start_at.is_some() {
-            return self.start_at;
-        }
-        // The deprecated field applies only when no builder-set bound exists on this side.
-        // This is the only place it is read.
-        #[allow(deprecated)]
-        let deprecated_start = self.start;
-        deprecated_start
+    /// Whether a message logged at `log_time` falls inside the configured time range, i.e.
+    /// satisfies both the lower bound ([`Self::starting_at`]/[`Self::starting_after`], or the
+    /// deprecated [`Self::start`]) and the upper bound ([`Self::ending_at`]/
+    /// [`Self::ending_before`], or the deprecated [`Self::end`]). This is the message-level
+    /// filter the reader applies.
+    pub fn includes_log_time(&self, log_time: u64) -> bool {
+        self.log_time_bounds().includes_log_time(log_time)
     }
 
-    /// The resolved exclusive upper bound on message log times, if any: only messages with
-    /// `log_time < end` are yielded. Set it with [`Self::ending_at`] or [`Self::ending_before`];
-    /// the deprecated [`Self::end`] field applies only when no builder-set end bound exists.
-    /// A lower bound of `starting_after(u64::MAX)` resolves to the empty range
-    /// `[u64::MAX, u64::MAX)`, overriding any end bound here: the intersection of an empty
-    /// range with anything is empty.
-    pub fn end(&self) -> Option<u64> {
-        if self.start_after == Some(u64::MAX) {
-            // No log time is strictly after u64::MAX: together with start(), report the
-            // empty range [u64::MAX, u64::MAX) so plain bound comparisons match no message.
-            return Some(u64::MAX);
-        }
-        if self.end_before.is_some() {
-            return self.end_before;
-        }
-        if let Some(end_at) = self.end_at {
-            // Log times are integer nanoseconds, so an inclusive end is the exclusive
-            // end + 1. An inclusive end of u64::MAX is a true "no upper bound": even a
-            // message logged at exactly u64::MAX is included, and the deprecated field
-            // cannot override it because end_at remains set.
-            return end_at.checked_add(1);
-        }
-        // The deprecated field applies only when no builder-set bound exists on this side.
-        // This is the only place it is read.
+    /// Whether any log time in the closed interval `[first, last]` falls inside the
+    /// configured time range. The reader uses it to skip chunks whose message time span
+    /// cannot contain a matching message.
+    pub fn overlaps_log_times(&self, first: u64, last: u64) -> bool {
+        self.log_time_bounds().overlaps_log_times(first, last)
+    }
+
+    /// The bounds with the deprecated `start`/`end` fields folded in. This is the only place
+    /// those fields are read: each applies only when no builder-set bound exists on its side,
+    /// so a builder-set bound — including the explicitly-unbounded `ending_at(u64::MAX)` —
+    /// always takes precedence.
+    fn log_time_bounds(&self) -> LogTimeBounds {
+        let mut bounds = self.bounds;
         #[allow(deprecated)]
-        let deprecated_end = self.end;
-        deprecated_end
+        let (deprecated_start, deprecated_end) = (self.start, self.end);
+        if let (LowerBound::Unbounded, Some(start)) = (bounds.lower, deprecated_start) {
+            bounds.lower = LowerBound::At(start);
+        }
+        if let (UpperBound::Unbounded, Some(end)) = (bounds.upper, deprecated_end) {
+            bounds.upper = UpperBound::Before(end);
+        }
+        bounds
     }
 
     /// Configure the reader to yield only messages with log time on or after this time.
@@ -672,17 +711,9 @@ fn index_messages(
             continue;
         }
         let msg = MessageHeader::read_le(&mut std::io::Cursor::new(record_data))?;
-        if let Some(end) = filter.end {
-            if msg.log_time >= end {
-                offset = next_offset;
-                continue;
-            }
-        }
-        if let Some(start) = filter.start {
-            if msg.log_time < start {
-                offset = next_offset;
-                continue;
-            }
+        if !filter.bounds.includes_log_time(msg.log_time) {
+            offset = next_offset;
+            continue;
         }
         if !filter.channel_ids.is_empty() && !filter.channel_ids.contains(&msg.channel_id) {
             offset = next_offset;
@@ -998,10 +1029,17 @@ mod tests {
             &mcap,
         );
         assert_eq!(&messages, &[(0, 3)]);
-        // The resolved bounds are readable through the accessors.
-        let options = IndexedReaderOptions::new().starting_at(3).ending_at(3);
-        assert_eq!(options.start(), Some(3));
-        assert_eq!(options.end(), Some(4));
+        // The membership predicates evaluate the bounds exactly as provided.
+        let options = IndexedReaderOptions::new().starting_after(3).ending_at(5);
+        assert!(!options.includes_log_time(3));
+        assert!(options.includes_log_time(4));
+        assert!(options.includes_log_time(5));
+        assert!(!options.includes_log_time(6));
+        // A chunk overlaps the range if any log time in its closed span does.
+        assert!(!options.overlaps_log_times(1, 3));
+        assert!(options.overlaps_log_times(1, 4));
+        assert!(options.overlaps_log_times(5, 9));
+        assert!(!options.overlaps_log_times(6, 9));
         // ending_at(u64::MAX) means no upper bound.
         let messages = read_mcap_noseek(IndexedReaderOptions::new().ending_at(u64::MAX), &mcap);
         assert_eq!(&messages, &[(0, 1), (0, 2), (0, 3), (0, 4), (0, 5), (0, 6)]);
@@ -1015,25 +1053,24 @@ mod tests {
         assert_eq!(&messages, &[(0, 3), (0, u64::MAX)]);
         let messages = read_mcap_noseek(IndexedReaderOptions::new().ending_at(u64::MAX), &mcap);
         assert_eq!(&messages, &[(0, 3), (0, u64::MAX)]);
-        // starting_after(u64::MAX) selects nothing: no log time is strictly after u64::MAX,
-        // so the bounds resolve to the empty range [u64::MAX, u64::MAX).
+        // starting_after(u64::MAX) selects nothing: no log time is strictly after u64::MAX.
+        // It is a valid (empty) query, not an error.
         let options = IndexedReaderOptions::new().starting_after(u64::MAX);
-        assert_eq!(options.start(), Some(u64::MAX));
-        assert_eq!(options.end(), Some(u64::MAX));
+        assert!(!options.includes_log_time(u64::MAX));
+        assert!(!options.overlaps_log_times(0, u64::MAX));
         let messages = read_mcap_noseek(options, &mcap);
         assert!(messages.is_empty());
-        // The empty range overrides any end bound: its intersection with anything is empty.
+        // Combining it with an end bound is still an empty query, not a crossed range.
         let options = IndexedReaderOptions::new()
             .starting_after(u64::MAX)
             .ending_at(5);
-        assert_eq!(options.end(), Some(u64::MAX));
         let messages = read_mcap_noseek(options, &mcap);
         assert!(messages.is_empty());
         // A later lower bound replaces the empty range.
         let options = IndexedReaderOptions::new()
             .starting_after(u64::MAX)
             .starting_at(3);
-        assert_eq!(options.start(), Some(3));
+        assert!(options.includes_log_time(3));
         let messages = read_mcap_noseek(options, &mcap);
         assert_eq!(&messages, &[(0, 3), (0, u64::MAX)]);
         // starting_after below the maximum keeps its normal exclusive behavior.
@@ -1060,12 +1097,22 @@ mod tests {
         };
         let result = IndexedReader::new_with_options(&summary, options);
         assert!(matches!(result, Err(McapError::EndBeforeStart)));
-        // Equal resolved bounds are a valid empty range, not an error.
+        // An empty range is not an error, whichever spelling produces it.
         let messages = read_mcap_noseek(
             IndexedReaderOptions::new().starting_at(5).ending_before(5),
             &mcap,
         );
         assert!(messages.is_empty());
+        let messages = read_mcap_noseek(
+            IndexedReaderOptions::new().starting_at(5).ending_at(4),
+            &mcap,
+        );
+        assert!(messages.is_empty());
+        let result = IndexedReader::new_with_options(
+            &summary,
+            IndexedReaderOptions::new().starting_at(6).ending_at(4),
+        );
+        assert!(matches!(result, Err(McapError::EndBeforeStart)));
     }
     #[test]
     #[allow(deprecated)]
@@ -1088,8 +1135,10 @@ mod tests {
         let mut options = IndexedReaderOptions::new();
         options.start = Some(3);
         options.end = Some(5);
-        assert_eq!(options.start(), Some(3));
-        assert_eq!(options.end(), Some(5));
+        assert!(!options.includes_log_time(2));
+        assert!(options.includes_log_time(3));
+        assert!(options.includes_log_time(4));
+        assert!(!options.includes_log_time(5));
         let messages = read_mcap_noseek(options, &mcap);
         assert_eq!(&messages, &[(0, 3), (0, 4)]);
     }
@@ -1110,7 +1159,7 @@ mod tests {
         let mut options = IndexedReaderOptions::new();
         options.end = Some(4);
         let options = options.ending_at(u64::MAX);
-        assert_eq!(options.end(), None);
+        assert!(options.includes_log_time(u64::MAX));
         let messages = read_mcap_noseek(options, &mcap);
         assert_eq!(&messages, &[(0, 3), (0, u64::MAX)]);
     }
