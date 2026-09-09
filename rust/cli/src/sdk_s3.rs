@@ -17,6 +17,7 @@
 //! object_store key prints a warning instead of being silently ignored.
 
 use async_trait::async_trait;
+use aws_credential_types::provider::error::CredentialsError;
 use aws_sdk_s3::error::SdkError;
 use aws_sdk_s3::types::RequestPayer;
 use futures_util::stream::BoxStream;
@@ -407,9 +408,77 @@ where
         },
         None => object_store::Error::Generic {
             store: "S3",
-            source,
+            source: unsent_request_message(source.as_ref()).into(),
         },
     }
+}
+
+// A request that never reached the server (credential resolution, DNS, TLS,
+// connect) surfaces as a bare "dispatch failure" whose cause sits deeper in
+// the error's source chain. Name the cause — and for missing credentials,
+// the fix — instead of the wrapper.
+fn unsent_request_message(err: &(dyn std::error::Error + 'static)) -> String {
+    let mut chain = Vec::new();
+    let mut current = Some(err);
+    while let Some(link) = current {
+        if let Some(creds) = link.downcast_ref::<CredentialsError>() {
+            return credentials_message(creds);
+        }
+        chain.push(link.to_string());
+        current = link.source();
+    }
+    join_error_chain(chain)
+}
+
+fn credentials_message(err: &CredentialsError) -> String {
+    if matches!(err, CredentialsError::CredentialsNotLoaded(_)) {
+        let profile = std::env::var("AWS_PROFILE")
+            .ok()
+            .filter(|name| !name.trim().is_empty());
+        return no_credentials_message(profile.as_deref());
+    }
+    let mut chain = vec!["failed to load AWS credentials".to_string()];
+    let mut current = std::error::Error::source(err);
+    while let Some(link) = current {
+        // Nested CredentialsError wrappers only restate that loading failed.
+        if link.downcast_ref::<CredentialsError>().is_none() {
+            chain.push(link.to_string());
+        }
+        current = link.source();
+    }
+    join_error_chain(chain)
+}
+
+fn no_credentials_message(profile: Option<&str>) -> String {
+    match profile {
+        // The SDK chain collapses "profile missing", "profile misconfigured",
+        // and "SSO session expired" into one not-loaded error, so name the
+        // profile and the things worth checking.
+        Some(profile) => format!(
+            "no AWS credentials found for AWS_PROFILE={profile}: check that the profile \
+             exists in ~/.aws/config or ~/.aws/credentials and that its SSO session \
+             (`aws sso login`) or source_profile is valid; for a public bucket set \
+             AWS_SKIP_SIGNATURE=true"
+        ),
+        None => "no AWS credentials found: set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY, \
+                 configure a profile in ~/.aws/credentials (selected with AWS_PROFILE), or \
+                 run `aws sso login`; for a public bucket set AWS_SKIP_SIGNATURE=true"
+            .to_string(),
+    }
+}
+
+// Join an error chain outermost-first, dropping links whose text the previous
+// link already includes so wrappers that echo their source don't repeat it.
+fn join_error_chain(chain: Vec<String>) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for text in chain {
+        let text = text.trim().to_string();
+        if text.is_empty() || parts.last().is_some_and(|prev| prev.contains(&text)) {
+            continue;
+        }
+        parts.push(text);
+    }
+    parts.join(": ")
 }
 
 trait RawStatus {
@@ -672,6 +741,107 @@ mod tests {
             heads.iter().all(|head| head.starts_with("HEAD ")),
             "head() should issue a HeadObject, got:\n{heads:?}"
         );
+    }
+
+    // Always fails credential resolution the way the SDK default chain does
+    // when nothing is configured.
+    #[derive(Debug)]
+    struct NoCredentials;
+
+    impl aws_sdk_s3::config::ProvideCredentials for NoCredentials {
+        fn provide_credentials<'a>(
+            &'a self,
+        ) -> aws_credential_types::provider::future::ProvideCredentials<'a>
+        where
+            Self: 'a,
+        {
+            aws_credential_types::provider::future::ProvideCredentials::ready(Err(
+                CredentialsError::not_loaded("no providers in chain provided credentials"),
+            ))
+        }
+    }
+
+    #[test]
+    fn missing_credentials_name_the_fix_instead_of_dispatch_failure() {
+        let server = serve_fake_s3(b"unused", None);
+        let builder = aws_sdk_s3::config::Builder::new()
+            .behavior_version(aws_config::BehaviorVersion::latest())
+            .region(Region::new("us-east-2"))
+            .endpoint_url(&server.url)
+            .force_path_style(true)
+            .http_client(ring_http_client())
+            .credentials_provider(SharedCredentialsProvider::new(NoCredentials));
+        let store = SdkS3Store {
+            client: aws_sdk_s3::Client::from_conf(builder.build()),
+            bucket: "test-bucket".to_string(),
+            request_payer: false,
+        };
+        let err = test_runtime()
+            .block_on(store.get(&ObjectStorePath::from("private.mcap")))
+            .expect_err("credential resolution must fail");
+        let message = err.to_string();
+        assert!(
+            message.contains("no AWS credentials found"),
+            "unexpected message: {message}"
+        );
+        assert!(
+            message.contains("AWS_PROFILE"),
+            "unexpected message: {message}"
+        );
+        assert!(
+            !message.contains("dispatch failure"),
+            "unexpected message: {message}"
+        );
+        assert_eq!(
+            server.requests.load(Ordering::SeqCst),
+            0,
+            "no request should reach the server without credentials"
+        );
+    }
+
+    #[test]
+    fn no_credentials_message_names_the_selected_profile() {
+        let message = no_credentials_message(Some("deploy"));
+        assert!(
+            message.starts_with("no AWS credentials found for AWS_PROFILE=deploy: "),
+            "unexpected message: {message}"
+        );
+        assert!(
+            message.contains("aws sso login"),
+            "unexpected message: {message}"
+        );
+        let message = no_credentials_message(None);
+        assert!(
+            message.starts_with("no AWS credentials found: set AWS_ACCESS_KEY_ID"),
+            "unexpected message: {message}"
+        );
+    }
+
+    #[test]
+    fn unsent_request_errors_carry_the_cause_chain() {
+        use aws_smithy_runtime_api::client::result::ConnectorError;
+        let io = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "connection refused");
+        let err: SdkError<
+            aws_sdk_s3::operation::get_object::GetObjectError,
+            aws_smithy_runtime_api::http::Response,
+        > = SdkError::dispatch_failure(ConnectorError::io(Box::new(io)));
+        let mapped = map_sdk_error(&ObjectStorePath::from("demo.mcap"), err);
+        let message = mapped.to_string();
+        assert!(
+            message.contains("dispatch failure: io error: connection refused"),
+            "unexpected message: {message}"
+        );
+    }
+
+    #[test]
+    fn error_chain_drops_links_the_previous_link_already_states() {
+        let joined = join_error_chain(vec![
+            "outer: inner".to_string(),
+            "inner".to_string(),
+            "  ".to_string(),
+            "root cause".to_string(),
+        ]);
+        assert_eq!(joined, "outer: inner: root cause");
     }
 
     #[test]
