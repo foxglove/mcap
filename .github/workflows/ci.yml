@@ -31,6 +31,43 @@ jobs:
       - run: make test-examples-host
       - run: make run-examples-host
 
+  # Native aarch64 coverage for the hardware-specific code paths (e.g. the
+  # ARM CRC32 kernel in crc32.hpp), building on the host like cpp-windows
+  # does rather than through the docker CI image.
+  cpp-linux-arm64:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            cc: gcc
+            cxx: g++
+          - compiler: clang
+            cc: clang
+            cxx: clang++
+    defaults:
+      run:
+        working-directory: cpp
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - uses: actions/cache@v6
+        with:
+          path: ~/.conan2/p
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.compiler }}-conan2-${{ hashFiles('cpp/**/conanfile.py') }}
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+      - run: pip install "conan>=2.0,<3"
+      - run: bash build.sh --build-tests-only
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+      - run: ./test/build/Debug/bin/unit-tests
+      - run: ./test/build/Debug/bin/unit-tests-nocompress
+
   cpp-windows:
     runs-on: windows-latest
     defaults:

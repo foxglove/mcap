@@ -167,13 +167,20 @@ overrides:
 
   - filename: "cpp/**"
     words:
+      - acle
       - bindirs
+      - carryless
+      - Castagnoli
       - cppstd
+      - Gopal
       - hdoc
+      - hwcap
       - includedirs
       - libdirs
       - libzstd
       - nlohmann
+      - pclmul
+      - pclmulqdq
       - zstdlib
       # Windows-specific functions and includes
       - ftelli
@@ -183,6 +190,10 @@ overrides:
     ignoreRegExpList:
       - "LZ4F_\\w+"
       - "LZ4HC_\\w+"
+      # SSE/AVX intrinsics such as _mm_clmulepi64_si128
+      - "_mm_\\w+"
+      # Header names in #include directives
+      - "#\\s*include\\s*<[^>]+>"
 
   - filename: "**/{*.js,*.ts,*.tsx}"
     ignoreRegExpList:
