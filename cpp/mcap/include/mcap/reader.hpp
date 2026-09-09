@@ -400,11 +400,7 @@ public:
   ReadMessageOptions normalized() const;
 
 private:
-  // Each bound as provided, one per spelling; at most one is set per side. Both empty on a
-  // side means no bound was provided there. The extreme values are distinct from both empty,
-  // so the deprecated startTime/endTime fields cannot override them: endAt_ == MaxTime is an
-  // explicitly-unbounded end, and startAfter_ == MaxTime resolves through start()/end() to
-  // the empty range [MaxTime, MaxTime).
+  // At most one of each pair is set; both empty means no bound was provided on that side.
   std::optional<Timestamp> startAt_;
   std::optional<Timestamp> startAfter_;
   std::optional<Timestamp> endAt_;
