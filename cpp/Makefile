@@ -22,7 +22,6 @@ clean:
 	docker rm -f hdoc
 	docker rmi -f mcap_cpp_dev
 	docker rmi -f mcap_cpp_ci
-	docker rmi -f mcap_cpp_ci_jammy
 	rm -rf bench/build
 	rm -rf examples/build
 	rm -rf test/build
@@ -74,11 +73,11 @@ test-examples-host:
 
 .PHONY: ci-image
 ci-image: hdoc-build
-	docker build -t mcap_cpp_ci -f ci.Dockerfile --build-arg IMAGE=ubuntu:focal .
+	docker build -t mcap_cpp_ci -f ci.Dockerfile .
 
 .PHONY: ci-clang
 ci-clang: ci-image
-	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(HOME)/.conan2/p:/root/.conan2/p -e CC=clang-13 -e CXX=clang++-13 mcap_cpp_ci ./build.sh
+	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(HOME)/.conan2/p:/root/.conan2/p -e CC=clang -e CXX=clang++ mcap_cpp_ci ./build.sh
 
 .PHONY: ci-gcc
 ci-gcc: ci-image
@@ -86,8 +85,7 @@ ci-gcc: ci-image
 
 .PHONY: ci-docs
 ci-docs: ci-image
-	docker build -t mcap_cpp_ci_jammy -f ci.Dockerfile .
-	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(CURDIR)/../__docs__/cpp:/hdoc-output -v $(HOME)/.conan2/p:/root/.conan2/p mcap_cpp_ci_jammy ./build-docs.sh
+	docker run -t --rm -v $(CURDIR):/mcap/cpp -v $(CURDIR)/../__docs__/cpp:/hdoc-output -v $(HOME)/.conan2/p:/root/.conan2/p mcap_cpp_ci ./build-docs.sh
 
 .PHONY: ci-format-check
 ci-format-check: ci-image
