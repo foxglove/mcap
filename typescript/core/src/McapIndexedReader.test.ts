@@ -544,6 +544,54 @@ describe("McapIndexedReader", () => {
       );
     });
 
+    it("keeps every message at an inclusive bound shared by several messages", async () => {
+      const tempBuffer = new TempBuffer();
+      // A zero chunk size puts every message in its own chunk, so the duplicates span chunks.
+      const writer = new McapWriter({ writable: tempBuffer, chunkSize: 0 });
+      await writer.start({ library: "", profile: "" });
+      const channelId = await writer.registerChannel({
+        topic: "test",
+        schemaId: 0,
+        messageEncoding: "json",
+        metadata: new Map(),
+      });
+      const written = [2n, 3n, 3n, 3n, 4n].map((logTime, i) => ({
+        type: "Message" as const,
+        channelId,
+        sequence: i,
+        publishTime: logTime,
+        logTime,
+        data: new Uint8Array(),
+      }));
+      for (const message of written) {
+        await writer.addMessage(message);
+      }
+      await writer.end();
+
+      const reader = await McapIndexedReader.Initialize({ readable: tempBuffer });
+      expect(reader.chunkIndexes).toHaveLength(written.length);
+
+      for (const reverse of [false, true]) {
+        const readWith = async (args: {
+          startingAt?: bigint;
+          startingAfter?: bigint;
+          endingAt?: bigint;
+          endingBefore?: bigint;
+        }) => await collect(reader.readMessages({ ...args, reverse }));
+        const expected = (indices: number[]) => {
+          const picked = indices.map((i) => written[i]!);
+          return reverse ? picked.reverse() : picked;
+        };
+        // Equal inclusive bounds keep every message at that log time, across chunks.
+        await expect(readWith({ startingAt: 3n, endingAt: 3n })).resolves.toEqual(
+          expected([1, 2, 3]),
+        );
+        // The exclusive spellings drop every one of them.
+        await expect(readWith({ startingAfter: 3n })).resolves.toEqual(expected([4]));
+        await expect(readWith({ endingBefore: 3n })).resolves.toEqual(expected([0]));
+      }
+    });
+
     it("includes a message logged at the maximum timestamp", async () => {
       const maxTime = 2n ** 64n - 1n;
       const tempBuffer = new TempBuffer();
