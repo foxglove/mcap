@@ -755,9 +755,68 @@ TEST_CASE("explicit time range bounds", "[reader]") {
     MCAP_DIAGNOSTIC_POP
   }
   {
-    // A crossing range is rejected.
+    // With a summary loaded, the linear path narrows its scan to the chunks overlapping the
+    // range and still applies the same membership test to each message.
+    auto logTimesWithSummary = [&buffer](const mcap::ReadMessageOptions& options) {
+      mcap::McapReader reader;
+      requireOk(reader.open(buffer));
+      requireOk(reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan));
+      const auto onProblem = [](const mcap::Status& status) {
+        FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+      };
+      std::vector<mcap::Timestamp> times;
+      for (const auto& msgView : reader.readMessages(onProblem, options)) {
+        times.push_back(msgView.message.logTime);
+      }
+      return times;
+    };
+    mcap::ReadMessageOptions inside;
+    inside.startingAfter(2).endingAt(4);
+    REQUIRE(logTimesWithSummary(inside) == std::vector<mcap::Timestamp>{3, 4});
+    mcap::ReadMessageOptions pastTheEnd;
+    pastTheEnd.startingAfter(6);
+    REQUIRE(logTimesWithSummary(pastTheEnd) == std::vector<mcap::Timestamp>{});
+    mcap::ReadMessageOptions beforeTheStart;
+    beforeTheStart.endingBefore(1);
+    REQUIRE(logTimesWithSummary(beforeTheStart) == std::vector<mcap::Timestamp>{});
+  }
+  {
+    // The membership predicates evaluate the bounds exactly as provided, on both sides.
+    mcap::ReadMessageOptions options;
+    options.startingAfter(3).endingAt(5);
+    REQUIRE(!options.includesLogTime(3));
+    REQUIRE(options.includesLogTime(4));
+    REQUIRE(options.includesLogTime(5));
+    REQUIRE(!options.includesLogTime(6));
+    // A chunk overlaps the range if any log time in its closed span does.
+    REQUIRE(!options.overlapsLogTimes(1, 3));
+    REQUIRE(options.overlapsLogTimes(1, 4));
+    REQUIRE(options.overlapsLogTimes(5, 9));
+    REQUIRE(!options.overlapsLogTimes(6, 9));
+    // The deprecated fields participate only where no explicit bound was set.
+    MCAP_DIAGNOSTIC_PUSH
+    MCAP_IGNORE_DEPRECATED
+    mcap::ReadMessageOptions deprecated;
+    deprecated.startTime = 3;
+    deprecated.endTime = 5;
+    REQUIRE(!deprecated.includesLogTime(2));
+    REQUIRE(deprecated.includesLogTime(3));
+    REQUIRE(deprecated.includesLogTime(4));
+    REQUIRE(!deprecated.includesLogTime(5));
+    deprecated.endingAt(5);
+    REQUIRE(deprecated.includesLogTime(5));
+    MCAP_DIAGNOSTIC_POP
+  }
+  {
+    // A crossing range is rejected; an empty range is not.
     mcap::ReadMessageOptions options;
     options.startingAt(5).endingBefore(3);
+    REQUIRE(!options.validate().ok());
+    options.startingAt(5).endingBefore(5);
+    requireOk(options.validate());
+    options.startingAt(5).endingAt(4);
+    requireOk(options.validate());
+    options.startingAt(6).endingAt(4);
     REQUIRE(!options.validate().ok());
   }
 }
@@ -871,23 +930,20 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3, mcap::MaxTime});
   }
   {
-    // startingAfter(MaxTime) selects nothing: no log time is strictly after MaxTime, so the
-    // bounds resolve to the empty range [MaxTime, MaxTime). It is a valid (empty) query,
-    // not an error, so pagination via startingAfter(lastLogTime) terminates even when the
-    // last message is logged at MaxTime.
+    // startingAfter(MaxTime) selects nothing: no log time is strictly after MaxTime. It is a
+    // valid (empty) query, not an error, so pagination via startingAfter(lastLogTime)
+    // terminates even when the last message is logged at MaxTime.
     mcap::ReadMessageOptions options;
     options.startingAfter(mcap::MaxTime);
-    REQUIRE(options.start() == mcap::MaxTime);
-    REQUIRE(options.end() == mcap::MaxTime);
+    REQUIRE(!options.includesLogTime(mcap::MaxTime));
+    REQUIRE(!options.overlapsLogTimes(0, mcap::MaxTime));
     requireOk(options.validate());
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{});
   }
   {
-    // The empty range overrides any end bound (its intersection with anything is empty),
-    // even one the saturated lower bound would appear to cross.
+    // Combining it with an end bound is still an empty query, not a crossed range.
     mcap::ReadMessageOptions options;
     options.startingAfter(mcap::MaxTime).endingBefore(5);
-    REQUIRE(options.end() == mcap::MaxTime);
     requireOk(options.validate());
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{});
   }
@@ -903,7 +959,7 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
     // deprecated endTime default applies, which drops the MaxTime message as pinned above.)
     mcap::ReadMessageOptions options;
     options.startingAfter(mcap::MaxTime).startingAt(3);
-    REQUIRE(options.start() == 3);
+    REQUIRE(options.includesLogTime(3));
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{3});
   }
   {

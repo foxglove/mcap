@@ -587,18 +587,32 @@ Status McapReader::readSummaryFromScan_(IReadable& reader) {
   return StatusCode::Success;
 }
 
-ReadMessageOptions ReadMessageOptions::normalized() const {
-  ReadMessageOptions normalized = *this;
+bool ReadMessageOptions::lowerBoundIncludes(Timestamp logTime) const {
+  if (startAt_.has_value()) {
+    return logTime >= *startAt_;
+  }
+  if (startAfter_.has_value()) {
+    return logTime > *startAfter_;
+  }
   MCAP_DIAGNOSTIC_PUSH
   MCAP_IGNORE_DEPRECATED
-  if (!normalized.startAt_.has_value() && !normalized.startAfter_.has_value()) {
-    normalized.startAt_ = normalized.startTime;
-  }
-  if (!normalized.endAt_.has_value() && !normalized.endBefore_.has_value()) {
-    normalized.endBefore_ = normalized.endTime;
-  }
+  const Timestamp deprecatedStart = startTime;
   MCAP_DIAGNOSTIC_POP
-  return normalized;
+  return logTime >= deprecatedStart;
+}
+
+bool ReadMessageOptions::upperBoundIncludes(Timestamp logTime) const {
+  if (endBefore_.has_value()) {
+    return logTime < *endBefore_;
+  }
+  if (endAt_.has_value()) {
+    return logTime <= *endAt_;
+  }
+  MCAP_DIAGNOSTIC_PUSH
+  MCAP_IGNORE_DEPRECATED
+  const Timestamp deprecatedEnd = endTime;
+  MCAP_DIAGNOSTIC_POP
+  return logTime < deprecatedEnd;
 }
 
 LinearMessageView McapReader::readMessages() {
@@ -638,10 +652,27 @@ LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem,
     onProblem(boundsStatus);
     return LinearMessageView{*this, boundsStatus, onProblem};
   }
-  const ReadMessageOptions normalizedOptions = options.normalized();
-  const auto [startOffset, endOffset] =
-    byteRange(*normalizedOptions.start(), normalizedOptions.end().value_or(MaxTime));
-  return LinearMessageView{*this, normalizedOptions, startOffset, endOffset, onProblem};
+  const auto [startOffset, endOffset] = byteRange_(options);
+  return LinearMessageView{*this, options, startOffset, endOffset, onProblem};
+}
+
+std::pair<ByteOffset, ByteOffset> McapReader::byteRange_(const ReadMessageOptions& options) const {
+  if (!parsedSummary_ || chunkIndexes_.empty()) {
+    return {dataStart_, dataEnd_};
+  }
+
+  ByteOffset dataStart = dataEnd_;
+  ByteOffset dataEnd = dataStart_;
+  for (const auto& chunkIndex : chunkIndexes_) {
+    if (options.overlapsLogTimes(chunkIndex.messageStartTime, chunkIndex.messageEndTime)) {
+      dataStart = std::min(dataStart, chunkIndex.chunkStartOffset);
+      dataEnd = std::max(dataEnd, chunkIndex.chunkStartOffset + chunkIndex.chunkLength);
+    }
+  }
+  if (dataStart >= dataEnd) {
+    return {0, 0};
+  }
+  return {dataStart, dataEnd};
 }
 
 std::pair<ByteOffset, ByteOffset> McapReader::byteRange(Timestamp startingAt,
@@ -1750,11 +1781,7 @@ LinearMessageView::Iterator::Impl::Impl(LinearMessageView& view)
  */
 void LinearMessageView::Iterator::Impl::onMessage(const Message& message, RecordOffset offset) {
   // make sure the message is within the expected time range
-  if (message.logTime < view_.readMessageOptions_.start().value_or(0)) {
-    return;
-  }
-  const auto endBound = view_.readMessageOptions_.end();
-  if (endBound.has_value() && message.logTime >= *endBound) {
+  if (!view_.readMessageOptions_.includesLogTime(message.logTime)) {
     return;
   }
   auto maybeChannel = view_.mcapReader_.channel(message.channelId);
@@ -1872,10 +1899,32 @@ bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::I
 }
 
 Status ReadMessageOptions::validate() const {
-  const auto normalized = this->normalized();
-  // The empty range [MaxTime, MaxTime) from startingAfter(MaxTime) passes this check like
-  // any other empty range: a valid query with no matches, not an error.
-  if (normalized.end().has_value() && *normalized.start() > *normalized.end()) {
+  // Only a strictly crossed range is an error. An empty range, such as
+  // startingAt(5).endingBefore(5) or startingAfter(MaxTime), is a valid query that matches
+  // nothing. Compare the first log time the lower bound admits with the first log time the
+  // upper bound rejects; the range is crossed when the former comes after the latter.
+  MCAP_DIAGNOSTIC_PUSH
+  MCAP_IGNORE_DEPRECATED
+  Timestamp firstIncluded = startTime;
+  if (startAt_.has_value()) {
+    firstIncluded = *startAt_;
+  } else if (startAfter_.has_value()) {
+    if (*startAfter_ == MaxTime) {
+      return Status();  // nothing is after MaxTime: empty, not crossed
+    }
+    firstIncluded = *startAfter_ + 1;
+  }
+  Timestamp firstExcluded = endTime;
+  if (endBefore_.has_value()) {
+    firstExcluded = *endBefore_;
+  } else if (endAt_.has_value()) {
+    if (*endAt_ == MaxTime) {
+      return Status();  // no upper bound: cannot be crossed
+    }
+    firstExcluded = *endAt_ + 1;
+  }
+  MCAP_DIAGNOSTIC_POP
+  if (firstIncluded > firstExcluded) {
     return Status(StatusCode::InvalidMessageReadOptions, "start time must be before end time");
   }
   return Status();
@@ -1887,7 +1936,7 @@ IndexedMessageReader::IndexedMessageReader(
   const std::function<void(const Message&, RecordOffset)> onMessage)
     : mcapReader_(reader)
     , recordReader_(*mcapReader_.dataSource(), 0, 0)
-    , options_(options.normalized())
+    , options_(options)
     , onMessage_(onMessage)
     , queue_(options_.readOrder == ReadMessageOptions::ReadOrder::ReverseLogTimeOrder) {
   auto chunkIndexes = mcapReader_.chunkIndexes();
@@ -1913,13 +1962,8 @@ IndexedMessageReader::IndexedMessageReader(
   }
   // Initialize the read job queue by finding all of the chunks that need to be read from.
   for (const auto& chunkIndex : mcapReader_.chunkIndexes()) {
-    const auto endBound = options_.end();
-    if (endBound.has_value() && chunkIndex.messageStartTime >= *endBound) {
-      // chunk starts after requested time range, skip it.
-      continue;
-    }
-    if (chunkIndex.messageEndTime < options_.start().value_or(0)) {
-      // chunk end before requested time range starts, skip it.
+    if (!options_.overlapsLogTimes(chunkIndex.messageStartTime, chunkIndex.messageEndTime)) {
+      // chunk lies entirely outside the requested time range, skip it.
       continue;
     }
     for (const auto& channelId : selectedChannels_) {
@@ -2016,9 +2060,7 @@ bool IndexedMessageReader::next() {
             }
             if (selectedChannels_.find(messageIndex.channelId) != selectedChannels_.end()) {
               for (const auto& [timestamp, byteOffset] : messageIndex.records) {
-                const auto endBound = options_.end();
-                if (timestamp >= options_.start().value_or(0) &&
-                    (!endBound.has_value() || timestamp < *endBound)) {
+                if (options_.includesLogTime(timestamp)) {
                   internal::ReadMessageJob job;
                   job.chunkReaderIndex = chunkReaderIndex;
                   job.offset.offset = byteOffset;
