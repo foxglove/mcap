@@ -501,9 +501,8 @@ class Writer:
 
     def flush(self):
         """Finishes the chunk in progress, if any, and writes everything buffered so far to
-        the output stream -- the Python counterpart of the C++ writer's ``closeLastChunk()`` and
-        the TypeScript writer's ``flush()``. Call it on a timer to bound how many messages a
-        crash can lose regardless of ``chunk_size``; a chunk with no messages is not written.
+        the output stream. A chunk with no messages is not written. Compression works per
+        chunk, so flushing often reduces the compression ratio.
         """
         self.__finalize_chunk()
         self.__flush()
