@@ -499,6 +499,15 @@ class Writer:
         self.__chunk_indices.append(chunk_index)
         self.__chunk_builder.reset()
 
+    def flush(self):
+        """Finishes the chunk in progress, if any, and writes everything buffered so far to
+        the output stream -- the Python counterpart of the C++ writer's ``closeLastChunk()`` and
+        the TypeScript writer's ``flush()``. Call it on a timer to bound how many messages a
+        crash can lose regardless of ``chunk_size``; a chunk with no messages is not written.
+        """
+        self.__finalize_chunk()
+        self.__flush()
+
     def __maybe_finalize_chunk(self):
         if self.__chunk_builder and self.__chunk_builder.count > self.__chunk_size:
             self.__finalize_chunk()
