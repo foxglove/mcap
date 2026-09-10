@@ -72,7 +72,8 @@ Options:
       --allow-remote-scan
           Allow whole-file scans or downloads of remote inputs.
 
-          Applies to http(s):// and object-store URLs (s3://, s3a://, gs://, az://, abfs://). Small bounded indexed reads work without this flag.
+          Applies to http(s):// and object-store URLs (s3://, s3a://, gs://, az://, abfs://). Small
+          bounded indexed reads work without this flag.
 
       --time-format <TIME_FORMAT>
           How to render timestamps in command output

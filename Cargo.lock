@@ -1293,7 +1293,6 @@ dependencies = [
  "log",
  "lz4",
  "mcap",
- "memmap2",
  "object_store",
  "prost-reflect",
  "regex",
