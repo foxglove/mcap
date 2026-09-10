@@ -499,6 +499,14 @@ class Writer:
         self.__chunk_indices.append(chunk_index)
         self.__chunk_builder.reset()
 
+    def flush(self):
+        """Finishes the chunk in progress, if any, and writes everything buffered so far to
+        the output stream. A chunk with no messages is not written. Compression works per
+        chunk, so flushing often reduces the compression ratio.
+        """
+        self.__finalize_chunk()
+        self.__flush()
+
     def __maybe_finalize_chunk(self):
         if self.__chunk_builder and self.__chunk_builder.count > self.__chunk_size:
             self.__finalize_chunk()
