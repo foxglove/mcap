@@ -358,8 +358,6 @@ public:
   Status validate() const;
 
 private:
-  // One side of the range. The deprecated startTime/endTime apply only when no explicit bound
-  // was set on that side.
   bool lowerBoundIncludes_(Timestamp logTime) const;
   bool upperBoundIncludes_(Timestamp logTime) const;
 
