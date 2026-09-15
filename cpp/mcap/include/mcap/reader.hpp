@@ -306,14 +306,14 @@ public:
    * @brief Whether a message logged at `logTime` falls inside the requested time range.
    */
   bool includesLogTime(Timestamp logTime) const {
-    return lowerBoundIncludes(logTime) && upperBoundIncludes(logTime);
+    return lowerBoundIncludes_(logTime) && upperBoundIncludes_(logTime);
   }
   /**
    * @brief Whether any log time in the closed interval [`first`, `last`] falls inside the
    * requested time range. Readers use it to skip chunks.
    */
   bool overlapsLogTimes(Timestamp first, Timestamp last) const {
-    return lowerBoundIncludes(last) && upperBoundIncludes(first);
+    return lowerBoundIncludes_(last) && upperBoundIncludes_(first);
   }
   /**
    * @brief If provided, `topicFilter` is called on all topics found in the MCAP file. If
@@ -360,8 +360,8 @@ public:
 private:
   // One side of the range. The deprecated startTime/endTime apply only when no explicit bound
   // was set on that side.
-  bool lowerBoundIncludes(Timestamp logTime) const;
-  bool upperBoundIncludes(Timestamp logTime) const;
+  bool lowerBoundIncludes_(Timestamp logTime) const;
+  bool upperBoundIncludes_(Timestamp logTime) const;
 
   // At most one of each pair is set; both empty means no bound was provided on that side.
   std::optional<Timestamp> startAt_;
