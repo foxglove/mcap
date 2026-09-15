@@ -4,7 +4,7 @@ A command line tool for inspecting and manipulating [MCAP](https://mcap.dev) fil
 
 ## Getting started
 
-Download the [latest release from GitHub](https://github.com/foxglove/mcap/releases?q=mcap-cli), or install via Homebrew:
+Download the [latest release from GitHub](https://github.com/foxglove/mcap/releases?q=cli), or install via Homebrew:
 
 ```sh
 brew install mcap
