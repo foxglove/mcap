@@ -28,6 +28,9 @@ find_package(mcap REQUIRED)
 
 set(MCAP_TEST_LIBS Catch2::Catch2 nlohmann_json::nlohmann_json mcap::mcap)
 
+# The parallel reader uses a thread pool.
+find_package(Threads REQUIRED)
+
 add_executable(streamed-reader-conformance streamed_reader_conformance.cpp)
 target_link_libraries(streamed-reader-conformance ${MCAP_TEST_LIBS})
 
@@ -43,3 +46,15 @@ target_link_libraries(unit-tests ${MCAP_TEST_LIBS})
 add_executable(unit-tests-nocompress unit_tests.cpp)
 target_link_libraries(unit-tests-nocompress ${MCAP_TEST_LIBS})
 target_compile_definitions(unit-tests-nocompress PRIVATE MCAP_COMPRESSION_NO_LZ4 MCAP_COMPRESSION_NO_ZSTD)
+
+# Proves the serial API still builds with the parallel reader compiled out.
+add_executable(unit-tests-noparallel unit_tests.cpp)
+target_link_libraries(unit-tests-noparallel ${MCAP_TEST_LIBS})
+target_compile_definitions(unit-tests-noparallel PRIVATE MCAP_NO_PARALLEL)
+
+add_executable(parallel-reader-test parallel_reader_test.cpp)
+target_link_libraries(parallel-reader-test ${MCAP_TEST_LIBS} Threads::Threads)
+
+add_executable(parallel-reader-test-nocompress parallel_reader_test.cpp)
+target_link_libraries(parallel-reader-test-nocompress ${MCAP_TEST_LIBS} Threads::Threads)
+target_compile_definitions(parallel-reader-test-nocompress PRIVATE MCAP_COMPRESSION_NO_LZ4 MCAP_COMPRESSION_NO_ZSTD)
