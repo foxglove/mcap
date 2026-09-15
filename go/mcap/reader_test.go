@@ -1193,10 +1193,10 @@ func TestMaxTimestampBound(t *testing.T) {
 	assert.Equal(t, 0, countMessages(t, StartingAfterNanos(math.MaxUint64)))
 	// StartingAfterNanos below the maximum keeps its normal exclusive behavior.
 	assert.Equal(t, 1, countMessages(t, StartingAfterNanos(2)))
-	// Combining it with an end bound is still an empty query, in either option order.
-	assert.Equal(t, 0, countMessages(t, StartingAfterNanos(math.MaxUint64), EndingBeforeNanos(5)))
-	assert.Equal(t, 0, countMessages(t, EndingBeforeNanos(5), StartingAfterNanos(math.MaxUint64)))
-	// An inclusive lower bound at the maximum is an ordinary bound, so this range is crossed.
+	// With an end bound that also reaches the maximum it is still an empty query.
+	assert.Equal(t, 0, countMessages(t, StartingAfterNanos(math.MaxUint64), EndingAtNanos(math.MaxUint64)))
+	// An end bound that stops short of the maximum makes the range crossed, in either option
+	// order, as it does for an inclusive lower bound at the maximum.
 	crossedErr := func(t *testing.T, opts ...ReadOpt) {
 		reader, err := NewReader(bytes.NewReader(buf.Bytes()))
 		require.NoError(t, err)
@@ -1204,6 +1204,9 @@ func TestMaxTimestampBound(t *testing.T) {
 		_, err = reader.Messages(opts...)
 		require.ErrorContains(t, err, "end cannot come before start")
 	}
+	crossedErr(t, StartingAfterNanos(math.MaxUint64), EndingBeforeNanos(5))
+	crossedErr(t, EndingBeforeNanos(5), StartingAfterNanos(math.MaxUint64))
+	crossedErr(t, StartingAfterNanos(math.MaxUint64), EndingAtNanos(5))
 	crossedErr(t, StartingAtNanos(math.MaxUint64), EndingAtNanos(5))
 	// An ordinary crossed window below the maximum errors too.
 	crossedErr(t, StartingAtNanos(10), EndingBeforeNanos(5))
@@ -1316,8 +1319,14 @@ func TestLogTimeBounds(t *testing.T) {
 	assert.True(t, apply(t, StartingAtNanos(6), EndingAtNanos(4)).isCrossed())
 	assert.False(t, apply(t, StartingAtNanos(5), EndingBeforeNanos(5)).isCrossed())
 	assert.False(t, apply(t, StartingAtNanos(5), EndingAtNanos(4)).isCrossed())
-	assert.False(t, apply(t, StartingAfterNanos(math.MaxUint64), EndingBeforeNanos(5)).isCrossed())
 	assert.False(t, apply(t, StartingAtNanos(math.MaxUint64), EndingAtNanos(math.MaxUint64)).isCrossed())
+	// StartingAfterNanos(math.MaxUint64) admits nothing. It is not crossed against the EndNanos
+	// default or EndingAtNanos(math.MaxUint64), which reject nothing, but is against any other
+	// upper bound, including an explicit EndingBeforeNanos(math.MaxUint64).
+	assert.False(t, apply(t, StartingAfterNanos(math.MaxUint64)).isCrossed())
+	assert.False(t, apply(t, StartingAfterNanos(math.MaxUint64), EndingAtNanos(math.MaxUint64)).isCrossed())
+	assert.True(t, apply(t, StartingAfterNanos(math.MaxUint64), EndingBeforeNanos(5)).isCrossed())
+	assert.True(t, apply(t, StartingAfterNanos(math.MaxUint64), EndingBeforeNanos(math.MaxUint64)).isCrossed())
 }
 
 func TestUnexpectedTokenOnHeader(t *testing.T) {

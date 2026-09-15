@@ -613,11 +613,22 @@ describe("McapIndexedReader", () => {
       // No log time is strictly after the maximum timestamp.
       const collectedAfterMax = await collect(reader.readMessages({ startingAfter: maxTime }));
       expect(collectedAfterMax).toEqual([]);
-      // Combining it with an end bound is still an empty query, not a crossed range.
+      // With an end bound that also reaches the maximum it is still an empty query.
       const collectedAfterMaxBounded = await collect(
-        reader.readMessages({ startingAfter: maxTime, endingBefore: 5n }),
+        reader.readMessages({ startingAfter: maxTime, endingAt: maxTime }),
       );
       expect(collectedAfterMaxBounded).toEqual([]);
+      // An end bound that stops short of the maximum makes the range crossed, as it does for
+      // an inclusive lower bound at the maximum.
+      for (const args of [
+        { startingAfter: maxTime, endingBefore: 5n },
+        { startingAfter: maxTime, endingAt: 5n },
+        { startingAt: maxTime, endingBefore: 5n },
+      ]) {
+        await expect(collect(reader.readMessages(args))).rejects.toThrow(
+          "end time cannot come before start time",
+        );
+      }
       // startingAfter below the maximum keeps its normal exclusive behavior.
       const collectedAfter = await collect(reader.readMessages({ startingAfter: 10n }));
       expect(collectedAfter.map((m) => m.logTime)).toEqual([maxTime]);

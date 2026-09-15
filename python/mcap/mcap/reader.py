@@ -50,8 +50,9 @@ def _resolve_time_range(
 ) -> Tuple[Optional[int], Optional[int]]:
     """Resolve the explicit and deprecated time bounds to an inclusive-start /
     exclusive-end pair, warning on deprecated names and rejecting conflicting bounds
-    and crossed ranges. ``starting_after`` at ``2**64 - 1`` is a valid empty query, not
-    a crossed range, so pagination terminates there instead of raising.
+    and crossed ranges. ``starting_after`` at ``2**64 - 1`` admits nothing; it is a valid
+    empty query on its own or with ``ending_at`` at ``2**64 - 1``, so pagination terminates
+    there, and a crossed range with any other end bound.
     """
     if start_time is not None:
         warnings.warn(
@@ -82,7 +83,7 @@ def _resolve_time_range(
     end = ending_before if ending_before is not None else end_time
     if ending_at is not None:
         end = ending_at + 1
-    if start is not None and end is not None and start <= 2**64 - 1 and start > end:
+    if start is not None and end is not None and start > end:
         raise ValueError("end time cannot come before start time")
     return start, end
 

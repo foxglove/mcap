@@ -275,7 +275,8 @@ public:
   }
   /**
    * @brief Limit reading to messages with log timestamps strictly after this time (exclusive
-   * lower bound). `startingAfter(MaxTime)` matches nothing and is not an error. Replaces any
+   * lower bound). `startingAfter(MaxTime)` matches nothing: a valid empty query on its own or
+   * with `endingAt(MaxTime)`, a crossed range with any other upper bound. Replaces any
    * previously-set lower bound.
    */
   ReadMessageOptions& startingAfter(Timestamp time) {

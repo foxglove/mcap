@@ -1887,29 +1887,34 @@ bool operator!=(const LinearMessageView::Iterator& a, const LinearMessageView::I
 
 Status ReadMessageOptions::validate() const {
   // Only a strictly crossed range is an error; an empty range is valid. Compare the first log
-  // time the lower bound admits with the first one the upper bound rejects.
+  // time the lower bound admits with the first one the upper bound rejects, as if one more
+  // timestamp existed past MaxTime: a lower bound that admits nothing sits there, and so does
+  // an upper bound that rejects nothing.
   MCAP_DIAGNOSTIC_PUSH
   MCAP_IGNORE_DEPRECATED
+  bool lowerPastEnd = false;
   Timestamp firstIncluded = startTime;
   if (startAt_.has_value()) {
     firstIncluded = *startAt_;
   } else if (startAfter_.has_value()) {
-    if (*startAfter_ == MaxTime) {
-      return Status();  // nothing is after MaxTime: empty, not crossed
-    }
-    firstIncluded = *startAfter_ + 1;
+    lowerPastEnd = *startAfter_ == MaxTime;
+    firstIncluded = lowerPastEnd ? MaxTime : *startAfter_ + 1;
   }
+  // The deprecated endTime default, an exclusive MaxTime, is the historical "no upper bound".
+  bool upperPastEnd = endTime == MaxTime;
   Timestamp firstExcluded = endTime;
   if (endBefore_.has_value()) {
+    upperPastEnd = false;
     firstExcluded = *endBefore_;
   } else if (endAt_.has_value()) {
-    if (*endAt_ == MaxTime) {
-      return Status();  // no upper bound: cannot be crossed
-    }
-    firstExcluded = *endAt_ + 1;
+    upperPastEnd = *endAt_ == MaxTime;
+    firstExcluded = upperPastEnd ? MaxTime : *endAt_ + 1;
   }
   MCAP_DIAGNOSTIC_POP
-  if (firstIncluded > firstExcluded) {
+  if (upperPastEnd) {
+    return Status();
+  }
+  if (lowerPastEnd || firstIncluded > firstExcluded) {
     return Status(StatusCode::InvalidMessageReadOptions, "start time must be before end time");
   }
   return Status();

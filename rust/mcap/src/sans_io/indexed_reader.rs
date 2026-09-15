@@ -487,23 +487,19 @@ impl LogTimeBounds {
     }
 
     /// Whether the upper bound lies strictly below the lower bound. An empty range such as
-    /// `starting_at(5).ending_before(5)` is not crossed.
+    /// `starting_at(5).ending_before(5)` is not crossed. The comparison is done in `u128` so
+    /// that `u64::MAX + 1` is representable: a lower bound that admits nothing sits there, and
+    /// so does an upper bound that rejects nothing.
     fn is_crossed(&self) -> bool {
-        let first_included = match self.lower {
+        let first_included: u128 = match self.lower {
             LowerBound::Unbounded => return false,
-            LowerBound::At(start) => start,
-            LowerBound::After(start) => match start.checked_add(1) {
-                Some(first) => first,
-                None => return false, // nothing is after u64::MAX: empty, not crossed
-            },
+            LowerBound::At(start) => start.into(),
+            LowerBound::After(start) => u128::from(start) + 1,
         };
-        let first_excluded = match self.upper {
-            UpperBound::Unbounded => return false,
-            UpperBound::Before(end) => end,
-            UpperBound::At(end) => match end.checked_add(1) {
-                Some(first) => first,
-                None => return false, // no upper bound: cannot be crossed
-            },
+        let first_excluded: u128 = match self.upper {
+            UpperBound::Unbounded => u128::from(u64::MAX) + 1,
+            UpperBound::Before(end) => end.into(),
+            UpperBound::At(end) => u128::from(end) + 1,
         };
         first_included > first_excluded
     }
@@ -584,7 +580,8 @@ impl IndexedReaderOptions {
     /// Configure the reader to yield only messages with log time strictly after this time
     /// (exclusive lower bound).
     ///
-    /// `starting_after(u64::MAX)` matches nothing and is not an error. Setting a start bound
+    /// `starting_after(u64::MAX)` matches nothing: a valid empty query on its own or with
+    /// `ending_at(u64::MAX)`, a crossed range with any other end bound. Setting a start bound
     /// replaces any previously-set start bound.
     pub fn starting_after(mut self, start: u64) -> Self {
         self.bounds.lower = LowerBound::After(start);
@@ -1046,12 +1043,29 @@ mod tests {
         assert!(!options.overlaps_log_times(0, u64::MAX));
         let messages = read_mcap_noseek(options, &mcap);
         assert!(messages.is_empty());
-        // Combining it with an end bound is still an empty query, not a crossed range.
+        // With an end bound that also reaches u64::MAX it is still an empty query.
         let options = IndexedReaderOptions::new()
             .starting_after(u64::MAX)
-            .ending_at(5);
+            .ending_at(u64::MAX);
         let messages = read_mcap_noseek(options, &mcap);
         assert!(messages.is_empty());
+        // An end bound that stops short of u64::MAX makes the range crossed, as it does for
+        // an inclusive lower bound at u64::MAX.
+        let summary = crate::Summary::read(&mcap).unwrap().unwrap();
+        for options in [
+            IndexedReaderOptions::new()
+                .starting_after(u64::MAX)
+                .ending_at(5),
+            IndexedReaderOptions::new()
+                .starting_after(u64::MAX)
+                .ending_before(5),
+            IndexedReaderOptions::new()
+                .starting_at(u64::MAX)
+                .ending_at(5),
+        ] {
+            let result = IndexedReader::new_with_options(&summary, options);
+            assert!(matches!(result, Err(McapError::EndBeforeStart)));
+        }
         // A later lower bound replaces the empty range.
         let options = IndexedReaderOptions::new()
             .starting_after(u64::MAX)
