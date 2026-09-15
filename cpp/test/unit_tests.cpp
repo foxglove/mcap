@@ -889,11 +889,20 @@ TEST_CASE("maximum timestamp bound", "[reader]") {
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{});
   }
   {
-    // Combining it with an end bound is still an empty query, not a crossed range.
+    // With no upper bound, or one that also reaches MaxTime, it is an empty query. An upper
+    // bound that stops short of MaxTime makes the range crossed, as it does for startingAt.
     mcap::ReadMessageOptions options;
-    options.startingAfter(mcap::MaxTime).endingBefore(5);
+    options.startingAfter(mcap::MaxTime).endingAt(mcap::MaxTime);
     requireOk(options.validate());
     REQUIRE(logTimes(options) == std::vector<mcap::Timestamp>{});
+    options.startingAfter(mcap::MaxTime).endingBefore(5);
+    REQUIRE(!options.validate().ok());
+    options.startingAfter(mcap::MaxTime).endingAt(5);
+    REQUIRE(!options.validate().ok());
+    options.startingAfter(mcap::MaxTime).endingBefore(mcap::MaxTime);
+    REQUIRE(!options.validate().ok());
+    options.startingAt(mcap::MaxTime).endingBefore(5);
+    REQUIRE(!options.validate().ok());
   }
   {
     // The indexed read path yields nothing for the empty range too.

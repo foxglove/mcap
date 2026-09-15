@@ -55,6 +55,8 @@ type logTimeBound struct {
 type logTimeBounds struct {
 	lower logTimeBound
 	upper logTimeBound
+	// upperFromField is set when upper came from the EndNanos field rather than an option.
+	upperFromField bool
 }
 
 // logTimeBounds returns the option-set bounds, falling back to StartNanos/EndNanos on a side
@@ -66,6 +68,7 @@ func (ro *ReadOptions) logTimeBounds() logTimeBounds {
 	}
 	if bounds.upper.kind == logTimeBoundUnset && ro.EndNanos != 0 {
 		bounds.upper = logTimeBound{kind: logTimeBoundExclusive, value: ro.EndNanos}
+		bounds.upperFromField = true
 	}
 	return bounds
 }
@@ -103,33 +106,47 @@ func (b logTimeBounds) overlapsLogTimes(first, last uint64) bool {
 }
 
 // isCrossed reports whether the upper bound lies strictly below the lower bound. An empty
-// range, such as StartingAtNanos(5) with EndingBeforeNanos(5), is not crossed.
+// range, such as StartingAtNanos(5) with EndingBeforeNanos(5), is not crossed. The bounds are
+// compared as if one more timestamp existed past math.MaxUint64: a lower bound that admits
+// nothing sits there, and so does an upper bound that rejects nothing.
 func (b logTimeBounds) isCrossed() bool {
 	var firstIncluded uint64
+	lowerPastEnd := false
 	switch b.lower.kind {
 	case logTimeBoundInclusive:
 		firstIncluded = b.lower.value
 	case logTimeBoundExclusive:
 		if b.lower.value == math.MaxUint64 {
-			return false // nothing is after math.MaxUint64: empty, not crossed
+			lowerPastEnd = true
+		} else {
+			firstIncluded = b.lower.value + 1
 		}
-		firstIncluded = b.lower.value + 1
 	default:
 		return false
 	}
 	var firstExcluded uint64
+	upperPastEnd := false
 	switch b.upper.kind {
 	case logTimeBoundExclusive:
-		firstExcluded = b.upper.value
+		// EndNanos at math.MaxUint64, the Messages() default, is the historical "no upper bound".
+		if b.upperFromField && b.upper.value == math.MaxUint64 {
+			upperPastEnd = true
+		} else {
+			firstExcluded = b.upper.value
+		}
 	case logTimeBoundInclusive:
 		if b.upper.value == math.MaxUint64 {
-			return false // no upper bound: cannot be crossed
+			upperPastEnd = true
+		} else {
+			firstExcluded = b.upper.value + 1
 		}
-		firstExcluded = b.upper.value + 1
 	default:
+		upperPastEnd = true
+	}
+	if upperPastEnd {
 		return false
 	}
-	return firstIncluded > firstExcluded
+	return lowerPastEnd || firstIncluded > firstExcluded
 }
 
 func (ro *ReadOptions) Finalize() {
@@ -181,8 +198,9 @@ func StartingAtNanos(start uint64) ReadOpt {
 }
 
 // StartingAfterNanos limits messages yielded by the reader to those with log times strictly after
-// this timestamp (exclusive lower bound). Passing math.MaxUint64 yields nothing and is not an
-// error. A later start option overrides an earlier one.
+// this timestamp (exclusive lower bound). Passing math.MaxUint64 yields nothing: a valid empty
+// query on its own or with EndingAtNanos(math.MaxUint64), a crossed range with any other end
+// option. A later start option overrides an earlier one.
 func StartingAfterNanos(start uint64) ReadOpt {
 	return func(ro *ReadOptions) error {
 		ro.lower = logTimeBound{kind: logTimeBoundExclusive, value: start}

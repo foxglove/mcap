@@ -148,8 +148,17 @@ def test_max_timestamp_bound(reader_cls: AnyReaderSubclass):
     assert count_messages(ending_at=2**64 - 1) == 2
     # No log time is strictly after the maximum timestamp.
     assert count_messages(starting_after=2**64 - 1) == 0
-    # Combining it with an end bound is still an empty query, not a crossed range.
-    assert count_messages(starting_after=2**64 - 1, ending_before=5) == 0
+    # With an end bound that also reaches the maximum it is still an empty query.
+    assert count_messages(starting_after=2**64 - 1, ending_at=2**64 - 1) == 0
+    # An end bound that stops short of the maximum makes the range crossed, as it does for
+    # an inclusive lower bound at the maximum.
+    for kwargs in (
+        dict(starting_after=2**64 - 1, ending_before=5),
+        dict(starting_after=2**64 - 1, ending_at=5),
+        dict(starting_at=2**64 - 1, ending_before=5),
+    ):
+        with pytest.raises(ValueError, match="end time cannot come before start time"):
+            count_messages(**kwargs)
     # starting_after below the maximum keeps its normal exclusive behavior.
     assert count_messages(starting_after=3) == 1
     # A strictly crossed range is a caller error; equal bounds are a valid empty query.

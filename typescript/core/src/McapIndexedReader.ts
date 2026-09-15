@@ -653,8 +653,6 @@ export class McapIndexedReader<TReadOptions = unknown> {
  * pair used internally, throwing on conflicting bounds or a strictly crossed range. This is
  * the only place the deprecated bounds are read.
  */
-const MAX_LOG_TIME = 2n ** 64n - 1n;
-
 function resolveInclusiveTimeRange(
   args: {
     startTime?: bigint;
@@ -684,14 +682,10 @@ function resolveInclusiveTimeRange(
     endingAt = args.endingBefore - 1n;
   }
   // Only the provided bounds are checked for crossing: the defaults come from the file's own
-  // time range, and a bound beyond it is a valid empty query. So are an empty range and
-  // startingAfter at 2^64 - 1, so pagination terminates there instead of throwing.
-  if (
-    startingAt != undefined &&
-    endingAt != undefined &&
-    startingAt <= MAX_LOG_TIME &&
-    startingAt > endingAt + 1n
-  ) {
+  // time range, and a bound beyond it is a valid empty query. So is an empty range. BigInt
+  // arithmetic makes 2^64 representable, so startingAfter at 2^64 - 1 is an ordinary bound:
+  // empty with no upper bound or endingAt 2^64 - 1, crossed with any other.
+  if (startingAt != undefined && endingAt != undefined && startingAt > endingAt + 1n) {
     throw new Error("end time cannot come before start time");
   }
   return { startingAt: startingAt ?? defaultStart, endingAt: endingAt ?? defaultEnd };
