@@ -382,9 +382,9 @@ export class McapIndexedReader<TReadOptions = unknown> {
   async *readMessages(
     args: {
       topics?: readonly string[];
-      /** @deprecated Use `startingAt`, which has the same (inclusive) behavior, or `startingAfter`. */
+      /** @deprecated Alias for `startingAt`; use `startingAt` or `startingAfter` instead. */
       startTime?: bigint;
-      /** @deprecated Use `endingAt`, which has the same (inclusive) behavior, or `endingBefore`. */
+      /** @deprecated Alias for `endingAt`; use `endingAt` or `endingBefore` instead. */
       endTime?: bigint;
       /** Only messages with `logTime >= startingAt` are returned. */
       startingAt?: bigint;
@@ -548,9 +548,9 @@ export class McapIndexedReader<TReadOptions = unknown> {
     args: {
       name?: string;
       mediaType?: string;
-      /** @deprecated Use `startingAt`, which has the same (inclusive) behavior, or `startingAfter`. */
+      /** @deprecated Alias for `startingAt`; use `startingAt` or `startingAfter` instead. */
       startTime?: bigint;
-      /** @deprecated Use `endingAt`, which has the same (inclusive) behavior, or `endingBefore`. */
+      /** @deprecated Alias for `endingAt`; use `endingAt` or `endingBefore` instead. */
       endTime?: bigint;
       /** Only attachments with `logTime >= startingAt` are returned. */
       startingAt?: bigint;
