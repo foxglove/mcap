@@ -10,7 +10,7 @@ A command line tool for inspecting and manipulating MCAP files.
 
 ### Release binaries
 
-Download binaries for your platform from [the latest GitHub release](https://github.com/foxglove/mcap/releases?q=mcap-cli).
+Download binaries for your platform from [the latest GitHub release](https://github.com/foxglove/mcap/releases?q=cli).
 
 Then, mark it executable:
 
