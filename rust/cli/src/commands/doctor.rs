@@ -8,10 +8,7 @@ use crate::context::CommandContext;
 use crate::source;
 
 pub fn run(ctx: &CommandContext, args: DoctorCommand) -> Result<()> {
-    let mcap = source::load_path(
-        &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()),
-    )?;
+    let mcap = source::load_path(&args.file, source::SourceOptions::from_context(ctx))?;
 
     let diagnosis = diagnose_mcap(&mcap, args.strict_message_order);
     for warning in &diagnosis.warnings {
