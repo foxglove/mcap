@@ -34,6 +34,7 @@ ignorePaths:
   - _vendor
   - go
   - rust
+  - Cargo.toml
   - cpp/examples/protobuf/proto
 
 words:
