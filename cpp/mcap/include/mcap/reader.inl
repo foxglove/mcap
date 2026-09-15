@@ -587,7 +587,7 @@ Status McapReader::readSummaryFromScan_(IReadable& reader) {
   return StatusCode::Success;
 }
 
-bool ReadMessageOptions::lowerBoundIncludes(Timestamp logTime) const {
+bool ReadMessageOptions::lowerBoundIncludes_(Timestamp logTime) const {
   if (startAt_.has_value()) {
     return logTime >= *startAt_;
   }
@@ -601,7 +601,7 @@ bool ReadMessageOptions::lowerBoundIncludes(Timestamp logTime) const {
   return logTime >= deprecatedStart;
 }
 
-bool ReadMessageOptions::upperBoundIncludes(Timestamp logTime) const {
+bool ReadMessageOptions::upperBoundIncludes_(Timestamp logTime) const {
   if (endBefore_.has_value()) {
     return logTime < *endBefore_;
   }
