@@ -374,26 +374,39 @@ export class McapIndexedReader<TReadOptions = unknown> {
     });
   }
 
+  /**
+   * Read messages from the file, optionally filtering by topic and log time.
+   * Provide at most one lower bound (`startingAt` or `startingAfter`) and one
+   * upper bound (`endingAt` or `endingBefore`).
+   */
   async *readMessages(
     args: {
       topics?: readonly string[];
+      /** @deprecated Alias for `startingAt`; use `startingAt` or `startingAfter` instead. */
       startTime?: bigint;
+      /** @deprecated Alias for `endingAt`; use `endingAt` or `endingBefore` instead. */
       endTime?: bigint;
+      /** Only messages with `logTime >= startingAt` are returned. */
+      startingAt?: bigint;
+      /** Only messages with `logTime > startingAfter` are returned. */
+      startingAfter?: bigint;
+      /** Only messages with `logTime <= endingAt` are returned. */
+      endingAt?: bigint;
+      /** Only messages with `logTime < endingBefore` are returned. */
+      endingBefore?: bigint;
       reverse?: boolean;
       validateCrcs?: boolean;
       readOptions?: TReadOptions;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Message"], void, void> {
-    const {
-      topics,
-      startTime = this.#messageStartTime,
-      endTime = this.#messageEndTime,
-      reverse = false,
-      validateCrcs,
-      readOptions,
-    } = args;
+    const { topics, reverse = false, validateCrcs, readOptions } = args;
+    const { startingAt, endingAt } = resolveInclusiveTimeRange(
+      args,
+      this.#messageStartTime,
+      this.#messageEndTime,
+    );
 
-    if (startTime == undefined || endTime == undefined) {
+    if (startingAt == undefined || endingAt == undefined) {
       return;
     }
 
@@ -412,13 +425,13 @@ export class McapIndexedReader<TReadOptions = unknown> {
     let prevChunkEndTime: bigint | undefined;
     const readFullMessageIndexRange = this.#messageIndexReadable !== this.#readable;
     for (const chunkIndex of this.chunkIndexes) {
-      if (chunkIndex.messageStartTime <= endTime && chunkIndex.messageEndTime >= startTime) {
+      if (chunkIndex.messageStartTime <= endingAt && chunkIndex.messageEndTime >= startingAt) {
         chunkCursors.push(
           new ChunkCursor({
             chunkIndex,
             relevantChannels,
-            startTime,
-            endTime,
+            startingAt,
+            endingAt,
             reverse,
             readFullMessageIndexRange,
           }),
@@ -526,26 +539,39 @@ export class McapIndexedReader<TReadOptions = unknown> {
     }
   }
 
+  /**
+   * Read attachments from the file, optionally filtering by name, media
+   * type, and log time. Provide at most one lower bound (`startingAt` or
+   * `startingAfter`) and one upper bound (`endingAt` or `endingBefore`).
+   */
   async *readAttachments(
     args: {
       name?: string;
       mediaType?: string;
+      /** @deprecated Alias for `startingAt`; use `startingAt` or `startingAfter` instead. */
       startTime?: bigint;
+      /** @deprecated Alias for `endingAt`; use `endingAt` or `endingBefore` instead. */
       endTime?: bigint;
+      /** Only attachments with `logTime >= startingAt` are returned. */
+      startingAt?: bigint;
+      /** Only attachments with `logTime > startingAfter` are returned. */
+      startingAfter?: bigint;
+      /** Only attachments with `logTime <= endingAt` are returned. */
+      endingAt?: bigint;
+      /** Only attachments with `logTime < endingBefore` are returned. */
+      endingBefore?: bigint;
       validateCrcs?: boolean;
       readOptions?: TReadOptions;
     } = {},
   ): AsyncGenerator<TypedMcapRecords["Attachment"], void, void> {
-    const {
-      name,
-      mediaType,
-      startTime = this.#attachmentStartTime,
-      endTime = this.#attachmentEndTime,
-      validateCrcs,
-      readOptions,
-    } = args;
+    const { name, mediaType, validateCrcs, readOptions } = args;
+    const { startingAt, endingAt } = resolveInclusiveTimeRange(
+      args,
+      this.#attachmentStartTime,
+      this.#attachmentEndTime,
+    );
 
-    if (startTime == undefined || endTime == undefined) {
+    if (startingAt == undefined || endingAt == undefined) {
       return;
     }
 
@@ -556,7 +582,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
       if (mediaType != undefined && attachmentIndex.mediaType !== mediaType) {
         continue;
       }
-      if (attachmentIndex.logTime > endTime || attachmentIndex.logTime < startTime) {
+      if (attachmentIndex.logTime > endingAt || attachmentIndex.logTime < startingAt) {
         continue;
       }
       const attachmentData = await this.#readable.read(
@@ -620,4 +646,47 @@ export class McapIndexedReader<TReadOptions = unknown> {
 
     return new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   }
+}
+
+/**
+ * Resolve the explicit and deprecated time bounds to the inclusive `startingAt`/`endingAt`
+ * pair used internally, throwing on conflicting bounds or a strictly crossed range. This is
+ * the only place the deprecated bounds are read.
+ */
+function resolveInclusiveTimeRange(
+  args: {
+    startTime?: bigint;
+    endTime?: bigint;
+    startingAt?: bigint;
+    startingAfter?: bigint;
+    endingAt?: bigint;
+    endingBefore?: bigint;
+  },
+  defaultStart: bigint | undefined,
+  defaultEnd: bigint | undefined,
+): { startingAt: bigint | undefined; endingAt: bigint | undefined } {
+  if (
+    [args.startTime, args.startingAt, args.startingAfter].filter((b) => b != undefined).length > 1
+  ) {
+    throw new Error("Provide at most one of startTime, startingAt, startingAfter");
+  }
+  if ([args.endTime, args.endingAt, args.endingBefore].filter((b) => b != undefined).length > 1) {
+    throw new Error("Provide at most one of endTime, endingAt, endingBefore");
+  }
+  let startingAt = args.startingAt ?? args.startTime;
+  if (args.startingAfter != undefined) {
+    startingAt = args.startingAfter + 1n;
+  }
+  let endingAt = args.endingAt ?? args.endTime;
+  if (args.endingBefore != undefined) {
+    endingAt = args.endingBefore - 1n;
+  }
+  // Only the provided bounds are checked for crossing: the defaults come from the file's own
+  // time range, and a bound beyond it is a valid empty query. So is an empty range. BigInt
+  // arithmetic makes 2^64 representable, so startingAfter at 2^64 - 1 is an ordinary bound:
+  // empty with no upper bound or endingAt 2^64 - 1, crossed with any other.
+  if (startingAt != undefined && endingAt != undefined && startingAt > endingAt + 1n) {
+    throw new Error("end time cannot come before start time");
+  }
+  return { startingAt: startingAt ?? defaultStart, endingAt: endingAt ?? defaultEnd };
 }
