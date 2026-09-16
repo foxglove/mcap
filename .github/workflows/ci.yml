@@ -33,6 +33,8 @@ jobs:
 
   cpp-windows:
     runs-on: windows-latest
+    # Successful runs take one to two minutes with a warm Conan cache; this only bounds hangs.
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: cpp

@@ -373,7 +373,10 @@ struct MCAP_PUBLIC RecordOffset {
     return ((*this == other) || (*this > other));
   }
   bool operator<(const RecordOffset& other) const {
-    return !(*this >= other);
+    // Mirror operator> rather than deriving from >=: operator== is false whenever exactly one
+    // side is inside a chunk, so a chunk-relative offset and a plain file offset that name the
+    // same position would otherwise compare less-than in both directions.
+    return other > *this;
   }
   bool operator<=(const RecordOffset& other) const {
     return !(*this > other);

@@ -1,7 +1,7 @@
 #define MCAP_IMPLEMENTATION
 #include <mcap/mcap.hpp>
 
-#define CATCH_CONFIG_MAIN
+#define CATCH_CONFIG_RUNNER
 #include <catch2/catch.hpp>
 
 #include <array>
@@ -13,6 +13,25 @@
 #  include <ioapiset.h>
 #  include <winioctl.h>
 #endif
+#if defined _MSC_VER
+#  include <crtdbg.h>
+#  include <stdlib.h>
+#endif
+
+int main(int argc, char* argv[]) {
+#if defined _MSC_VER
+  // In Debug builds the Microsoft CRT reports failed assertions (including the STL's own
+  // "invalid comparator" checks) through a modal dialog, which hangs an unattended CI run until
+  // the job times out. Send those reports to stderr and abort instead.
+  _set_abort_behavior(0, _WRITE_ABORT_MSG);
+  _set_error_mode(_OUT_TO_STDERR);
+  _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE);
+  _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+  _CrtSetReportMode(_CRT_ERROR, _CRTDBG_MODE_FILE);
+  _CrtSetReportFile(_CRT_ERROR, _CRTDBG_FILE_STDERR);
+#endif
+  return Catch::Session().run(argc, argv);
+}
 
 std::string_view StringView(const std::byte* data, size_t size) {
   return std::string_view{reinterpret_cast<const char*>(data), size};
