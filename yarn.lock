@@ -19814,7 +19814,9 @@ __metadata:
     "@foxglove/rostime": "npm:1.1.2"
     "@foxglove/schemas": "npm:1.8.0"
     "@foxglove/tsconfig": "npm:3.2.0"
+    "@foxglove/wasm-zstd": "npm:1.0.1"
     "@mcap/core": "workspace:*"
+    "@mcap/support": "workspace:*"
     "@mdx-js/react": "npm:3.1.1"
     "@types/dom-mediacapture-transform": "npm:0.1.12"
     "@types/dom-webcodecs": "npm:0.1.18"
@@ -19833,6 +19835,7 @@ __metadata:
     react: "npm:19.2.8"
     react-async: "npm:10.0.1"
     react-dom: "npm:19.2.8"
+    tsx: "npm:4.23.5"
     typescript: "npm:5.9.3"
     zustand: "npm:4.5.7"
   languageName: unknown

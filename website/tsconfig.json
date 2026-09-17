@@ -1,6 +1,6 @@
 // cspell:ignore webcodecs, mediacapture
 {
-  "extends": "@foxglove/tsconfig/node.json",
+  "extends": "@foxglove/tsconfig/bundler.json",
   "include": ["./**/*"],
   "compilerOptions": {
     "noEmit": true,
@@ -15,5 +15,8 @@
     ],
     "verbatimModuleSyntax": false
   },
-  "references": [{ "path": "../typescript/core" }]
+  "references": [
+    { "path": "../typescript/core" },
+    { "path": "../typescript/support" }
+  ]
 }
