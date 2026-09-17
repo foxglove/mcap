@@ -208,8 +208,15 @@ Status LZ4Reader::decompressAll(const std::byte* data, uint64_t compressedSize,
   size_t dstSize = uncompressedSize;
   size_t srcSize = compressedSize;
   LZ4F_resetDecompressionContext((LZ4F_dctx*)decompressionContext_);
+  // Skip XXH32 block/content-checksum verification for a measurable throughput
+  // gain on trusted files. Profiling a point-cloud-heavy MCAP showed
+  // LZ4_XXH32_update costing more than the decompression itself (~12% vs ~9%
+  // of total GUI-thread CPU). Structural corruption is still caught by the
+  // size/consumption checks below.
+  LZ4F_decompressOptions_t decompressOptions = {};
+  decompressOptions.skipChecksums = 1;
   const auto status = LZ4F_decompress((LZ4F_dctx*)decompressionContext_, output->data(), &dstSize,
-                                      data, &srcSize, nullptr);
+                                      data, &srcSize, &decompressOptions);
   if (status != 0) {
     if (LZ4F_isError(status)) {
       const auto msg = internal::StrCat("lz4 decompression of ", compressedSize, " bytes into ",
