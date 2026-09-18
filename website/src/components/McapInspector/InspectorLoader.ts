@@ -8,6 +8,7 @@ export interface LoaderCallbacks {
   onProgress: (fraction: number) => void;
   onBusy: (phase: "catalog" | "window" | undefined) => void;
   onError: (error: Error) => void;
+  onPreload?: (state: "loading" | "complete" | "paused" | undefined) => void;
 }
 
 /** Owns one worker and discards results from superseded sources/time windows. */
@@ -66,6 +67,26 @@ export class InspectorLoader {
           case "opened":
             this.#callbacks.onBusy(undefined);
             this.#callbacks.onCatalog(data.recording);
+            break;
+          case "preload-status":
+            if (data.id === this.#request) {
+              this.#callbacks.onPreload?.(data.state);
+            }
+            break;
+          case "prefetched":
+            if (data.id !== this.#request || this.#requestedRange) {
+              return;
+            }
+            if (
+              !data.recording.loadedRange ||
+              (this.#loadedRange &&
+                (data.recording.loadedRange.start > this.#loadedRange.start ||
+                  data.recording.loadedRange.end < this.#loadedRange.end))
+            ) {
+              return;
+            }
+            this.#loadedRange = data.recording.loadedRange;
+            this.#callbacks.onWindow(data.recording);
             break;
           case "window":
             if (data.id !== this.#request) {
@@ -156,6 +177,7 @@ export class InspectorLoader {
     ) {
       return;
     }
+    this.#callbacks.onPreload?.(undefined);
     this.#requestedRange = { start, end };
     const id = ++this.#request;
     clearTimeout(this.#timer);
@@ -185,6 +207,7 @@ export class InspectorLoader {
     clearTimeout(this.#timer);
     this.#worker?.terminate();
     this.#worker = undefined;
+    this.#callbacks.onPreload?.(undefined);
     this.#callbacks.onBusy(undefined);
   }
 }

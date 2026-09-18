@@ -157,3 +157,73 @@ void test("loaded intervals satisfy zoom-in and panning without loads; duplicate
   assert.equal(phases.at(-1), undefined);
   loader.cancel();
 });
+
+void test("prefetched snapshots expand usable coverage without showing foreground loading", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const posts: LoaderRequest[] = [];
+  const phases: (string | undefined)[] = [];
+  let snapshots = 0;
+  const worker = {
+    onmessage: undefined as
+      | ((event: MessageEvent<LoaderMessage>) => void)
+      | undefined,
+    postMessage: (message: LoaderRequest) => {
+      posts.push(message);
+    },
+    terminate: () => {
+      /* No resources. */
+    },
+  };
+  const loader = new InspectorLoader(() => worker as unknown as Worker, {
+    onCatalog: () => {
+      /* Not observed. */
+    },
+    onWindow: () => {
+      snapshots++;
+    },
+    onProgress: () => {
+      /* Not observed. */
+    },
+    onBusy: (phase) => {
+      phases.push(phase);
+    },
+    onError: (error) => {
+      throw error;
+    },
+  });
+  loader.openFile(new File([], "test.mcap"));
+  loader.requestWindow(0, 5);
+  context.mock.timers.tick(120);
+  const request = posts.find((message) => message.type === "window")!;
+  const send = (data: LoaderMessage) =>
+    worker.onmessage?.({ data } as MessageEvent<LoaderMessage>);
+  send({
+    type: "window",
+    id: request.id,
+    recording: { ...overlappingRecording(), loadedRange: { start: 0, end: 5 } },
+  });
+  phases.length = 0;
+  send({
+    type: "prefetched",
+    id: request.id - 1,
+    recording: {
+      ...overlappingRecording(),
+      loadedRange: { start: 0, end: 100 },
+    },
+  });
+  assert.equal(snapshots, 1);
+  send({
+    type: "prefetched",
+    id: request.id,
+    recording: {
+      ...overlappingRecording(),
+      loadedRange: { start: 0, end: 20 },
+    },
+  });
+  loader.requestWindow(10, 5);
+  context.mock.timers.tick(120);
+  assert.equal(snapshots, 2);
+  assert.deepEqual(phases, []);
+  assert.equal(posts.filter((message) => message.type === "window").length, 1);
+  loader.cancel();
+});

@@ -15,7 +15,8 @@ export interface ChunkGroup {
 }
 export interface GroupRow extends ChunkGroup {
   kind: "group";
-  expanded: boolean;
+  groups: ChunkGroup[];
+  messages: MessageMark[];
   shownMessageCount: number;
 }
 export type TimelineRow = MessageRow | GroupRow;
@@ -67,39 +68,96 @@ export function matchesChannel(channel: ChannelRow, filter: string): boolean {
     .includes(filter.toLowerCase());
 }
 
-export function chunkRows(
-  groups: ChunkGroup[],
-  filter: string,
-  expanded: ReadonlySet<number | "loose">,
-): TimelineRow[] {
-  const rows: TimelineRow[] = [];
-  for (const group of groups) {
-    const children = group.children.filter((row) =>
-      matchesChannel(row.channel, filter),
-    );
-    if (children.length === 0 && filter) {
-      continue;
-    }
-    const open = expanded.has(group.key);
-    rows.push({
+/** Interval partitioning in O(chunks log lanes). MCAP end timestamps are inclusive,
+ * so chunks sharing an endpoint occupy separate lanes. IDs and offsets break ties.
+ */
+export function chunkRows(groups: ChunkGroup[], filter: string): GroupRow[] {
+  const selected = groups
+    .map((group) => ({
       ...group,
-      kind: "group",
-      children,
-      expanded: open,
-      shownMessageCount: children.reduce(
-        (sum, child) => sum + child.messages.length,
-        0,
+      children: group.children.filter((row) =>
+        matchesChannel(row.channel, filter),
       ),
+    }))
+    .filter((group) => !filter || group.children.length > 0);
+  const ordered = selected
+    .filter((group) => group.chunk)
+    .sort((a, b) => {
+      const left = a.chunk!,
+        right = b.chunk!;
+      return left.startTime < right.startTime
+        ? -1
+        : left.startTime > right.startTime
+          ? 1
+          : left.offset !== right.offset
+            ? left.offset - right.offset
+            : left.id - right.id;
     });
-    if (open) {
-      rows.push(...children);
+  const lanes: ChunkGroup[][] = [];
+  const heap: { end: bigint; lane: number }[] = [];
+  const less = (
+    a: { end: bigint; lane: number },
+    b: { end: bigint; lane: number },
+  ) => a.end < b.end || (a.end === b.end && a.lane < b.lane);
+  for (const group of ordered) {
+    const chunk = group.chunk!;
+    let lane: number;
+    if (heap[0] && heap[0].end < chunk.startTime) {
+      lane = heap[0].lane;
+      heap[0] = heap[heap.length - 1]!;
+      heap.pop();
+      let index = 0;
+      while (index * 2 + 1 < heap.length) {
+        let child = index * 2 + 1;
+        if (child + 1 < heap.length && less(heap[child + 1]!, heap[child]!)) {
+          child++;
+        }
+        if (!less(heap[child]!, heap[index]!)) {
+          break;
+        }
+        [heap[index], heap[child]] = [heap[child]!, heap[index]!];
+        index = child;
+      }
+    } else {
+      lane = lanes.length;
+      lanes.push([]);
     }
+    lanes[lane]!.push(group);
+    heap.push({ end: chunk.endTime, lane });
+    let index = heap.length - 1;
+    while (index > 0) {
+      const parent = (index - 1) >>> 1;
+      if (!less(heap[index]!, heap[parent]!)) {
+        break;
+      }
+      [heap[index], heap[parent]] = [heap[parent]!, heap[index]!];
+      index = parent;
+    }
+  }
+  const makeRow = (members: ChunkGroup[], key: number | "loose"): GroupRow => {
+    const children = members.flatMap((group) => group.children);
+    const messages = children
+      .flatMap((child) => child.messages)
+      .sort((a, b) => a.time - b.time);
+    return {
+      kind: "group",
+      key,
+      groups: members,
+      children,
+      messages,
+      shownMessageCount: messages.length,
+    };
+  };
+  const rows = lanes.map((members, index) => makeRow(members, index));
+  const loose = selected.find((group) => group.key === "loose");
+  if (loose) {
+    rows.push(makeRow([loose], "loose"));
   }
   return rows;
 }
 
 export function groupTimeRange(
-  row: GroupRow,
+  row: ChunkGroup,
   origin: bigint,
 ): { start: number; end: number } | undefined {
   if (row.chunk) {

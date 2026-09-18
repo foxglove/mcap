@@ -52,7 +52,6 @@ export class Timeline {
   #rows: TimelineRow[] = [];
   #grouping: Grouping = "channel";
   #groups?: ChunkGroup[];
-  #expanded = new Set<number | "loose">();
   #filter = "";
   #raf = 0;
   #drag?: {
@@ -196,27 +195,6 @@ export class Timeline {
       "pointerup",
       (e) => {
         if (this.#drag && !this.#drag.moved) {
-          const row =
-            e.offsetY >= RULER
-              ? this.#rows[
-                  Math.floor(
-                    (e.offsetY - RULER + this.#scrollY) / this.#rowHeight,
-                  )
-                ]
-              : undefined;
-          if (
-            e.offsetY >= RULER &&
-            e.offsetX < this.#labelWidth &&
-            row?.kind === "group"
-          ) {
-            if (this.#expanded.has(row.key)) {
-              this.#expanded.delete(row.key);
-            } else {
-              this.#expanded.add(row.key);
-            }
-            this.#rebuildRows();
-            this.#clamp();
-          }
           this.#selected = this.#hit(e.offsetX, e.offsetY);
           this.#onSelect(this.#selected);
           this.#draw();
@@ -270,7 +248,11 @@ export class Timeline {
         } else if (e.key === "Home") {
           this.fit();
         } else if (e.key === "Escape") {
-          this.clearSelection();
+          if (this.#focusedChunk) {
+            this.exitChunk();
+          } else {
+            this.clearSelection();
+          }
         } else {
           handled = false;
         }
@@ -349,7 +331,6 @@ export class Timeline {
       recording.chunks.map((chunk) => [chunk.id, chunk]),
     );
     this.#groups = undefined;
-    this.#expanded.clear();
     this.#scrollY = 0;
     this.#start = 0;
     this.#span = Math.min(5, Math.max(recording.duration, 0.001));
@@ -449,7 +430,7 @@ export class Timeline {
         }));
     } else {
       this.#groups ??= groupChunks(this.#recording);
-      this.#rows = chunkRows(this.#groups, this.#filter, this.#expanded);
+      this.#rows = chunkRows(this.#groups, this.#filter);
     }
     this.#onRowsChange(this.#rows.length);
   }
@@ -530,22 +511,6 @@ export class Timeline {
     this.#hover = undefined;
     this.#focusedChunk = undefined;
     this.#previousView = undefined;
-    this.#expanded.clear();
-  }
-  public setChunksExpanded({ expanded }: { expanded: boolean }): void {
-    if (!this.#recording) {
-      return;
-    }
-    this.#groups ??= groupChunks(this.#recording);
-    this.#expanded = expanded
-      ? new Set(this.#groups.map((group) => group.key))
-      : new Set();
-    this.#rebuildRows();
-    this.#scrollY = 0;
-    this.#hover = undefined;
-    this.#hideTooltip();
-    this.#clamp();
-    this.#draw();
   }
   public clearSelection(): void {
     this.#selected = undefined;
@@ -622,13 +587,36 @@ export class Timeline {
           ]) {
             if (message && Math.abs(this.#x(message.time) - x) < distance) {
               distance = Math.abs(this.#x(message.time) - x);
-              best = { channel: child.channel, message, chunk: row.chunk };
+              best = {
+                channel: child.channel,
+                message,
+                chunk:
+                  message.chunkId == undefined
+                    ? undefined
+                    : this.#chunksById.get(message.chunkId),
+              };
             }
           }
         }
         return best;
       }
-      return { chunk: row.chunk, unchunked: !row.chunk };
+      if (row.key === "loose") {
+        return { unchunked: true };
+      }
+      if (x < this.#labelWidth) {
+        return undefined;
+      }
+      for (const group of row.groups) {
+        const range = groupTimeRange(group, this.#recording.startTime);
+        if (
+          range &&
+          x >= this.#x(range.start) - 2 &&
+          x <= Math.max(this.#x(range.start) + 3, this.#x(range.end)) + 2
+        ) {
+          return { chunk: group.chunk };
+        }
+      }
+      return undefined;
     }
     const { channel, messages } = row;
     if (x < this.#labelWidth) {
@@ -694,7 +682,7 @@ export class Timeline {
             chunk.compression
           } · ${chunk.messageCount.toLocaleString()} messages`
         : this.#hover.unchunked === true
-          ? "Unchunked messages · click the label to expand channels"
+          ? "Unchunked messages"
           : `${channel?.id ?? "?"} · ${channel?.topic ?? "Unknown channel"}`;
     this.#tooltip.hidden = false;
     const tipWidth = this.#tooltip.offsetWidth;
@@ -821,13 +809,7 @@ export class Timeline {
       ? [this.#focusedChunk]
       : this.#grouping === "channel"
         ? this.#recording?.chunks ?? []
-        : [
-            ...new Set(
-              this.#rows
-                .slice(first, last)
-                .flatMap((row) => (row.chunk ? [row.chunk] : [])),
-            ),
-          ];
+        : [];
     for (const chunk of this.#showChunks ? visibleChunks : []) {
       const start = Number(chunk.startTime - this.#recording!.startTime) / 1e9;
       const end = Number(chunk.endTime - this.#recording!.startTime) / 1e9;
@@ -856,52 +838,49 @@ export class Timeline {
       const row = this.#rows[i]!,
         y = RULER + i * this.#rowHeight - this.#scrollY + this.#rowHeight / 2;
       if (row.kind === "group" && this.#showChunks) {
-        const range = groupTimeRange(row, this.#recording!.startTime);
-        if (
-          !range ||
-          range.end < this.#start ||
-          range.start > this.#start + this.#span
-        ) {
-          continue;
-        }
-        const left = Math.max(this.#labelWidth, this.#x(range.start));
-        const right = Math.min(
-          this.#labelWidth + this.#plotWidth,
-          Math.max(this.#x(range.start) + 3, this.#x(range.end)),
-        );
-        const color = row.chunk
-          ? COLORS[row.chunk.id % COLORS.length]!
-          : "#ffb570";
-        ctx.fillStyle = color;
-        ctx.strokeStyle = color;
-        ctx.globalAlpha =
-          highlighted == undefined || highlighted === row.chunk?.id
-            ? 0.3
-            : 0.12;
-        ctx.fillRect(left, y - 12, right - left, 24);
-        ctx.globalAlpha = 1;
-        ctx.lineWidth = highlighted === row.chunk?.id ? 2 : 1;
-        ctx.strokeRect(left + 0.5, y - 11.5, Math.max(1, right - left - 1), 23);
-        ctx.font = FONT;
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = "#e3edf8";
-        const label =
-          row.chunk?.loaded === false
-            ? "Messages not loaded"
-            : `${row.shownMessageCount.toLocaleString()} loaded messages · ${
-                row.children.length
-              } channels`;
-        if (right - left > ctx.measureText(label).width + 20) {
-          ctx.fillText(label, left + 9, y);
+        for (const group of row.groups) {
+          const range = groupTimeRange(group, this.#recording!.startTime);
+          if (
+            !range ||
+            range.end < this.#start ||
+            range.start > this.#start + this.#span
+          ) {
+            continue;
+          }
+          const left = Math.max(this.#labelWidth, this.#x(range.start));
+          const right = Math.min(
+            this.#labelWidth + this.#plotWidth,
+            Math.max(this.#x(range.start) + 3, this.#x(range.end)),
+          );
+          const color = group.chunk
+            ? COLORS[group.chunk.id % COLORS.length]!
+            : "#ffb570";
+          ctx.fillStyle = color;
+          ctx.strokeStyle = color;
+          ctx.globalAlpha =
+            highlighted == undefined || highlighted === group.chunk?.id
+              ? 0.3
+              : 0.12;
+          ctx.fillRect(left, y - 12, right - left, 24);
+          ctx.globalAlpha = 1;
+          ctx.lineWidth = highlighted === group.chunk?.id ? 2 : 1;
+          ctx.strokeRect(
+            left + 0.5,
+            y - 11.5,
+            Math.max(1, right - left - 1),
+            23,
+          );
+          ctx.font = FONT;
+          ctx.textBaseline = "middle";
+          ctx.fillStyle = "#e3edf8";
+          const label = group.chunk ? `#${group.chunk.id}` : "Unchunked";
+          if (right - left > ctx.measureText(label).width + 20) {
+            ctx.fillText(label, left + 9, y);
+          }
         }
         continue;
       }
-      const messages =
-        row.kind === "channel"
-          ? row.messages
-          : row.children
-              .flatMap((child) => child.messages)
-              .sort((a, b) => a.time - b.time);
+      const messages = row.messages;
       const a = lowerBound(messages, this.#start),
         b = lowerBound(messages, this.#start + this.#span + 1e-9);
       let previousPixel = -Infinity;
@@ -943,7 +922,11 @@ export class Timeline {
         row.kind === "channel"
           ? row.channel.id === this.#selected?.channel?.id &&
             (!row.chunk || row.chunk.id === picked?.chunkId)
-          : row.chunk?.id === picked?.chunkId;
+          : row.groups.some(
+              (group) =>
+                group.chunk?.id === picked?.chunkId ||
+                (group.key === "loose" && picked?.chunkId == undefined),
+            );
       if (
         picked &&
         selectedRow &&
@@ -982,7 +965,7 @@ export class Timeline {
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#8394a8";
     ctx.fillText(
-      this.#grouping === "channel" ? "CHANNEL / TOPIC" : "CHUNK / CHANNEL",
+      this.#grouping === "channel" ? "CHANNEL / TOPIC" : "CHUNK LANES",
       18,
       21,
     );
@@ -1021,27 +1004,19 @@ export class Timeline {
         ctx.fillRect(0, y + 2, this.#labelWidth - 8, this.#rowHeight - 4);
       }
       if (row.kind === "group") {
-        const color = row.chunk
-          ? COLORS[row.chunk.id % COLORS.length]!
-          : "#ffb570";
-        ctx.fillStyle = color;
-        ctx.fillText(row.expanded ? "▾" : "▸", 14, y + this.#rowHeight / 2 - 4);
+        ctx.fillStyle = row.key === "loose" ? "#ffb570" : "#93a5b9";
         this.#drawTruncatedText(
-          row.chunk ? `Chunk #${row.chunk.id}` : "Unchunked",
-          34,
+          row.key === "loose" ? "Unchunked" : `Lane ${row.key + 1}`,
+          18,
           y + this.#rowHeight / 2 - 4,
-          this.#labelWidth - 45,
+          this.#labelWidth - 30,
         );
-        if (this.#rowHeight >= 42) {
-          ctx.fillStyle = "#8aa1b9";
-          ctx.fillText(
-            `${row.children.length} channels · ${
-              row.expanded ? "collapse" : "expand"
-            }`,
-            34,
-            y + this.#rowHeight / 2 + 12,
-          );
-        }
+        ctx.fillStyle = "#8aa1b9";
+        ctx.fillText(
+          `${row.groups.length} ${row.key === "loose" ? "group" : "chunks"}`,
+          18,
+          y + this.#rowHeight / 2 + 12,
+        );
         continue;
       }
       ctx.fillStyle = "#64819e";

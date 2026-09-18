@@ -241,3 +241,30 @@ void test("unindexed seeks discover channel definitions in earlier chunks, inclu
     assert.equal(result!.channels[0]!.messages[0]!.chunkId, expectedChunk);
   }
 });
+
+void test("expanding a preloaded range retains earlier chunks beyond the small LRU", async () => {
+  const file = await createDemo();
+  const base = fileReadable(file);
+  const reads: number[] = [];
+  const source = await InspectorSource.open(
+    {
+      size: async () => await base.size(),
+      read: async (offset, size) => {
+        reads.push(Number(offset));
+        return await base.read(offset, size);
+      },
+    },
+    {},
+    file.name,
+    new AbortController().signal,
+  );
+  const first = await source.readWindow(0, 18);
+  const retained = first!.chunks.filter((chunk) => chunk.loaded === true);
+  assert.ok(retained.length > 32, "fixture exceeds the worker LRU chunk count");
+  reads.length = 0;
+  await source.readWindow(0, source.recording.duration);
+  assert.ok(
+    retained.every((chunk) => !reads.includes(chunk.offset)),
+    "idle expansion never re-reads retained chunks",
+  );
+});

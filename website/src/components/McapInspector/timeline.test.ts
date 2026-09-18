@@ -118,14 +118,16 @@ void test("double-click drills into a chunk, back restores the viewport, and dis
     const before = [...view];
     const event = new Event("dblclick");
     Object.defineProperties(event, {
-      offsetX: { value: 400 },
+      offsetX: { value: 650 },
       offsetY: { value: 110 },
     });
     canvas.dispatchEvent(event); // The second collapsed chunk row.
     assert.equal(scope?.id, 1);
     assert.equal(grouping, "channel");
     assert.deepEqual(view, [1, 2]);
-    timeline.exitChunk();
+    const escape = new Event("keydown", { cancelable: true });
+    Object.defineProperty(escape, "key", { value: "Escape" });
+    canvas.dispatchEvent(escape);
     assert.equal(scope, undefined);
     assert.equal(grouping, "chunk");
     assert.deepEqual(view, before);
@@ -171,6 +173,55 @@ void test("double-click drills into a chunk, back restores the viewport, and dis
     assert.ok(
       !drawing.some((call) => call.method === "fill"),
       "chunk polygons are hidden in ticks-only mode",
+    );
+    const sequential = overlappingRecording();
+    sequential.duration = 6;
+    sequential.chunks[1]!.startTime += 3_000_000_000n;
+    sequential.chunks[1]!.endTime += 3_000_000_000n;
+    for (const channel of sequential.channels) {
+      for (const message of channel.messages) {
+        if (message.chunkId === 1) {
+          message.time += 3;
+          message.logTime += 3_000_000_000n;
+        }
+      }
+      channel.messages.sort((a, b) => a.time - b.time);
+    }
+    timeline.setRecording(sequential);
+    timeline.setShowChunks({ visible: true });
+    timeline.setGrouping("chunk");
+    timeline.fit();
+    assert.equal(rows, 1, "sequential chunks share one row");
+    frame?.();
+    assert.ok(
+      drawing.some(
+        (call) => call.method === "fillText" && call.args[0] === "#1",
+      ),
+      "chunk ID is rendered inside its lane outline",
+    );
+    const packedClick = new Event("dblclick");
+    Object.defineProperties(packedClick, {
+      offsetX: { value: 246 + (736 * 5) / 6 },
+      offsetY: { value: 66 },
+    });
+    canvas.dispatchEvent(packedClick);
+    assert.equal(
+      (scope as ChunkInfo | undefined)?.id,
+      1,
+      "hit-testing resolves the clicked chunk within a shared row",
+    );
+    canvas.dispatchEvent(escape);
+    assert.equal(scope, undefined);
+    const gapClick = new Event("dblclick");
+    Object.defineProperties(gapClick, {
+      offsetX: { value: 614 },
+      offsetY: { value: 66 },
+    });
+    canvas.dispatchEvent(gapClick);
+    assert.equal(
+      scope,
+      undefined,
+      "empty space between chunks does not select a chunk",
     );
     timeline.destroy();
     const atDisposal = changes;

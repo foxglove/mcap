@@ -52,6 +52,8 @@ export class InspectorSource {
   #loose = new Map<number, MessageMark[]>();
   #cache = new Map<number, ChunkMessages>();
   #cacheMessages = 0;
+  // Full chunk metadata backing the latest completed window, bounded by MAX_MESSAGES.
+  #retained = new Map<number, ChunkMessages>();
   #signal: AbortSignal;
   private constructor(
     readable: IReadable,
@@ -306,6 +308,10 @@ export class InspectorSource {
     }
   }
   async #decodeChunk(chunk: ChunkInfo): Promise<ChunkMessages> {
+    const retained = this.#retained.get(chunk.id);
+    if (retained) {
+      return retained;
+    }
     const cached = this.#cache.get(chunk.id);
     if (cached) {
       this.#cache.delete(chunk.id);
@@ -387,6 +393,7 @@ export class InspectorSource {
       /* Optional window progress. */
     },
   ): Promise<Recording | undefined> {
+    const nextRetained = new Map<number, ChunkMessages>();
     const channels = new Map<number, ChannelRow>();
     const add = (id: number, marks: MessageMark[]) => {
       let channel = channels.get(id);
@@ -436,6 +443,7 @@ export class InspectorSource {
           "This view exceeds the 2,000,000-message metadata limit. Zoom in to a smaller time range.",
         );
       }
+      nextRetained.set(chunk.id, result);
       for (const [id, marks] of result.channels) {
         add(id, marks);
       }
@@ -494,6 +502,7 @@ export class InspectorSource {
     if (!isCurrent()) {
       return undefined;
     }
+    this.#retained = nextRetained;
     progress(1);
     return result;
   }

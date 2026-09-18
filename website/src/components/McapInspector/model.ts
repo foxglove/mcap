@@ -82,6 +82,12 @@ export type LoaderRequest =
     };
 
 export type LoaderMessage =
+  | { type: "prefetched"; id: number; recording: Recording }
+  | {
+      type: "preload-status";
+      id: number;
+      state: "loading" | "complete" | "paused";
+    }
   | { type: "progress"; fraction: number; id?: number }
   | { type: "opened"; recording: Recording }
   | { type: "window"; id: number; recording: Recording }

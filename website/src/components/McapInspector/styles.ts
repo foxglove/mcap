@@ -478,7 +478,7 @@ aside {
   gap:10px
 }
 .view-controls {
-  margin-left:0
+  margin-left:auto
 }
 .toolbar {
   gap:10px

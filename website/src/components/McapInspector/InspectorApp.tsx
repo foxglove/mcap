@@ -46,6 +46,7 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
     const [view, setView] = useState({ start: 0, span: 0, duration: 0 });
     const [busy, setBusy] = useState<"catalog" | "window">();
     const [progress, setProgress] = useState(0);
+    const [preload, setPreload] = useState<"loading" | "complete" | "paused">();
     const [error, setError] = useState<string>();
     const [drop, setDrop] = useState(false);
     const [rowCount, setRowCount] = useState<number>();
@@ -96,6 +97,7 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
             mounted.updateRecording(data);
           },
           onProgress: setProgress,
+          onPreload: setPreload,
           onBusy: setBusy,
           onError: fail,
         },
@@ -175,6 +177,12 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
       : recording?.channels ?? [];
     return (
       <div
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && scope) {
+            event.preventDefault();
+            timeline.current?.exitChunk();
+          }
+        }}
         onDragEnter={(event) => {
           if (event.dataTransfer.types.includes("Files")) {
             event.preventDefault();
@@ -266,7 +274,7 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
                   </span>
                   <span title="Total uncompressed chunk bytes divided by stored chunk bytes, across all chunks. Excludes file headers, indexes, and unchunked messages.">
                     <strong>
-                      {ratio == undefined ? "—" : `${ratio.toFixed(2)}:1`}
+                      {ratio == undefined ? "—" : `${ratio.toFixed(2)}x`}
                     </strong>
                     compression ratio
                   </span>
@@ -323,18 +331,6 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
             >
               Chunk outlines {showChunks ? "on" : "off"}
             </button>
-            <button
-              aria-pressed={sidebar}
-              onClick={() => {
-                if (sidebar) {
-                  closeSidebar();
-                } else {
-                  setSidebar(true);
-                }
-              }}
-            >
-              Inspector
-            </button>
             <div className="view-controls">
               <button
                 aria-label="Zoom out"
@@ -351,6 +347,18 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
               <button onClick={() => timeline.current?.fit()}>
                 {scope ? "Fit chunk" : "Fit recording"}
               </button>
+              <button
+                aria-pressed={sidebar}
+                onClick={() => {
+                  if (sidebar) {
+                    closeSidebar();
+                  } else {
+                    setSidebar(true);
+                  }
+                }}
+              >
+                Details
+              </button>
             </div>
           </div>
           {scope && (
@@ -365,23 +373,9 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
           {!scope && grouping === "chunk" && (
             <div className="group-hint">
               <span>
-                Click a left label to expand. Double-click a chunk for its
-                channel view.
+                Sequential chunks share a lane; overlapping chunks use separate
+                lanes. Double-click a chunk for its channel view.
               </span>
-              <button
-                onClick={() =>
-                  timeline.current?.setChunksExpanded({ expanded: true })
-                }
-              >
-                Expand all
-              </button>
-              <button
-                onClick={() =>
-                  timeline.current?.setChunksExpanded({ expanded: false })
-                }
-              >
-                Collapse all
-              </button>
             </div>
           )}
           {error && (
@@ -456,10 +450,10 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
               )}
             </div>
             {sidebar && (
-              <aside aria-label="Inspector">
+              <aside aria-label="Details">
                 <div className="inspector-heading">
-                  <span className="eyebrow">INSPECTOR</span>
-                  <button aria-label="Close inspector" onClick={closeSidebar}>
+                  <span className="eyebrow">DETAILS</span>
+                  <button aria-label="Close details" onClick={closeSidebar}>
                     ×
                   </button>
                 </div>
@@ -499,9 +493,15 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
             <span role="status">
               {busy
                 ? "Loading…"
-                : recording?.partial === true
-                  ? "Messages load as you pan and zoom"
-                  : "Ready"}
+                : preload === "loading"
+                  ? "Preloading in the background…"
+                  : preload === "complete"
+                    ? "Recording preloaded"
+                    : preload === "paused"
+                      ? "Preloading paused · load on demand"
+                      : recording?.partial === true
+                        ? "Messages load as you pan and zoom"
+                        : "Ready"}
             </span>
           </footer>
         </main>
