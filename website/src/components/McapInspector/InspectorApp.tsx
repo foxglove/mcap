@@ -5,6 +5,8 @@ import React, {
   useImperativeHandle,
   useRef,
   useState,
+  useMemo,
+  type CSSProperties,
 } from "react";
 
 import { InspectorLoader } from "./InspectorLoader.ts";
@@ -15,6 +17,7 @@ import { createDemo } from "./demo.ts";
 import type { Grouping } from "./layout.ts";
 import { bytes, timeLabel, type ChunkInfo, type Recording } from "./model.ts";
 import { Timeline, type Selection } from "./timeline.ts";
+import { compressionRatio, inspectorHeight } from "./viewMetrics.ts";
 
 export interface InspectorAppProps extends InspectorOptions {
   file?: File;
@@ -45,6 +48,12 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string>();
     const [drop, setDrop] = useState(false);
+    const [rowCount, setRowCount] = useState<number>();
+    const height = inspectorHeight(rowCount, props.maxHeight ?? props.height);
+    const ratio = useMemo(
+      () => compressionRatio(recording?.chunks ?? []),
+      [recording?.chunks],
+    );
     useEffect(() => {
       callbacks.current = props;
     });
@@ -70,6 +79,7 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
           setScope(chunk);
           setGrouping(mode);
         },
+        setRowCount,
       );
       const mountedLoader = new InspectorLoader(
         callbacks.current.createWorker,
@@ -254,6 +264,12 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
                   <span>
                     <strong>{bytes(recording.fileSize)}</strong>file size
                   </span>
+                  <span title="Total uncompressed chunk bytes divided by stored chunk bytes, across all chunks. Excludes file headers, indexes, and unchunked messages.">
+                    <strong>
+                      {ratio == undefined ? "—" : `${ratio.toFixed(2)}:1`}
+                    </strong>
+                    compression ratio
+                  </span>
                 </>
               ) : (
                 <span>
@@ -373,7 +389,12 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
               {error}
             </div>
           )}
-          <section className="workspace">
+          <section
+            className="workspace"
+            style={
+              { "--mcap-inspector-height": `${height}px` } as CSSProperties
+            }
+          >
             <div className="plot">
               <canvas
                 ref={canvas}
@@ -406,7 +427,12 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
                 <div className="loading">
                   <div className="loading-card">
                     <h2>Reading recording structure</h2>
-                    <progress max={1} value={progress} />
+                    <progress
+                      max={1}
+                      value={progress}
+                      aria-label="Reading recording structure"
+                    />
+                    <span>{Math.round(progress * 100)}%</span>
                     <p>
                       Locating chunks without reading their message payloads.
                     </p>
@@ -418,7 +444,14 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
               )}
               {busy === "window" && (
                 <div className="window-loading" role="status">
-                  Loading visible messages…
+                  <span>
+                    Loading visible messages… {Math.round(progress * 100)}%
+                  </span>
+                  <progress
+                    max={1}
+                    value={progress}
+                    aria-label="Loading visible messages"
+                  />
                 </div>
               )}
             </div>

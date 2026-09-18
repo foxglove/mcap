@@ -71,6 +71,7 @@ export function timeLabel(seconds: number): string {
 }
 
 export type LoaderRequest =
+  | { type: "cancel-window"; id: number }
   | { type: "open"; file?: File; size?: bigint; name: string }
   | { type: "window"; id: number; start: number; end: number }
   | {
@@ -81,7 +82,7 @@ export type LoaderRequest =
     };
 
 export type LoaderMessage =
-  | { type: "progress"; fraction: number }
+  | { type: "progress"; fraction: number; id?: number }
   | { type: "opened"; recording: Recording }
   | { type: "window"; id: number; recording: Recording }
   | { type: "read"; id: number; offset: bigint; size: bigint }

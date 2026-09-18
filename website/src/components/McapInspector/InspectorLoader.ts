@@ -16,6 +16,8 @@ export class InspectorLoader {
   #callbacks: LoaderCallbacks;
   #worker?: Worker;
   #request = 0;
+  #loadedRange?: { start: number; end: number };
+  #requestedRange?: { start: number; end: number };
   #opening = 0;
   #timer?: ReturnType<typeof setTimeout>;
   constructor(createWorker: () => Worker, callbacks: LoaderCallbacks) {
@@ -56,6 +58,9 @@ export class InspectorLoader {
             void this.#read(worker, readable, data);
             break;
           case "progress":
+            if (data.id != undefined && data.id !== this.#request) {
+              return;
+            }
             this.#callbacks.onProgress(data.fraction);
             break;
           case "opened":
@@ -66,6 +71,8 @@ export class InspectorLoader {
             if (data.id !== this.#request) {
               return;
             }
+            this.#loadedRange = data.recording.loadedRange;
+            this.#requestedRange = undefined;
             this.#callbacks.onBusy(undefined);
             this.#callbacks.onWindow(data.recording);
             break;
@@ -122,8 +129,37 @@ export class InspectorLoader {
     if (!this.#worker) {
       return;
     }
+    const end = start + span;
+    // The canvas already owns all metadata in this interval. Keep that snapshot
+    // when narrowing the view, even if its chunks were evicted from the worker LRU.
+    if (
+      this.#loadedRange &&
+      start >= this.#loadedRange.start &&
+      end <= this.#loadedRange.end
+    ) {
+      if (this.#requestedRange) {
+        clearTimeout(this.#timer);
+        this.#worker.postMessage({
+          type: "cancel-window",
+          id: ++this.#request,
+        } satisfies LoaderRequest);
+        this.#requestedRange = undefined;
+        this.#callbacks.onBusy(undefined);
+      }
+      return;
+    }
+    // Repeated notifications and narrower views can share the outstanding load.
+    if (
+      this.#requestedRange &&
+      start >= this.#requestedRange.start &&
+      end <= this.#requestedRange.end
+    ) {
+      return;
+    }
+    this.#requestedRange = { start, end };
     const id = ++this.#request;
     clearTimeout(this.#timer);
+    this.#callbacks.onProgress(0);
     this.#callbacks.onBusy("window");
     this.#timer = setTimeout(() => {
       this.#worker?.postMessage({
@@ -135,6 +171,7 @@ export class InspectorLoader {
     }, 120);
   }
   #fail(error: unknown) {
+    this.#requestedRange = undefined;
     this.#callbacks.onBusy(undefined);
     this.#callbacks.onError(
       error instanceof Error ? error : new Error(String(error)),
@@ -143,6 +180,8 @@ export class InspectorLoader {
   cancel(): void {
     this.#opening++;
     this.#request++;
+    this.#loadedRange = undefined;
+    this.#requestedRange = undefined;
     clearTimeout(this.#timer);
     this.#worker?.terminate();
     this.#worker = undefined;

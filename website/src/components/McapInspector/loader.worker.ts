@@ -24,10 +24,22 @@ async function drain() {
       const request = pending;
       pending = undefined;
       try {
+        let lastProgress = 0;
         const recording = await source.readWindow(
           request.start,
           request.end,
           () => request.id === generation,
+          (fraction) => {
+            if (
+              request.id === generation &&
+              (fraction === 0 ||
+                fraction === 1 ||
+                Date.now() - lastProgress > 80)
+            ) {
+              lastProgress = Date.now();
+              self.postMessage({ type: "progress", id: request.id, fraction });
+            }
+          },
         );
         if (recording && request.id === generation) {
           self.postMessage({ type: "window", id: request.id, recording });
@@ -56,6 +68,11 @@ self.onmessage = async ({ data }: MessageEvent<LoaderRequest>) => {
     } else if (data.bytes) {
       waiting?.resolve(data.bytes);
     }
+    return;
+  }
+  if (data.type === "cancel-window") {
+    generation = data.id;
+    pending = undefined;
     return;
   }
   if (data.type === "window") {

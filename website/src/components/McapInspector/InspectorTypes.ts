@@ -3,6 +3,10 @@ import type { IReadable } from "@mcap/core";
 import type { Recording } from "./model.ts";
 
 export interface InspectorOptions {
+  /** Maximum canvas viewport height in CSS pixels. Defaults to 520. */
+  maxHeight?: number;
+  /** Compatibility alias for maxHeight. Prefer maxHeight in new integrations. */
+  height?: number;
   createWorker?: () => Worker;
   onLoad?: (recording: Recording) => void;
   onError?: (error: Error) => void;

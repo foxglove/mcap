@@ -16,6 +16,7 @@ import {
   type MessageMark,
   type ChunkInfo,
 } from "./model.ts";
+import { RULER_HEIGHT, ROW_HEIGHT } from "./viewMetrics.ts";
 
 export const COLORS = [
   "#5aafff",
@@ -31,7 +32,7 @@ export interface Selection {
   chunk?: ChunkInfo;
   unchunked?: boolean;
 }
-const RULER = 42;
+const RULER = RULER_HEIGHT;
 const FONT = "12px ui-monospace, SFMono-Regular, Consolas, monospace";
 
 export class Timeline {
@@ -39,7 +40,9 @@ export class Timeline {
   #width = 1;
   #height = 1;
   #labelWidth = 246;
-  #rowHeight = 48;
+  #rowHeight = ROW_HEIGHT;
+  #lastView?: { start: number; span: number; duration: number };
+  #onRowsChange: (count: number) => void;
   #showChunks = true;
   #scrollY = 0;
   #start = 0;
@@ -87,7 +90,11 @@ export class Timeline {
     ) => void = () => {
       /* Scope notifications are optional. */
     },
+    onRowsChange: (count: number) => void = () => {
+      /* Optional layout notification. */
+    },
   ) {
+    this.#onRowsChange = onRowsChange;
     this.#canvas = canvas;
     this.#onSelect = onSelect;
     this.#onView = onView;
@@ -289,6 +296,18 @@ export class Timeline {
     );
   }
   #notify() {
+    if (
+      this.#lastView?.start === this.#start &&
+      this.#lastView.span === this.#span &&
+      this.#lastView.duration === this.#extent
+    ) {
+      return;
+    }
+    this.#lastView = {
+      start: this.#start,
+      span: this.#span,
+      duration: this.#extent,
+    };
     this.#onView(this.#start, this.#span, this.#extent);
   }
   #clamp() {
@@ -321,6 +340,7 @@ export class Timeline {
     this.#draw();
   }
   public setRecording(recording: Recording): void {
+    this.#lastView = undefined;
     this.#focusedChunk = undefined;
     this.#previousView = undefined;
     this.#onScopeChange(undefined, this.#grouping);
@@ -408,6 +428,7 @@ export class Timeline {
   #rebuildRows() {
     if (!this.#recording) {
       this.#rows = [];
+      this.#onRowsChange(0);
       return;
     }
     if (this.#focusedChunk) {
@@ -430,6 +451,7 @@ export class Timeline {
       this.#groups ??= groupChunks(this.#recording);
       this.#rows = chunkRows(this.#groups, this.#filter, this.#expanded);
     }
+    this.#onRowsChange(this.#rows.length);
   }
   public setGrouping(grouping: Grouping): void {
     if (this.#focusedChunk) {

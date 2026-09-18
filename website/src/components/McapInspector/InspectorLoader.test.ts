@@ -72,3 +72,88 @@ void test("loader ignores stale windows and sources and never transfers borrowed
   loader.cancel();
   assert.equal(terminated, 2);
 });
+
+void test("loaded intervals satisfy zoom-in and panning without loads; duplicate requests and stale progress are ignored", (context) => {
+  context.mock.timers.enable({ apis: ["setTimeout"] });
+  const posts: LoaderRequest[] = [];
+  const phases: ("catalog" | "window" | undefined)[] = [];
+  const progress: number[] = [];
+  let windows = 0;
+  const worker = {
+    onmessage: undefined as
+      | ((event: MessageEvent<LoaderMessage>) => void)
+      | undefined,
+    postMessage: (message: LoaderRequest) => {
+      posts.push(message);
+    },
+    terminate: () => {
+      /* Fake worker has no resources. */
+    },
+  };
+  const loader = new InspectorLoader(() => worker as unknown as Worker, {
+    onCatalog: () => {
+      /* Catalog contents not needed. */
+    },
+    onWindow: () => {
+      windows++;
+    },
+    onProgress: (fraction) => {
+      progress.push(fraction);
+    },
+    onBusy: (phase) => {
+      phases.push(phase);
+    },
+    onError: (error) => {
+      throw error;
+    },
+  });
+  const receive = (data: LoaderMessage) =>
+    worker.onmessage?.({ data } as MessageEvent<LoaderMessage>);
+  loader.openFile(new File([], "test.mcap"));
+  receive({ type: "opened", recording: overlappingRecording() });
+  phases.length = 0;
+  loader.requestWindow(0, 100);
+  loader.requestWindow(0, 100); // A vertical pan reports the same time interval.
+  loader.requestWindow(5, 5); // Share a pending broader load rather than restarting it.
+  context.mock.timers.tick(120);
+  const request = posts.find((post) => post.type === "window")!;
+  assert.equal(request.type, "window");
+  assert.deepEqual(phases, ["window"]);
+  receive({ type: "progress", id: request.id, fraction: 0.5 });
+  assert.equal(progress.at(-1), 0.5);
+  receive({
+    type: "window",
+    id: request.id,
+    recording: {
+      ...overlappingRecording(),
+      loadedRange: { start: 0, end: 100 },
+    },
+  });
+  phases.length = 0;
+  loader.requestWindow(5, 5);
+  loader.requestWindow(30, 10);
+  context.mock.timers.tick(120);
+  assert.equal(
+    posts.filter((post) => post.type === "window").length,
+    1,
+    "zooming inside the loaded full recording does not read again",
+  );
+  assert.equal(phases.length, 0, "cache hits do not flash loading UI");
+  loader.requestWindow(150, 5);
+  context.mock.timers.tick(120);
+  const outside = posts.at(-1)!;
+  assert.equal(outside.type, "window");
+  loader.requestWindow(40, 5); // Return to retained metadata while a different request runs.
+  assert.equal(posts.at(-1)!.type, "cancel-window");
+  const before = progress.length;
+  receive({ type: "progress", id: outside.id, fraction: 0.9 });
+  receive({
+    type: "window",
+    id: outside.id,
+    recording: overlappingRecording(),
+  });
+  assert.equal(progress.length, before);
+  assert.equal(windows, 1);
+  assert.equal(phases.at(-1), undefined);
+  loader.cancel();
+});

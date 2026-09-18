@@ -383,6 +383,9 @@ export class InspectorSource {
     start: number,
     end: number,
     isCurrent: () => boolean = () => true,
+    progress: (fraction: number) => void = () => {
+      /* Optional window progress. */
+    },
   ): Promise<Recording | undefined> {
     const channels = new Map<number, ChannelRow>();
     const add = (id: number, marks: MessageMark[]) => {
@@ -407,15 +410,21 @@ export class InspectorSource {
         }
       }
     };
+    const chunks = this.recording.chunks.filter((chunk) => {
+      const a = Number(chunk.startTime - this.recording.startTime) / 1e9;
+      const b = Number(chunk.endTime - this.recording.startTime) / 1e9;
+      return b >= start && a <= end;
+    });
+    const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+    let completedBytes = 0;
     let count = 0;
-    for (const chunk of this.recording.chunks) {
+    if (!isCurrent()) {
+      return undefined;
+    }
+    progress(0);
+    for (const chunk of chunks) {
       if (!isCurrent()) {
         return undefined;
-      }
-      const a = Number(chunk.startTime - this.recording.startTime) / 1e9,
-        b = Number(chunk.endTime - this.recording.startTime) / 1e9;
-      if (b < start || a > end) {
-        continue;
       }
       const result = await this.#chunk(chunk, isCurrent);
       if (!isCurrent()) {
@@ -430,6 +439,9 @@ export class InspectorSource {
       for (const [id, marks] of result.channels) {
         add(id, marks);
       }
+      completedBytes += chunk.byteLength;
+      // Reserve completion for loose metadata, channel discovery, and sorting.
+      progress(totalBytes > 0 ? (0.95 * completedBytes) / totalBytes : 0.95);
     }
     const visibleLoose = new Map<number, MessageMark[]>();
     for (const [id, marks] of this.#loose) {
@@ -479,6 +491,10 @@ export class InspectorSource {
       ),
       loadedRange: { start, end },
     };
+    if (!isCurrent()) {
+      return undefined;
+    }
+    progress(1);
     return result;
   }
 }

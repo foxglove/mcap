@@ -5,12 +5,14 @@ Reusable React UI for exploring physical MCAP message/chunk structure. The websi
 ```tsx
 import { McapInspector } from "./components/McapInspector/index.ts";
 
-<McapInspector file={selectedFile} height={560} />;
+<McapInspector file={selectedFile} maxHeight={560} />;
 // Or supply any seekable @mcap/core IReadable, including a remote range reader:
 <McapInspector readable={readable} name="robot.mcap" onError={reportError} />;
 ```
 
 Both inputs are optional; the component includes file selection and drag and drop. A new input object starts a new load. Prefer one input; `readable` takes precedence if both are supplied. `onLoad(recording)` fires when the structural catalog is ready, before viewport messages have loaded. Catalog snapshots have `partial: true`; `messageCount` counts loaded marks, and optional `totalMessageCount` comes from MCAP statistics. `onError(error)` reports loading failures.
+
+The canvas height follows the visible rows (including filtering, chunk drill-down, and expansion), up to `maxHeight` in CSS pixels (default 520). The legacy `height` prop is an alias for this cap. The same options are accepted by `createInspector`. On narrow screens the sidebar stacks below the capped canvas.
 
 Each instance owns its worker, canvas, view state, and shadow root. Unmount terminates its worker, disconnects the resize observer, cancels pending drawing/loading, and removes event listeners. Multiple inspectors can share a page. Importing the component is safe during server rendering.
 
@@ -36,12 +38,15 @@ For `setRecording`, channel message arrays must be sorted by log time, times mus
 - The overview band represents the actual viewport start and end within the recording. Drag its control to pan, or focus it and use arrow keys. The exact visible interval is printed alongside it.
 - Drag the canvas to pan; scroll vertically for rows, Shift + scroll for time, and Ctrl/Command + scroll to zoom. Arrow keys pan/scroll, +/− zoom, Home fits, and Escape clears selection.
 - Rows always use the comfortable height. Filtering matches channel IDs and topic names.
+- Recording stats include the aggregate compression ratio: summed uncompressed chunk bytes divided by summed stored chunk bytes. This excludes file overhead and unchunked messages; recordings without chunk data show a dash.
 
 ## On-demand reading and limits
 
 The first view covers up to five seconds. Opening a source builds a structural catalog by reading top-level record headers and metadata, seeking past message payloads, chunk bodies, attachments, and indexes. This is a header scan across the file, **not** a complete payload scan. It works with indexed, unindexed, and mixed loose/chunked recordings, including overlapping chunks. A file with many top-level records or a high-latency range reader can still take time to catalog.
 
-Panning and zooming load only chunks that overlap the requested interval. Compressed chunks are read/decompressed in full; individual messages cannot be extracted without decompressing their containing chunk. The worker retains only message metadata, filters visible ticks to the requested interval, and preserves complete per-channel extents for chunk outlines. An LRU keeps at most 32 chunks / 200,000 message marks; payload bytes are discarded. Stale viewport results are ignored, and superseded work stops at chunk boundaries.
+Vertical scrolling does not request data. The canvas retains its latest completed time range: zooming in or panning within that range performs no worker request and shows no loading indicator, even if the worker LRU evicted those chunks. Repeated notifications share a pending request; returning to retained data cancels an outstanding request for a different interval. Moving outside the retained range can still require reads after cache eviction.
+
+Panning and zooming outside the retained range load only chunks that overlap the requested interval. A centered, non-blocking progress indicator reports chunk processing weighted by stored bytes, followed by final metadata preparation. Progress advances at chunk boundaries; it cannot update during synchronous decompression of a single large chunk. Compressed chunks are read/decompressed in full; individual messages cannot be extracted without decompressing their containing chunk. The worker retains only message metadata, filters visible ticks to the requested interval, and preserves complete per-channel extents for chunk outlines. An LRU keeps at most 32 chunks / 200,000 message marks; payload bytes are discarded. Stale viewport results are ignored, and superseded work stops at chunk boundaries.
 
 Loose messages require reading each message's fixed header to discover timestamps and channel membership; their payloads are skipped. A channel defined only inside an earlier chunk in an unindexed file may require decoding earlier chunks to discover that definition. Summary channel definitions avoid this fallback.
 

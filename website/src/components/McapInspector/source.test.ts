@@ -34,7 +34,23 @@ void test("catalog skips payloads; five-second windows read only intersecting ph
     );
   }
   reads.length = 0;
-  const initial = await source.readWindow(0, 5);
+  const progress: number[] = [];
+  const initial = await source.readWindow(
+    0,
+    5,
+    () => true,
+    (fraction) => {
+      progress.push(fraction);
+    },
+  );
+  assert.equal(progress[0], 0);
+  assert.equal(progress.at(-1), 1);
+  assert.ok(progress.some((fraction) => fraction > 0 && fraction < 1));
+  assert.ok(
+    progress.every(
+      (fraction, index) => index === 0 || fraction >= progress[index - 1]!,
+    ),
+  );
   assert.ok(initial!.messageCount > 0);
   assert.ok(
     initial!.channels.every((channel) =>

@@ -69,6 +69,8 @@ void test("double-click drills into a chunk, back restores the viewport, and dis
   let scope: ChunkInfo | undefined;
   let selection: Selection | undefined;
   let changes = 0;
+  let viewChanges = 0;
+  let rows = 0;
   let grouping = "";
   let view = [0, 0];
   let timeline: Timeline | undefined;
@@ -79,6 +81,7 @@ void test("double-click drills into a chunk, back restores the viewport, and dis
         selection = picked;
       },
       (start, span) => {
+        viewChanges++;
         view = [start, span];
       },
       tooltip,
@@ -87,8 +90,28 @@ void test("double-click drills into a chunk, back restores the viewport, and dis
         grouping = mode;
         changes++;
       },
+      (count) => {
+        rows = count;
+      },
     );
     timeline.setRecording(overlappingRecording());
+    assert.equal(rows, 2);
+    timeline.setFilter("camera");
+    assert.equal(rows, 1, "height tracks filtered rows");
+    timeline.setFilter("");
+    const notifications = viewChanges;
+    const wheel = new Event("wheel", { cancelable: true });
+    Object.defineProperties(wheel, {
+      deltaX: { value: 0 },
+      deltaY: { value: 40 },
+      deltaMode: { value: 0 },
+    });
+    canvas.dispatchEvent(wheel);
+    assert.equal(
+      viewChanges,
+      notifications,
+      "vertical scrolling does not notify the loader",
+    );
     timeline.setGrouping("chunk");
     timeline.zoom(2);
     timeline.pan(0.4);
