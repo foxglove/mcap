@@ -3,6 +3,8 @@ import type { IReadable } from "@mcap/core";
 import type { Recording } from "./model.ts";
 
 export interface InspectorOptions {
+  /** Minimum canvas viewport height in CSS pixels. Defaults to 320; maxHeight takes precedence. */
+  minHeight?: number;
   /** Maximum canvas viewport height in CSS pixels. Defaults to 520. */
   maxHeight?: number;
   /** Compatibility alias for maxHeight. Prefer maxHeight in new integrations. */

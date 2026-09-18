@@ -26,7 +26,7 @@ export function SelectionDetails({
     );
   }
   const { channel, message, chunk, unchunked } = selection;
-  const rows: [string, string][] = [];
+  const rows: [label: string, value: string, exact?: string][] = [];
   if (channel) {
     rows.push(
       ["Channel ID", String(channel.id)],
@@ -46,7 +46,11 @@ export function SelectionDetails({
     );
   }
   if (message && !chunk) {
-    rows.push(["Record file offset", `${message.offset.toLocaleString()} B`]);
+    rows.push([
+      "Record file offset",
+      bytes(message.offset),
+      `${message.offset.toLocaleString()} B`,
+    ]);
   }
   if (channel && !message) {
     rows.push([
@@ -72,7 +76,11 @@ export function SelectionDetails({
       ],
       ["Start", timeLabel(Number(chunk.startTime - recording.startTime) / 1e9)],
       ["End", timeLabel(Number(chunk.endTime - recording.startTime) / 1e9)],
-      ["File offset", `${chunk.offset.toLocaleString()} B`],
+      [
+        "File offset",
+        bytes(chunk.offset),
+        `${chunk.offset.toLocaleString()} B`,
+      ],
       ["Record size", bytes(chunk.byteLength)],
       ["Compressed records", bytes(chunk.compressedSize)],
       ["Uncompressed records", bytes(chunk.uncompressedSize)],
@@ -90,10 +98,10 @@ export function SelectionDetails({
               : "Selected channel"}
       </h2>
       <dl>
-        {rows.map(([label, value]) => (
+        {rows.map(([label, value, exact]) => (
           <div key={label}>
             <dt>{label}</dt>
-            <dd>{value}</dd>
+            <dd title={exact}>{value}</dd>
           </div>
         ))}
       </dl>

@@ -4,9 +4,14 @@ import { test } from "node:test";
 import { overlappingRecording } from "./testFixture.ts";
 import { compressionRatio, inspectorHeight } from "./viewMetrics.ts";
 
-void test("viewport height fits rows and obeys a host maximum, including small caps", () => {
-  assert.equal(inspectorHeight(1, 600), 92);
-  assert.equal(inspectorHeight(4, 600), 236);
+void test("viewport height keeps details usable and obeys host minimum and maximum", () => {
+  assert.equal(inspectorHeight(1, 600), 320);
+  assert.equal(inspectorHeight(0, 600), 320);
+  assert.equal(inspectorHeight(8, 600), 428);
+  assert.equal(inspectorHeight(1, 600, 400), 400);
+  assert.equal(inspectorHeight(1, 200, 400), 200);
+  assert.equal(inspectorHeight(1, 600, Number.NaN), 320);
+  assert.equal(inspectorHeight(4, 600), 320);
   assert.equal(inspectorHeight(100, 600), 600);
   assert.equal(inspectorHeight(1, 60), 60);
   assert.equal(inspectorHeight(undefined, 600), 320);

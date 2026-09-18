@@ -12,7 +12,7 @@ import { McapInspector } from "./components/McapInspector/index.ts";
 
 Both inputs are optional; the component includes file selection and drag and drop. A new input object starts a new load. Prefer one input; `readable` takes precedence if both are supplied. `onLoad(recording)` fires when the structural catalog is ready, before viewport messages have loaded. Catalog snapshots have `partial: true`; `messageCount` counts loaded marks, and optional `totalMessageCount` comes from MCAP statistics. `onError(error)` reports loading failures.
 
-The canvas height follows the visible rows (including filtering, chunk drill-down, and packed lanes), up to `maxHeight` in CSS pixels (default 520). The legacy `height` prop is an alias for this cap. The same options are accepted by `createInspector`. On narrow screens the sidebar stacks below the capped canvas.
+The canvas height follows the visible rows (including filtering, chunk drill-down, and packed lanes), between `minHeight` (default 320) and `maxHeight` (default 520) in CSS pixels. The minimum keeps the Details sidebar usable even with one chunk lane. An explicit smaller maximum takes precedence over the minimum. The legacy `height` prop is an alias for this cap. The same options are accepted by `createInspector`. On narrow screens the sidebar stacks below the capped canvas.
 
 Each instance owns its worker, canvas, view state, and shadow root. Unmount terminates its worker, disconnects the resize observer, cancels pending drawing/loading, and removes event listeners. Multiple inspectors can share a page. Importing the component is safe during server rendering.
 
@@ -38,6 +38,7 @@ For `setRecording`, channel message arrays must be sorted by log time, times mus
 - The overview band represents the actual viewport start and end within the recording. Drag its control to pan, or focus it and use arrow keys. The exact visible interval is printed alongside it.
 - Drag the canvas to pan; scroll vertically for rows, Shift + scroll for time, and Ctrl/Command + scroll to zoom. Arrow keys pan/scroll, +/− zoom, Home fits, and Escape leaves chunk drill-down or otherwise clears the canvas selection.
 - Rows always use the comfortable height. Filtering matches channel IDs and topic names.
+- Chunk tooltips show compressed and uncompressed sizes, including before messages are loaded. All sizes use binary byte units (B, KiB, MiB, GiB, TiB, PiB); file offsets also retain exact byte values on hover in Details.
 - Recording stats include the aggregate compression ratio: summed uncompressed chunk bytes divided by summed stored chunk bytes, displayed as a multiplier such as `2.13x`. This excludes file overhead and unchunked messages; recordings without chunk data show a dash.
 
 ## On-demand reading and limits

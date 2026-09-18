@@ -50,7 +50,11 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
     const [error, setError] = useState<string>();
     const [drop, setDrop] = useState(false);
     const [rowCount, setRowCount] = useState<number>();
-    const height = inspectorHeight(rowCount, props.maxHeight ?? props.height);
+    const height = inspectorHeight(
+      rowCount,
+      props.maxHeight ?? props.height,
+      props.minHeight,
+    );
     const ratio = useMemo(
       () => compressionRatio(recording?.chunks ?? []),
       [recording?.chunks],

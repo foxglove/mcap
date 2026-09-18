@@ -61,10 +61,12 @@ export function bytes(n: number): string {
   if (n < 1024) {
     return `${n.toLocaleString()} B`;
   }
-  const i = Math.min(3, Math.floor(Math.log(n) / Math.log(1024)));
-  return `${(n / 1024 ** i).toFixed(1)} ${
-    ["B", "KiB", "MiB", "GiB"][i] ?? "B"
-  }`;
+  const units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB"];
+  const i = Math.min(
+    units.length - 1,
+    Math.floor(Math.log(n) / Math.log(1024)),
+  );
+  return `${(n / 1024 ** i).toFixed(1)} ${units[i] ?? "B"}`;
 }
 export function timeLabel(seconds: number): string {
   return `${seconds.toFixed(seconds < 0.001 ? 9 : seconds < 1 ? 6 : 3)} s`;

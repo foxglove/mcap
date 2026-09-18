@@ -9,6 +9,7 @@ import {
   type TimelineRow,
 } from "./layout.ts";
 import {
+  bytes,
   lowerBound,
   timeLabel,
   type Recording,
@@ -674,16 +675,23 @@ export class Timeline {
     this.#tooltip.textContent = message
       ? `${channel?.topic ?? "Unknown channel"} · ${timeLabel(
           message.time,
-        )} · ${
-          chunk ? `Chunk #${chunk.id}` : "Unchunked"
-        } · ${message.size.toLocaleString()} B`
+        )} · ${chunk ? `Chunk #${chunk.id}` : "Unchunked"} · ${bytes(
+          message.size,
+        )}`
       : chunk
-        ? `Chunk #${chunk.id} · ${
-            chunk.compression
-          } · ${chunk.messageCount.toLocaleString()} messages`
+        ? `Chunk #${chunk.id} · ${chunk.compression} · ${
+            chunk.loaded === false
+              ? "Messages not loaded"
+              : `${chunk.messageCount.toLocaleString()} messages`
+          }`
         : this.#hover.unchunked === true
           ? "Unchunked messages"
           : `${channel?.id ?? "?"} · ${channel?.topic ?? "Unknown channel"}`;
+    if (chunk) {
+      this.#tooltip.textContent += `\nCompressed: ${bytes(
+        chunk.compressedSize,
+      )} · Uncompressed: ${bytes(chunk.uncompressedSize)}`;
+    }
     this.#tooltip.hidden = false;
     const tipWidth = this.#tooltip.offsetWidth;
     this.#tooltip.style.left = `${Math.max(
@@ -692,7 +700,10 @@ export class Timeline {
     )}px`;
     this.#tooltip.style.top = `${Math.max(
       8,
-      Math.min(this.#pointer.y + 18, this.#height - 58),
+      Math.min(
+        this.#pointer.y + 18,
+        this.#height - this.#tooltip.offsetHeight - 8,
+      ),
     )}px`;
   }
   #draw() {

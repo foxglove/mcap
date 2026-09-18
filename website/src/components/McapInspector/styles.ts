@@ -423,6 +423,7 @@ footer b {
   padding:8px 10px;
   font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
   max-width:min(460px,90%);
+  white-space:pre-line;
   box-shadow:0 4px 20px #0006
 }
 #error {
