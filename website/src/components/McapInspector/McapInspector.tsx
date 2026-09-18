@@ -1,62 +1,62 @@
-import React, { useEffect, useRef, type CSSProperties } from "react";
+import React, {
+  forwardRef,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
+import { createPortal } from "react-dom";
 
-import { createInspector, type InspectorHandle } from "./createInspector.ts";
-import type { Recording } from "./model.ts";
+import { InspectorApp, type InspectorAppProps } from "./InspectorApp.tsx";
+import type { InspectorControls } from "./InspectorTypes.ts";
+import { inspectorStyles } from "./styles.ts";
 
-export interface McapInspectorProps {
-  /** Optional controlled input. Omitting it leaves the picker/drop zone available. */
-  file?: File;
-  /** Height of the canvas viewport, in CSS pixels. */
+export interface McapInspectorProps
+  extends Omit<InspectorAppProps, "createWorker"> {
+  createWorker?: () => Worker;
   height?: number;
   className?: string;
-  onLoad?: (recording: Recording) => void;
-  onError?: (error: Error) => void;
 }
 
-/** A local-only MCAP structural inspector. Safe to import during server rendering. */
-export function McapInspector({
-  file,
-  height = 520,
-  className,
-  onLoad,
-  onError,
-}: McapInspectorProps): React.JSX.Element {
-  const host = useRef<HTMLDivElement>(null);
-  const inspector = useRef<InspectorHandle | undefined>(undefined);
-  const callbacks = useRef({ onLoad, onError });
-  useEffect(() => {
-    callbacks.current = { onLoad, onError };
-  }, [onLoad, onError]);
-  useEffect(() => {
-    if (!host.current) {
-      return;
-    }
-    const mounted = createInspector(host.current, {
-      createWorker: () =>
-        new Worker(new URL("./loader.worker.ts", import.meta.url), {
-          type: "module",
-        }),
-      onLoad: (recording) => callbacks.current.onLoad?.(recording),
-      onError: (error) => callbacks.current.onError?.(error),
-    });
-    inspector.current = mounted;
-    return () => {
-      inspector.current = undefined;
-      mounted.destroy();
-    };
-  }, []);
-  useEffect(() => {
-    if (file) {
-      inspector.current?.loadFile(file);
-    }
-  }, [file]);
-  const style = { "--mcap-inspector-height": `${height}px` } as CSSProperties;
-  return (
-    <div
-      ref={host}
-      className={className}
-      style={style}
-      aria-label="MCAP chunk inspector"
-    />
-  );
+function createWorker() {
+  return new Worker(new URL("./loader.worker.ts", import.meta.url), {
+    type: "module",
+  });
 }
+
+/** SSR-safe React UI with per-instance style isolation and a seekable input API. */
+export const McapInspector = forwardRef<InspectorControls, McapInspectorProps>(
+  function McapInspectorView({ height = 520, className, ...props }, ref) {
+    const host = useRef<HTMLDivElement>(null);
+    const [shadow, setShadow] = useState<ShadowRoot>();
+    useEffect(() => {
+      if (host.current) {
+        setShadow(
+          host.current.shadowRoot ??
+            host.current.attachShadow({ mode: "open" }),
+        );
+      }
+    }, []);
+    return (
+      <div
+        ref={host}
+        className={className}
+        style={{ "--mcap-inspector-height": `${height}px` } as CSSProperties}
+        aria-label="MCAP chunk inspector"
+      >
+        {shadow &&
+          createPortal(
+            <>
+              <style>{inspectorStyles}</style>
+              <InspectorApp
+                {...props}
+                createWorker={props.createWorker ?? createWorker}
+                ref={ref}
+              />
+            </>,
+            shadow,
+          )}
+      </div>
+    );
+  },
+);

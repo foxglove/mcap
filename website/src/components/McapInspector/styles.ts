@@ -162,7 +162,7 @@ main {
   font-size:25px;
   color:#758da6
 }
-input:not([type=range]) {
+input:not([type=range]):not([type=file]) {
   background:transparent;
   border:0;
   color:#dde9f7;
@@ -574,4 +574,15 @@ footer {
 .group-hint { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .group-hint span { margin-right: auto; }
 .group-hint button { font-size: 12px; padding: 4px 8px; }
+.channel-picker { display:flex; flex-direction:column; gap:8px; margin:18px 0; color:#a8bdd2; font-size:12px; }
+.overview { position:relative; flex:1; min-width:80px; height:28px; }
+.overview-track { position:absolute; inset:8px 0; background:#263647; border-radius:3px; overflow:hidden; }
+.viewport-range { position:absolute; top:0; bottom:0; background:#77b9ff; border:1px solid #d1e8ff; border-radius:2px; }
+.overview input { position:absolute; inset:0; width:100%; height:100%; margin:0; appearance:none; background:transparent; cursor:ew-resize; }
+.overview input::-webkit-slider-runnable-track { background:transparent; }
+.overview input::-moz-range-track, .overview input::-moz-range-progress { background:transparent; }
+.overview input::-webkit-slider-thumb { appearance:none; width:14px; height:24px; background:transparent; }
+.overview input::-moz-range-thumb { width:14px; height:24px; border:0; background:transparent; }
+.window-loading { position:absolute; top:52px; right:12px; padding:8px 12px; border-radius:6px; background:#23364e; color:#d4e7fc; pointer-events:none; }
+button[aria-pressed=true] { border-color:#7ebdff; background:#26435f; }
 `;

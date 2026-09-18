@@ -26,6 +26,8 @@ export interface ChunkInfo {
   startTime: bigint;
   endTime: bigint;
   messageCount: number;
+  /** False until this chunk has been decoded. */
+  loaded?: boolean;
   ranges: Map<number, { start: number; end: number; count: number }>;
 }
 export interface Recording {
@@ -38,6 +40,9 @@ export interface Recording {
   messageCount: number;
   looseCount: number;
   profile: string;
+  partial?: boolean;
+  totalMessageCount?: number;
+  loadedRange?: { start: number; end: number };
 }
 export function lowerBound(messages: MessageMark[], time: number): number {
   let lo = 0,
@@ -65,7 +70,19 @@ export function timeLabel(seconds: number): string {
   return `${seconds.toFixed(seconds < 0.001 ? 9 : seconds < 1 ? 6 : 3)} s`;
 }
 
+export type LoaderRequest =
+  | { type: "open"; file?: File; size?: bigint; name: string }
+  | { type: "window"; id: number; start: number; end: number }
+  | {
+      type: "read-result";
+      id: number;
+      bytes?: Uint8Array<ArrayBuffer>;
+      error?: string;
+    };
+
 export type LoaderMessage =
   | { type: "progress"; fraction: number }
-  | { type: "loaded"; recording: Recording }
-  | { type: "error"; message: string };
+  | { type: "opened"; recording: Recording }
+  | { type: "window"; id: number; recording: Recording }
+  | { type: "read"; id: number; offset: bigint; size: bigint }
+  | { type: "error"; id?: number; message: string };

@@ -40,6 +40,7 @@ export class Timeline {
   #height = 1;
   #labelWidth = 246;
   #rowHeight = 48;
+  #showChunks = true;
   #scrollY = 0;
   #start = 0;
   #span = 2;
@@ -209,10 +210,7 @@ export class Timeline {
             this.#rebuildRows();
             this.#clamp();
           }
-          this.#selected =
-            row?.kind === "group"
-              ? { chunk: row.chunk, unchunked: !row.chunk }
-              : this.#hit(e.offsetX, e.offsetY);
+          this.#selected = this.#hit(e.offsetX, e.offsetY);
           this.#onSelect(this.#selected);
           this.#draw();
         }
@@ -334,10 +332,69 @@ export class Timeline {
     this.#expanded.clear();
     this.#scrollY = 0;
     this.#start = 0;
-    this.#span = Math.min(2, Math.max(recording.duration, 0.001));
+    this.#span = Math.min(5, Math.max(recording.duration, 0.001));
     this.clearSelection();
     this.setFilter(this.#filter);
     this.#notify();
+  }
+  /** Replace loaded metadata without resetting navigation, selection, or grouping. */
+  public updateRecording(recording: Recording): void {
+    this.#recording = recording;
+    this.#chunksById = new Map(
+      recording.chunks.map((chunk) => [chunk.id, chunk]),
+    );
+    this.#groups = undefined;
+    if (this.#focusedChunk) {
+      this.#focusedChunk = this.#chunksById.get(this.#focusedChunk.id);
+    }
+    if (this.#selected) {
+      const channel = recording.channels.find(
+        (c) => c.id === this.#selected?.channel?.id,
+      );
+      const chunk = this.#selected.chunk
+        ? this.#chunksById.get(this.#selected.chunk.id)
+        : undefined;
+      this.#selected = { ...this.#selected, channel, chunk };
+      this.#onSelect(this.#selected);
+    }
+    this.#rebuildRows();
+    this.#clamp();
+    this.#onScopeChange(this.#focusedChunk, this.#grouping);
+    this.#draw();
+  }
+  public setShowChunks({ visible }: { visible: boolean }): void {
+    this.#showChunks = visible;
+    this.#hover = undefined;
+    this.#hideTooltip();
+    this.#draw();
+  }
+  public selectChannel(id?: number): void {
+    if (id == undefined) {
+      this.clearSelection();
+      return;
+    }
+    if (this.#grouping === "chunk") {
+      this.setGrouping("channel");
+    }
+    const index = this.#rows.findIndex(
+      (row) => row.kind === "channel" && row.channel.id === id,
+    );
+    const channel = this.#recording?.channels.find((c) => c.id === id);
+    if (!channel) {
+      return;
+    }
+    this.#selected = { channel, chunk: this.#focusedChunk };
+    if (index >= 0) {
+      this.#scrollY = Math.max(
+        0,
+        index * this.#rowHeight -
+          (this.#height - RULER) / 2 +
+          this.#rowHeight / 2,
+      );
+    }
+    this.#clamp();
+    this.#onSelect(this.#selected);
+    this.#draw();
   }
   public setFilter(filter: string): void {
     this.#filter = filter.toLowerCase();
@@ -385,6 +442,8 @@ export class Timeline {
     this.#hideTooltip();
     this.#clamp();
     this.#draw();
+    this.#onScopeChange(undefined, this.#grouping);
+    this.#notify();
     // Keep the time window and inspection selection unchanged for direct comparison.
   }
   public focusChunk(id: number): void {
@@ -466,11 +525,6 @@ export class Timeline {
     this.#clamp();
     this.#draw();
   }
-  public setRowHeight(value: number): void {
-    this.#rowHeight = value;
-    this.#clamp();
-    this.#draw();
-  }
   public clearSelection(): void {
     this.#selected = undefined;
     this.#hover = undefined;
@@ -533,6 +587,25 @@ export class Timeline {
       return;
     }
     if (row.kind === "group") {
+      if (!this.#showChunks && x >= this.#labelWidth) {
+        const time =
+          this.#start + ((x - this.#labelWidth) / this.#plotWidth) * this.#span;
+        let best: Selection | undefined;
+        let distance = 6;
+        for (const child of row.children) {
+          const messageIndex = lowerBound(child.messages, time);
+          for (const message of [
+            child.messages[messageIndex],
+            child.messages[messageIndex - 1],
+          ]) {
+            if (message && Math.abs(this.#x(message.time) - x) < distance) {
+              distance = Math.abs(this.#x(message.time) - x);
+              best = { channel: child.channel, message, chunk: row.chunk };
+            }
+          }
+        }
+        return best;
+      }
       return { chunk: row.chunk, unchunked: !row.chunk };
     }
     const { channel, messages } = row;
@@ -561,6 +634,9 @@ export class Timeline {
     }
     if (this.#grouping === "chunk" || this.#focusedChunk) {
       return { channel, chunk: row.chunk };
+    }
+    if (!this.#showChunks) {
+      return { channel };
     }
     // Match drawing order: later chunks are on top where extents overlap.
     for (let k = this.#recording.chunks.length - 1; k >= 0; k--) {
@@ -683,7 +759,16 @@ export class Timeline {
     ctx.clip();
     for (let i = first; i < last; i++) {
       const y = RULER + i * this.#rowHeight - this.#scrollY;
-      ctx.fillStyle = i % 2 === 0 ? "#192028" : "#151b22";
+      const row = this.#rows[i]!;
+      const selectedRow =
+        row.kind === "channel" &&
+        row.channel.id === this.#selected?.channel?.id &&
+        (!row.chunk || row.chunk.id === this.#selected.chunk?.id);
+      ctx.fillStyle = selectedRow
+        ? "#293a4c"
+        : i % 2 === 0
+          ? "#192028"
+          : "#151b22";
       ctx.fillRect(
         this.#labelWidth,
         y + 2,
@@ -721,7 +806,7 @@ export class Timeline {
                 .flatMap((row) => (row.chunk ? [row.chunk] : [])),
             ),
           ];
-    for (const chunk of visibleChunks) {
+    for (const chunk of this.#showChunks ? visibleChunks : []) {
       const start = Number(chunk.startTime - this.#recording!.startTime) / 1e9;
       const end = Number(chunk.endTime - this.#recording!.startTime) / 1e9;
       if (end < this.#start || start > this.#start + this.#span) {
@@ -748,7 +833,7 @@ export class Timeline {
     for (let i = first; i < last; i++) {
       const row = this.#rows[i]!,
         y = RULER + i * this.#rowHeight - this.#scrollY + this.#rowHeight / 2;
-      if (row.kind === "group") {
+      if (row.kind === "group" && this.#showChunks) {
         const range = groupTimeRange(row, this.#recording!.startTime);
         if (
           !range ||
@@ -778,23 +863,32 @@ export class Timeline {
         ctx.font = FONT;
         ctx.textBaseline = "middle";
         ctx.fillStyle = "#e3edf8";
-        const label = `${row.shownMessageCount.toLocaleString()} messages · ${
-          row.children.length
-        } channels`;
+        const label =
+          row.chunk?.loaded === false
+            ? "Messages not loaded"
+            : `${row.shownMessageCount.toLocaleString()} loaded messages · ${
+                row.children.length
+              } channels`;
         if (right - left > ctx.measureText(label).width + 20) {
           ctx.fillText(label, left + 9, y);
         }
         continue;
       }
-      const a = lowerBound(row.messages, this.#start),
-        b = lowerBound(row.messages, this.#start + this.#span + 1e-9);
+      const messages =
+        row.kind === "channel"
+          ? row.messages
+          : row.children
+              .flatMap((child) => child.messages)
+              .sort((a, b) => a.time - b.time);
+      const a = lowerBound(messages, this.#start),
+        b = lowerBound(messages, this.#start + this.#span + 1e-9);
       let previousPixel = -Infinity;
       ctx.beginPath();
       ctx.strokeStyle = "#d7e5f3";
       ctx.lineWidth = 1;
       ctx.globalAlpha = 0.75;
       for (let n = a; n < b; n++) {
-        const message = row.messages[n]!,
+        const message = messages[n]!,
           x = Math.round(this.#x(message.time)) + 0.5;
         if (x === previousPixel) {
           continue;
@@ -809,7 +903,7 @@ export class Timeline {
       ctx.strokeStyle = "#ffb570";
       previousPixel = -Infinity;
       for (let n = a; n < b; n++) {
-        const m = row.messages[n]!;
+        const m = messages[n]!;
         if (m.chunkId != undefined) {
           continue;
         }
@@ -822,6 +916,29 @@ export class Timeline {
         ctx.lineTo(x, y + 7);
       }
       ctx.stroke();
+      const picked = this.#selected?.message;
+      const selectedRow =
+        row.kind === "channel"
+          ? row.channel.id === this.#selected?.channel?.id &&
+            (!row.chunk || row.chunk.id === picked?.chunkId)
+          : row.chunk?.id === picked?.chunkId;
+      if (
+        picked &&
+        selectedRow &&
+        picked.time >= this.#start &&
+        picked.time <= this.#start + this.#span
+      ) {
+        const x = this.#x(picked.time);
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = "#ffdc7a";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x, y - 11);
+        ctx.lineTo(x, y + 11);
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - 6, y - 13, 12, 26);
+      }
     }
     ctx.globalAlpha = 1;
     const picked = this.#selected?.message ?? this.#hover?.message;
@@ -874,6 +991,13 @@ export class Timeline {
       const row = this.#rows[i]!,
         y = RULER + i * this.#rowHeight - this.#scrollY;
       ctx.font = FONT;
+      if (
+        row.kind === "channel" &&
+        row.channel.id === this.#selected?.channel?.id
+      ) {
+        ctx.fillStyle = "#293a4c";
+        ctx.fillRect(0, y + 2, this.#labelWidth - 8, this.#rowHeight - 4);
+      }
       if (row.kind === "group") {
         const color = row.chunk
           ? COLORS[row.chunk.id % COLORS.length]!
