@@ -143,6 +143,11 @@ const config = {
             label: "Specification",
           },
           {
+            to: "/inspect",
+            label: "Inspector",
+            position: "left",
+          },
+          {
             href: "https://foxglove.dev/chat",
             label: "Discord",
             position: "right",

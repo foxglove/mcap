@@ -24,6 +24,7 @@ jobs:
 
       - run: yarn workspace website lint:ci
       - run: yarn workspace website typecheck
+      - run: yarn workspace website test
       - run: yarn workspace website build
 
       - run: yarn typedoc --out website/build/docs/typescript
