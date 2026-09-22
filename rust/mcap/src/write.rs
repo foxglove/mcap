@@ -2883,6 +2883,87 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn test_reused_zstd_encoder_across_chunks_roundtrips_correctly() {
+        // A small chunk_size forces many small chunks from few messages, so this test
+        // exercises the *reused*-encoder path (chunk 2 onward reinits a held-over
+        // Encoder via Operation::reinit()) and not just the fresh-encoder path a single
+        // chunk would only ever take. compression_threads(2) also exercises NbWorkers
+        // staying set across the reinit, on targets where it's honored at all.
+        //
+        // Note on what this does and doesn't prove: I checked by temporarily deleting the
+        // reinit() call entirely that this test's own byte-for-byte checks don't currently
+        // distinguish "reinit called" from "reinit skipped" -- libzstd already resets a
+        // CCtx for a fresh frame after a clean ZSTD_e_end completion, independent of an
+        // explicit ZSTD_reset_session_only call, so that specific omission isn't something
+        // a correctness-only test can catch here. What this test does verify, and would
+        // catch a regression in, is the actual reuse plumbing this PR adds: `mem::take`
+        // on `reusable_zstd_encoder`, `ChunkWriter::finish()`'s encoder hand-back, and the
+        // multi-chunk byte layout staying correct under a multithreaded zstd context.
+        let mut file = vec![];
+        let mut writer = WriteOptions::new()
+            .compression(Some(Compression::Zstd))
+            .chunk_size(Some(64))
+            .compression_threads(2)
+            .create(Cursor::new(&mut file))
+            .expect("failed to construct writer");
+
+        let channel = Arc::new(crate::Channel {
+            id: 0,
+            topic: "chat".into(),
+            message_encoding: "json".into(),
+            metadata: BTreeMap::new(),
+            schema: None,
+        });
+
+        const NUM_MESSAGES: u32 = 60;
+        for i in 0..NUM_MESSAGES {
+            let payload = format!("{{\"seq\":{i}}}").into_bytes();
+            writer
+                .write(&crate::Message {
+                    channel: channel.clone(),
+                    sequence: i,
+                    log_time: i as u64,
+                    publish_time: i as u64,
+                    data: Cow::Owned(payload),
+                })
+                .expect("failed to write message");
+        }
+
+        writer.finish().expect("failed to finish");
+        let buf = writer.into_inner().into_inner();
+
+        let summary = crate::Summary::read(buf)
+            .expect("failed to parse summary")
+            .expect("expected a summary");
+
+        // If this ever drops to 1, the rest of the test only proves the fresh-encoder
+        // path works and says nothing about reuse across chunk boundaries.
+        assert!(
+            summary.chunk_indexes.len() >= 3,
+            "expected at least 3 chunks to exercise the reused encoder, got {}",
+            summary.chunk_indexes.len()
+        );
+
+        let messages: Vec<_> = crate::MessageStream::new(buf)
+            .expect("failed to construct message stream")
+            .collect::<McapResult<Vec<_>>>()
+            .expect("failed to read back messages");
+
+        assert_eq!(messages.len(), NUM_MESSAGES as usize);
+        for (i, msg) in messages.iter().enumerate() {
+            let expected = format!("{{\"seq\":{i}}}").into_bytes();
+            assert_eq!(msg.sequence, i as u32, "message {i} has wrong sequence");
+            assert_eq!(
+                &msg.data[..],
+                &expected[..],
+                "message {i} payload corrupted -- reused zstd encoder leaked frame state \
+                 across a chunk boundary"
+            );
+        }
+    }
+
     #[test]
     fn test_write_failure_does_not_cause_panic() {
         #[derive(Default)]
