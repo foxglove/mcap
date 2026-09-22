@@ -3,7 +3,7 @@ import React from "react";
 import {
   bytes,
   frequencyLabel,
-  messageFrequency,
+  frequencyWindow,
   timeLabel,
   type Recording,
 } from "./model.ts";
@@ -64,7 +64,10 @@ export function SelectionDetails({
       : channel.messages;
     rows.push([
       chunk ? "Channel messages in chunk" : "Messages in loaded window",
-      `${messages.length.toLocaleString()} · ${messageFrequency(messages)}`,
+      `${messages.length.toLocaleString()} · ${frequencyLabel(
+        messages.length,
+        frequencyWindow(recording, chunk)?.duration,
+      )}`,
     ]);
   }
   if (unchunked === true && recording) {
@@ -78,13 +81,18 @@ export function SelectionDetails({
       ["Chunk", `#${chunk.id}`],
       ["Compression", chunk.compression],
       [
+        "Chunk rate interval",
+        `${(Number(chunk.endTime - chunk.startTime) / 1e9).toFixed(
+          6,
+        )} s (including silence)`,
+      ],
+      [
         "Messages in chunk",
         chunk.loaded === false
           ? "Not loaded"
           : `${chunk.messageCount.toLocaleString()} · ${frequencyLabel(
               chunk.messageCount,
-              chunk.startTime,
-              chunk.endTime,
+              Number(chunk.endTime - chunk.startTime) / 1e9,
             )}`,
       ],
       ["Start", timeLabel(Number(chunk.startTime - recording.startTime) / 1e9)],

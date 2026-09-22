@@ -11,7 +11,7 @@ import {
 import {
   bytes,
   frequencyLabel,
-  messageFrequency,
+  frequencyWindow,
   lowerBound,
   timeLabel,
   type Recording,
@@ -711,8 +711,7 @@ export class Timeline {
               ? "Messages not loaded"
               : `${chunk.messageCount.toLocaleString()} messages · ${frequencyLabel(
                   chunk.messageCount,
-                  chunk.startTime,
-                  chunk.endTime,
+                  Number(chunk.endTime - chunk.startTime) / 1e9,
                 )}`
           }`
         : this.#hover.unchunked === true
@@ -1077,8 +1076,9 @@ export class Timeline {
       if (this.#rowHeight >= 42) {
         ctx.fillStyle = "#73869a";
         ctx.fillText(
-          `${row.messages.length.toLocaleString()} messages · ${messageFrequency(
-            row.messages,
+          `${row.messages.length.toLocaleString()} messages · ${frequencyLabel(
+            row.messages.length,
+            frequencyWindow(this.#recording, row.chunk)?.duration,
           )}`,
           70,
           y + this.#rowHeight / 2 + 12,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { frequencyLabel, messageFrequency } from "./model.ts";
+import { frequencyLabel, frequencyWindow } from "./model.ts";
 import { overlappingRecording } from "./testFixture.ts";
 import { compressionRatio, inspectorHeight } from "./viewMetrics.ts";
 
@@ -41,29 +41,54 @@ void test("manual height overrides row fitting while respecting host constraints
   assert.equal(inspectorHeight(1, 600, 320, 100), 320);
 });
 
-void test("frequency uses observed nanosecond intervals, including sparse and simultaneous messages", () => {
-  const epoch = 1_750_000_000_000_000_000n;
-  assert.equal(frequencyLabel(11, epoch, epoch + 1_000_000_000n), "10 Hz");
-  assert.equal(frequencyLabel(2, epoch, epoch + 10_000_000_000n), "0.1 Hz");
+void test("frequency averages over the recording duration, including silence", () => {
+  // Five log messages in a 1 ms burst must use all 39.273 s, not that burst.
+  assert.equal(frequencyLabel(5, 39.273), "0.1 Hz");
+  assert.equal(frequencyLabel(4887, 39.273), "124.4 Hz");
+  assert.equal(frequencyLabel(10, 1), "10 Hz");
+  assert.equal(frequencyLabel(12346, 10), `${(1234.6).toLocaleString()} Hz`);
+  assert.equal(frequencyLabel(10, 0), "— Hz");
+  assert.equal(frequencyLabel(10, Number.NaN), "— Hz");
+  assert.equal(frequencyLabel(10), "— Hz");
+  assert.equal(frequencyLabel(1, 39.273), "— Hz");
+});
+
+void test("frequency interval matches loaded counts and intersects chunk drill-down", () => {
+  const recording = overlappingRecording();
+  assert.deepEqual(frequencyWindow(recording), {
+    start: 0,
+    end: 3,
+    duration: 3,
+  });
+  assert.equal(frequencyLabel(6, frequencyWindow(recording)?.duration), "2 Hz");
+  recording.partial = true;
   assert.equal(
-    frequencyLabel(2, epoch, epoch + 100_000n),
-    `${(10000).toLocaleString()} Hz`,
+    frequencyWindow(recording),
+    undefined,
+    "catalog has no known loaded interval",
   );
-  assert.equal(frequencyLabel(2, epoch, epoch + 3_000_000_000n), "0.3 Hz");
-  assert.equal(
-    frequencyLabel(12347, epoch, epoch + 10_000_000_000n),
-    `${(1234.6).toLocaleString()} Hz`,
-  );
-  assert.equal(frequencyLabel(0), "— Hz");
-  assert.equal(frequencyLabel(1, epoch, epoch), "— Hz");
-  assert.equal(frequencyLabel(10, epoch, epoch), "— Hz");
-  const messages = overlappingRecording().channels[0]!.messages;
-  assert.equal(
-    messageFrequency(messages),
-    frequencyLabel(
-      messages.length,
-      messages[0]!.logTime,
-      messages[messages.length - 1]!.logTime,
-    ),
-  );
+  recording.loadedRange = { start: 0.5, end: 1.5 };
+  assert.deepEqual(frequencyWindow(recording), {
+    start: 0.5,
+    end: 1.5,
+    duration: 1,
+  });
+  assert.deepEqual(frequencyWindow(recording, recording.chunks[1]), {
+    start: 1,
+    end: 1.5,
+    duration: 0.5,
+  });
+  recording.loadedRange = { start: 0, end: 0.5 };
+  assert.equal(frequencyWindow(recording, recording.chunks[1]), undefined);
+  recording.loadedRange = { start: -1, end: 10 };
+  assert.deepEqual(frequencyWindow(recording), {
+    start: 0,
+    end: 3,
+    duration: 3,
+  });
+  assert.deepEqual(frequencyWindow(recording, recording.chunks[1]), {
+    start: 1,
+    end: 3,
+    duration: 2,
+  });
 });

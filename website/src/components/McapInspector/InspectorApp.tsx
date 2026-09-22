@@ -19,6 +19,7 @@ import type { Grouping } from "./layout.ts";
 import {
   bytes,
   frequencyLabel,
+  frequencyWindow,
   timeLabel,
   type ChunkInfo,
   type Recording,
@@ -84,20 +85,12 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
       props.minHeight,
       requestedHeight,
     );
-    const frequency = useMemo(() => {
-      let first: bigint | undefined, last: bigint | undefined;
-      for (const channel of recording?.channels ?? []) {
-        const start = channel.messages[0]?.logTime;
-        const end = channel.messages[channel.messages.length - 1]?.logTime;
-        if (start != undefined && (first == undefined || start < first)) {
-          first = start;
-        }
-        if (end != undefined && (last == undefined || end > last)) {
-          last = end;
-        }
-      }
-      return frequencyLabel(recording?.messageCount ?? 0, first, last);
-    }, [recording]);
+    const loadedWindow = frequencyWindow(recording);
+    const channelRateWindow = frequencyWindow(recording, scope);
+    const frequency = frequencyLabel(
+      recording?.messageCount ?? 0,
+      loadedWindow?.duration,
+    );
     const ratio = useMemo(
       () => compressionRatio(recording?.chunks ?? []),
       [recording?.chunks],
@@ -427,6 +420,21 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
               <span>
                 Sequential chunks share a lane; overlapping chunks use separate
                 lanes. Double-click a chunk for its channel view.
+              </span>
+            </div>
+          )}
+          {channelRateWindow && grouping === "channel" && (
+            <div className="group-hint">
+              <span>
+                Channel rates averaged over{" "}
+                {scope
+                  ? "loaded chunk interval"
+                  : channelRateWindow.start === 0 &&
+                      channelRateWindow.end === recording?.duration
+                    ? "full recording"
+                    : "loaded interval"}
+                : {timeLabel(channelRateWindow.start)} –{" "}
+                {timeLabel(channelRateWindow.end)} (including silence).
               </span>
             </div>
           )}

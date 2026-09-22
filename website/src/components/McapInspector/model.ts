@@ -72,26 +72,46 @@ export function timeLabel(seconds: number): string {
   return `${seconds.toFixed(seconds < 0.001 ? 9 : seconds < 1 ? 6 : 3)} s`;
 }
 
-/** Estimate from observed intervals; equal timestamps cannot establish a rate. */
-export function frequencyLabel(
-  count: number,
-  first?: bigint,
-  last?: bigint,
-): string {
-  if (count < 2 || first == undefined || last == undefined || last <= first) {
+/** Average over the entire covered interval, including silence (as in mcap info). */
+export function frequencyLabel(count: number, duration?: number): string {
+  if (
+    count < 2 ||
+    duration == undefined ||
+    !Number.isFinite(duration) ||
+    duration <= 0
+  ) {
     return "— Hz";
   }
-  const hz = ((count - 1) * 1e9) / Number(last - first);
-  return `${hz.toLocaleString(undefined, { maximumFractionDigits: 1 })} Hz`;
+  return `${(count / duration).toLocaleString(undefined, {
+    maximumFractionDigits: 1,
+  })} Hz`;
 }
 
-/** Messages must be sorted by log time, as in each timeline row. */
-export function messageFrequency(messages: readonly MessageMark[]): string {
-  return frequencyLabel(
-    messages.length,
-    messages[0]?.logTime,
-    messages[messages.length - 1]?.logTime,
-  );
+/** Channel counts cover the loaded interval, intersected with the chunk during drill-down. */
+export function frequencyWindow(
+  recording?: Recording,
+  chunk?: ChunkInfo,
+): { start: number; end: number; duration: number } | undefined {
+  if (!recording || (recording.partial === true && !recording.loadedRange)) {
+    return undefined;
+  }
+  let start =
+    recording.partial === true ? Math.max(0, recording.loadedRange!.start) : 0;
+  let end =
+    recording.partial === true
+      ? Math.min(recording.duration, recording.loadedRange!.end)
+      : recording.duration;
+  if (chunk) {
+    start = Math.max(
+      start,
+      Number(chunk.startTime - recording.startTime) / 1e9,
+    );
+    end = Math.min(end, Number(chunk.endTime - recording.startTime) / 1e9);
+  }
+  if (end < start) {
+    return undefined;
+  }
+  return { start, end, duration: end - start };
 }
 
 export type LoaderRequest =
