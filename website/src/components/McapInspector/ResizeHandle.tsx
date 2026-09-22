@@ -8,7 +8,6 @@ export function ResizeHandle({
   min,
   max,
   onChange,
-  onReset,
   style,
 }: {
   axis: "x" | "y";
@@ -17,7 +16,6 @@ export function ResizeHandle({
   min: number;
   max: number;
   onChange: (value: number) => void;
-  onReset: () => void;
   style?: CSSProperties;
 }): React.JSX.Element {
   const drag = useRef<
@@ -38,7 +36,7 @@ export function ResizeHandle({
       aria-valuemax={Math.round(max)}
       aria-valuenow={Math.round(value)}
       aria-valuetext={`${Math.round(value)} pixels`}
-      title={`${label}. Drag or use arrow keys; double-click to reset.`}
+      title={`${label}. Drag or use arrow keys.`}
       onPointerDown={(event) => {
         if (event.button !== 0) {
           return;
@@ -74,7 +72,6 @@ export function ResizeHandle({
       onLostPointerCapture={() => {
         drag.current = undefined;
       }}
-      onDoubleClick={onReset}
       onKeyDown={(event) => {
         const decrease = axis === "x" ? "ArrowLeft" : "ArrowUp";
         const increase = axis === "x" ? "ArrowRight" : "ArrowDown";
@@ -85,9 +82,6 @@ export function ResizeHandle({
         } else if (event.key === "Home" || event.key === "End") {
           event.preventDefault();
           change(event.key === "Home" ? min : max);
-        } else if (event.key === "Enter") {
-          event.preventDefault();
-          onReset();
         }
       }}
     />

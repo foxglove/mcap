@@ -57,6 +57,8 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
     const [error, setError] = useState<string>();
     const [drop, setDrop] = useState(false);
     const [rowCount, setRowCount] = useState<number>();
+    const showResizeHandles =
+      recording != undefined && busy == undefined && error == undefined;
     const [requestedHeight, setRequestedHeight] = useState<number>();
     const [column, setColumn] = useState({ width: 246, max: 600 });
     const heightCap =
@@ -445,16 +447,17 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
                 tabIndex={0}
                 aria-label="MCAP timeline. Drag to pan, scroll for channels, Shift scroll for time, Control or Command scroll to zoom. Arrow keys pan, plus and minus zoom, Home fits recording."
               />
-              <ResizeHandle
-                axis="x"
-                label="Resize channel and topic column"
-                value={column.width}
-                min={Math.min(120, column.max)}
-                max={column.max}
-                style={{ left: column.width }}
-                onChange={(width) => timeline.current?.setLabelWidth(width)}
-                onReset={() => timeline.current?.setLabelWidth(undefined)}
-              />
+              {showResizeHandles && (
+                <ResizeHandle
+                  axis="x"
+                  label="Resize channel and topic column"
+                  value={column.width}
+                  min={Math.min(120, column.max)}
+                  max={column.max}
+                  style={{ left: column.width }}
+                  onChange={(width) => timeline.current?.setLabelWidth(width)}
+                />
+              )}
               <div ref={tooltip} className="tooltip" hidden />
               {!recording && busy !== "catalog" && (
                 <div className="empty">
@@ -541,17 +544,16 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
               </aside>
             )}
           </section>
-          <ResizeHandle
-            axis="y"
-            label="Resize inspector height"
-            value={height}
-            min={minimumHeight}
-            max={maximumHeight}
-            onChange={setRequestedHeight}
-            onReset={() => {
-              setRequestedHeight(undefined);
-            }}
-          />
+          {showResizeHandles && (
+            <ResizeHandle
+              axis="y"
+              label="Resize inspector height"
+              value={height}
+              min={minimumHeight}
+              max={maximumHeight}
+              onChange={setRequestedHeight}
+            />
+          )}
           <ViewportNavigator
             {...view}
             onSeek={(fraction) => timeline.current?.seek(fraction)}

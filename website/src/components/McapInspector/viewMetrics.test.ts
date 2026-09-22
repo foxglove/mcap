@@ -43,11 +43,16 @@ void test("manual height overrides row fitting while respecting host constraints
 
 void test("frequency uses observed nanosecond intervals, including sparse and simultaneous messages", () => {
   const epoch = 1_750_000_000_000_000_000n;
-  assert.equal(frequencyLabel(11, epoch, epoch + 1_000_000_000n), "≈10 Hz");
-  assert.equal(frequencyLabel(2, epoch, epoch + 10_000_000_000n), "≈0.1 Hz");
+  assert.equal(frequencyLabel(11, epoch, epoch + 1_000_000_000n), "10 Hz");
+  assert.equal(frequencyLabel(2, epoch, epoch + 10_000_000_000n), "0.1 Hz");
   assert.equal(
     frequencyLabel(2, epoch, epoch + 100_000n),
-    `≈${(10000).toLocaleString()} Hz`,
+    `${(10000).toLocaleString()} Hz`,
+  );
+  assert.equal(frequencyLabel(2, epoch, epoch + 3_000_000_000n), "0.3 Hz");
+  assert.equal(
+    frequencyLabel(12347, epoch, epoch + 10_000_000_000n),
+    `${(1234.6).toLocaleString()} Hz`,
   );
   assert.equal(frequencyLabel(0), "— Hz");
   assert.equal(frequencyLabel(1, epoch, epoch), "— Hz");

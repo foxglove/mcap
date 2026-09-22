@@ -82,7 +82,7 @@ export function frequencyLabel(
     return "— Hz";
   }
   const hz = ((count - 1) * 1e9) / Number(last - first);
-  return `≈${hz.toLocaleString(undefined, { maximumSignificantDigits: 3 })} Hz`;
+  return `${hz.toLocaleString(undefined, { maximumFractionDigits: 1 })} Hz`;
 }
 
 /** Messages must be sorted by log time, as in each timeline row. */
