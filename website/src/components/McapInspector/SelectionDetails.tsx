@@ -1,6 +1,12 @@
 import React from "react";
 
-import { bytes, timeLabel, type Recording } from "./model.ts";
+import {
+  bytes,
+  frequencyLabel,
+  messageFrequency,
+  timeLabel,
+  type Recording,
+} from "./model.ts";
 import type { Selection } from "./timeline.ts";
 
 export function SelectionDetails({
@@ -53,9 +59,12 @@ export function SelectionDetails({
     ]);
   }
   if (channel && !message) {
+    const messages = chunk
+      ? channel.messages.filter((mark) => mark.chunkId === chunk.id)
+      : channel.messages;
     rows.push([
-      "Messages in loaded window",
-      channel.messages.length.toLocaleString(),
+      chunk ? "Channel messages in chunk" : "Messages in loaded window",
+      `${messages.length.toLocaleString()} · ${messageFrequency(messages)}`,
     ]);
   }
   if (unchunked === true && recording) {
@@ -72,7 +81,11 @@ export function SelectionDetails({
         "Messages in chunk",
         chunk.loaded === false
           ? "Not loaded"
-          : chunk.messageCount.toLocaleString(),
+          : `${chunk.messageCount.toLocaleString()} · ${frequencyLabel(
+              chunk.messageCount,
+              chunk.startTime,
+              chunk.endTime,
+            )}`,
       ],
       ["Start", timeLabel(Number(chunk.startTime - recording.startTime) / 1e9)],
       ["End", timeLabel(Number(chunk.endTime - recording.startTime) / 1e9)],

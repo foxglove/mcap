@@ -72,6 +72,28 @@ export function timeLabel(seconds: number): string {
   return `${seconds.toFixed(seconds < 0.001 ? 9 : seconds < 1 ? 6 : 3)} s`;
 }
 
+/** Estimate from observed intervals; equal timestamps cannot establish a rate. */
+export function frequencyLabel(
+  count: number,
+  first?: bigint,
+  last?: bigint,
+): string {
+  if (count < 2 || first == undefined || last == undefined || last <= first) {
+    return "— Hz";
+  }
+  const hz = ((count - 1) * 1e9) / Number(last - first);
+  return `≈${hz.toLocaleString(undefined, { maximumSignificantDigits: 3 })} Hz`;
+}
+
+/** Messages must be sorted by log time, as in each timeline row. */
+export function messageFrequency(messages: readonly MessageMark[]): string {
+  return frequencyLabel(
+    messages.length,
+    messages[0]?.logTime,
+    messages[messages.length - 1]?.logTime,
+  );
+}
+
 export type LoaderRequest =
   | { type: "cancel-window"; id: number }
   | { type: "open"; file?: File; size?: bigint; name: string }

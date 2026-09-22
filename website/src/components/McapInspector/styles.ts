@@ -32,7 +32,7 @@ button:hover {
   background:#293748;
   border-color:#59728e
 }
-button:focus-visible,input:focus-visible,select:focus-visible,canvas:focus-visible {
+button:focus-visible,input:focus-visible,select:focus-visible,canvas:focus-visible,.resize-handle:focus-visible {
   outline:2px solid #79baff;
   outline-offset:2px
 }
@@ -227,6 +227,13 @@ select {
 .view-controls button {
   padding:7px 10px
 }
+.resize-handle { touch-action:none; user-select:none; position:relative; z-index:2; }
+.resize-handle::after { content:""; position:absolute; background:#59738d; border-radius:2px; }
+.resize-handle:hover,.resize-handle:focus-visible { background:#5aafff33; }
+.resize-x { position:absolute; top:0; bottom:0; width:10px; transform:translateX(-50%); cursor:col-resize; }
+.resize-x::after { width:3px; height:28px; top:7px; left:3px; }
+.resize-y { height:12px; cursor:row-resize; background:#111820; border:1px solid #293544; border-top:0; }
+.resize-y::after { width:40px; height:3px; top:4px; left:calc(50% - 20px); }
 .workspace {
   display:flex;
   border:1px solid #293544;

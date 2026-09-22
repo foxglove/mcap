@@ -10,6 +10,8 @@ import {
 } from "./layout.ts";
 import {
   bytes,
+  frequencyLabel,
+  messageFrequency,
   lowerBound,
   timeLabel,
   type Recording,
@@ -41,6 +43,8 @@ export class Timeline {
   #width = 1;
   #height = 1;
   #labelWidth = 246;
+  #preferredLabelWidth?: number;
+  #onLabelWidthChange: (width: number, max: number) => void;
   #rowHeight = ROW_HEIGHT;
   #lastView?: { start: number; span: number; duration: number };
   #onRowsChange: (count: number) => void;
@@ -93,7 +97,11 @@ export class Timeline {
     onRowsChange: (count: number) => void = () => {
       /* Optional layout notification. */
     },
+    onLabelWidthChange: (width: number, max: number) => void = () => {
+      /* Optional splitter layout notification. */
+    },
   ) {
+    this.#onLabelWidthChange = onLabelWidthChange;
     this.#onRowsChange = onRowsChange;
     this.#canvas = canvas;
     this.#onSelect = onSelect;
@@ -314,12 +322,31 @@ export class Timeline {
     const rect = this.#canvas.getBoundingClientRect();
     this.#width = rect.width;
     this.#height = rect.height;
-    this.#labelWidth = Math.min(246, Math.max(132, this.#width * 0.28));
+    this.#updateLabelWidth();
     const dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
     this.#canvas.width = Math.round(rect.width * dpr);
     this.#canvas.height = Math.round(rect.height * dpr);
     this.#ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.#clamp();
+    this.#draw();
+  }
+  #updateLabelWidth() {
+    const max = Math.max(1, this.#width - 118);
+    this.#labelWidth = Math.min(
+      max,
+      Math.max(
+        Math.min(120, max),
+        this.#preferredLabelWidth ??
+          Math.min(246, Math.max(132, this.#width * 0.28)),
+      ),
+    );
+    this.#onLabelWidthChange(this.#labelWidth, max);
+  }
+  public setLabelWidth(width: number | undefined): void {
+    this.#preferredLabelWidth = width;
+    this.#updateLabelWidth();
+    this.#hover = undefined;
+    this.#hideTooltip();
     this.#draw();
   }
   public setRecording(recording: Recording): void {
@@ -682,7 +709,11 @@ export class Timeline {
         ? `Chunk #${chunk.id} · ${chunk.compression} · ${
             chunk.loaded === false
               ? "Messages not loaded"
-              : `${chunk.messageCount.toLocaleString()} messages`
+              : `${chunk.messageCount.toLocaleString()} messages · ${frequencyLabel(
+                  chunk.messageCount,
+                  chunk.startTime,
+                  chunk.endTime,
+                )}`
           }`
         : this.#hover.unchunked === true
           ? "Unchunked messages"
@@ -1046,7 +1077,9 @@ export class Timeline {
       if (this.#rowHeight >= 42) {
         ctx.fillStyle = "#73869a";
         ctx.fillText(
-          `${row.messages.length.toLocaleString()} messages`,
+          `${row.messages.length.toLocaleString()} messages · ${messageFrequency(
+            row.messages,
+          )}`,
           70,
           y + this.#rowHeight / 2 + 12,
         );

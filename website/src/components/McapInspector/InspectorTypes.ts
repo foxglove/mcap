@@ -5,7 +5,7 @@ import type { Recording } from "./model.ts";
 export interface InspectorOptions {
   /** Minimum canvas viewport height in CSS pixels. Defaults to 320; maxHeight takes precedence. */
   minHeight?: number;
-  /** Maximum canvas viewport height in CSS pixels. Defaults to 520. */
+  /** Maximum canvas viewport height in CSS pixels. Defaults to 520 for automatic sizing, 1200 for manual resizing. */
   maxHeight?: number;
   /** Compatibility alias for maxHeight. Prefer maxHeight in new integrations. */
   height?: number;

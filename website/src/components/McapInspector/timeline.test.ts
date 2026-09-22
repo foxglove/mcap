@@ -39,12 +39,14 @@ void test("double-click drills into a chunk, back restores the viewport, and dis
   install("cancelAnimationFrame", () => {
     /* No rendering is needed in this state test. */
   });
+  let resize: (() => void) | undefined;
   install(
     "ResizeObserver",
     class {
       #callback: () => void;
       constructor(callback: () => void) {
         this.#callback = callback;
+        resize = callback;
       }
       observe() {
         this.#callback();
@@ -64,7 +66,8 @@ void test("double-click drills into a chunk, back restores the viewport, and dis
     /* Mock capture. */
   };
   canvas.hasPointerCapture = () => false;
-  canvas.getBoundingClientRect = () => ({ width: 1000, height: 500 });
+  const rect = { width: 1000, height: 500 };
+  canvas.getBoundingClientRect = () => rect;
   const tooltip = { hidden: true } as HTMLDivElement;
   let scope: ChunkInfo | undefined;
   let selection: Selection | undefined;
@@ -72,6 +75,7 @@ void test("double-click drills into a chunk, back restores the viewport, and dis
   let viewChanges = 0;
   let rows = 0;
   let grouping = "";
+  let columnWidth = 0;
   let view = [0, 0];
   let timeline: Timeline | undefined;
   try {
@@ -92,6 +96,9 @@ void test("double-click drills into a chunk, back restores the viewport, and dis
       },
       (count) => {
         rows = count;
+      },
+      (width) => {
+        columnWidth = width;
       },
     );
     timeline.setRecording(overlappingRecording());
@@ -223,6 +230,40 @@ void test("double-click drills into a chunk, back restores the viewport, and dis
       undefined,
       "empty space between chunks does not select a chunk",
     );
+    const beforeResize = [...view];
+    const requestsBeforeResize = viewChanges;
+    timeline.setLabelWidth(340);
+    assert.equal(columnWidth, 340);
+    rect.width = 350;
+    resize?.();
+    assert.equal(columnWidth, 232, "column leaves room for the time plot");
+    rect.width = 1000;
+    resize?.();
+    assert.equal(
+      columnWidth,
+      340,
+      "requested width survives a temporary narrow layout",
+    );
+    assert.deepEqual(view, beforeResize);
+    assert.equal(
+      viewChanges,
+      requestsBeforeResize,
+      "resizing does not request more data",
+    );
+    const resizedClick = new Event("dblclick");
+    Object.defineProperties(resizedClick, {
+      offsetX: { value: 340 + (642 * 5) / 6 },
+      offsetY: { value: 66 },
+    });
+    canvas.dispatchEvent(resizedClick);
+    assert.equal(
+      (scope as ChunkInfo | undefined)?.id,
+      1,
+      "hit-testing uses the resized column",
+    );
+    canvas.dispatchEvent(escape);
+    timeline.setLabelWidth(undefined);
+    assert.equal(columnWidth, 246, "reset restores automatic column sizing");
     timeline.destroy();
     const atDisposal = changes;
     canvas.dispatchEvent(event);

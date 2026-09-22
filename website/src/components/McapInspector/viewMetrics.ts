@@ -8,11 +8,16 @@ export function inspectorHeight(
   rows: number | undefined,
   maxHeight = 520,
   minHeight = 320,
+  requestedHeight?: number,
 ): number {
   const cap = Number.isFinite(maxHeight) ? Math.max(1, maxHeight) : 520;
   const minimum = Number.isFinite(minHeight) ? Math.max(1, minHeight) : 320;
   const content =
-    rows == undefined ? 320 : RULER_HEIGHT + Math.max(1, rows) * ROW_HEIGHT + 2;
+    requestedHeight != undefined && Number.isFinite(requestedHeight)
+      ? requestedHeight
+      : rows == undefined
+        ? 320
+        : RULER_HEIGHT + Math.max(1, rows) * ROW_HEIGHT + 2;
   return Math.min(cap, Math.max(minimum, content));
 }
 

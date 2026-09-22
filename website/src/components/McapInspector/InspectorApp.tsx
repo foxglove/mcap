@@ -11,11 +11,18 @@ import React, {
 
 import { InspectorLoader } from "./InspectorLoader.ts";
 import type { InspectorControls, InspectorOptions } from "./InspectorTypes.ts";
+import { ResizeHandle } from "./ResizeHandle.tsx";
 import { SelectionDetails } from "./SelectionDetails.tsx";
 import { ViewportNavigator } from "./ViewportNavigator.tsx";
 import { createDemo } from "./demo.ts";
 import type { Grouping } from "./layout.ts";
-import { bytes, timeLabel, type ChunkInfo, type Recording } from "./model.ts";
+import {
+  bytes,
+  frequencyLabel,
+  timeLabel,
+  type ChunkInfo,
+  type Recording,
+} from "./model.ts";
 import { Timeline, type Selection } from "./timeline.ts";
 import { compressionRatio, inspectorHeight } from "./viewMetrics.ts";
 
@@ -50,11 +57,45 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
     const [error, setError] = useState<string>();
     const [drop, setDrop] = useState(false);
     const [rowCount, setRowCount] = useState<number>();
+    const [requestedHeight, setRequestedHeight] = useState<number>();
+    const [column, setColumn] = useState({ width: 246, max: 600 });
+    const heightCap =
+      props.maxHeight ??
+      props.height ??
+      (requestedHeight == undefined ? 520 : 1200);
+    const resizeHeightCap = props.maxHeight ?? props.height ?? 1200;
+    const minimumHeight = inspectorHeight(
+      0,
+      resizeHeightCap,
+      props.minHeight,
+      0,
+    );
+    const maximumHeight = inspectorHeight(
+      0,
+      resizeHeightCap,
+      props.minHeight,
+      Number.MAX_SAFE_INTEGER,
+    );
     const height = inspectorHeight(
       rowCount,
-      props.maxHeight ?? props.height,
+      heightCap,
       props.minHeight,
+      requestedHeight,
     );
+    const frequency = useMemo(() => {
+      let first: bigint | undefined, last: bigint | undefined;
+      for (const channel of recording?.channels ?? []) {
+        const start = channel.messages[0]?.logTime;
+        const end = channel.messages[channel.messages.length - 1]?.logTime;
+        if (start != undefined && (first == undefined || start < first)) {
+          first = start;
+        }
+        if (end != undefined && (last == undefined || end > last)) {
+          last = end;
+        }
+      }
+      return frequencyLabel(recording?.messageCount ?? 0, first, last);
+    }, [recording]);
     const ratio = useMemo(
       () => compressionRatio(recording?.chunks ?? []),
       [recording?.chunks],
@@ -85,6 +126,9 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
           setGrouping(mode);
         },
         setRowCount,
+        (width, max) => {
+          setColumn({ width, max });
+        },
       );
       const mountedLoader = new InspectorLoader(
         callbacks.current.createWorker,
@@ -265,7 +309,9 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
                     <strong>{recording.chunks.length}</strong>chunks
                   </span>
                   <span>
-                    <strong>{recording.messageCount.toLocaleString()}</strong>
+                    <strong>
+                      {recording.messageCount.toLocaleString()} · {frequency}
+                    </strong>
                     {recording.partial === true
                       ? "loaded messages"
                       : "messages"}
@@ -399,6 +445,16 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
                 tabIndex={0}
                 aria-label="MCAP timeline. Drag to pan, scroll for channels, Shift scroll for time, Control or Command scroll to zoom. Arrow keys pan, plus and minus zoom, Home fits recording."
               />
+              <ResizeHandle
+                axis="x"
+                label="Resize channel and topic column"
+                value={column.width}
+                min={Math.min(120, column.max)}
+                max={column.max}
+                style={{ left: column.width }}
+                onChange={(width) => timeline.current?.setLabelWidth(width)}
+                onReset={() => timeline.current?.setLabelWidth(undefined)}
+              />
               <div ref={tooltip} className="tooltip" hidden />
               {!recording && busy !== "catalog" && (
                 <div className="empty">
@@ -485,6 +541,17 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
               </aside>
             )}
           </section>
+          <ResizeHandle
+            axis="y"
+            label="Resize inspector height"
+            value={height}
+            min={minimumHeight}
+            max={maximumHeight}
+            onChange={setRequestedHeight}
+            onReset={() => {
+              setRequestedHeight(undefined);
+            }}
+          />
           <ViewportNavigator
             {...view}
             onSeek={(fraction) => timeline.current?.seek(fraction)}
