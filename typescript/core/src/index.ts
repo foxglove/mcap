@@ -1,4 +1,6 @@
 export { McapIndexedReader } from "./McapIndexedReader.ts";
+export { default as McapRawStreamReader } from "./McapRawStreamReader.ts";
+export type { McapRawStreamReaderOptions } from "./McapRawStreamReader.ts";
 export { default as McapStreamReader } from "./McapStreamReader.ts";
 export { McapWriter } from "./McapWriter.ts";
 export type { McapWriterOptions } from "./McapWriter.ts";

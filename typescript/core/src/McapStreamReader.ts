@@ -1,20 +1,15 @@
 import { crc32 } from "@foxglove/crc";
 
+import McapRawStreamReader from "./McapRawStreamReader.ts";
 import Reader from "./Reader.ts";
-import { MCAP_MAGIC } from "./constants.ts";
-import { parseMagic, parseRecord } from "./parse.ts";
-import type {
-  Channel,
-  DecompressHandlers,
-  McapMagic,
-  TypedMcapRecord,
-  TypedMcapRecords,
-} from "./types.ts";
+import { parseRecord } from "./parse.ts";
+import type { Channel, DecompressHandlers, TypedMcapRecord, TypedMcapRecords } from "./types.ts";
 
 type McapReaderOptions = {
   /**
    * When set to true, Chunk records will be returned from `nextRecord()`. Chunk contents will still
-   * be processed after each chunk record itself.
+   * be processed after each chunk record itself. Use McapRawStreamReader to read outer records
+   * without expanding chunks.
    */
   includeChunks?: boolean;
 
@@ -25,7 +20,8 @@ type McapReaderOptions = {
   decompressHandlers?: DecompressHandlers;
 
   /**
-   * When set to true (the default), chunk CRCs will be validated. Set to false to improve performance.
+   * When set to true (the default), nonzero chunk and attachment CRCs will be validated.
+   * Set to false to improve performance. Data-section and summary CRCs are not validated.
    */
   validateCrcs?: boolean;
 
@@ -56,13 +52,10 @@ type McapReaderOptions = {
  * ```
  */
 export default class McapStreamReader {
-  #buffer = new ArrayBuffer(MCAP_MAGIC.length * 2);
-  #view = new DataView(this.#buffer, 0, 0);
-  #reader = new Reader(this.#view);
+  #rawReader: McapRawStreamReader;
   #decompressHandlers;
   #includeChunks;
   #validateCrcs;
-  #noMagicPrefix;
   #doneReading = false;
   #generator = this.#read();
   #channelsById = new Map<number, TypedMcapRecords["Channel"]>();
@@ -76,7 +69,7 @@ export default class McapStreamReader {
     this.#includeChunks = includeChunks;
     this.#decompressHandlers = decompressHandlers;
     this.#validateCrcs = validateCrcs;
-    this.#noMagicPrefix = noMagicPrefix;
+    this.#rawReader = new McapRawStreamReader({ validateCrcs, noMagicPrefix });
   }
 
   /** @returns True if a valid, complete mcap file has been parsed. */
@@ -86,7 +79,7 @@ export default class McapStreamReader {
 
   /** @returns The number of bytes that have been received by `append()` but not yet parsed. */
   bytesRemaining(): number {
-    return this.#reader.bytesRemaining();
+    return this.#rawReader.bytesRemaining();
   }
 
   /**
@@ -97,62 +90,7 @@ export default class McapStreamReader {
     if (this.#doneReading) {
       throw new Error("Already done reading");
     }
-    this.#appendOrShift(data);
-  }
-
-  #appendOrShift(data: Uint8Array): void {
-    /** Add data to the buffer, shifting existing data or reallocating if necessary. */
-    const consumedBytes = this.#reader.offset;
-    const unconsumedBytes = this.#view.byteLength - consumedBytes;
-    const neededCapacity = unconsumedBytes + data.byteLength;
-
-    if (neededCapacity <= this.#buffer.byteLength) {
-      // Data fits in the current buffer
-      if (
-        this.#view.byteOffset + this.#view.byteLength + data.byteLength <=
-        this.#buffer.byteLength
-      ) {
-        // Data fits by appending only
-        const array = new Uint8Array(this.#buffer, this.#view.byteOffset);
-        array.set(data, this.#view.byteLength);
-        this.#view = new DataView(
-          this.#buffer,
-          this.#view.byteOffset,
-          this.#view.byteLength + data.byteLength,
-        );
-        // Reset the reader to use the new larger view. We keep the reader's previous offset as the
-        // view's byte offset didn't change, it only got larger.
-        this.#reader.reset(this.#view, this.#reader.offset);
-      } else {
-        // Data fits but requires moving existing data to start of buffer
-        const existingData = new Uint8Array(
-          this.#buffer,
-          this.#view.byteOffset + consumedBytes,
-          unconsumedBytes,
-        );
-        const array = new Uint8Array(this.#buffer);
-        array.set(existingData, 0);
-        array.set(data, existingData.byteLength);
-        this.#view = new DataView(this.#buffer, 0, existingData.byteLength + data.byteLength);
-        this.#reader.reset(this.#view);
-      }
-    } else {
-      // New data doesn't fit, copy to a new buffer
-
-      // Currently, the new buffer size may be smaller than the old size. For future optimizations,
-      // we could consider making the buffer size increase monotonically.
-      this.#buffer = new ArrayBuffer(neededCapacity * 2);
-      const array = new Uint8Array(this.#buffer);
-      const existingData = new Uint8Array(
-        this.#view.buffer,
-        this.#view.byteOffset + consumedBytes,
-        unconsumedBytes,
-      );
-      array.set(existingData, 0);
-      array.set(data, existingData.byteLength);
-      this.#view = new DataView(this.#buffer, 0, existingData.byteLength + data.byteLength);
-      this.#reader.reset(this.#view);
-    }
+    this.#rawReader.append(data);
   }
 
   /**
@@ -191,13 +129,6 @@ export default class McapStreamReader {
   }
 
   *#read(): Generator<TypedMcapRecord | undefined, TypedMcapRecord | undefined, void> {
-    if (!this.#noMagicPrefix) {
-      let magic: McapMagic | undefined;
-      while (((magic = parseMagic(this.#reader)), !magic)) {
-        yield;
-      }
-    }
-
     let header: TypedMcapRecords["Header"] | undefined;
 
     function errorWithLibrary(message: string): Error {
@@ -206,17 +137,12 @@ export default class McapStreamReader {
 
     for (;;) {
       let record;
-      while (((record = parseRecord(this.#reader, this.#validateCrcs)), !record)) {
+      while (((record = this.#rawReader.nextRecord()), !record)) {
         yield;
       }
 
       switch (record.type) {
         case "Header":
-          if (header) {
-            throw new Error(
-              `Duplicate Header record: library=${header.library} profile=${header.profile} vs. library=${record.library} profile=${record.profile}`,
-            );
-          }
           header = record;
           yield record;
           break;
@@ -288,19 +214,6 @@ export default class McapStreamReader {
           break;
         }
         case "Footer":
-          try {
-            let magic;
-            while (((magic = parseMagic(this.#reader)), !magic)) {
-              yield;
-            }
-          } catch (error) {
-            throw errorWithLibrary((error as Error).message);
-          }
-          if (this.#reader.bytesRemaining() !== 0) {
-            throw errorWithLibrary(
-              `${this.#reader.bytesRemaining()} bytes remaining after MCAP footer and trailing magic`,
-            );
-          }
           return record;
       }
     }
