@@ -13,7 +13,26 @@ use binrw::prelude::*;
 use byteorder::{WriteBytesExt, LE};
 use enumset::{EnumSet, EnumSetType};
 #[cfg(feature = "zstd")]
+use zraw::Operation as _;
+#[cfg(feature = "zstd")]
 use zstd::stream::{raw as zraw, zio};
+
+// A zstd compression context kept alive across chunks so a new chunk can reuse its worker
+// thread pool via `Operation::reinit()` instead of spawning `compression_threads` new OS
+// threads every time a chunk starts. `()` when the zstd feature is off, so the reuse
+// plumbing below compiles (and does nothing) regardless of feature flags.
+#[cfg(feature = "zstd")]
+type ReusableZstdEncoder = Option<zraw::Encoder<'static>>;
+#[cfg(not(feature = "zstd"))]
+type ReusableZstdEncoder = ();
+
+// Bundles the zstd-only inputs to `ChunkWriter::new` into one parameter, instead of two
+// separate `#[cfg(feature = "zstd")]` arguments, to stay under clippy's too_many_arguments.
+#[cfg(feature = "zstd")]
+struct ZstdChunkState {
+    compression_threads: u32,
+    reused_encoder: ReusableZstdEncoder,
+}
 
 use crate::{
     chunk_sink::{ChunkMode, ChunkSink},
@@ -430,6 +449,7 @@ pub struct Writer<W: Write + Seek> {
     /// Message start and end time, or None if there are no messages yet.
     message_bounds: Option<(u64, u64)>,
     channel_message_counts: BTreeMap<u16, u64>,
+    reusable_zstd_encoder: ReusableZstdEncoder,
 }
 
 impl<W: Write + Seek> Writer<W> {
@@ -486,6 +506,7 @@ impl<W: Write + Seek> Writer<W> {
             metadata_indexes: Default::default(),
             message_bounds: None,
             channel_message_counts: BTreeMap::new(),
+            reusable_zstd_encoder: Default::default(),
         })
     }
 
@@ -1117,7 +1138,10 @@ impl<W: Write + Seek> Writer<W> {
                     #[cfg(any(feature = "zstd", feature = "lz4"))]
                     self.options.compression_level,
                     #[cfg(feature = "zstd")]
-                    self.options.compression_threads,
+                    ZstdChunkState {
+                        compression_threads: self.options.compression_threads,
+                        reused_encoder: std::mem::take(&mut self.reusable_zstd_encoder),
+                    },
                 )?)
             }
             chunk => chunk,
@@ -1145,9 +1169,10 @@ impl<W: Write + Seek> Writer<W> {
         // See start_chunk() for why we use take() here.
         match self.writer.take().expect(Self::WRITER_IS_NONE) {
             WriteMode::Chunk(c) => match c.finish() {
-                Ok((w, mode, index)) => {
+                Ok((w, mode, index, reused_encoder)) => {
                     self.chunk_indexes.push(index);
                     self.chunk_mode = mode;
+                    self.reusable_zstd_encoder = reused_encoder;
                     self.writer = Some(WriteMode::Raw(w))
                 }
                 Err((w, err)) => {
@@ -1181,6 +1206,14 @@ impl<W: Write + Seek> Writer<W> {
         }
         // Finish any chunk we were working on and update stats, indexes, etc.
         self.finish_chunk()?;
+        // finish_chunk() just handed back the last chunk's zstd encoder (and its worker
+        // thread pool, if any) into reusable_zstd_encoder for the next chunk to reinit.
+        // There is no next chunk -- finish() means we're done, so nothing can legally
+        // call start_chunk() again -- so drop it now instead of keeping the context (and
+        // compression_threads worker OS threads, which default to the physical CPU
+        // count) alive for as long as the caller happens to hold onto this now-finished
+        // Writer before dropping it.
+        self.reusable_zstd_encoder = Default::default();
 
         let summary = self.take_summary();
         self.finished_summary = Some(summary.clone());
@@ -1481,16 +1514,20 @@ enum Compressor<W: Write> {
 }
 
 impl<W: Write> Compressor<W> {
-    fn finish(self) -> (W, std::io::Result<()>) {
+    fn finish(self) -> (W, std::io::Result<()>, ReusableZstdEncoder) {
         match self {
-            Compressor::Null(w) => (w, Ok(())),
+            Compressor::Null(w) => (w, Ok(()), Default::default()),
             #[cfg(feature = "zstd")]
             Compressor::Zstd(mut w) => {
                 let result = w.finish();
-                (w.into_inner().0, result)
+                let (writer, enc) = w.into_inner();
+                (writer, result, Some(enc))
             }
             #[cfg(feature = "lz4")]
-            Compressor::Lz4(w) => w.finish(),
+            Compressor::Lz4(w) => {
+                let (w, result) = w.finish();
+                (w, result, Default::default())
+            }
         }
     }
 
@@ -1527,6 +1564,16 @@ impl<W: Write> Write for Compressor<W> {
     }
 }
 
+type ChunkFinishResult<W> = Result<
+    (
+        CountingCrcWriter<W>,
+        ChunkMode,
+        records::ChunkIndex,
+        ReusableZstdEncoder,
+    ),
+    (W, McapError),
+>;
+
 struct ChunkWriter<W: Write> {
     chunk_offset: u64,
     header_start: u64,
@@ -1552,7 +1599,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         emit_message_indexes: bool,
         calculate_chunk_crcs: bool,
         #[cfg(any(feature = "zstd", feature = "lz4"))] compression_level: u32,
-        #[cfg(feature = "zstd")] compression_threads: u32,
+        #[cfg(feature = "zstd")] zstd_state: ZstdChunkState,
     ) -> McapResult<Self> {
         // Relative to start of original stream.
         let chunk_offset = writer.stream_position()?;
@@ -1592,11 +1639,29 @@ impl<W: Write + Seek> ChunkWriter<W> {
         let compressor = match compression {
             #[cfg(feature = "zstd")]
             Some(Compression::Zstd) => {
-                #[allow(unused_mut)]
-                let mut enc = zraw::Encoder::with_dictionary(compression_level as i32, &[])?;
-                // Enable multithreaded encoding on non-WASM targets.
-                #[cfg(not(target_arch = "wasm32"))]
-                enc.set_parameter(zraw::CParameter::NbWorkers(compression_threads))?;
+                let ZstdChunkState {
+                    compression_threads,
+                    reused_encoder,
+                } = zstd_state;
+                let enc = match reused_encoder {
+                    // Reuse the existing compression context -- and its worker thread pool, if
+                    // any -- for the new chunk instead of spawning `compression_threads` new OS
+                    // threads. `SessionOnly` resets frame state while leaving parameters
+                    // (including `NbWorkers`) untouched.
+                    Some(mut enc) => {
+                        enc.reinit()?;
+                        enc
+                    }
+                    None => {
+                        #[allow(unused_mut)]
+                        let mut enc =
+                            zraw::Encoder::with_dictionary(compression_level as i32, &[])?;
+                        // Enable multithreaded encoding on non-WASM targets.
+                        #[cfg(not(target_arch = "wasm32"))]
+                        enc.set_parameter(zraw::CParameter::NbWorkers(compression_threads))?;
+                        enc
+                    }
+                };
 
                 Compressor::Zstd(zio::Writer::new(sink, enc))
             }
@@ -1662,9 +1727,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         Ok(())
     }
 
-    fn finish(
-        self,
-    ) -> Result<(CountingCrcWriter<W>, ChunkMode, records::ChunkIndex), (W, McapError)> {
+    fn finish(self) -> ChunkFinishResult<W> {
         // Get the number of uncompressed bytes written and the CRC.
         fn unwrap_writer<W>(writer: CountingCrcWriter<ChunkSink<W>>) -> W {
             writer.finalize().0.inner
@@ -1674,7 +1737,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
         let (stream, uncompressed_crc) = self.compressor.finalize();
 
         // Finalize the compression stream - it maintains an internal buffer.
-        let (writer, result) = stream.finish();
+        let (writer, result, reused_encoder) = stream.finish();
 
         if let Err(err) = result {
             return Err((unwrap_writer(writer), err.into()));
@@ -1791,7 +1854,7 @@ impl<W: Write + Seek> ChunkWriter<W> {
             uncompressed_size: header.uncompressed_size,
         };
 
-        Ok((writer, mode, index))
+        Ok((writer, mode, index, reused_encoder))
     }
 }
 
@@ -2826,6 +2889,143 @@ mod tests {
             e.to_string(),
             "Private records must have an opcode >= 0x80, got 0x01"
         );
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn test_reused_zstd_encoder_across_chunks_roundtrips_correctly() {
+        // A small chunk_size forces many small chunks from few messages, so this test
+        // exercises the *reused*-encoder path (chunk 2 onward reinits a held-over
+        // Encoder via Operation::reinit()) and not just the fresh-encoder path a single
+        // chunk would only ever take. compression_threads(2) also exercises NbWorkers
+        // staying set across the reinit, on targets where it's honored at all.
+        //
+        // Note on what this does and doesn't prove: this is a correctness test, not a
+        // reuse-detection test. It would still pass unchanged if the encoder hand-back
+        // were removed entirely, or if ChunkWriter::new() went back to always
+        // constructing a fresh encoder -- multi-chunk output is correct either way. I
+        // confirmed this directly by temporarily deleting the reinit() call and rerunning:
+        // still green, because libzstd already resets a CCtx for a fresh frame after a
+        // clean ZSTD_e_end completion, independent of an explicit ZSTD_reset_session_only
+        // call. What this test does verify, and would catch a regression in, is multi-chunk
+        // correctness under the new implementation: `mem::take` on `reusable_zstd_encoder`,
+        // `ChunkWriter::finish()`'s encoder hand-back, and the byte layout staying correct
+        // under a multithreaded zstd context. That reuse is actually *happening* is a
+        // separate claim, backed by the before/after clone3 thread-spawn count in the PR
+        // description, not by this test.
+        let mut file = vec![];
+        let mut writer = WriteOptions::new()
+            .compression(Some(Compression::Zstd))
+            .chunk_size(Some(64))
+            .compression_threads(2)
+            .create(Cursor::new(&mut file))
+            .expect("failed to construct writer");
+
+        let channel = Arc::new(crate::Channel {
+            id: 0,
+            topic: "chat".into(),
+            message_encoding: "json".into(),
+            metadata: BTreeMap::new(),
+            schema: None,
+        });
+
+        const NUM_MESSAGES: u32 = 60;
+        for i in 0..NUM_MESSAGES {
+            let payload = format!("{{\"seq\":{i}}}").into_bytes();
+            writer
+                .write(&crate::Message {
+                    channel: channel.clone(),
+                    sequence: i,
+                    log_time: i as u64,
+                    publish_time: i as u64,
+                    data: Cow::Owned(payload),
+                })
+                .expect("failed to write message");
+        }
+
+        writer.finish().expect("failed to finish");
+        let buf = writer.into_inner().into_inner();
+
+        let summary = crate::Summary::read(buf)
+            .expect("failed to parse summary")
+            .expect("expected a summary");
+
+        // If this ever drops to 1, the rest of the test only proves the fresh-encoder
+        // path works and says nothing about reuse across chunk boundaries.
+        assert!(
+            summary.chunk_indexes.len() >= 3,
+            "expected at least 3 chunks to exercise the reused encoder, got {}",
+            summary.chunk_indexes.len()
+        );
+
+        let messages: Vec<_> = crate::MessageStream::new(buf)
+            .expect("failed to construct message stream")
+            .collect::<McapResult<Vec<_>>>()
+            .expect("failed to read back messages");
+
+        assert_eq!(messages.len(), NUM_MESSAGES as usize);
+        for (i, msg) in messages.iter().enumerate() {
+            let expected = format!("{{\"seq\":{i}}}").into_bytes();
+            assert_eq!(msg.sequence, i as u32, "message {i} has wrong sequence");
+            assert_eq!(
+                &msg.data[..],
+                &expected[..],
+                "message {i} payload corrupted -- reused zstd encoder leaked frame state \
+                 across a chunk boundary"
+            );
+        }
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn test_finish_releases_the_reused_zstd_encoder() {
+        // finish_chunk() hands the just-finished chunk's zstd encoder (and its worker
+        // thread pool, if compression_threads > 1) into reusable_zstd_encoder so the
+        // *next* chunk can reinit it instead of building a fresh one. write() immediately
+        // takes it back out again -- via start_chunk()'s mem::take() -- the moment a new
+        // chunk opens, in the same call, so the field is only observably populated in the
+        // gap between a chunk closing and (if any) the next one opening. finish() calls
+        // finish_chunk() too, but by definition no next chunk can ever start after
+        // finish() -- so retaining the encoder past this point would just keep its thread
+        // pool and buffers alive for as long as the caller holds onto the now-finished
+        // Writer, for no reason. Calls the private finish_chunk() directly (this test is
+        // in write.rs's own module) instead of write()ing past chunk_size, so the "some
+        // chunk did leave an encoder behind" check isn't racing write()'s own immediate
+        // re-take on the next message.
+        let mut file = vec![];
+        let mut writer = WriteOptions::new()
+            .compression(Some(Compression::Zstd))
+            .compression_threads(2)
+            .create(Cursor::new(&mut file))
+            .expect("failed to construct writer");
+
+        let channel = Arc::new(crate::Channel {
+            id: 0,
+            topic: "chat".into(),
+            message_encoding: "json".into(),
+            metadata: BTreeMap::new(),
+            schema: None,
+        });
+        writer
+            .write(&crate::Message {
+                channel,
+                sequence: 0,
+                log_time: 0,
+                publish_time: 0,
+                data: Cow::Owned(b"hello".to_vec()),
+            })
+            .expect("failed to write message");
+
+        writer.finish_chunk().expect("failed to finish chunk");
+        assert!(
+            writer.reusable_zstd_encoder.is_some(),
+            "expected the just-closed chunk to leave a reusable encoder behind"
+        );
+
+        writer.finish().expect("failed to finish");
+
+        let msg = "finish() left the last chunk's zstd encoder (and its worker thread pool) retained on a Writer that can never start another chunk";
+        assert!(writer.reusable_zstd_encoder.is_none(), "{}", msg);
     }
 
     #[test]
