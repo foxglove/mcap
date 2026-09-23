@@ -203,10 +203,11 @@ describe("McapStreamReader emitChunks", () => {
     const builder = new McapRecordBuilder();
     builder.writeMagic();
     builder.writeChunk(chunk);
+    const input = builder.buffer;
     const reader = new McapStreamReader({ emitChunks: true });
-    reader.append(builder.buffer);
+    reader.append(input);
+    input.fill(0);
     const retained = reader.nextRecord();
-    builder.buffer.fill(0);
     expect(retained).toEqual(chunk);
     for (const size of [builder.length - 9, builder.length, builder.length * 10]) {
       reader.append(record(0x80 as Opcode, new Array<number>(size).fill(0xaa)));
