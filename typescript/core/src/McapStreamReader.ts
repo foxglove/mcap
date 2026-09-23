@@ -19,11 +19,8 @@ type McapReaderOptions = {
   includeChunks?: boolean;
 
   /**
-   * Emit chunks without expanding them (default: false), as in the Python, Go, and Rust readers.
-   * Takes precedence over `includeChunks`; decompression handlers and chunk CRC checks are skipped.
-   * Chunks retain their original `records` payload (copied and safe to retain across appends),
-   * even for unknown compression algorithms. Following MessageIndex records are emitted separately.
-   * Message/channel references are not checked because channel definitions may be inside chunks.
+   * Emit raw, potentially compressed chunks without expanding them (default: false).
+   * Takes precedence over `includeChunks`.
    * Consumers are responsible for grouping chunks with indexes and validating expanded contents.
    */
   emitChunks?: boolean;
