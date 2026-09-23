@@ -14,9 +14,17 @@ import type {
 type McapReaderOptions = {
   /**
    * When set to true, Chunk records will be returned from `nextRecord()`. Chunk contents will still
-   * be processed after each chunk record itself.
+   * be processed after each chunk record itself, unless `emitChunks` is true.
    */
   includeChunks?: boolean;
+
+  /**
+   * Emit raw, potentially compressed chunks without expanding them (default: false).
+   * Takes precedence over `includeChunks`.
+   * Chunk CRCs and message/channel references are not checked.
+   * Consumers are responsible for grouping chunks with indexes and validating expanded contents.
+   */
+  emitChunks?: boolean;
 
   /**
    * When a compressed chunk is encountered, the entry in `decompressHandlers` corresponding to the
@@ -61,6 +69,7 @@ export default class McapStreamReader {
   #reader = new Reader(this.#view);
   #decompressHandlers;
   #includeChunks;
+  #emitChunks;
   #validateCrcs;
   #noMagicPrefix;
   #doneReading = false;
@@ -69,11 +78,13 @@ export default class McapStreamReader {
 
   constructor({
     includeChunks = false,
+    emitChunks = false,
     decompressHandlers = {},
     validateCrcs = true,
     noMagicPrefix = false,
   }: McapReaderOptions = {}) {
     this.#includeChunks = includeChunks;
+    this.#emitChunks = emitChunks;
     this.#decompressHandlers = decompressHandlers;
     this.#validateCrcs = validateCrcs;
     this.#noMagicPrefix = noMagicPrefix;
@@ -176,7 +187,7 @@ export default class McapStreamReader {
           `Channel record for id ${result.value.id} (topic: ${result.value.topic}) differs from previous channel record of the same id.`,
         );
       }
-    } else if (result.value?.type === "Message") {
+    } else if (!this.#emitChunks && result.value?.type === "Message") {
       const channelId = result.value.channelId;
       const existing = this.#channelsById.get(channelId);
       if (!existing) {
@@ -237,6 +248,10 @@ export default class McapStreamReader {
           break;
 
         case "Chunk": {
+          if (this.#emitChunks) {
+            yield record;
+            break;
+          }
           if (this.#includeChunks) {
             yield record;
           }
