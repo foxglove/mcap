@@ -765,73 +765,76 @@ describe("McapStreamReader", () => {
     expect(reader.nextRecord()).toBeUndefined();
   });
 
-  it("emits raw chunks without expanding or validating them when emitChunks is set", () => {
-    const records = record(Opcode.MESSAGE, [
-      ...uint16LE(1), // channel id
-      ...uint32LE(0), // sequence
-      ...uint64LE(1n), // log time
-      ...uint64LE(1n), // publish time
-      42, // data
-    ]);
-    const reader = new McapStreamReader({
-      emitChunks: true,
-      includeChunks: true,
-      decompressHandlers: {
-        deflate: () => {
-          throw new Error("must not decompress");
+  it.each([false, true])(
+    "emits raw chunks without expanding or validating them when emitChunks is set (includeChunks=%s)",
+    (includeChunks) => {
+      const records = record(Opcode.MESSAGE, [
+        ...uint16LE(1), // channel id
+        ...uint32LE(0), // sequence
+        ...uint64LE(1n), // log time
+        ...uint64LE(1n), // publish time
+        42, // data
+      ]);
+      const reader = new McapStreamReader({
+        emitChunks: true,
+        includeChunks,
+        decompressHandlers: {
+          deflate: () => {
+            throw new Error("must not decompress");
+          },
         },
-      },
-    });
-    reader.append(
-      new Uint8Array([
-        ...MCAP_MAGIC,
-        ...record(Opcode.CHUNK, [
-          ...uint64LE(1n), // start_time
-          ...uint64LE(2n), // end_time
-          ...uint64LE(99n), // decompressed size
-          ...uint32LE(1), // decompressed crc32
-          ...string("deflate"), // compression
-          ...uint64LE(BigInt(records.byteLength)),
-          ...records,
+      });
+      reader.append(
+        new Uint8Array([
+          ...MCAP_MAGIC,
+          ...record(Opcode.CHUNK, [
+            ...uint64LE(1n), // start_time
+            ...uint64LE(2n), // end_time
+            ...uint64LE(99n), // decompressed size
+            ...uint32LE(1), // decompressed crc32
+            ...string("deflate"), // compression
+            ...uint64LE(BigInt(records.byteLength)),
+            ...records,
+          ]),
+          ...record(Opcode.MESSAGE, [
+            ...uint16LE(42), // channel id
+            ...uint32LE(0), // sequence
+            ...uint64LE(0n), // log time
+            ...uint64LE(0n), // publish time
+          ]),
+          ...record(Opcode.FOOTER, [
+            ...uint64LE(0n), // summary start
+            ...uint64LE(0n), // summary offset start
+            ...uint32LE(0), // summary crc
+          ]),
+          ...MCAP_MAGIC,
         ]),
-        ...record(Opcode.MESSAGE, [
-          ...uint16LE(42), // channel id
-          ...uint32LE(0), // sequence
-          ...uint64LE(0n), // log time
-          ...uint64LE(0n), // publish time
-        ]),
-        ...record(Opcode.FOOTER, [
-          ...uint64LE(0n), // summary start
-          ...uint64LE(0n), // summary offset start
-          ...uint32LE(0), // summary crc
-        ]),
-        ...MCAP_MAGIC,
-      ]),
-    );
+      );
 
-    expect(reader.nextRecord()).toEqual({
-      type: "Chunk",
-      messageStartTime: 1n,
-      messageEndTime: 2n,
-      uncompressedSize: 99n,
-      uncompressedCrc: 1,
-      compression: "deflate",
-      records,
-    });
-    expect(reader.nextRecord()).toEqual({
-      type: "Message",
-      channelId: 42,
-      sequence: 0,
-      logTime: 0n,
-      publishTime: 0n,
-      data: new Uint8Array(),
-    });
-    expect(reader.nextRecord()).toEqual({
-      type: "Footer",
-      summaryStart: 0n,
-      summaryOffsetStart: 0n,
-      summaryCrc: 0,
-    });
-    expect(reader.done()).toBe(true);
-  });
+      expect(reader.nextRecord()).toEqual({
+        type: "Chunk",
+        messageStartTime: 1n,
+        messageEndTime: 2n,
+        uncompressedSize: 99n,
+        uncompressedCrc: 1,
+        compression: "deflate",
+        records,
+      });
+      expect(reader.nextRecord()).toEqual({
+        type: "Message",
+        channelId: 42,
+        sequence: 0,
+        logTime: 0n,
+        publishTime: 0n,
+        data: new Uint8Array(),
+      });
+      expect(reader.nextRecord()).toEqual({
+        type: "Footer",
+        summaryStart: 0n,
+        summaryOffsetStart: 0n,
+        summaryCrc: 0,
+      });
+      expect(reader.done()).toBe(true);
+    },
+  );
 });
