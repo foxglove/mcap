@@ -21,6 +21,7 @@ type McapReaderOptions = {
   /**
    * Emit raw, potentially compressed chunks without expanding them (default: false).
    * Takes precedence over `includeChunks`.
+   * Chunk CRCs and message/channel references are not checked.
    * Consumers are responsible for grouping chunks with indexes and validating expanded contents.
    */
   emitChunks?: boolean;
