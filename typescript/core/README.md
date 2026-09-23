@@ -8,14 +8,14 @@ The `@mcap/core` package provides low-level readers and writers for the MCAP for
 
 Examples of how to use the `@mcap/core` APIs can be found in the [TypeScript examples folder](https://github.com/foxglove/mcap/tree/main/typescript/examples) in the MCAP repo.
 
-### Reading outer records without expanding chunks
+### Emit chunks without expanding them
 
-`McapRawStreamReader` uses the same incremental API as `McapStreamReader`, but returns only records from the outer stream, in file order. A `Chunk` retains its original compressed `records` payload; its following `MessageIndex` records are returned separately. Consumers decide whether to group, decompress, or inspect chunks. No decompression handlers are required, and unknown compression algorithms are accepted. Even uncompressed chunks remain opaque.
+Set `emitChunks: true` on `McapStreamReader` to return only records from the outer stream, in file order. This corresponds to Python’s `emit_chunks`, Go’s `EmitChunks`, and Rust’s `with_emit_chunks` options. A `Chunk` retains its original compressed `records` payload; its following `MessageIndex` records are returned separately. Consumers decide whether to group, decompress, or inspect chunks. No decompression handlers are required, and unknown compression algorithms are accepted. Even uncompressed chunks remain opaque.
 
 ```ts
-import { McapRawStreamReader } from "@mcap/core";
+import { McapStreamReader } from "@mcap/core";
 
-const reader = new McapRawStreamReader();
+const reader = new McapStreamReader({ emitChunks: true });
 // input is an AsyncIterable<Uint8Array>, such as a Node.js readable stream.
 for await (const bytes of input) {
   reader.append(bytes);
@@ -32,9 +32,19 @@ if (!reader.done()) {
 }
 ```
 
-`append()` copies its input, and returned byte arrays are owned copies. Input buffers can be reused after `append()` returns, and returned payloads can be retained or modified across further reads and appends.
+`append()` copies its input. With `emitChunks: true`, all returned byte arrays are owned copies. Input buffers can be reused after `append()` returns, and returned payloads can be retained or modified across further reads and appends.
 
-The raw reader preserves the stream reader's magic, record parsing, duplicate-header, and footer/trailing-byte checks. Nonzero attachment CRCs are checked by default (`validateCrcs: false` disables this). It does not validate chunk contents or uncompressed size/CRC: checking a compressed chunk's uncompressed CRC requires decompression. It also does not validate message/channel relationships, since channel definitions may be inside chunks, or data-section and summary CRCs. `McapStreamReader` adds chunk expansion, chunk CRC checks, and message/channel validation; its `includeChunks` option still expands chunk contents.
+The chunk options have the following behavior:
+
+| Options               | Behavior                                         |
+| --------------------- | ------------------------------------------------ |
+| Default               | Expand chunks and emit their contents            |
+| `includeChunks: true` | Emit chunks, then expand and emit their contents |
+| `emitChunks: true`    | Emit only outer records; never expand chunks     |
+
+`emitChunks` takes precedence when both options are true. Decompression handlers are ignored in this mode.
+
+Magic, record parsing, duplicate-header, and footer/trailing-byte checks apply in all modes. Nonzero attachment CRCs are checked by default (`validateCrcs: false` disables this). With `emitChunks: true`, the reader does not validate chunk contents or uncompressed size/CRC: checking a compressed chunk's uncompressed CRC requires decompression. It also skips message/channel relationship validation, since channel definitions may be inside chunks. Consumers are responsible for validating any chunks they expand. In the default mode, the reader expands chunks and validates chunk CRCs and message/channel relationships. Data-section and summary CRCs are not validated in either mode.
 
 An undefined `nextRecord()` result may mean more input is needed. Check `done()` at end of input even when `bytesRemaining()` is zero. The `noMagicPrefix` option permits starting at a record boundary without the initial magic, but `done()` still requires a footer and trailing magic.
 

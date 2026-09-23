@@ -2,13 +2,12 @@ import { crc32 } from "@foxglove/crc";
 import { deflateSync, inflateSync } from "node:zlib";
 
 import { McapRecordBuilder } from "./McapRecordBuilder.ts";
-import McapStreamReader from "./McapStreamReader.ts";
 import { MCAP_MAGIC, Opcode } from "./constants.ts";
-import { McapRawStreamReader } from "./index.ts";
+import { McapStreamReader } from "./index.ts";
 import { record, string, uint32LE, uint64LE } from "./testUtils.ts";
 import type { TypedMcapRecord, TypedMcapRecords } from "./types.ts";
 
-const header = { type: "Header", profile: "", library: "raw-reader-test" } as const;
+const header = { type: "Header", profile: "", library: "emit-chunks-test" } as const;
 const footer = { type: "Footer", summaryStart: 0n, summaryOffsetStart: 0n, summaryCrc: 0 } as const;
 const schema = {
   type: "Schema",
@@ -53,7 +52,7 @@ function finish(builder: McapRecordBuilder): Uint8Array {
   return builder.buffer;
 }
 
-function drain(reader: McapRawStreamReader | McapStreamReader): TypedMcapRecord[] {
+function drain(reader: McapStreamReader): TypedMcapRecord[] {
   const records: TypedMcapRecord[] = [];
   for (let next; (next = reader.nextRecord()) != undefined; ) {
     records.push(next);
@@ -108,10 +107,62 @@ function fixture(): { data: Uint8Array; expected: TypedMcapRecord[] } {
   };
 }
 
-describe("McapRawStreamReader", () => {
+describe("McapStreamReader emitChunks", () => {
+  it.each([
+    { emitChunks: false, includeChunks: false },
+    { emitChunks: false, includeChunks: true },
+    { emitChunks: true, includeChunks: false },
+    { emitChunks: true, includeChunks: true },
+  ])("handles emitChunks=$emitChunks with includeChunks=$includeChunks", (options) => {
+    const contents = new McapRecordBuilder();
+    contents.writeSchema(schema);
+    contents.writeChannel(channel);
+    contents.writeMessage(message);
+    const compressed = chunk(contents.buffer, "deflate");
+    const builder = new McapRecordBuilder();
+    builder.writeMagic();
+    builder.writeChunk(compressed);
+    const decompress = jest.fn((bytes: Uint8Array) => new Uint8Array(inflateSync(bytes)));
+    const reader = new McapStreamReader({
+      ...options,
+      decompressHandlers: { deflate: decompress },
+    });
+    reader.append(finish(builder));
+    expect(drain(reader)).toEqual([
+      ...(options.emitChunks || options.includeChunks ? [compressed] : []),
+      ...(options.emitChunks ? [] : [schema, channel, message]),
+      { type: "DataEnd", dataSectionCrc: 0 },
+      footer,
+    ]);
+    expect(decompress).toHaveBeenCalledTimes(options.emitChunks ? 0 : 1);
+    expect(reader.done()).toBe(true);
+  });
+
+  it("checks chunk CRCs only when expanding chunks", () => {
+    const contents = new McapRecordBuilder();
+    contents.writeChannel(channel);
+    const compressed = { ...chunk(contents.buffer, "deflate"), uncompressedCrc: 1 };
+    const builder = new McapRecordBuilder();
+    builder.writeMagic();
+    builder.writeChunk(compressed);
+    const data = finish(builder);
+    const reader = new McapStreamReader({
+      includeChunks: true,
+      decompressHandlers: { deflate: (bytes) => new Uint8Array(inflateSync(bytes)) },
+    });
+    reader.append(data);
+    expect(reader.nextRecord()).toEqual(compressed);
+    expect(() => drain(reader)).toThrow("Incorrect chunk CRC");
+
+    const emitting = new McapStreamReader({ emitChunks: true, includeChunks: true });
+    emitting.append(data);
+    expect(drain(emitting)).toEqual([compressed, { type: "DataEnd", dataSectionCrc: 0 }, footer]);
+    expect(emitting.done()).toBe(true);
+  });
+
   it("returns compressed chunks, multiple indexes, consecutive chunks, and standalone messages in order", () => {
     const { data, expected } = fixture();
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(data);
     expect(drain(reader)).toEqual(expected);
     expect(reader.done()).toBe(true);
@@ -125,7 +176,7 @@ describe("McapRawStreamReader", () => {
   it("handles every two-part input split", () => {
     const { data, expected } = fixture();
     for (let split = 1; split < data.length; split++) {
-      const reader = new McapRawStreamReader();
+      const reader = new McapStreamReader({ emitChunks: true });
       reader.append(data.subarray(0, split));
       const records = drain(reader);
       expect(reader.done()).toBe(false);
@@ -139,7 +190,7 @@ describe("McapRawStreamReader", () => {
 
   it("handles one-byte appends interleaved with empty appends", () => {
     const { data, expected } = fixture();
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     const records: TypedMcapRecord[] = [];
     for (const byte of data) {
       reader.append(new Uint8Array());
@@ -166,7 +217,7 @@ describe("McapRawStreamReader", () => {
     };
     builder.writeChunk(valid);
     builder.writeChunk(invalid);
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(finish(builder));
     expect(drain(reader)).toEqual([valid, invalid, { type: "DataEnd", dataSectionCrc: 0 }, footer]);
   });
@@ -176,7 +227,7 @@ describe("McapRawStreamReader", () => {
     builder.writeMagic();
     const compressed = chunk(new Uint8Array([1, 2, 3]), "future-codec");
     builder.writeChunk(compressed);
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(finish(builder));
     expect(drain(reader)).toEqual([compressed, { type: "DataEnd", dataSectionCrc: 0 }, footer]);
   });
@@ -201,7 +252,7 @@ describe("McapRawStreamReader", () => {
     builder.writeAttachment(attachment);
     const metadata = { type: "Metadata", name: "meta", metadata: new Map([["a", "b"]]) } as const;
     builder.writeMetadata(metadata);
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(finish(builder));
     expect(drain(reader)).toEqual([
       header,
@@ -219,7 +270,7 @@ describe("McapRawStreamReader", () => {
   it("leaves done false for every incomplete prefix, including at record boundaries", () => {
     const { data } = fixture();
     for (let end = 0; end < data.length; end++) {
-      const reader = new McapRawStreamReader();
+      const reader = new McapStreamReader({ emitChunks: true });
       reader.append(data.subarray(0, end));
       drain(reader);
       expect(reader.done()).toBe(false);
@@ -231,7 +282,7 @@ describe("McapRawStreamReader", () => {
     const builder = new McapRecordBuilder();
     builder.writeMagic();
     builder.writeFooter(footer);
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(builder.buffer.subarray(0, MCAP_MAGIC.length + 3));
     expect(reader.nextRecord()).toBeUndefined();
     expect(reader.bytesRemaining()).toBe(3);
@@ -246,7 +297,7 @@ describe("McapRawStreamReader", () => {
 
   it("supports noMagicPrefix while still requiring trailing magic", () => {
     const { data, expected } = fixture();
-    const reader = new McapRawStreamReader({ noMagicPrefix: true });
+    const reader = new McapStreamReader({ emitChunks: true, noMagicPrefix: true });
     reader.append(data.subarray(MCAP_MAGIC.length, data.length - MCAP_MAGIC.length));
     expect(drain(reader)).toEqual(expected.slice(0, -1));
     expect(reader.done()).toBe(false);
@@ -258,18 +309,18 @@ describe("McapRawStreamReader", () => {
   it.each(["prefix", "suffix"])("rejects malformed %s magic", (which) => {
     const { data } = fixture();
     data[which === "prefix" ? 0 : data.length - 1] = 0;
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(data);
     expect(() => drain(reader)).toThrow(
       which === "prefix"
         ? /Expected MCAP magic/
-        : /Expected MCAP magic.*\[library=raw-reader-test\]/,
+        : /Expected MCAP magic.*\[library=emit-chunks-test\]/,
     );
   });
 
   it("rejects bytes following the trailing magic", () => {
     const { data } = fixture();
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(new Uint8Array([...data, 0]));
     expect(() => drain(reader)).toThrow("1 bytes remaining after MCAP footer and trailing magic");
   });
@@ -279,19 +330,19 @@ describe("McapRawStreamReader", () => {
     builder.writeMagic();
     builder.writeHeader(header);
     builder.writeHeader(header);
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(builder.buffer);
     expect(() => drain(reader)).toThrow("Duplicate Header record");
   });
 
   it("rejects record lengths that cannot be represented safely", () => {
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(new Uint8Array([...MCAP_MAGIC, Opcode.CHUNK, ...uint64LE(2n ** 53n)]));
     expect(() => drain(reader)).toThrow("Record content length 9007199254740992 is too large");
   });
 
   it("rejects a chunk payload length exceeding its record", () => {
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(
       new Uint8Array([
         ...MCAP_MAGIC,
@@ -320,10 +371,10 @@ describe("McapRawStreamReader", () => {
     });
     const bytes = builder.buffer.slice();
     bytes[bytes.length - 1] = bytes[bytes.length - 1]! ^ 0xff;
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(bytes);
     expect(() => drain(reader)).toThrow("Attachment CRC32 mismatch");
-    const unchecked = new McapRawStreamReader({ validateCrcs: false });
+    const unchecked = new McapStreamReader({ emitChunks: true, validateCrcs: false });
     unchecked.append(bytes);
     expect(unchecked.nextRecord()?.type).toBe("Attachment");
   });
@@ -343,7 +394,7 @@ describe("McapRawStreamReader", () => {
       data: new Uint8Array([8, 9]),
     });
     const input = new Uint8Array([...builder.buffer, ...record(0x80 as Opcode, [7, 6, 5])]);
-    const reader = new McapRawStreamReader();
+    const reader = new McapStreamReader({ emitChunks: true });
     reader.append(input);
     input.fill(0);
     const retained = drain(reader);
@@ -351,7 +402,7 @@ describe("McapRawStreamReader", () => {
     expect(retained[2]).toEqual(compressed);
     expect(retained[4]).toEqual({ type: "Unknown", opcode: 0x80, data: new Uint8Array([7, 6, 5]) });
     // Similar-size appends first fill unused capacity, then force compaction; the large one grows it.
-    for (const size of [input.length, input.length, input.length * 10]) {
+    for (const size of [input.length - 9, input.length - 9, input.length * 10]) {
       reader.append(record(0x81 as Opcode, new Array<number>(size).fill(0xaa)));
       expect(reader.nextRecord()?.type).toBe("Unknown");
       expect(retained).toEqual(expected);
