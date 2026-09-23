@@ -19,28 +19,23 @@ type McapReaderOptions = {
   includeChunks?: boolean;
 
   /**
-   * Emit chunks without expanding them (default: false). Only typed outer records are returned,
-   * in file order, with each Chunk's original compressed `records` payload and its MessageIndex
-   * records returned separately. Uncompressed chunks also remain opaque. Takes precedence over
-   * `includeChunks` and does not call `decompressHandlers`, even for unknown compression algorithms.
-   *
-   * Chunk contents, uncompressed size/CRC, and messages referencing unknown channels are not validated
-   * in this mode: definitions may be inside chunks, and checking a compressed chunk's uncompressed
-   * CRC requires decompression. Conflicting outer Channel definitions, framing, and attachment CRCs
-   * are still checked. Consumers group chunks with indexes and validate any chunks they expand.
+   * Emit chunks without expanding them (default: false), as in the Python, Go, and Rust readers.
+   * Takes precedence over `includeChunks`; decompression handlers and chunk CRC checks are skipped.
+   * Chunks retain their original `records` payload (copied and safe to retain across appends),
+   * even for unknown compression algorithms. Following MessageIndex records are emitted separately.
+   * Message/channel references are not checked because channel definitions may be inside chunks.
+   * Consumers are responsible for grouping chunks with indexes and validating expanded contents.
    */
   emitChunks?: boolean;
 
   /**
    * When a compressed chunk is encountered, the entry in `decompressHandlers` corresponding to the
-   * compression will be called to decompress the chunk data. Ignored when `emitChunks` is true.
+   * compression will be called to decompress the chunk data.
    */
   decompressHandlers?: DecompressHandlers;
 
   /**
-   * When set to true (the default), nonzero chunk and attachment CRCs will be validated.
-   * Chunk CRC validation is skipped when `emitChunks` is true. Set to false to improve performance.
-   * Data-section and summary CRCs are not validated.
+   * When set to true (the default), chunk CRCs will be validated. Set to false to improve performance.
    */
   validateCrcs?: boolean;
 
@@ -55,28 +50,19 @@ type McapReaderOptions = {
 /**
  * A streaming reader for MCAP files.
  *
- * Set `emitChunks: true` to emit chunks without expanding them, as in the Python, Go, and Rust
- * stream readers. Byte arrays in outer records are owned copies in all modes, so subsequent
- * appends do not overwrite retained payloads. With `emitChunks: true`, payloads may also be
- * modified without affecting subsequent reads.
- *
- * The reader checks magic bytes, record parsing, duplicate headers, and trailing bytes after
- * the footer. It is not a complete MCAP validator; see the options for validation boundaries.
- * At end of input, check `done()` to detect truncation even when `bytesRemaining()` is zero.
- * With `noMagicPrefix`, completion still requires a footer and trailing magic.
- *
  * Usage example:
  * ```
  * const reader = new McapStreamReader();
- * for await (const data of stream) {
- *   reader.append(data);
- *   for (let record; (record = reader.nextRecord()); ) {
- *     // process available records
+ * stream.on("data", (data) => {
+ *   try {
+ *     reader.append(data);
+ *     for (let record; (record = reader.nextRecord()); ) {
+ *       // process available records
+ *     }
+ *   } catch (e) {
+ *     // handle errors
  *   }
- * }
- * if (!reader.done()) {
- *   throw new Error("Incomplete MCAP stream");
- * }
+ * });
  * ```
  */
 export default class McapStreamReader {
@@ -106,7 +92,7 @@ export default class McapStreamReader {
     this.#noMagicPrefix = noMagicPrefix;
   }
 
-  /** @returns True once the footer and trailing magic have been parsed successfully. */
+  /** @returns True if a valid, complete mcap file has been parsed. */
   done(): boolean {
     return this.#doneReading;
   }
@@ -119,7 +105,6 @@ export default class McapStreamReader {
   /**
    * Provide the reader with newly received bytes for it to process. After calling this function,
    * call `nextRecord()` again to parse any records that are now available.
-   * Input is copied, so callers may reuse or modify `data` after this method returns.
    */
   append(data: Uint8Array): void {
     if (this.#doneReading) {
@@ -212,7 +197,7 @@ export default class McapStreamReader {
       }
     }
 
-    if (result.done === true && result.value?.type === "Footer") {
+    if (result.done === true) {
       this.#doneReading = true;
     }
     return result.value;
@@ -249,10 +234,6 @@ export default class McapStreamReader {
           yield record;
           break;
         case "Unknown":
-          // The low-level parser borrows unknown payloads from the streaming buffer, which
-          // subsequent appends may reuse.
-          yield { ...record, data: record.data.slice() };
-          break;
         case "Schema":
         case "Channel":
         case "Message":

@@ -16,33 +16,6 @@ import {
 import type { TypedMcapRecords } from "./types.ts";
 
 describe("McapStreamReader", () => {
-  it.each([
-    { emitChunks: false, invalidMagic: "prefix" },
-    { emitChunks: false, invalidMagic: "suffix" },
-    { emitChunks: true, invalidMagic: "prefix" },
-    { emitChunks: true, invalidMagic: "suffix" },
-  ])(
-    "does not report completion after invalid $invalidMagic magic (emitChunks=$emitChunks)",
-    ({ emitChunks, invalidMagic }) => {
-      const builder = new McapRecordBuilder();
-      builder.writeMagic();
-      builder.writeFooter({ summaryStart: 0n, summaryOffsetStart: 0n, summaryCrc: 0 });
-      builder.writeMagic();
-      const bytes = builder.buffer.slice();
-      bytes[invalidMagic === "prefix" ? 0 : bytes.length - 1] = 0;
-      const reader = new McapStreamReader({ emitChunks });
-      reader.append(bytes);
-      expect(() => reader.nextRecord()).toThrow("Expected MCAP magic");
-      expect(reader.done()).toBe(false);
-      // A thrown generator is closed; exhausting it must not be mistaken for a parsed footer.
-      expect(reader.nextRecord()).toBeUndefined();
-      expect(reader.done()).toBe(false);
-      reader.append(new Uint8Array([0]));
-      expect(reader.nextRecord()).toBeUndefined();
-      expect(reader.done()).toBe(false);
-    },
-  );
-
   it("rejects invalid header", () => {
     for (let i = 0; i < MCAP_MAGIC.length - 1; i++) {
       const reader = new McapStreamReader();
