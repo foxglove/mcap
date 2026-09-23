@@ -328,6 +328,27 @@ describe("McapStreamReader", () => {
     expect(() => reader.nextRecord()).toThrow("Schema data length 3 exceeds bounds of record");
   });
 
+  it("rejects message record shorter than the fixed prefix size", () => {
+    const reader = new McapStreamReader();
+    reader.append(
+      new Uint8Array([
+        ...MCAP_MAGIC,
+        ...record(Opcode.MESSAGE, [
+          ...uint16LE(42), // channel id
+          ...uint32LE(0), // sequence
+          ...uint64LE(0n), // log time
+        ]),
+        ...record(Opcode.FOOTER, [
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
+        ]),
+        ...MCAP_MAGIC,
+      ]),
+    );
+    expect(() => reader.nextRecord()).toThrow("Message record length 14 is less than 22 bytes");
+  });
+
   it("rejects attachment data with incorrect length prefix", () => {
     const reader = new McapStreamReader();
     reader.append(

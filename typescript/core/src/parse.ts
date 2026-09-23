@@ -185,6 +185,11 @@ function parseChannel(reader: Reader, recordLength: number): TypedMcapRecord {
 
 function parseMessage(reader: Reader, recordLength: number): TypedMcapRecord {
   const MESSAGE_PREFIX_SIZE = 2 + 4 + 8 + 8; // channelId, sequence, logTime, publishTime
+  if (recordLength < MESSAGE_PREFIX_SIZE) {
+    throw new Error(
+      `Message record length ${recordLength} is less than ${MESSAGE_PREFIX_SIZE} bytes`,
+    );
+  }
   const channelId = reader.uint16();
   const sequence = reader.uint32();
   const logTime = reader.uint64();
