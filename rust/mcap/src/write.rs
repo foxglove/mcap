@@ -1206,6 +1206,14 @@ impl<W: Write + Seek> Writer<W> {
         }
         // Finish any chunk we were working on and update stats, indexes, etc.
         self.finish_chunk()?;
+        // finish_chunk() just handed back the last chunk's zstd encoder (and its worker
+        // thread pool, if any) into reusable_zstd_encoder for the next chunk to reinit.
+        // There is no next chunk -- finish() means we're done, so nothing can legally
+        // call start_chunk() again -- so drop it now instead of keeping the context (and
+        // compression_threads worker OS threads, which default to the physical CPU
+        // count) alive for as long as the caller happens to hold onto this now-finished
+        // Writer before dropping it.
+        self.reusable_zstd_encoder = Default::default();
 
         let summary = self.take_summary();
         self.finished_summary = Some(summary.clone());
@@ -2892,15 +2900,19 @@ mod tests {
         // chunk would only ever take. compression_threads(2) also exercises NbWorkers
         // staying set across the reinit, on targets where it's honored at all.
         //
-        // Note on what this does and doesn't prove: I checked by temporarily deleting the
-        // reinit() call entirely that this test's own byte-for-byte checks don't currently
-        // distinguish "reinit called" from "reinit skipped" -- libzstd already resets a
-        // CCtx for a fresh frame after a clean ZSTD_e_end completion, independent of an
-        // explicit ZSTD_reset_session_only call, so that specific omission isn't something
-        // a correctness-only test can catch here. What this test does verify, and would
-        // catch a regression in, is the actual reuse plumbing this PR adds: `mem::take`
-        // on `reusable_zstd_encoder`, `ChunkWriter::finish()`'s encoder hand-back, and the
-        // multi-chunk byte layout staying correct under a multithreaded zstd context.
+        // Note on what this does and doesn't prove: this is a correctness test, not a
+        // reuse-detection test. It would still pass unchanged if the encoder hand-back
+        // were removed entirely, or if ChunkWriter::new() went back to always
+        // constructing a fresh encoder -- multi-chunk output is correct either way. I
+        // confirmed this directly by temporarily deleting the reinit() call and rerunning:
+        // still green, because libzstd already resets a CCtx for a fresh frame after a
+        // clean ZSTD_e_end completion, independent of an explicit ZSTD_reset_session_only
+        // call. What this test does verify, and would catch a regression in, is multi-chunk
+        // correctness under the new implementation: `mem::take` on `reusable_zstd_encoder`,
+        // `ChunkWriter::finish()`'s encoder hand-back, and the byte layout staying correct
+        // under a multithreaded zstd context. That reuse is actually *happening* is a
+        // separate claim, backed by the before/after clone3 thread-spawn count in the PR
+        // description, not by this test.
         let mut file = vec![];
         let mut writer = WriteOptions::new()
             .compression(Some(Compression::Zstd))
@@ -2962,6 +2974,58 @@ mod tests {
                  across a chunk boundary"
             );
         }
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn test_finish_releases_the_reused_zstd_encoder() {
+        // finish_chunk() hands the just-finished chunk's zstd encoder (and its worker
+        // thread pool, if compression_threads > 1) into reusable_zstd_encoder so the
+        // *next* chunk can reinit it instead of building a fresh one. write() immediately
+        // takes it back out again -- via start_chunk()'s mem::take() -- the moment a new
+        // chunk opens, in the same call, so the field is only observably populated in the
+        // gap between a chunk closing and (if any) the next one opening. finish() calls
+        // finish_chunk() too, but by definition no next chunk can ever start after
+        // finish() -- so retaining the encoder past this point would just keep its thread
+        // pool and buffers alive for as long as the caller holds onto the now-finished
+        // Writer, for no reason. Calls the private finish_chunk() directly (this test is
+        // in write.rs's own module) instead of write()ing past chunk_size, so the "some
+        // chunk did leave an encoder behind" check isn't racing write()'s own immediate
+        // re-take on the next message.
+        let mut file = vec![];
+        let mut writer = WriteOptions::new()
+            .compression(Some(Compression::Zstd))
+            .compression_threads(2)
+            .create(Cursor::new(&mut file))
+            .expect("failed to construct writer");
+
+        let channel = Arc::new(crate::Channel {
+            id: 0,
+            topic: "chat".into(),
+            message_encoding: "json".into(),
+            metadata: BTreeMap::new(),
+            schema: None,
+        });
+        writer
+            .write(&crate::Message {
+                channel,
+                sequence: 0,
+                log_time: 0,
+                publish_time: 0,
+                data: Cow::Owned(b"hello".to_vec()),
+            })
+            .expect("failed to write message");
+
+        writer.finish_chunk().expect("failed to finish chunk");
+        assert!(
+            writer.reusable_zstd_encoder.is_some(),
+            "expected the just-closed chunk to leave a reusable encoder behind"
+        );
+
+        writer.finish().expect("failed to finish");
+
+        let msg = "finish() left the last chunk's zstd encoder (and its worker thread pool) retained on a Writer that can never start another chunk";
+        assert!(writer.reusable_zstd_encoder.is_none(), "{}", msg);
     }
 
     #[test]
