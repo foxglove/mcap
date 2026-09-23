@@ -43,11 +43,11 @@ void test("manual height overrides row fitting while respecting host constraints
 
 void test("frequency averages over the recording duration, including silence", () => {
   // Five log messages in a 1 ms burst must use all 39.273 s, not that burst.
-  assert.equal(frequencyLabel(5, 39.273), "0.1 Hz");
-  assert.equal(frequencyLabel(4887, 39.273), "124.4 Hz");
+  assert.equal(frequencyLabel(5, 39.273), `${(0.1).toLocaleString()} Hz`);
+  assert.equal(frequencyLabel(4887, 39.273), `${(124.4).toLocaleString()} Hz`);
   assert.equal(frequencyLabel(10, 1), "10 Hz");
-  assert.equal(frequencyLabel(2, 60), "<0.1 Hz");
-  assert.equal(frequencyLabel(2, 40), "0.1 Hz");
+  assert.equal(frequencyLabel(2, 60), `<${(0.1).toLocaleString()} Hz`);
+  assert.equal(frequencyLabel(2, 40), `${(0.1).toLocaleString()} Hz`);
   assert.equal(frequencyLabel(12346, 10), `${(1234.6).toLocaleString()} Hz`);
   assert.equal(frequencyLabel(10, 0), "— Hz");
   assert.equal(frequencyLabel(10, Number.NaN), "— Hz");
