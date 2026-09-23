@@ -7,8 +7,6 @@ export interface InspectorOptions {
   minHeight?: number;
   /** Maximum canvas viewport height in CSS pixels. Defaults to 520 for automatic sizing, 1200 for manual resizing. */
   maxHeight?: number;
-  /** Compatibility alias for maxHeight. Prefer maxHeight in new integrations. */
-  height?: number;
   createWorker?: () => Worker;
   onLoad?: (recording: Recording) => void;
   onError?: (error: Error) => void;

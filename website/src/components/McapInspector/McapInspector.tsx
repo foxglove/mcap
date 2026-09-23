@@ -31,7 +31,7 @@ export const McapInspector = forwardRef<InspectorControls, McapInspectorProps>(
       }
     }, []);
     return (
-      <div ref={host} className={className} aria-label="MCAP chunk inspector">
+      <div ref={host} className={className} aria-label="MCAP inspector">
         {shadow &&
           createPortal(
             <>

@@ -1,11 +1,25 @@
 import * as zstd from "@foxglove/wasm-zstd";
-import { McapWriter, McapRecordBuilder } from "@mcap/core";
+import {
+  McapWriter,
+  McapRecordBuilder,
+  type DecompressHandlers,
+} from "@mcap/core";
 import { loadDecompressHandlers } from "@mcap/support";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createDemo } from "./demo.ts";
-import { parseMcap } from "./parse.ts";
+import { fileReadable, InspectorSource } from "./source.ts";
+
+async function readRecording(file: Blob, handlers: DecompressHandlers) {
+  const source = await InspectorSource.open(
+    fileReadable(file),
+    handlers,
+    "fixture.mcap",
+    new AbortController().signal,
+  );
+  return (await source.readWindow(0, source.recording.duration))!;
+}
 
 async function fixture({
   useChunks,
@@ -61,7 +75,7 @@ async function fixture({
 }
 for (const mode of ["loose", "chunked", "zstd"]) {
   void test(`reads ${mode} and preserves nanoseconds and separate channel IDs`, async () => {
-    const result = await parseMcap(
+    const result = await readRecording(
       await fixture({
         useChunks: mode !== "loose",
         compression: mode === "zstd" ? mode : "",
@@ -115,7 +129,7 @@ void test("mixed loose/chunked physical records are never assigned to the preced
     "mixed.mcap",
   );
   // Summary offsets are intentionally stale: the sequential scanner must not rely on them.
-  const result = await parseMcap(mixed, {});
+  const result = await readRecording(mixed, {});
   assert.equal(result.looseCount, 1);
   assert.equal(
     result.channels[0]!.messages.find((m) => m.sequence === 99)?.chunkId,
@@ -123,15 +137,18 @@ void test("mixed loose/chunked physical records are never assigned to the preced
   );
 });
 void test("rejects invalid magic and truncated recordings", async () => {
-  await assert.rejects(parseMcap(new Blob([new Uint8Array(64)]), {}), /magic/i);
+  await assert.rejects(
+    readRecording(new Blob([new Uint8Array(64)]), {}),
+    /magic/i,
+  );
   const file = await fixture({ useChunks: true });
   await assert.rejects(
-    parseMcap(file.slice(0, file.size - 4), {}),
+    readRecording(file.slice(0, file.size - 4), {}),
     /truncated|incomplete/i,
   );
 });
 void test("demo is a real MCAP with all twelve populated channels", async () => {
-  const result = await parseMcap(await createDemo(), {});
+  const result = await readRecording(await createDemo(), {});
   assert.equal(result.channels.length, 12);
   assert.ok(result.chunks.length > 20);
   assert.ok(result.channels.every((c) => c.messages.length > 0));

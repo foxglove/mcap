@@ -82,7 +82,11 @@ export function frequencyLabel(count: number, duration?: number): string {
   ) {
     return "— Hz";
   }
-  return `${(count / duration).toLocaleString(undefined, {
+  const hz = count / duration;
+  if (hz > 0 && hz < 0.05) {
+    return "<0.1 Hz";
+  }
+  return `${hz.toLocaleString(undefined, {
     maximumFractionDigits: 1,
   })} Hz`;
 }

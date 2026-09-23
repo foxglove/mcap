@@ -13,9 +13,6 @@ export const inspectorStyles = `:host {
 * {
   box-sizing:border-box
 }
-body {
-  margin:0
-}
 button,input,select {
   font:inherit
 }
@@ -174,47 +171,11 @@ input:not([type=range]):not([type=file]) {
 input::placeholder {
   color:#7c90a6
 }
-.legend {
-  display:flex;
-  gap:16px;
-  margin-left:10px;
-  color:#9eafc2;
-  font-size:12px
-}
-.legend span {
-  display:flex;
-  align-items:center;
-  gap:7px
-}
-.legend i {
-  display:block
-}
-.tick {
-  width:1px;
-  height:12px;
-  background:#d7e5f3
-}
-.chunk {
-  width:16px;
-  height:12px;
-  background:#5aafff30;
-  border:1px solid #5aafff
-}
-.loose {
-  width:2px;
-  height:12px;
-  background:#ffb570
-}
 .view-controls {
   display:flex;
   align-items:center;
   gap:6px;
   margin-left:auto
-}
-.view-controls label {
-  font-size:12px;
-  color:#8ba0b7;
-  margin-right:8px
 }
 select {
   background:#1b2531;
@@ -279,29 +240,10 @@ h2 {
   font-weight:550;
   letter-spacing:-.3px
 }
-h3 {
-  font-size:15px;
-  margin:24px 0 10px
-}
 p {
   font-size:14px;
   line-height:1.7;
   color:#a0b1c4
-}
-.muted {
-  color:#71869e;
-  font-size:12px
-}
-.sample-colors {
-  display:flex;
-  gap:4px;
-  margin:24px 0
-}
-.sample-colors i {
-  display:block;
-  width:28px;
-  height:4px;
-  border-radius:1px
 }
 dl {
   margin:16px 0
@@ -320,21 +262,6 @@ dd {
   overflow-wrap:anywhere;
   color:#cfdfef
 }
-.accessible {
-  padding-top:18px;
-  border-top:1px solid #263341;
-  margin-top:24px
-}
-.accessible label {
-  display:block;
-  color:#899fb6;
-  font-size:12px;
-  margin-bottom:8px
-}
-.accessible select {
-  width:100%;
-  font-size:12px
-}
 .navigator {
   border:1px solid #293544;
   border-top:0;
@@ -346,12 +273,6 @@ dd {
   border-radius:0 0 8px 8px;
   font:12px ui-monospace,SFMono-Regular,Consolas,monospace;
   color:#8fa6be
-}
-.navigator input {
-  flex:1;
-  min-width:30px;
-  accent-color:#70b3ff;
-  height:14px
 }
 .navigator span {
   white-space:nowrap
@@ -369,15 +290,6 @@ footer {
   font-size:11px;
   padding:15px 0;
   line-height:1.7
-}
-footer b {
-  padding:0 7px;
-  font-weight:400;
-  color:#3c536c
-}
-#status {
-  color:#95a9c0;
-  text-align:right
 }
 .empty,.loading {
   position:absolute;
@@ -466,10 +378,6 @@ footer b {
   aside {
   width:300px
 }
-.workspace {
-  min-height:0
-}
-
 }
 @container(max-width:1050px) {
   .local {
@@ -481,20 +389,9 @@ footer b {
 aside {
   width:235px
 }
-.legend {
-  margin-left:0;
-  gap:10px
-}
-.view-controls {
-  margin-left:auto
-}
 .toolbar {
   gap:10px
 }
-.workspace {
-  height:var(--mcap-inspector-height, 520px)
-}
-
 }
 @container(max-width:760px) {
   header {
@@ -515,10 +412,6 @@ main {
   flex-direction:column;
   margin-bottom:16px;
   gap:16px
-}
-.stats {
-  gap:18px;
-  flex-wrap:wrap
 }
 .stats strong {
   font-size:14px
@@ -542,9 +435,6 @@ aside {
 .view-controls {
   flex-wrap:wrap
 }
-.legend {
-  margin-left:0
-}
 .search {
   flex:1
 }
@@ -566,10 +456,6 @@ footer {
   flex-direction:column;
   gap:4px
 }
-#status {
-  text-align:left
-}
-
 }
 
 .grouping { display: flex; align-items: center; gap: 0; }

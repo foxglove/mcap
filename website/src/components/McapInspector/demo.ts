@@ -15,7 +15,7 @@ export async function createDemo(): Promise<File> {
       },
     },
   });
-  await writer.start({ profile: "", library: "mcap-chunk-viewer demo" });
+  await writer.start({ profile: "", library: "mcap-inspector demo" });
   const topics: [string, number][] = [
     ["/camera/image", 10],
     ["/camera/info", 10],

@@ -63,10 +63,8 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
     const [requestedHeight, setRequestedHeight] = useState<number>();
     const [column, setColumn] = useState({ width: 246, max: 600 });
     const heightCap =
-      props.maxHeight ??
-      props.height ??
-      (requestedHeight == undefined ? 520 : 1200);
-    const resizeHeightCap = props.maxHeight ?? props.height ?? 1200;
+      props.maxHeight ?? (requestedHeight == undefined ? 520 : 1200);
+    const resizeHeightCap = props.maxHeight ?? 1200;
     const minimumHeight = inspectorHeight(
       0,
       resizeHeightCap,
@@ -210,10 +208,6 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
       setSidebar(false);
       timeline.current?.clearSelection();
     }
-    function changeGrouping(mode: Grouping) {
-      timeline.current?.setGrouping(mode);
-      setGrouping(mode);
-    }
     const channels = scope
       ? recording?.channels.filter((channel) => scope.ranges.has(channel.id)) ??
         []
@@ -263,7 +257,7 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
               ▥
             </span>
             <h1>
-              MCAP <span>Chunk explorer</span>
+              MCAP <span>Inspector</span>
             </h1>
           </div>
           <div className="header-actions">
@@ -352,17 +346,13 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
               <span>Group by</span>
               <button
                 aria-pressed={grouping === "channel"}
-                onClick={() => {
-                  changeGrouping("channel");
-                }}
+                onClick={() => timeline.current?.setGrouping("channel")}
               >
                 Channels
               </button>
               <button
                 aria-pressed={grouping === "chunk"}
-                onClick={() => {
-                  changeGrouping("chunk");
-                }}
+                onClick={() => timeline.current?.setGrouping("chunk")}
               >
                 Chunks
               </button>
@@ -552,8 +542,10 @@ export const InspectorApp = forwardRef<InspectorControls, InspectorAppProps>(
               </aside>
             )}
           </section>
-          {showResizeHandles && (
+          {recording && (
             <ResizeHandle
+              // Reserve the handle height during window loads to keep navigation stationary.
+              style={{ visibility: showResizeHandles ? "visible" : "hidden" }}
               axis="y"
               label="Resize inspector height"
               value={height}

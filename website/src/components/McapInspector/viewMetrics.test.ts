@@ -46,6 +46,8 @@ void test("frequency averages over the recording duration, including silence", (
   assert.equal(frequencyLabel(5, 39.273), "0.1 Hz");
   assert.equal(frequencyLabel(4887, 39.273), "124.4 Hz");
   assert.equal(frequencyLabel(10, 1), "10 Hz");
+  assert.equal(frequencyLabel(2, 60), "<0.1 Hz");
+  assert.equal(frequencyLabel(2, 40), "0.1 Hz");
   assert.equal(frequencyLabel(12346, 10), `${(1234.6).toLocaleString()} Hz`);
   assert.equal(frequencyLabel(10, 0), "— Hz");
   assert.equal(frequencyLabel(10, Number.NaN), "— Hz");

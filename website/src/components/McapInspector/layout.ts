@@ -17,7 +17,6 @@ export interface GroupRow extends ChunkGroup {
   kind: "group";
   groups: ChunkGroup[];
   messages: MessageMark[];
-  shownMessageCount: number;
 }
 export type TimelineRow = MessageRow | GroupRow;
 
@@ -145,7 +144,6 @@ export function chunkRows(groups: ChunkGroup[], filter: string): GroupRow[] {
       groups: members,
       children,
       messages,
-      shownMessageCount: messages.length,
     };
   };
   const rows = lanes.map((members, index) => makeRow(members, index));

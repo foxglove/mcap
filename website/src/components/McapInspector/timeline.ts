@@ -45,7 +45,6 @@ export class Timeline {
   #labelWidth = 246;
   #preferredLabelWidth?: number;
   #onLabelWidthChange: (width: number, max: number) => void;
-  #rowHeight = ROW_HEIGHT;
   #lastView?: { start: number; span: number; duration: number };
   #onRowsChange: (count: number) => void;
   #showChunks = true;
@@ -247,11 +246,11 @@ export class Timeline {
         } else if (e.key === "ArrowRight") {
           this.pan(this.#span * 0.15);
         } else if (e.key === "ArrowDown") {
-          this.#scrollY += this.#rowHeight;
+          this.#scrollY += ROW_HEIGHT;
           this.#clamp();
           this.#draw();
         } else if (e.key === "ArrowUp") {
-          this.#scrollY -= this.#rowHeight;
+          this.#scrollY -= ROW_HEIGHT;
           this.#clamp();
           this.#draw();
         } else if (e.key === "Home") {
@@ -310,10 +309,7 @@ export class Timeline {
     this.#scrollY = Math.max(
       0,
       Math.min(
-        Math.max(
-          0,
-          this.#rows.length * this.#rowHeight - (this.#height - RULER),
-        ),
+        Math.max(0, this.#rows.length * ROW_HEIGHT - (this.#height - RULER)),
         this.#scrollY,
       ),
     );
@@ -416,9 +412,7 @@ export class Timeline {
     if (index >= 0) {
       this.#scrollY = Math.max(
         0,
-        index * this.#rowHeight -
-          (this.#height - RULER) / 2 +
-          this.#rowHeight / 2,
+        index * ROW_HEIGHT - (this.#height - RULER) / 2 + ROW_HEIGHT / 2,
       );
     }
     this.#clamp();
@@ -583,12 +577,12 @@ export class Timeline {
     this.#notify();
   }
   #visibleRows() {
-    const first = Math.max(0, Math.floor(this.#scrollY / this.#rowHeight));
+    const first = Math.max(0, Math.floor(this.#scrollY / ROW_HEIGHT));
     return {
       first,
       last: Math.min(
         this.#rows.length,
-        first + Math.ceil((this.#height - RULER) / this.#rowHeight) + 1,
+        first + Math.ceil((this.#height - RULER) / ROW_HEIGHT) + 1,
       ),
     };
   }
@@ -596,7 +590,7 @@ export class Timeline {
     if (!this.#recording || y < RULER) {
       return;
     }
-    const index = Math.floor((y - RULER + this.#scrollY) / this.#rowHeight),
+    const index = Math.floor((y - RULER + this.#scrollY) / ROW_HEIGHT),
       row = this.#rows[index];
     if (!row) {
       return;
@@ -792,8 +786,8 @@ export class Timeline {
       }
       const left = this.#x(range.start),
         right = Math.max(left + 3, this.#x(range.end));
-      const top = RULER + row * this.#rowHeight - this.#scrollY;
-      group.push({ left, right, top, bottom: top + this.#rowHeight });
+      const top = RULER + row * ROW_HEIGHT - this.#scrollY;
+      group.push({ left, right, top, bottom: top + ROW_HEIGHT });
     }
     flush();
     return paths;
@@ -809,7 +803,7 @@ export class Timeline {
     ctx.rect(this.#labelWidth, RULER, this.#plotWidth, this.#height - RULER);
     ctx.clip();
     for (let i = first; i < last; i++) {
-      const y = RULER + i * this.#rowHeight - this.#scrollY;
+      const y = RULER + i * ROW_HEIGHT - this.#scrollY;
       const row = this.#rows[i]!;
       const selectedRow =
         row.kind === "channel" &&
@@ -820,12 +814,7 @@ export class Timeline {
         : i % 2 === 0
           ? "#192028"
           : "#151b22";
-      ctx.fillRect(
-        this.#labelWidth,
-        y + 2,
-        this.#plotWidth,
-        this.#rowHeight - 4,
-      );
+      ctx.fillRect(this.#labelWidth, y + 2, this.#plotWidth, ROW_HEIGHT - 4);
     }
     const roughStep =
       this.#span / Math.max(2, Math.floor(this.#plotWidth / 110));
@@ -877,7 +866,7 @@ export class Timeline {
     ctx.globalAlpha = 1;
     for (let i = first; i < last; i++) {
       const row = this.#rows[i]!,
-        y = RULER + i * this.#rowHeight - this.#scrollY + this.#rowHeight / 2;
+        y = RULER + i * ROW_HEIGHT - this.#scrollY + ROW_HEIGHT / 2;
       if (row.kind === "group" && this.#showChunks) {
         for (const group of row.groups) {
           const range = groupTimeRange(group, this.#recording!.startTime);
@@ -1035,28 +1024,34 @@ export class Timeline {
     ctx.clip();
     for (let i = first; i < last; i++) {
       const row = this.#rows[i]!,
-        y = RULER + i * this.#rowHeight - this.#scrollY;
+        y = RULER + i * ROW_HEIGHT - this.#scrollY;
       ctx.font = FONT;
       if (
         row.kind === "channel" &&
         row.channel.id === this.#selected?.channel?.id
       ) {
         ctx.fillStyle = "#293a4c";
-        ctx.fillRect(0, y + 2, this.#labelWidth - 8, this.#rowHeight - 4);
+        ctx.fillRect(0, y + 2, this.#labelWidth - 8, ROW_HEIGHT - 4);
       }
       if (row.kind === "group") {
         ctx.fillStyle = row.key === "loose" ? "#ffb570" : "#93a5b9";
         this.#drawTruncatedText(
           row.key === "loose" ? "Unchunked" : `Lane ${row.key + 1}`,
           18,
-          y + this.#rowHeight / 2 - 4,
+          y + ROW_HEIGHT / 2 - 4,
           this.#labelWidth - 30,
         );
         ctx.fillStyle = "#8aa1b9";
         ctx.fillText(
-          `${row.groups.length} ${row.key === "loose" ? "group" : "chunks"}`,
+          `${row.groups.length} ${
+            row.key === "loose"
+              ? "group"
+              : row.groups.length === 1
+                ? "chunk"
+                : "chunks"
+          }`,
           18,
-          y + this.#rowHeight / 2 + 12,
+          y + ROW_HEIGHT / 2 + 12,
         );
         continue;
       }
@@ -1064,26 +1059,24 @@ export class Timeline {
       ctx.fillText(
         String(row.channel.id).padStart(2, "0"),
         this.#grouping === "chunk" ? 27 : 18,
-        y + this.#rowHeight / 2 - 4,
+        y + ROW_HEIGHT / 2 - 4,
       );
       ctx.fillStyle = "#dbe5ef";
       this.#drawTruncatedText(
         row.channel.topic,
         70,
-        y + this.#rowHeight / 2 - 4,
+        y + ROW_HEIGHT / 2 - 4,
         this.#labelWidth - 82,
       );
-      if (this.#rowHeight >= 42) {
-        ctx.fillStyle = "#73869a";
-        ctx.fillText(
-          `${row.messages.length.toLocaleString()} messages · ${frequencyLabel(
-            row.messages.length,
-            frequencyWindow(this.#recording, row.chunk)?.duration,
-          )}`,
-          70,
-          y + this.#rowHeight / 2 + 12,
-        );
-      }
+      ctx.fillStyle = "#73869a";
+      ctx.fillText(
+        `${row.messages.length.toLocaleString()} messages · ${frequencyLabel(
+          row.messages.length,
+          frequencyWindow(this.#recording, row.chunk)?.duration,
+        )}`,
+        70,
+        y + ROW_HEIGHT / 2 + 12,
+      );
     }
     ctx.restore();
     ctx.strokeStyle = "#2b3542";
@@ -1102,9 +1095,9 @@ export class Timeline {
         85,
       );
     }
-    if (this.#rows.length * this.#rowHeight > this.#height - RULER) {
+    if (this.#rows.length * ROW_HEIGHT > this.#height - RULER) {
       const track = this.#height - RULER,
-        total = this.#rows.length * this.#rowHeight;
+        total = this.#rows.length * ROW_HEIGHT;
       ctx.fillStyle = "#52647a";
       ctx.fillRect(
         this.#width - 7,

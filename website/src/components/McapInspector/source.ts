@@ -8,7 +8,9 @@ import {
 } from "@mcap/core";
 
 import type { ChannelRow, ChunkInfo, MessageMark, Recording } from "./model.ts";
-import { MAX_MESSAGES, MAX_RECORD_BYTES } from "./parse.ts";
+// Bound transient payload allocations and retained message metadata.
+const MAX_RECORD_BYTES = 512 * 1024 * 1024;
+const MAX_MESSAGES = 2_000_000;
 
 export function fileReadable(file: Blob): IReadable {
   return {

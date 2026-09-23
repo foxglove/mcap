@@ -40,7 +40,7 @@ void test("filtering preserves chunk extents and only includes matching channels
   const rows = chunkRows(groupChunks(overlappingRecording()), "/imu");
   assert.equal(rows.length, 2);
   for (const row of rows) {
-    assert.equal(row.shownMessageCount, 3);
+    assert.equal(row.messages.length, 3);
     assert.equal(row.children.length, 1);
     assert.equal(row.children[0]!.channel.topic, "/imu");
   }
