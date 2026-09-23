@@ -24,10 +24,10 @@ type McapReaderOptions = {
    * records returned separately. Uncompressed chunks also remain opaque. Takes precedence over
    * `includeChunks` and does not call `decompressHandlers`, even for unknown compression algorithms.
    *
-   * Chunk contents, uncompressed size/CRC, and message/channel relationships are not validated
+   * Chunk contents, uncompressed size/CRC, and messages referencing unknown channels are not validated
    * in this mode: definitions may be inside chunks, and checking a compressed chunk's uncompressed
-   * CRC requires decompression. Framing and attachment CRC checks are unchanged. Consumers are
-   * responsible for grouping chunks with indexes and validating any chunks they expand.
+   * CRC requires decompression. Conflicting outer Channel definitions, framing, and attachment CRCs
+   * are still checked. Consumers group chunks with indexes and validate any chunks they expand.
    */
   emitChunks?: boolean;
 
@@ -56,8 +56,9 @@ type McapReaderOptions = {
  * A streaming reader for MCAP files.
  *
  * Set `emitChunks: true` to emit chunks without expanding them, as in the Python, Go, and Rust
- * stream readers. In this mode, all returned byte arrays are owned copies, independent of input
- * and internal buffering, and may be retained or modified across further reads and appends.
+ * stream readers. Byte arrays in outer records are owned copies in all modes, so subsequent
+ * appends do not overwrite retained payloads. With `emitChunks: true`, payloads may also be
+ * modified without affecting subsequent reads.
  *
  * The reader checks magic bytes, record parsing, duplicate headers, and trailing bytes after
  * the footer. It is not a complete MCAP validator; see the options for validation boundaries.
@@ -67,16 +68,15 @@ type McapReaderOptions = {
  * Usage example:
  * ```
  * const reader = new McapStreamReader();
- * stream.on("data", (data) => {
- *   try {
- *     reader.append(data);
- *     for (let record; (record = reader.nextRecord()); ) {
- *       // process available records
- *     }
- *   } catch (e) {
- *     // handle errors
+ * for await (const data of stream) {
+ *   reader.append(data);
+ *   for (let record; (record = reader.nextRecord()); ) {
+ *     // process available records
  *   }
- * });
+ * }
+ * if (!reader.done()) {
+ *   throw new Error("Incomplete MCAP stream");
+ * }
  * ```
  */
 export default class McapStreamReader {
@@ -196,7 +196,7 @@ export default class McapStreamReader {
     }
     const result = this.#generator.next();
 
-    if (!this.#emitChunks && result.value?.type === "Channel") {
+    if (result.value?.type === "Channel") {
       const existing = this.#channelsById.get(result.value.id);
       this.#channelsById.set(result.value.id, result.value);
       if (existing && !isChannelEqual(existing, result.value)) {
@@ -212,7 +212,7 @@ export default class McapStreamReader {
       }
     }
 
-    if (result.done === true) {
+    if (result.done === true && result.value?.type === "Footer") {
       this.#doneReading = true;
     }
     return result.value;
@@ -249,9 +249,9 @@ export default class McapStreamReader {
           yield record;
           break;
         case "Unknown":
-          // The low-level parser borrows unknown payloads. In emitChunks mode, keep them safe
-          // to retain when subsequent appends reuse the streaming buffer.
-          yield this.#emitChunks ? { ...record, data: record.data.slice() } : record;
+          // The low-level parser borrows unknown payloads from the streaming buffer, which
+          // subsequent appends may reuse.
+          yield { ...record, data: record.data.slice() };
           break;
         case "Schema":
         case "Channel":

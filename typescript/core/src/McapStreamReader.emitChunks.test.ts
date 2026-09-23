@@ -232,15 +232,13 @@ describe("McapStreamReader emitChunks", () => {
     expect(drain(reader)).toEqual([compressed, { type: "DataEnd", dataSectionCrc: 0 }, footer]);
   });
 
-  it("returns standalone records without message/channel relationship validation", () => {
+  it("returns standalone messages without requiring prior channel definitions", () => {
     const builder = new McapRecordBuilder();
     builder.writeMagic();
     builder.writeHeader(header);
     builder.writeSchema(schema);
     builder.writeMessage(message);
     builder.writeChannel(channel);
-    const otherChannel = { ...channel, topic: "/different" };
-    builder.writeChannel(otherChannel);
     const attachment = {
       type: "Attachment",
       logTime: 0n,
@@ -259,12 +257,26 @@ describe("McapStreamReader emitChunks", () => {
       schema,
       message,
       channel,
-      otherChannel,
       attachment,
       metadata,
       { type: "DataEnd", dataSectionCrc: 0 },
       footer,
     ]);
+  });
+
+  it.each([false, true])("rejects conflicting outer channels (emitChunks=%s)", (emitChunks) => {
+    const builder = new McapRecordBuilder();
+    builder.writeMagic();
+    builder.writeChannel(channel);
+    builder.writeChannel(channel);
+    builder.writeChannel({ ...channel, topic: "/different" });
+    const reader = new McapStreamReader({ emitChunks });
+    reader.append(finish(builder));
+    expect(reader.nextRecord()).toEqual(channel);
+    expect(reader.nextRecord()).toEqual(channel);
+    expect(() => reader.nextRecord()).toThrow(
+      "differs from previous channel record of the same id",
+    );
   });
 
   it("leaves done false for every incomplete prefix, including at record boundaries", () => {
@@ -379,43 +391,64 @@ describe("McapStreamReader emitChunks", () => {
     expect(unchecked.nextRecord()?.type).toBe("Attachment");
   });
 
-  it("owns input and returned payloads across buffer appends, compaction, and growth", () => {
-    const builder = new McapRecordBuilder();
-    builder.writeMagic();
-    builder.writeSchema(schema);
-    builder.writeMessage(message);
-    const compressed = chunk(new Uint8Array([1, 2, 3]), "deflate");
-    builder.writeChunk(compressed);
-    builder.writeAttachment({
-      logTime: 0n,
-      createTime: 0n,
-      name: "file",
-      mediaType: "",
-      data: new Uint8Array([8, 9]),
-    });
-    const input = new Uint8Array([...builder.buffer, ...record(0x80 as Opcode, [7, 6, 5])]);
-    const reader = new McapStreamReader({ emitChunks: true });
-    reader.append(input);
-    input.fill(0);
-    const retained = drain(reader);
-    const expected = structuredClone(retained);
-    expect(retained[2]).toEqual(compressed);
-    expect(retained[4]).toEqual({ type: "Unknown", opcode: 0x80, data: new Uint8Array([7, 6, 5]) });
-    // Similar-size appends first fill unused capacity, then force compaction; the large one grows it.
-    for (const size of [input.length - 9, input.length - 9, input.length * 10]) {
-      reader.append(record(0x81 as Opcode, new Array<number>(size).fill(0xaa)));
-      expect(reader.nextRecord()?.type).toBe("Unknown");
+  it.each([false, true])(
+    "owns outer payloads across appends, compaction, and growth (emitChunks=%s)",
+    (emitChunks) => {
+      const builder = new McapRecordBuilder();
+      builder.writeMagic();
+      builder.writeSchema(schema);
+      builder.writeChannel(channel);
+      builder.writeMessage(message);
+      const compressed = chunk(new Uint8Array(), "deflate");
+      builder.writeChunk(compressed);
+      builder.writeAttachment({
+        logTime: 0n,
+        createTime: 0n,
+        name: "file",
+        mediaType: "",
+        data: new Uint8Array([8, 9]),
+      });
+      const input = new Uint8Array([...builder.buffer, ...record(0x80 as Opcode, [7, 6, 5])]);
+      const reader = new McapStreamReader({
+        emitChunks,
+        includeChunks: true,
+        decompressHandlers: { deflate: (bytes) => new Uint8Array(inflateSync(bytes)) },
+      });
+      reader.append(input);
+      input.fill(0);
+      const retained = drain(reader);
+      const expected = [
+        schema,
+        channel,
+        message,
+        compressed,
+        {
+          type: "Attachment",
+          logTime: 0n,
+          createTime: 0n,
+          name: "file",
+          mediaType: "",
+          data: new Uint8Array([8, 9]),
+        },
+        { type: "Unknown", opcode: 0x80, data: new Uint8Array([7, 6, 5]) },
+      ];
       expect(retained).toEqual(expected);
-    }
-    const compressedRecord = retained[2];
-    if (compressedRecord?.type !== "Chunk") {
-      throw new Error("Expected chunk");
-    }
-    compressedRecord.records.fill(0);
-    const end = new McapRecordBuilder();
-    reader.append(finish(end));
-    expect(drain(reader)).toEqual([{ type: "DataEnd", dataSectionCrc: 0 }, footer]);
-  });
+      // Similar-size appends first fill unused capacity, then force compaction; the large one grows it.
+      for (const size of [input.length - 9, input.length - 9, input.length * 10]) {
+        reader.append(record(0x81 as Opcode, new Array<number>(size).fill(0xaa)));
+        expect(reader.nextRecord()?.type).toBe("Unknown");
+        expect(retained).toEqual(expected);
+      }
+      const compressedRecord = retained[3];
+      if (compressedRecord?.type !== "Chunk") {
+        throw new Error("Expected chunk");
+      }
+      compressedRecord.records.fill(0);
+      const end = new McapRecordBuilder();
+      reader.append(finish(end));
+      expect(drain(reader)).toEqual([{ type: "DataEnd", dataSectionCrc: 0 }, footer]);
+    },
+  );
 
   it("preserves McapStreamReader chunk expansion, includeChunks ordering, and decompression timing", () => {
     const { data } = fixture();
