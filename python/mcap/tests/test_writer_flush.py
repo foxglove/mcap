@@ -54,7 +54,7 @@ def test_flush_with_no_open_chunk_writes_no_chunk():
 
 def test_flush_flushes_a_file_opened_by_the_writer(tmp_path):
     # When given a path, the writer owns the buffered file object, so the caller cannot flush
-    # it; flush() must do so or the chunk may stay in the userspace buffer.
+    # it; flush() must do so or the chunk may stay buffered.
     path = tmp_path / "out.mcap"
     writer = Writer(str(path), compression=CompressionType.NONE)
     writer.start()
