@@ -4,7 +4,7 @@ from mcap.exceptions import EndOfFile
 from mcap.reader import make_reader
 from mcap.records import Message
 from mcap.stream_reader import StreamReader
-from mcap.writer import Writer
+from mcap.writer import CompressionType, Writer
 
 
 def test_flush_finishes_the_open_chunk_without_reaching_chunk_size():
@@ -50,3 +50,26 @@ def test_flush_with_no_open_chunk_writes_no_chunk():
     summary = make_reader(BytesIO(output.getvalue())).get_summary()
     assert summary is not None and summary.statistics is not None
     assert summary.statistics.chunk_count == 0
+
+
+def test_flush_flushes_a_file_opened_by_the_writer(tmp_path):
+    # When given a path, the writer owns the buffered file object, so the caller cannot flush
+    # it; flush() must do so or the chunk may stay in the userspace buffer.
+    path = tmp_path / "out.mcap"
+    writer = Writer(str(path), compression=CompressionType.NONE)
+    writer.start()
+    channel_id = writer.register_channel(
+        topic="/t", message_encoding="json", schema_id=0
+    )
+    writer.add_message(channel_id, log_time=0, data=b"{}", publish_time=0)
+    writer.flush()
+    prefix = StreamReader(BytesIO(path.read_bytes()), emit_chunks=False)
+    messages = []
+    try:
+        for record in prefix.records:
+            if isinstance(record, Message):
+                messages.append(record)
+    except EndOfFile:
+        pass
+    assert len(messages) == 1
+    writer.finish()
