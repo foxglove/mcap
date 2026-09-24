@@ -280,7 +280,7 @@ wheels = [
 
 [[package]]
 name = "mcap"
-version = "1.4.0"
+version = "1.5.0"
 source = { editable = "mcap" }
 dependencies = [
     { name = "lz4" },
