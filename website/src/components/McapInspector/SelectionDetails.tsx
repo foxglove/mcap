@@ -1,0 +1,131 @@
+import React from "react";
+
+import {
+  bytes,
+  frequencyLabel,
+  frequencyWindow,
+  timeLabel,
+  type Recording,
+} from "./model.ts";
+import type { Selection } from "./timeline.ts";
+
+export function SelectionDetails({
+  selection,
+  recording,
+}: {
+  selection?: Selection;
+  recording?: Recording;
+}): React.JSX.Element {
+  if (!selection) {
+    return (
+      <>
+        <h2>Inspect a message</h2>
+        <p>
+          Click a tick to select it. Its marker and channel stay highlighted
+          while you inspect its details.
+        </p>
+        <p>
+          Double-click a chunk to see only the channels and messages it
+          contains.
+        </p>
+      </>
+    );
+  }
+  const { channel, message, chunk, unchunked } = selection;
+  const rows: [label: string, value: string, exact?: string][] = [];
+  if (channel) {
+    rows.push(
+      ["Channel ID", String(channel.id)],
+      ["Topic", channel.topic],
+      ["Encoding", channel.encoding || "—"],
+      ["Schema ID", String(channel.schemaId)],
+    );
+  }
+  if (message) {
+    rows.push(
+      ["Relative log time", timeLabel(message.time)],
+      ["Log time · ns", String(message.logTime)],
+      ["Publish time · ns", String(message.publishTime)],
+      ["Sequence", String(message.sequence)],
+      ["Payload size", bytes(message.size)],
+      ["Belongs to", chunk ? `Chunk #${chunk.id}` : "Unchunked record"],
+    );
+  }
+  if (message && !chunk) {
+    rows.push([
+      "Record file offset",
+      bytes(message.offset),
+      `${message.offset.toLocaleString()} B`,
+    ]);
+  }
+  if (channel && !message) {
+    const messages = chunk
+      ? channel.messages.filter((mark) => mark.chunkId === chunk.id)
+      : channel.messages;
+    rows.push([
+      chunk ? "Channel messages in chunk" : "Messages in loaded window",
+      `${messages.length.toLocaleString()} · ${frequencyLabel(
+        messages.length,
+        frequencyWindow(recording, chunk)?.duration,
+      )}`,
+    ]);
+  }
+  if (unchunked === true && recording) {
+    rows.push([
+      "Messages outside chunks",
+      recording.looseCount.toLocaleString(),
+    ]);
+  }
+  if (chunk && recording) {
+    rows.push(
+      ["Chunk", `#${chunk.id}`],
+      ["Compression", chunk.compression],
+      [
+        "Chunk rate interval",
+        `${(Number(chunk.endTime - chunk.startTime) / 1e9).toFixed(
+          6,
+        )} s (including silence)`,
+      ],
+      [
+        "Messages in chunk",
+        chunk.loaded === false
+          ? "Not loaded"
+          : `${chunk.messageCount.toLocaleString()} · ${frequencyLabel(
+              chunk.messageCount,
+              Number(chunk.endTime - chunk.startTime) / 1e9,
+            )}`,
+      ],
+      ["Start", timeLabel(Number(chunk.startTime - recording.startTime) / 1e9)],
+      ["End", timeLabel(Number(chunk.endTime - recording.startTime) / 1e9)],
+      [
+        "File offset",
+        bytes(chunk.offset),
+        `${chunk.offset.toLocaleString()} B`,
+      ],
+      ["Record size", bytes(chunk.byteLength)],
+      ["Compressed records", bytes(chunk.compressedSize)],
+      ["Uncompressed records", bytes(chunk.uncompressedSize)],
+    );
+  }
+  return (
+    <>
+      <h2>
+        {message
+          ? "Selected message"
+          : chunk
+            ? `Chunk #${chunk.id}`
+            : unchunked === true
+              ? "Unchunked messages"
+              : "Selected channel"}
+      </h2>
+      <dl>
+        {rows.map(([label, value, exact]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd title={exact}>{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </>
+  );
+}
