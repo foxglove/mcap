@@ -1,4 +1,4 @@
-import Reader from "./Reader.ts";
+import McapByteReader from "./McapByteReader.ts";
 import { parseRecord } from "./parse.ts";
 import { sortedIndexBy } from "./sortedIndexBy.ts";
 import { sortedLastIndexBy } from "./sortedLastIndex.ts";
@@ -157,7 +157,7 @@ export class ChunkCursor {
       messageIndexes.byteLength,
     );
 
-    const reader = new Reader(messageIndexesView);
+    const reader = new McapByteReader(messageIndexesView);
     const arrayOfMessageOffsets: [logTime: bigint, offset: bigint][][] = [];
     let record;
     while ((record = parseRecord(reader, true))) {

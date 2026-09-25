@@ -3,7 +3,7 @@ import { Heap } from "heap-js";
 
 import { CachedReadable } from "./CachedReadable.ts";
 import { ChunkCursor } from "./ChunkCursor.ts";
-import Reader from "./Reader.ts";
+import McapByteReader from "./McapByteReader.ts";
 import { MCAP_MAGIC } from "./constants.ts";
 import { parseMagic, parseRecord } from "./parse.ts";
 import type { DecompressHandlers, IReadable, TypedMcapRecords } from "./types.ts";
@@ -145,7 +145,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
         headerPrefix.byteOffset,
         headerPrefix.byteLength,
       );
-      void parseMagic(new Reader(headerPrefixView));
+      void parseMagic(new McapByteReader(headerPrefixView));
       const headerContentLength = headerPrefixView.getBigUint64(
         MCAP_MAGIC.length + /* Opcode.HEADER */ 1,
         true,
@@ -159,7 +159,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
         readOptions,
       );
       headerEndOffset = BigInt(MCAP_MAGIC.length) + headerReadLength;
-      const headerReader = new Reader(
+      const headerReader = new McapByteReader(
         new DataView(headerRecord.buffer, headerRecord.byteOffset, headerRecord.byteLength),
       );
       const headerResult = parseRecord(headerReader, true);
@@ -211,7 +211,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
 
     try {
       void parseMagic(
-        new Reader(footerAndMagicView, footerAndMagicView.byteLength - MCAP_MAGIC.length),
+        new McapByteReader(footerAndMagicView, footerAndMagicView.byteLength - MCAP_MAGIC.length),
       );
     } catch (error) {
       throw errorWithLibrary((error as Error).message);
@@ -219,7 +219,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
 
     let footer: TypedMcapRecords["Footer"];
     {
-      const footerReader = new Reader(footerAndMagicView);
+      const footerReader = new McapByteReader(footerAndMagicView);
       const footerRecord = parseRecord(footerReader, true);
       if (footerRecord?.type !== "Footer") {
         throw errorWithLibrary(
@@ -292,7 +292,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
       dataEndAndSummarySection.byteOffset,
       dataEndAndSummarySection.byteLength,
     );
-    const indexReader = new Reader(indexView);
+    const indexReader = new McapByteReader(indexView);
 
     const channelsById = new Map<number, TypedMcapRecords["Channel"]>();
     const schemasById = new Map<number, TypedMcapRecords["Schema"]>();
@@ -434,7 +434,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
     // cursor becomes active (i.e. when we first need to access messages from the chunk) and removed
     // when the cursor is removed from the heap.
     const chunkViewCache = new Map<bigint, DataView>();
-    const chunkReader = new Reader(new DataView(new ArrayBuffer(0)));
+    const chunkReader = new McapByteReader(new DataView(new ArrayBuffer(0)));
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
@@ -511,7 +511,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
         metadataIndex.length,
         readOptions,
       );
-      const metadataReader = new Reader(
+      const metadataReader = new McapByteReader(
         new DataView(metadataData.buffer, metadataData.byteOffset, metadataData.byteLength),
       );
       const metadataRecord = parseRecord(metadataReader, false);
@@ -564,7 +564,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
         attachmentIndex.length,
         readOptions,
       );
-      const attachmentReader = new Reader(
+      const attachmentReader = new McapByteReader(
         new DataView(attachmentData.buffer, attachmentData.byteOffset, attachmentData.byteLength),
       );
       const attachmentRecord = parseRecord(attachmentReader, validateCrcs ?? true);
@@ -588,7 +588,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
       chunkIndex.chunkLength,
       options?.readOptions,
     );
-    const chunkReader = new Reader(
+    const chunkReader = new McapByteReader(
       new DataView(chunkData.buffer, chunkData.byteOffset, chunkData.byteLength),
     );
     const chunkRecord = parseRecord(chunkReader, options?.validateCrcs ?? true);

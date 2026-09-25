@@ -1,13 +1,13 @@
 import { crc32 } from "@foxglove/crc";
 
-import Reader from "./Reader.ts";
+import McapByteReader from "./McapByteReader.ts";
 import { MCAP_MAGIC, Opcode } from "./constants.ts";
 import type { McapMagic, TypedMcapRecord } from "./types.ts";
 
 /**
  * Parse a MCAP magic string at `startOffset` in `view`.
  */
-export function parseMagic(reader: Reader): McapMagic | undefined {
+export function parseMagic(reader: McapByteReader): McapMagic | undefined {
   if (reader.bytesRemaining() < MCAP_MAGIC.length) {
     return undefined;
   }
@@ -28,8 +28,11 @@ export function parseMagic(reader: Reader): McapMagic | undefined {
  * Parse a MCAP record from the given reader
  */
 // NOTE: internal function in the hot path, (de)structuring  args would be wasteful, acceptable perf/clarity tradeoff
-// eslint-disable-next-line @foxglove/no-boolean-parameters
-export function parseRecord(reader: Reader, validateCrcs = false): TypedMcapRecord | undefined {
+export function parseRecord(
+  reader: McapByteReader,
+  // eslint-disable-next-line @foxglove/no-boolean-parameters
+  validateCrcs = false,
+): TypedMcapRecord | undefined {
   const RECORD_HEADER_SIZE = 1 /*opcode*/ + 8; /*record content length*/
   if (reader.bytesRemaining() < RECORD_HEADER_SIZE) {
     return undefined;
@@ -108,7 +111,11 @@ export function parseRecord(reader: Reader, validateCrcs = false): TypedMcapReco
   return result;
 }
 
-function parseUnknown(reader: Reader, recordLength: number, opcode: number): TypedMcapRecord {
+function parseUnknown(
+  reader: McapByteReader,
+  recordLength: number,
+  opcode: number,
+): TypedMcapRecord {
   const data = reader.u8ArrayBorrow(recordLength);
   return {
     type: "Unknown",
@@ -117,7 +124,7 @@ function parseUnknown(reader: Reader, recordLength: number, opcode: number): Typ
   };
 }
 
-function parseHeader(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseHeader(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const profile = reader.string();
   const library = reader.string();
@@ -125,7 +132,7 @@ function parseHeader(reader: Reader, recordLength: number): TypedMcapRecord {
   return { type: "Header", profile, library };
 }
 
-function parseFooter(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseFooter(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const summaryStart = reader.uint64();
   const summaryOffsetStart = reader.uint64();
@@ -139,7 +146,7 @@ function parseFooter(reader: Reader, recordLength: number): TypedMcapRecord {
   };
 }
 
-function parseSchema(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseSchema(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const start = reader.offset;
   const id = reader.uint16();
   const name = reader.string();
@@ -161,7 +168,7 @@ function parseSchema(reader: Reader, recordLength: number): TypedMcapRecord {
   };
 }
 
-function parseChannel(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseChannel(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const channelId = reader.uint16();
   const schemaId = reader.uint16();
@@ -183,8 +190,13 @@ function parseChannel(reader: Reader, recordLength: number): TypedMcapRecord {
   };
 }
 
-function parseMessage(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseMessage(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const MESSAGE_PREFIX_SIZE = 2 + 4 + 8 + 8; // channelId, sequence, logTime, publishTime
+  if (recordLength < MESSAGE_PREFIX_SIZE) {
+    throw new Error(
+      `Message record length ${recordLength} is less than ${MESSAGE_PREFIX_SIZE} bytes`,
+    );
+  }
   const channelId = reader.uint16();
   const sequence = reader.uint32();
   const logTime = reader.uint64();
@@ -200,7 +212,7 @@ function parseMessage(reader: Reader, recordLength: number): TypedMcapRecord {
   };
 }
 
-function parseChunk(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseChunk(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const start = reader.offset;
   const startTime = reader.uint64();
   const endTime = reader.uint64();
@@ -226,7 +238,7 @@ function parseChunk(reader: Reader, recordLength: number): TypedMcapRecord {
   };
 }
 
-function parseMessageIndex(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseMessageIndex(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const channelId = reader.uint16();
   const records = reader.keyValuePairs(
@@ -241,7 +253,7 @@ function parseMessageIndex(reader: Reader, recordLength: number): TypedMcapRecor
   };
 }
 
-function parseChunkIndex(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseChunkIndex(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const messageStartTime = reader.uint64();
   const messageEndTime = reader.uint64();
@@ -271,7 +283,7 @@ function parseChunkIndex(reader: Reader, recordLength: number): TypedMcapRecord 
 }
 
 function parseAttachment(
-  reader: Reader,
+  reader: McapByteReader,
   recordLength: number,
   // NOTE: internal function in the hot path, (de)structuring  args would be wasteful, acceptable perf/clarity tradeoff
   // eslint-disable-next-line @foxglove/no-boolean-parameters
@@ -314,7 +326,7 @@ function parseAttachment(
   };
 }
 
-function parseAttachmentIndex(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseAttachmentIndex(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const offset = reader.uint64();
   const length = reader.uint64();
@@ -337,7 +349,7 @@ function parseAttachmentIndex(reader: Reader, recordLength: number): TypedMcapRe
   };
 }
 
-function parseStatistics(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseStatistics(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const messageCount = reader.uint64();
   const schemaCount = reader.uint16();
@@ -367,7 +379,7 @@ function parseStatistics(reader: Reader, recordLength: number): TypedMcapRecord 
   };
 }
 
-function parseMetadata(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseMetadata(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const name = reader.string();
   const metadata = reader.map(
@@ -378,7 +390,7 @@ function parseMetadata(reader: Reader, recordLength: number): TypedMcapRecord {
   return { type: "Metadata", metadata, name };
 }
 
-function parseMetadataIndex(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseMetadataIndex(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const offset = reader.uint64();
   const length = reader.uint64();
@@ -393,7 +405,7 @@ function parseMetadataIndex(reader: Reader, recordLength: number): TypedMcapReco
   };
 }
 
-function parseSummaryOffset(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseSummaryOffset(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const groupOpcode = reader.uint8();
   const groupStart = reader.uint64();
@@ -408,7 +420,7 @@ function parseSummaryOffset(reader: Reader, recordLength: number): TypedMcapReco
   };
 }
 
-function parseDataEnd(reader: Reader, recordLength: number): TypedMcapRecord {
+function parseDataEnd(reader: McapByteReader, recordLength: number): TypedMcapRecord {
   const startOffset = reader.offset;
   const dataSectionCrc = reader.uint32();
   reader.offset = startOffset + recordLength;
