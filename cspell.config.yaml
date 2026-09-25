@@ -116,6 +116,7 @@ words:
   - rustup
   - Saronic
   - schemaless
+  - seekable
   - serde
   - sfixed
   - srgb
