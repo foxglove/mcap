@@ -28,9 +28,9 @@ export function parseMagic(reader: McapByteReader): McapMagic | undefined {
  * Parse a MCAP record from the given reader
  */
 // NOTE: internal function in the hot path, (de)structuring  args would be wasteful, acceptable perf/clarity tradeoff
-// eslint-disable-next-line @foxglove/no-boolean-parameters
 export function parseRecord(
   reader: McapByteReader,
+  // eslint-disable-next-line @foxglove/no-boolean-parameters
   validateCrcs = false,
 ): TypedMcapRecord | undefined {
   const RECORD_HEADER_SIZE = 1 /*opcode*/ + 8; /*record content length*/
