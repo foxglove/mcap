@@ -32,10 +32,7 @@ struct OffsetEntry {
 }
 
 pub fn run(ctx: &CommandContext, args: DuCommand) -> Result<()> {
-    let mcap = source::load_path(
-        &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()),
-    )?;
+    let mcap = source::load_path(&args.file, source::SourceOptions::from_context(ctx))?;
 
     let (usage, used_approximate) = if args.approximate {
         match collect_usage_approximate(&mcap)? {

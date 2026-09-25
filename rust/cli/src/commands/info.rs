@@ -10,7 +10,7 @@ use crate::{parse, render, source};
 pub fn run(ctx: &CommandContext, args: InfoCommand) -> Result<()> {
     let parsed = source::parse_mcap_from_path(
         &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()).scan_data_without_statistics(true),
+        source::SourceOptions::from_context(ctx).scan_data_without_statistics(true),
     )?;
     print!("{}", render_info(&parsed, ctx.time_format()));
     Ok(())

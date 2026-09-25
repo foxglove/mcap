@@ -7,7 +7,7 @@ use crate::context::CommandContext;
 use crate::{parse, source};
 
 pub fn run(ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
-    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let source_options = source::SourceOptions::from_context(ctx);
     let metadata = if let Some(remote) = source::try_open_remote_mcap(&args.file, source_options)? {
         merged_remote_metadata_for_name(&remote, &args.name, source_options)?
     } else {

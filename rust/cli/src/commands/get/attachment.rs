@@ -11,7 +11,7 @@ const PLEASE_REDIRECT: &str =
     "Binary output can screw up your terminal. Supply -o or redirect to a file or pipe";
 
 pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
-    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let source_options = source::SourceOptions::from_context(ctx);
     if let Some(output) = args.output.as_deref() {
         source::ensure_distinct_local_input_output(&args.file, output)?;
     }
