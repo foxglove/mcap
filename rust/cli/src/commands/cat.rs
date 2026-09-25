@@ -246,10 +246,10 @@ fn cat_indexed(
     let mut indexed_opts =
         mcap::sans_io::IndexedReaderOptions::new().with_order(ReadOrder::LogTime);
     if opts.start != 0 {
-        indexed_opts = indexed_opts.log_time_on_or_after(opts.start);
+        indexed_opts = indexed_opts.starting_at(opts.start);
     }
     if let Some(end) = opts.end {
-        indexed_opts = indexed_opts.log_time_before(end);
+        indexed_opts = indexed_opts.ending_before(end);
     }
     // Reader-level topic filtering keys on `summary.channels`, so skip it when chunk-local channels
     // may exist (see `needs_in_chunk_definitions`) and let the per-message `include_topic` check
@@ -422,10 +422,10 @@ fn cat_remote_indexed(
     let mut indexed_opts =
         mcap::sans_io::IndexedReaderOptions::new().with_order(ReadOrder::LogTime);
     if opts.start != 0 {
-        indexed_opts = indexed_opts.log_time_on_or_after(opts.start);
+        indexed_opts = indexed_opts.starting_at(opts.start);
     }
     if let Some(end) = opts.end {
-        indexed_opts = indexed_opts.log_time_before(end);
+        indexed_opts = indexed_opts.ending_before(end);
     }
     // Reader-level topic filtering keys on `summary.channels`, so skip it when chunk-local channels
     // may exist (see `needs_in_chunk_definitions`) and let the per-message `include_topic` check

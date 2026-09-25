@@ -45,8 +45,7 @@ type indexedMessageIterator struct {
 	lexer  *Lexer
 	rs     io.ReadSeeker
 	topics map[string]bool
-	start  uint64
-	end    uint64
+	bounds logTimeBounds
 	order  ReadOrder
 
 	channels          slicemap[Channel]
@@ -163,8 +162,8 @@ func (it *indexedMessageIterator) parseSummarySection() error {
 			if err != nil {
 				return fmt.Errorf("failed to parse chunk index: %w", err)
 			}
-			// if the chunk overlaps with the requested parameters, load it
-			if (it.end == 0 && it.start == 0) || (idx.MessageStartTime < it.end && idx.MessageEndTime >= it.start) {
+			// if the chunk overlaps with the requested time range, load it
+			if it.bounds.overlapsLogTimes(idx.MessageStartTime, idx.MessageEndTime) {
 				// Can't infer absence of a topic if there are no message indexes.
 				if len(idx.MessageIndexOffsets) == 0 {
 					it.chunkIndexes = append(it.chunkIndexes, idx)
@@ -322,7 +321,7 @@ func (it *indexedMessageIterator) loadChunk(chunkIndex *ChunkIndex) error {
 				return fmt.Errorf("could not parse message in chunk: %w", err)
 			}
 			if it.channels.Get(msg.ChannelID) != nil {
-				if msg.LogTime >= it.start && msg.LogTime < it.end {
+				if it.bounds.includesLogTime(msg.LogTime) {
 					it.messageIndexes = append(it.messageIndexes, messageIndexWithChunkSlot{
 						timestamp:      msg.LogTime,
 						offset:         offset,
