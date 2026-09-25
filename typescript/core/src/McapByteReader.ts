@@ -12,7 +12,7 @@ const textDecoder = new TextDecoder();
  * an MCAP file reader; use {@link McapIndexedReader} or {@link McapStreamReader} to read MCAP
  * files.
  */
-export default class Reader {
+export default class McapByteReader {
   #view: DataView;
   #viewU8: Uint8Array;
   /** Current read position in bytes from the start of the view. */
@@ -86,7 +86,10 @@ export default class Reader {
    * Read a length-prefixed sequence of key-value pairs (uint32 byte length of the entries, then
    * entries until that many bytes have been consumed).
    */
-  keyValuePairs<K, V>(readKey: (reader: Reader) => K, readValue: (reader: Reader) => V): [K, V][] {
+  keyValuePairs<K, V>(
+    readKey: (reader: McapByteReader) => K,
+    readValue: (reader: McapByteReader) => V,
+  ): [K, V][] {
     const length = this.uint32();
     if (this.offset + length > this.#view.byteLength) {
       throw new Error(`Key-value pairs length ${length} exceeds bounds of buffer`);
@@ -114,7 +117,10 @@ export default class Reader {
    * Read a length-prefixed map (uint32 byte length of the entries, then key-value entries until
    * that many bytes have been consumed). Duplicate keys are an error.
    */
-  map<K, V>(readKey: (reader: Reader) => K, readValue: (reader: Reader) => V): Map<K, V> {
+  map<K, V>(
+    readKey: (reader: McapByteReader) => K,
+    readValue: (reader: McapByteReader) => V,
+  ): Map<K, V> {
     const length = this.uint32();
     if (this.offset + length > this.#view.byteLength) {
       throw new Error(`Map length ${length} exceeds bounds of buffer`);

@@ -1,14 +1,16 @@
-import Reader from "./Reader.ts";
+import McapByteReader from "./McapByteReader.ts";
 
-function readerFromBytes(bytes: number[]): Reader {
+function readerFromBytes(bytes: number[]): McapByteReader {
   const buffer = new Uint8Array(bytes);
-  return new Reader(new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength));
+  return new McapByteReader(new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength));
 }
 
-describe("Reader", () => {
+describe("McapByteReader", () => {
   it("u8ArrayBorrow shares memory with the source buffer", () => {
     const buffer = new Uint8Array([1, 2, 3, 4]);
-    const reader = new Reader(new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength));
+    const reader = new McapByteReader(
+      new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength),
+    );
     const borrowed = reader.u8ArrayBorrow(2);
     expect(Array.from(borrowed)).toEqual([1, 2]);
     buffer[0] = 9;
@@ -17,7 +19,9 @@ describe("Reader", () => {
 
   it("u8ArrayCopy does not share memory with the source buffer", () => {
     const buffer = new Uint8Array([1, 2, 3, 4]);
-    const reader = new Reader(new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength));
+    const reader = new McapByteReader(
+      new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength),
+    );
     const copied = reader.u8ArrayCopy(2);
     expect(Array.from(copied)).toEqual([1, 2]);
     buffer[0] = 9;

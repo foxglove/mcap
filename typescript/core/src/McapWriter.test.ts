@@ -1,9 +1,9 @@
 import { crc32 } from "@foxglove/crc";
 
+import McapByteReader from "./McapByteReader.ts";
 import { McapIndexedReader } from "./McapIndexedReader.ts";
 import McapStreamReader from "./McapStreamReader.ts";
 import { McapWriter } from "./McapWriter.ts";
-import Reader from "./Reader.ts";
 import { TempBuffer } from "./TempBuffer.ts";
 import { MCAP_MAGIC, Opcode } from "./constants.ts";
 import { parseMagic, parseRecord } from "./parse.ts";
@@ -298,7 +298,7 @@ describe("McapWriter", () => {
 
     const array = tempBuffer.get();
     const view = new DataView(array.buffer, array.byteOffset, array.byteLength);
-    const reader = new Reader(view);
+    const reader = new McapByteReader(view);
     const records: TypedMcapRecord[] = [];
     parseMagic(reader);
     let result;

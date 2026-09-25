@@ -1,6 +1,6 @@
 import { crc32 } from "@foxglove/crc";
 
-import Reader from "./Reader.ts";
+import McapByteReader from "./McapByteReader.ts";
 import { MCAP_MAGIC } from "./constants.ts";
 import { parseMagic, parseRecord } from "./parse.ts";
 import type {
@@ -66,7 +66,7 @@ type McapReaderOptions = {
 export default class McapStreamReader {
   #buffer = new ArrayBuffer(MCAP_MAGIC.length * 2);
   #view = new DataView(this.#buffer, 0, 0);
-  #reader = new Reader(this.#view);
+  #reader = new McapByteReader(this.#view);
   #decompressHandlers;
   #includeChunks;
   #emitChunks;
@@ -272,7 +272,7 @@ export default class McapStreamReader {
             }
           }
           const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-          const chunkReader = new Reader(view);
+          const chunkReader = new McapByteReader(view);
           let chunkRecord;
           while ((chunkRecord = parseRecord(chunkReader, this.#validateCrcs))) {
             switch (chunkRecord.type) {
