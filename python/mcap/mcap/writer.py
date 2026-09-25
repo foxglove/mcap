@@ -4,7 +4,7 @@ from collections import defaultdict
 from enum import Enum, Flag, auto
 from importlib.metadata import PackageNotFoundError, version
 from io import BufferedWriter, RawIOBase
-from typing import IO, Any, Dict, List, OrderedDict, Union
+from typing import IO, Any, Dict, List, Optional, OrderedDict, Set, Union
 
 from .exceptions import UnsupportedCompressionError
 
@@ -106,6 +106,9 @@ class Writer:
         self.__metadata_indexes: list[MetadataIndex] = []
         self.__channels: OrderedDict[int, Channel] = OrderedDict()
         self.__chunk_builder = ChunkBuilder() if use_chunking else None
+        self.__group_chunk_builders: Dict[str, ChunkBuilder] = {}
+        self.__group_schema_ids: Dict[str, Set[int]] = {}
+        self.__channel_chunk_builders: Dict[int, ChunkBuilder] = {}
         self.__chunk_indices: List[ChunkIndex] = []
         self.__chunk_size = chunk_size
         self.__compression = compression
@@ -215,8 +218,11 @@ class Writer:
         self.__statistics.channel_message_counts[message.channel_id] += 1
         self.__statistics.message_count += 1
         if self.__chunk_builder:
-            self.__chunk_builder.add_message(message)
-            self.__maybe_finalize_chunk()
+            chunk_builder = self.__channel_chunk_builders.get(
+                channel_id, self.__chunk_builder
+            )
+            chunk_builder.add_message(message)
+            self.__maybe_finalize_chunk(chunk_builder)
         else:
             message.write(self.__record_builder)
             self.__flush()
@@ -245,7 +251,7 @@ class Writer:
         Writes any final indexes, summaries etc to the file. Note that it does
         not close the underlying output stream.
         """
-        self.__finalize_chunk()
+        self.__finalize_all_chunks()
 
         DataEnd(self.__data_section_crc).write(self.__record_builder)
         self.__flush()
@@ -367,6 +373,7 @@ class Writer:
         message_encoding: str,
         schema_id: int,
         metadata: Dict[str, str] = {},
+        chunk_group: Optional[str] = None,
     ) -> int:
         """
         Registers a new message channel. Returns the numeric id of the new channel.
@@ -377,7 +384,13 @@ class Writer:
         :param message_encoding: Encoding for messages on this channel. See the list of well-known
             message encodings for common values.
         :param metadata: Metadata about this channel.
+        :param chunk_group: Name of the chunk group for this channel's messages. Messages from
+            channels in different groups never share a chunk, so a reader can fetch one group's
+            chunks without the others. Each group fills and finishes its own chunks. Channels
+            without a group share the default chunks.
         """
+        if chunk_group is not None and not self.__chunk_builder:
+            raise ValueError("chunk_group requires use_chunking=True")
         channel_id = len(self.__channels) + 1
         channel = Channel(
             id=channel_id,
@@ -389,8 +402,13 @@ class Writer:
         self.__channels[channel_id] = channel
         self.__statistics.channel_count += 1
         if self.__chunk_builder:
-            self.__chunk_builder.add_channel(channel)
-            self.__maybe_finalize_chunk()
+            if chunk_group is None:
+                chunk_builder = self.__chunk_builder
+            else:
+                chunk_builder = self.__group_chunk_builder(chunk_group, schema_id)
+                self.__channel_chunk_builders[channel_id] = chunk_builder
+            chunk_builder.add_channel(channel)
+            self.__maybe_finalize_chunk(chunk_builder)
         else:
             channel.write(self.__record_builder)
         return channel_id
@@ -411,7 +429,7 @@ class Writer:
         self.__statistics.schema_count += 1
         if self.__chunk_builder:
             self.__chunk_builder.add_schema(schema)
-            self.__maybe_finalize_chunk()
+            self.__maybe_finalize_chunk(self.__chunk_builder)
         else:
             schema.write(self.__record_builder)
         return schema_id
@@ -437,16 +455,32 @@ class Writer:
             self.__data_section_crc = zlib.crc32(data, self.__data_section_crc)
         self.__stream.write(data)
 
-    def __finalize_chunk(self):
-        if not self.__chunk_builder:
-            return
+    def __group_chunk_builder(self, chunk_group: str, schema_id: int) -> ChunkBuilder:
+        chunk_builder = self.__group_chunk_builders.setdefault(
+            chunk_group, ChunkBuilder()
+        )
+        # A group's chunks can land in the file before the chunk holding this schema, so
+        # each group carries its own copy of the schemas its channels use.
+        schema_ids = self.__group_schema_ids.setdefault(chunk_group, set())
+        schema = self.__schemas.get(schema_id)
+        if schema is not None and schema_id not in schema_ids:
+            chunk_builder.add_schema(schema)
+            schema_ids.add(schema_id)
+        return chunk_builder
 
-        if self.__chunk_builder.num_messages == 0:
+    def __finalize_all_chunks(self):
+        if self.__chunk_builder:
+            self.__finalize_chunk(self.__chunk_builder)
+        for chunk_builder in self.__group_chunk_builders.values():
+            self.__finalize_chunk(chunk_builder)
+
+    def __finalize_chunk(self, chunk_builder: ChunkBuilder):
+        if chunk_builder.num_messages == 0:
             return
 
         self.__statistics.chunk_count += 1
 
-        chunk_data = self.__chunk_builder.end()
+        chunk_data = chunk_builder.end()
         if self.__compression == CompressionType.LZ4:
             compression = "lz4"
             compressed_data: bytes = lz4.frame.compress(chunk_data)  # type: ignore
@@ -459,8 +493,8 @@ class Writer:
         chunk = Chunk(
             compression=compression,
             data=compressed_data,
-            message_start_time=self.__chunk_builder.message_start_time,
-            message_end_time=self.__chunk_builder.message_end_time,
+            message_start_time=chunk_builder.message_start_time,
+            message_end_time=chunk_builder.message_end_time,
             uncompressed_crc=zlib.crc32(chunk_data) if self.__enable_crcs else 0,
             uncompressed_size=len(chunk_data),
         )
@@ -486,7 +520,7 @@ class Writer:
         message_index_start_offset = self.__stream.tell()
 
         if self.__index_types & IndexType.MESSAGE:
-            for id, index in self.__chunk_builder.message_indices.items():
+            for id, index in chunk_builder.message_indices.items():
                 chunk_index.message_index_offsets[id] = (
                     message_index_start_offset + self.__record_builder.count
                 )
@@ -497,7 +531,7 @@ class Writer:
         self.__flush()
 
         self.__chunk_indices.append(chunk_index)
-        self.__chunk_builder.reset()
+        chunk_builder.reset()
 
     def flush(self):
         """Finishes the chunk in progress, if any, writes everything buffered so far to
@@ -505,13 +539,13 @@ class Writer:
         A chunk with no messages is not written. Compression works per chunk, so flushing
         often reduces the compression ratio.
         """
-        self.__finalize_chunk()
+        self.__finalize_all_chunks()
         self.__flush()
         self.__stream.flush()
 
-    def __maybe_finalize_chunk(self):
-        if self.__chunk_builder and self.__chunk_builder.count > self.__chunk_size:
-            self.__finalize_chunk()
+    def __maybe_finalize_chunk(self, chunk_builder: ChunkBuilder):
+        if chunk_builder.count > self.__chunk_size:
+            self.__finalize_chunk(chunk_builder)
 
 
 __all__ = ["CompressionType", "IndexType", "LIBRARY_IDENTIFIER", "Writer"]
