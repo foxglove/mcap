@@ -392,10 +392,10 @@ jobs:
           fallback: none
       - name: Build binary
         run: |
-          ${{ matrix.build }} -p mcap-cli --release --target "${{ matrix.target }}"
+          ${{ matrix.build }} -p mcap-cli --profile dist --target "${{ matrix.target }}"
           mkdir -p rust/bin
           cp \
-            "target/${{ matrix.target }}/release/mcap${{ matrix.exe }}" \
+            "target/${{ matrix.target }}/dist/mcap${{ matrix.exe }}" \
             "rust/bin/mcap-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }}"
       - if: matrix.arch == 'amd64'
         run: rust/bin/mcap-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.exe }} --version
