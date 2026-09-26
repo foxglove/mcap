@@ -27,6 +27,7 @@ class Writer:
         chunk_size: int = 1024 * 1024,
         compression: CompressionType = CompressionType.ZSTD,
         enable_crcs: bool = True,
+        profile: str = "",
     ):
         self._writer = McapWriter(
             output,
@@ -37,7 +38,7 @@ class Writer:
         self._schemas: Dict[str, Tuple[int, str]] = {}
         self._channels: Dict[str, int] = {}
         self._finished = False
-        self._writer.start(library=_library_identifier())
+        self._writer.start(profile=profile, library=_library_identifier())
 
     def write_message(
         self,
