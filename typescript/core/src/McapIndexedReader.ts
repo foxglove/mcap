@@ -377,8 +377,9 @@ export class McapIndexedReader<TReadOptions = unknown> {
   /**
    * Read messages from the file, optionally filtering by topic and log time.
    * Provide at most one lower bound (`startingAt` or `startingAfter`) and one
-   * upper bound (`endingAt` or `endingBefore`). An upper bound below the lower
-   * bound throws; equal bounds are a valid empty range.
+   * upper bound (`endingAt` or `endingBefore`). The bounds resolve to a
+   * half-open range `[start, end)`. `start > end` throws; `start == end` is a
+   * valid empty range.
    */
   async *readMessages(
     args: {
@@ -543,9 +544,9 @@ export class McapIndexedReader<TReadOptions = unknown> {
   /**
    * Read attachments from the file, optionally filtering by name, media
    * type, and log time. Provide at most one lower bound (`startingAt` or
-   * `startingAfter`) and one upper bound (`endingAt` or `endingBefore`). An
-   * upper bound below the lower bound throws; equal bounds are a valid empty
-   * range.
+   * `startingAfter`) and one upper bound (`endingAt` or `endingBefore`). The
+   * bounds resolve to a half-open range `[start, end)`. `start > end` throws;
+   * `start == end` is a valid empty range.
    */
   async *readAttachments(
     args: {

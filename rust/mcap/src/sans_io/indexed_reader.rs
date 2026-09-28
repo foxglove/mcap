@@ -134,8 +134,8 @@ impl IndexedReader {
 
     /// Create a reader over `summary` with the given options.
     ///
-    /// Returns [`McapError::EndBeforeStart`] if the upper log-time bound is below the lower
-    /// bound; equal bounds are a valid empty range.
+    /// The log-time bounds resolve to a half-open range `[start, end)`. Returns
+    /// [`McapError::EndBeforeStart`] if `start > end`; `start == end` is a valid empty range.
     pub fn new_with_options(
         summary: &crate::Summary,
         options: IndexedReaderOptions,
