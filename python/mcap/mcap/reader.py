@@ -50,9 +50,9 @@ def _resolve_time_range(
 ) -> Tuple[Optional[int], Optional[int]]:
     """Resolve the explicit and deprecated time bounds to an inclusive-start /
     exclusive-end pair, warning on deprecated names and rejecting conflicting bounds
-    and crossed ranges. ``starting_after`` at ``2**64 - 1`` admits nothing; it is a valid
-    empty query on its own or with ``ending_at`` at ``2**64 - 1``, so pagination terminates
-    there, and a crossed range with any other end bound.
+    and crossed ranges. A start bound past every possible end bound (for example
+    ``starting_after`` at the maximum timestamp) is an empty query, not an error,
+    unless an end bound is also given below it.
     """
     if start_time is not None:
         warnings.warn(
