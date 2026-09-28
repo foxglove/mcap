@@ -3,6 +3,7 @@
 # cspell:words getbuffer
 import json
 import os
+import warnings
 from io import BytesIO
 from pathlib import Path
 from typing import IO, Any, Dict, List, Optional, Tuple, Type, Union
@@ -212,6 +213,34 @@ def test_deprecated_time_range_names(reader_cls: AnyReaderSubclass):
             with pytest.warns(DeprecationWarning, match="end_time is deprecated"):
                 count = sum(1 for _ in reader.iter_messages(start_time=42, end_time=43))
     assert count == 1
+
+
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+@pytest.mark.parametrize("method", ["iter_messages", "iter_decoded_messages"])
+def test_deprecated_time_range_warning_points_at_caller(
+    reader_cls: AnyReaderSubclass, method: str
+):
+    """the deprecation warning is attributed to the caller's frame, not to mcap.reader.
+
+    Python's default filters only show a DeprecationWarning attributed to __main__, so a
+    warning attributed to the library would be invisible to most callers.
+    """
+
+    class RawDecoderFactory(DecoderFactory):
+        def decoder_for(self, message_encoding: str, schema: Optional[Schema]):
+            return lambda data: data
+
+    with open(DEMO_MCAP, "rb") as f:
+        reader: McapReader = reader_cls(f, decoder_factories=[RawDecoderFactory()])
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            for _ in getattr(reader, method)(start_time=42, end_time=43):
+                pass
+    deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
+    names = [str(w.message).split(" ")[0] for w in deprecations]
+    assert names == ["start_time", "end_time"]
+    for w in deprecations:
+        assert w.filename == __file__
 
 
 @pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)

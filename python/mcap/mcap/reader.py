@@ -240,15 +240,16 @@ class McapReader(ABC):
 
         Accepts the same arguments as :py:meth:`iter_messages`.
         """
+        # Resolve the bounds here rather than in iter_messages so that a deprecation
+        # warning is attributed to the caller of this generator, not to the loop below.
+        starting_at, ending_before = _resolve_time_range(
+            start_time, end_time, starting_at, starting_after, ending_at, ending_before
+        )
         message_iterator = self.iter_messages(
             topics,
-            start_time,
-            end_time,
-            log_time_order,
-            reverse,
+            log_time_order=log_time_order,
+            reverse=reverse,
             starting_at=starting_at,
-            starting_after=starting_after,
-            ending_at=ending_at,
             ending_before=ending_before,
         )
 
