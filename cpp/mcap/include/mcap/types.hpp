@@ -352,6 +352,16 @@ struct MCAP_PUBLIC DataEnd {
   uint32_t dataSectionCrc;
 };
 
+/**
+ * @brief The position of a record in an MCAP file. A record inside a chunk is identified by its
+ * offset within the decompressed chunk contents together with the file offset of the chunk
+ * record; a record outside any chunk is identified by its file offset alone.
+ *
+ * RecordOffsets are totally ordered by position in the file. Records are ordered by the file
+ * offset of the chunk that contains them (or their own file offset when not chunked); a plain
+ * file offset that names the start of a chunk sorts before every record inside that chunk; and
+ * records in the same chunk are ordered by their offset within it.
+ */
 struct MCAP_PUBLIC RecordOffset {
   ByteOffset offset;
   std::optional<ByteOffset> chunkOffset;
@@ -363,23 +373,29 @@ struct MCAP_PUBLIC RecordOffset {
       : offset(offset_)
       , chunkOffset(chunkOffset_) {}
 
-  bool operator==(const RecordOffset& other) const;
-  bool operator>(const RecordOffset& other) const;
+  /**
+   * @brief Three-way comparison: negative if this record precedes `other` in the file, zero if
+   * they name the same record, positive if this record follows `other`.
+   */
+  int compare(const RecordOffset& other) const;
 
-  bool operator!=(const RecordOffset& other) const {
-    return !(*this == other);
+  bool operator==(const RecordOffset& other) const {
+    return compare(other) == 0;
   }
-  bool operator>=(const RecordOffset& other) const {
-    return ((*this == other) || (*this > other));
+  bool operator!=(const RecordOffset& other) const {
+    return compare(other) != 0;
   }
   bool operator<(const RecordOffset& other) const {
-    // Mirror operator> rather than deriving from >=: operator== is false whenever exactly one
-    // side is inside a chunk, so a chunk-relative offset and a plain file offset that name the
-    // same position would otherwise compare less-than in both directions.
-    return other > *this;
+    return compare(other) < 0;
   }
   bool operator<=(const RecordOffset& other) const {
-    return !(*this > other);
+    return compare(other) <= 0;
+  }
+  bool operator>(const RecordOffset& other) const {
+    return compare(other) > 0;
+  }
+  bool operator>=(const RecordOffset& other) const {
+    return compare(other) >= 0;
   }
 };
 

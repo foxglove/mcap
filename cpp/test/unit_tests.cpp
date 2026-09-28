@@ -1450,6 +1450,102 @@ TEST_CASE("RecordOffset equality operators", "[reader]") {
     REQUIRE(!(a >= b));
     REQUIRE(b >= a);
   }
+
+  SECTION("unchunked record before a chunk") {
+    mcap::RecordOffset a(20);
+    mcap::RecordOffset b(10, 30);
+
+    REQUIRE(a != b);
+    REQUIRE(b != a);
+
+    REQUIRE(a < b);
+    REQUIRE(!(b < a));
+
+    REQUIRE(a <= b);
+    REQUIRE(!(b <= a));
+
+    REQUIRE(!(a > b));
+    REQUIRE(b > a);
+
+    REQUIRE(!(a >= b));
+    REQUIRE(b >= a);
+  }
+
+  SECTION("unchunked record after a chunk") {
+    mcap::RecordOffset a(40);
+    mcap::RecordOffset b(10, 30);
+
+    REQUIRE(a != b);
+    REQUIRE(b != a);
+
+    REQUIRE(!(a < b));
+    REQUIRE(b < a);
+
+    REQUIRE(!(a <= b));
+    REQUIRE(b <= a);
+
+    REQUIRE(a > b);
+    REQUIRE(!(b > a));
+
+    REQUIRE(a >= b);
+    REQUIRE(!(b >= a));
+  }
+
+  SECTION("unchunked offset at the start of a chunk precedes the chunk's records") {
+    // The reverse-order indexed reader keys a chunk's decompress job on the end of its message
+    // indexes, which is the start offset of the next chunk. That plain offset must sort before
+    // every record inside the next chunk, including one at chunk-relative offset 0.
+    mcap::RecordOffset a(30);
+    mcap::RecordOffset b(0, 30);
+    mcap::RecordOffset c(10, 30);
+
+    REQUIRE(a != b);
+    REQUIRE(a != c);
+
+    REQUIRE(a < b);
+    REQUIRE(a < c);
+    REQUIRE(!(b < a));
+    REQUIRE(!(c < a));
+
+    REQUIRE(a <= b);
+    REQUIRE(!(b <= a));
+
+    REQUIRE(!(a > b));
+    REQUIRE(b > a);
+    REQUIRE(c > a);
+
+    REQUIRE(!(a >= b));
+    REQUIRE(b >= a);
+  }
+
+  SECTION("operators describe a total order") {
+    // Every pair of offsets, chunked or not, must be ordered by exactly one of <, ==, >, with the
+    // remaining operators derived consistently. This is what std::push_heap and std::pop_heap
+    // require of the indexed reader's job queue.
+    const std::vector<mcap::RecordOffset> offsets = {
+      mcap::RecordOffset(10),     mcap::RecordOffset(30),     mcap::RecordOffset(30),
+      mcap::RecordOffset(40),     mcap::RecordOffset(0, 30),  mcap::RecordOffset(10, 30),
+      mcap::RecordOffset(10, 30), mcap::RecordOffset(20, 30), mcap::RecordOffset(5, 40),
+    };
+    for (const auto& a : offsets) {
+      for (const auto& b : offsets) {
+        CAPTURE(a.offset, a.chunkOffset.value_or(0), a.chunkOffset.has_value());
+        CAPTURE(b.offset, b.chunkOffset.value_or(0), b.chunkOffset.has_value());
+        const int ordered = int(a < b) + int(a == b) + int(a > b);
+        REQUIRE(ordered == 1);
+        REQUIRE((a < b) == (b > a));
+        REQUIRE((a == b) == (b == a));
+        REQUIRE((a != b) == !(a == b));
+        REQUIRE((a <= b) == !(a > b));
+        REQUIRE((a >= b) == !(a < b));
+        for (const auto& c : offsets) {
+          if (a < b && b < c) {
+            REQUIRE(a < c);
+          }
+        }
+      }
+    }
+  }
 }
 
 TEST_CASE("parsing", "header") {
