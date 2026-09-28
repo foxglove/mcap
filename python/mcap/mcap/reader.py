@@ -219,7 +219,8 @@ class McapReader(ABC):
             after this timestamp are not included (exclusive upper bound).
 
         At most one lower bound (``start_time``, ``starting_at``, ``starting_after``) and one upper
-        bound (``end_time``, ``ending_at``, ``ending_before``) may be provided.
+        bound (``end_time``, ``ending_at``, ``ending_before``) may be provided. An upper bound
+        below the lower bound raises ``ValueError``; equal bounds are a valid empty range.
         """
         raise NotImplementedError()
 
