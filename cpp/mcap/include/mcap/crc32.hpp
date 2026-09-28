@@ -12,11 +12,15 @@
   (defined(__GNUC__) || defined(__clang__) || defined(_MSC_VER))
 #  define MCAP_CRC32_PCLMUL 1
 #  include <immintrin.h>
+#  if defined(_MSC_VER)
+// Also covers clang-cl, which defines _MSC_VER alongside __clang__ and
+// provides __cpuid via this header.
+#    include <intrin.h>
+#  endif
 #  if defined(__GNUC__) || defined(__clang__)
 #    define MCAP_CRC32_PCLMUL_TARGET __attribute__((target("pclmul,sse4.1")))
 #  else
 #    define MCAP_CRC32_PCLMUL_TARGET
-#    include <intrin.h>
 #  endif
 #endif
 
@@ -210,7 +214,10 @@ MCAP_CRC32_PCLMUL_TARGET inline uint32_t crc32UpdatePclmul(const uint32_t prev,
 }
 
 inline bool cpuSupportsPclmul() {
-#  if defined(_MSC_VER) && !defined(__clang__)
+  // Use __cpuid for MSVC and clang-cl. clang-cl lowers __builtin_cpu_supports
+  // to a read of __cpu_model from the compiler-rt builtins library, which the
+  // MSVC linker does not link by default, so that path fails to link there.
+#  if defined(_MSC_VER)
   static const bool supported = [] {
     int info[4] = {0, 0, 0, 0};
     __cpuid(info, 1);
