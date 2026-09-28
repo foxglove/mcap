@@ -607,14 +607,17 @@ impl IndexedReaderOptions {
         self
     }
 
-    /// Whether a message logged at `log_time` falls inside the configured time range.
-    pub fn includes_log_time(&self, log_time: u64) -> bool {
+    /// Whether a message logged at `log_time` falls inside the configured time range,
+    /// with the deprecated `start`/`end` fields folded in.
+    #[cfg(test)]
+    fn includes_log_time(&self, log_time: u64) -> bool {
         self.log_time_bounds().includes_log_time(log_time)
     }
 
     /// Whether any log time in the closed interval `[first, last]` falls inside the configured
-    /// time range. The reader uses it to skip chunks.
-    pub fn overlaps_log_times(&self, first: u64, last: u64) -> bool {
+    /// time range, with the deprecated `start`/`end` fields folded in.
+    #[cfg(test)]
+    fn overlaps_log_times(&self, first: u64, last: u64) -> bool {
         self.log_time_bounds().overlaps_log_times(first, last)
     }
 
