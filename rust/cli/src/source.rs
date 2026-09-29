@@ -37,13 +37,16 @@ pub(crate) const MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN: u64 = 100_000_000;
 // byte received.
 const REMOTE_DOWNLOAD_CHUNK_BYTES: u64 = 64 * 1024 * 1024;
 // object_store's default 30s timeout spans the entire response body, killing
-// long transfers. Downloads get an effectively unlimited one instead; stalls
-// are caught by REMOTE_DOWNLOAD_STALL_TIMEOUT.
-const REMOTE_DOWNLOAD_REQUEST_TIMEOUT: &str = "7days";
-const REMOTE_DOWNLOAD_STALL_TIMEOUT: Duration = Duration::from_secs(120);
-// Bounds waiting for each download GET's response head; sits above
-// object_store's 180s retry budget so internal retries can finish.
-const REMOTE_DOWNLOAD_RESPONSE_TIMEOUT: Duration = Duration::from_secs(240);
+// long transfers: whole-file downloads, but also indexed reads of a single
+// large chunk record over a slow link. Every remote request gets an
+// effectively unlimited one instead, and liveness is enforced here: a
+// response head must arrive within REMOTE_RESPONSE_TIMEOUT and a body must
+// keep delivering bytes at least every REMOTE_STALL_TIMEOUT.
+const REMOTE_REQUEST_TIMEOUT: &str = "7days";
+const REMOTE_STALL_TIMEOUT: Duration = Duration::from_secs(120);
+// Sits above object_store's default 180s retry budget so internal retries
+// on the response head can finish.
+const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(240);
 // object_store resumes body errors itself inside `GetResult::into_stream`
 // when the response carried an ETag, sharing one retry budget with the
 // request head (default: 10 retries or 3 minutes, with backoff). Downloads
@@ -527,15 +530,15 @@ impl RemoteUrl {
         self.options_from_env_vars(std::env::vars_os())
     }
 
-    fn store_options(&self, access: RemoteAccess) -> Vec<(String, String)> {
+    /// `options()` plus the long request timeout for object_store stores.
+    /// Last-wins in the builder, so this overrides any env timeout
+    /// (for example AWS_TIMEOUT).
+    fn store_options(&self) -> Vec<(String, String)> {
         let mut options = self.options();
-        if matches!(access, RemoteAccess::Download) {
-            // Last-wins in parse_url_opts: overrides any env timeout (e.g. AWS_TIMEOUT).
-            options.push((
-                ClientConfigKey::Timeout.as_ref().to_string(),
-                REMOTE_DOWNLOAD_REQUEST_TIMEOUT.to_string(),
-            ));
-        }
+        options.push((
+            ClientConfigKey::Timeout.as_ref().to_string(),
+            REMOTE_REQUEST_TIMEOUT.to_string(),
+        ));
         options
     }
 
@@ -594,12 +597,12 @@ impl ObjectStoreSource {
         // S3 credentials resolve through the AWS SDK default chain so
         // ~/.aws/credentials, profiles, and SSO work like they do for the
         // `aws` CLI; other stores keep object_store's env-var mechanisms.
-        // The SDK manages its own request timeouts, so the download timeout
-        // override in `store_options` only applies to object_store backends.
+        // The SDK manages its own request timeouts, so the timeout override in
+        // `store_options` only applies to object_store backends.
         let result = if matches!(remote_url.url.scheme(), "s3" | "s3a") {
             crate::sdk_s3::build_s3_store(&runtime, &remote_url.url, remote_url.options())
         } else {
-            build_object_store(&remote_url.url, remote_url.store_options(access), access)
+            build_object_store(&remote_url.url, remote_url.store_options(), access)
         };
         // object_store errors repeat their source in Display, so flatten to a
         // single message instead of letting the anyhow chain print it twice.
@@ -618,8 +621,7 @@ impl ObjectStoreSource {
     }
 
     fn stat(&self) -> Result<object_store::ObjectMeta> {
-        self.runtime
-            .block_on(self.store.head(&self.path))
+        self.block_on_bounded(self.store.head(&self.path))?
             .map_err(|err| concise_remote_stat_error(&self.display_url, err))
     }
 
@@ -631,23 +633,72 @@ impl ObjectStoreSource {
     /// encoding. The range is assumed to be valid (non-empty, within the object).
     fn get_range(&self, range: std::ops::Range<u64>) -> Result<Vec<u8>> {
         let response = self
-            .runtime
-            .block_on(self.store.get_opts(
-                &self.path,
-                GetOptions {
-                    range: Some(GetRange::Bounded(range)),
-                    ..GetOptions::default()
-                },
-            ))
+            .get_opts_bounded(GetOptions {
+                range: Some(GetRange::Bounded(range)),
+                ..GetOptions::default()
+            })?
             .map_err(|err| {
                 concise_remote_operation_error("fetching range from", &self.display_url, err)
             })?;
         validate_identity_content_encoding(&response.attributes, &self.display_url)?;
-        let bytes = self
-            .runtime
-            .block_on(response.bytes())
-            .with_context(|| format!("failed to read range from {}", self.display_url))?;
-        Ok(bytes.to_vec())
+        self.collect_body(response)
+    }
+
+    /// Run one store request, bounding the wait for its response head by
+    /// `REMOTE_RESPONSE_TIMEOUT`. The outer error is that wait expiring; the
+    /// inner result is the store's own, left intact for callers to classify.
+    fn block_on_bounded<T>(
+        &self,
+        request: impl std::future::Future<Output = object_store::Result<T>>,
+    ) -> Result<object_store::Result<T>> {
+        self.runtime.block_on(async {
+            match tokio::time::timeout(REMOTE_RESPONSE_TIMEOUT, request).await {
+                Ok(result) => Ok(result),
+                Err(_) => Err(anyhow::anyhow!(
+                    "failed to read {}: timed out waiting for response ({}s)",
+                    self.display_url,
+                    REMOTE_RESPONSE_TIMEOUT.as_secs()
+                )),
+            }
+        })
+    }
+
+    fn get_opts_bounded(
+        &self,
+        options: GetOptions,
+    ) -> Result<std::result::Result<object_store::GetResult, object_store::Error>> {
+        self.block_on_bounded(self.store.get_opts(&self.path, options))
+    }
+
+    /// Read a whole response body into memory, failing if no bytes arrive for
+    /// `REMOTE_STALL_TIMEOUT`. Replaces `GetResult::bytes`, which has no
+    /// liveness check now that the request timeout is effectively unlimited.
+    fn collect_body(&self, response: object_store::GetResult) -> Result<Vec<u8>> {
+        let expected = response.range.end.saturating_sub(response.range.start);
+        let mut out = Vec::with_capacity(
+            usize::try_from(expected.min(REMOTE_DOWNLOAD_CHUNK_BYTES)).unwrap_or(0),
+        );
+        self.runtime.block_on(async {
+            let mut stream = response.into_stream();
+            loop {
+                let Ok(next) = tokio::time::timeout(REMOTE_STALL_TIMEOUT, stream.try_next()).await
+                else {
+                    bail!(
+                        "failed to read range from {}: stalled (no data for {}s)",
+                        self.display_url,
+                        REMOTE_STALL_TIMEOUT.as_secs()
+                    );
+                };
+                match next {
+                    Ok(Some(bytes)) => out.extend_from_slice(&bytes),
+                    Ok(None) => return Ok(out),
+                    Err(err) => {
+                        return Err(anyhow::Error::new(err)
+                            .context(format!("failed to read range from {}", self.display_url)))
+                    }
+                }
+            }
+        })
     }
 
     /// Probe bounded range support with a one-byte request, returning the object
@@ -656,13 +707,10 @@ impl ObjectStoreSource {
     /// ranges but reject suffix ranges, and to learn the size without a HEAD (which
     /// some HTTP servers reject).
     fn probe_bounded_range_size(&self) -> Result<Option<u64>> {
-        match self.runtime.block_on(self.store.get_opts(
-            &self.path,
-            GetOptions {
-                range: Some(GetRange::Bounded(0..1)),
-                ..GetOptions::default()
-            },
-        )) {
+        match self.get_opts_bounded(GetOptions {
+            range: Some(GetRange::Bounded(0..1)),
+            ..GetOptions::default()
+        })? {
             Ok(response) => {
                 validate_identity_content_encoding(&response.attributes, &self.display_url)?;
                 // A `*` total in `Content-Range` fails object_store's parse and
@@ -698,13 +746,10 @@ impl ObjectStoreSource {
             // A suffix request proves range support, discovers the size via
             // `Content-Range`, and returns the tail in one round trip. If the object
             // is shorter than `tail_bytes`, servers return the entire object.
-            match self.runtime.block_on(self.store.get_opts(
-                &self.path,
-                GetOptions {
-                    range: Some(GetRange::Suffix(tail_bytes)),
-                    ..GetOptions::default()
-                },
-            )) {
+            match self.get_opts_bounded(GetOptions {
+                range: Some(GetRange::Suffix(tail_bytes)),
+                ..GetOptions::default()
+            })? {
                 Ok(response) => {
                     validate_identity_content_encoding(&response.attributes, &self.display_url)?;
                     // Relies on object_store parsing a numeric total from
@@ -712,11 +757,7 @@ impl ObjectStoreSource {
                     // fails object_store's parse and surfaces as a fetch error rather
                     // than a bogus size.
                     let size = response.meta.size;
-                    let bytes = self
-                        .runtime
-                        .block_on(response.bytes())
-                        .with_context(|| format!("failed to read range from {}", self.display_url))?
-                        .to_vec();
+                    let bytes = self.collect_body(response)?;
                     let start = size.saturating_sub(bytes.len() as u64);
                     return Ok(Some((size, RemoteTail { start, bytes })));
                 }
@@ -759,7 +800,7 @@ impl ObjectStoreSource {
         if chunk_bytes == 0 {
             bail!("remote download chunk size must be non-zero");
         }
-        match self.get_opts_for_download(GetOptions {
+        match self.get_opts_bounded(GetOptions {
             range: Some(GetRange::Bounded(0..chunk_bytes)),
             ..GetOptions::default()
         })? {
@@ -773,30 +814,6 @@ impl ObjectStoreSource {
                 err,
             )),
         }
-    }
-
-    /// Wait up to `REMOTE_DOWNLOAD_RESPONSE_TIMEOUT` for the response head.
-    /// The outer error is that wait timing out; the inner error is left intact
-    /// so callers can classify range support.
-    fn get_opts_for_download(
-        &self,
-        options: GetOptions,
-    ) -> Result<std::result::Result<object_store::GetResult, object_store::Error>> {
-        self.runtime.block_on(async {
-            match tokio::time::timeout(
-                REMOTE_DOWNLOAD_RESPONSE_TIMEOUT,
-                self.store.get_opts(&self.path, options),
-            )
-            .await
-            {
-                Ok(result) => Ok(result),
-                Err(_) => Err(anyhow::anyhow!(
-                    "failed to read remote input {}: timed out waiting for response ({}s)",
-                    self.display_url,
-                    REMOTE_DOWNLOAD_RESPONSE_TIMEOUT.as_secs()
-                )),
-            }
-        })
     }
 
     /// Stream `first` and then the remaining `chunk_bytes`-sized ranges to
@@ -883,7 +900,7 @@ impl ObjectStoreSource {
         if_match: &Option<String>,
         expected_size: u64,
     ) -> std::result::Result<object_store::GetResult, DownloadError> {
-        match self.get_opts_for_download(GetOptions {
+        match self.get_opts_bounded(GetOptions {
             range: Some(GetRange::Bounded(range)),
             if_match: if_match.clone(),
             ..GetOptions::default()
@@ -917,14 +934,14 @@ impl ObjectStoreSource {
                 &self.display_url,
                 err,
             ))),
-            // The REMOTE_DOWNLOAD_RESPONSE_TIMEOUT wait expired.
+            // The REMOTE_RESPONSE_TIMEOUT wait expired.
             Err(err) => Err(DownloadError::Retryable(err)),
         }
     }
 
     fn download_unranged(&self, writer: &mut impl Write) -> Result<()> {
         let response = self
-            .get_opts_for_download(GetOptions::default())?
+            .get_opts_bounded(GetOptions::default())?
             .map_err(|err| {
                 concise_remote_operation_error("reading remote input from", &self.display_url, err)
             })?;
@@ -951,13 +968,12 @@ impl ObjectStoreSource {
         let result = self.runtime.block_on(async {
             let mut stream = response.into_stream();
             loop {
-                let Ok(next) =
-                    tokio::time::timeout(REMOTE_DOWNLOAD_STALL_TIMEOUT, stream.try_next()).await
+                let Ok(next) = tokio::time::timeout(REMOTE_STALL_TIMEOUT, stream.try_next()).await
                 else {
                     return Err(DownloadError::Retryable(anyhow::anyhow!(
                         "failed to read remote input {}: download stalled (no data for {}s)",
                         self.display_url,
-                        REMOTE_DOWNLOAD_STALL_TIMEOUT.as_secs()
+                        REMOTE_STALL_TIMEOUT.as_secs()
                     )));
                 };
                 let bytes = match next {
@@ -2901,21 +2917,20 @@ mod tests {
     }
 
     #[test]
-    fn remote_url_options_add_download_request_timeout() {
+    fn remote_url_store_options_set_long_request_timeout() {
         let url = super::RemoteUrl::parse(Path::new("https://example.com/demo.mcap")).expect("url");
-        let download = url.store_options(super::RemoteAccess::Download);
-        assert!(
-            download.iter().any(|(key, value)| key
-                == object_store::ClientConfigKey::Timeout.as_ref()
-                && value == super::REMOTE_DOWNLOAD_REQUEST_TIMEOUT),
-            "download options should set a long request timeout, got {download:?}"
-        );
-        let indexed = url.store_options(super::RemoteAccess::Indexed);
-        assert!(
-            !indexed
-                .iter()
-                .any(|(key, _)| key == object_store::ClientConfigKey::Timeout.as_ref()),
-            "indexed options should keep object_store's default timeout, got {indexed:?}"
+        let options = url.store_options();
+        let timeouts: Vec<_> = options
+            .iter()
+            .filter(|(key, _)| key == object_store::ClientConfigKey::Timeout.as_ref())
+            .collect();
+        assert_eq!(
+            timeouts,
+            vec![&(
+                object_store::ClientConfigKey::Timeout.as_ref().to_string(),
+                super::REMOTE_REQUEST_TIMEOUT.to_string()
+            )],
+            "store options should set exactly one long request timeout, got {options:?}"
         );
     }
 
