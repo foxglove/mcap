@@ -923,7 +923,7 @@ mod tests {
                 metadata: BTreeMap::new(),
             }],
         )?;
-        let library = crate::parse::slice::read_header(&output)
+        let library = crate::parse::read_header_from_bytes(&output)
             .expect("read header")
             .expect("header present")
             .library;

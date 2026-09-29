@@ -90,6 +90,31 @@ pub(crate) fn parsed_mcap_from_library_summary(
     out
 }
 
+/// Parses a seekable local (or spooled) input: the summary section when present, else a linear
+/// scan. With `scan_data_without_statistics`, a summary that lacks a statistics record also
+/// triggers the scan so message counts and time bounds can be derived.
+pub(crate) fn parse_mcap_from_byte_source(
+    source: &mut dyn crate::byte_source::ByteSource,
+    options: crate::source::SourceOptions,
+) -> Result<ParsedMcap> {
+    let header = crate::byte_source::read_header(source)?;
+    if let Some(parsed) = try_parsed_mcap_from_summary(source, header.clone(), options)? {
+        let want_stats_scan = options.scan_data_without_statistics && parsed.statistics.is_none();
+        if !want_stats_scan {
+            return Ok(parsed);
+        }
+        eprintln!(
+            "Warning: Statistics record not available; full scan may be slow. Run `mcap doctor` for details."
+        );
+        return parse_mcap_linear_from_byte_source(source, header);
+    }
+
+    eprintln!(
+        "Warning: summary section not available; full scan may be slow. Run `mcap doctor` for details."
+    );
+    parse_mcap_linear_from_byte_source(source, header)
+}
+
 /// Prefer [`SummaryReader`]; on [`mcap::McapError::UnknownSchema`] fall back to parsing the raw
 /// summary section (channels/schemas as records, without resolving Arc links).
 pub(crate) fn try_parsed_mcap_from_summary(
@@ -471,259 +496,11 @@ fn collect_definition_record(
     }
 }
 
-/// Slice-based parse helpers for unit tests. Production code uses [`ByteSource`] APIs.
+/// Test helper: reads the leading header record of an in-memory MCAP through the production
+/// [`ByteSource`] driver.
 #[cfg(test)]
-pub(crate) mod slice {
-    use std::borrow::Cow;
-    use std::collections::HashMap;
-    use std::sync::Arc;
-
-    use anyhow::{Context as _, Result};
-    use mcap::records::{self, Record};
-    use mcap::sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions};
-
-    use super::{
-        collect_record, parsed_mcap_from_summary_section, ParsedMcap,
-        FOOTER_RECORD_AND_END_MAGIC_LEN, RECORD_PREFIX_LEN,
-    };
-
-    pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
-        parse_mcap_with_scan_fallback(mcap, false)
-    }
-
-    pub fn parse_mcap_with_scan_fallback(
-        mcap: &[u8],
-        scan_without_statistics: bool,
-    ) -> Result<ParsedMcap> {
-        let header = read_header(mcap)?;
-        if let Some(parsed_from_summary) = parse_mcap_from_summary(mcap, header.clone())? {
-            if scan_without_statistics && parsed_from_summary.statistics.is_none() {
-                eprintln!(
-                    "Warning: Statistics record not available; full scan may be slow. Run `mcap doctor` for details."
-                );
-                return parse_mcap_linear(mcap, header);
-            }
-            return Ok(parsed_from_summary);
-        }
-
-        eprintln!(
-            "Warning: summary section not available; full scan may be slow. Run `mcap doctor` for details."
-        );
-        parse_mcap_linear(mcap, header)
-    }
-
-    pub(crate) fn read_header(mcap: &[u8]) -> Result<Option<records::Header>> {
-        let mut reader = mcap::read::LinearReader::new(mcap)?;
-        match reader.next() {
-            Some(Ok(Record::Header(header))) => Ok(Some(header)),
-            Some(Ok(_)) | None => Ok(None),
-            Some(Err(err)) => Err(err.into()),
-        }
-    }
-
-    pub(crate) fn parse_mcap_from_summary(
-        mcap: &[u8],
-        header: Option<records::Header>,
-    ) -> Result<Option<ParsedMcap>> {
-        let footer = mcap::read::footer(mcap)?;
-        if footer.summary_start == 0 {
-            return Ok(None);
-        }
-
-        let footer_start = mcap
-            .len()
-            .checked_sub(FOOTER_RECORD_AND_END_MAGIC_LEN)
-            .context("input is too short to contain a footer")?;
-        let summary_start =
-            usize::try_from(footer.summary_start).context("summary offset is too large")?;
-        if summary_start > footer_start {
-            return Err(mcap::McapError::UnexpectedEof.into());
-        }
-
-        Ok(Some(parsed_mcap_from_summary_section(
-            header,
-            &mcap[summary_start..footer_start],
-        )?))
-    }
-
-    fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
-        let mut out = ParsedMcap {
-            header,
-            message_count: Some(0),
-            attachment_count: Some(0),
-            metadata_count: Some(0),
-            ..ParsedMcap::default()
-        };
-        scan_top_level_records(mcap, |record, offset, length| {
-            if let Record::Chunk { header, data } = record {
-                for nested_record in mcap::read::ChunkReader::new(header, data.as_ref())? {
-                    collect_record(&mut out, nested_record?, None)?;
-                }
-            } else {
-                collect_record(&mut out, record, Some((offset, length)))?;
-            }
-            Ok(())
-        })?;
-
-        Ok(out)
-    }
-
-    pub(crate) fn collect_attachment_indexes_linear(
-        mcap: &[u8],
-    ) -> Result<Vec<records::AttachmentIndex>> {
-        let mut indexes = Vec::new();
-        scan_top_level_records(mcap, |record, offset, length| {
-            if let Record::Attachment { header, data, .. } = record {
-                indexes.push(records::AttachmentIndex {
-                    offset,
-                    length,
-                    log_time: header.log_time,
-                    create_time: header.create_time,
-                    data_size: data.len() as u64,
-                    name: header.name,
-                    media_type: header.media_type,
-                });
-            }
-            Ok(())
-        })?;
-        Ok(indexes)
-    }
-
-    pub(crate) fn collect_metadata_indexes_linear(
-        mcap: &[u8],
-    ) -> Result<Vec<records::MetadataIndex>> {
-        let mut indexes = Vec::new();
-        scan_top_level_records(mcap, |record, offset, length| {
-            if let Record::Metadata(metadata) = record {
-                indexes.push(records::MetadataIndex {
-                    offset,
-                    length,
-                    name: metadata.name,
-                });
-            }
-            Ok(())
-        })?;
-        Ok(indexes)
-    }
-
-    fn scan_top_level_records<F>(mcap: &[u8], mut process: F) -> Result<()>
-    where
-        F: FnMut(Record<'_>, u64, u64) -> Result<()>,
-    {
-        let mut reader = SansIoReader::new_with_options(
-            LinearReaderOptions::default()
-                .with_emit_chunks(true)
-                .with_record_length_limit(mcap.len()),
-        );
-        let mut remaining = mcap;
-        let mut next_record_offset = mcap::MAGIC.len() as u64;
-
-        while let Some(event) = reader.next_event() {
-            match event? {
-                LinearReadEvent::ReadRequest(need) => {
-                    let read = need.min(remaining.len());
-                    let dst = reader.insert(read);
-                    dst.copy_from_slice(&remaining[..read]);
-                    reader.notify_read(read);
-                    remaining = &remaining[read..];
-                }
-                LinearReadEvent::Record { opcode, data } => {
-                    let record_offset = next_record_offset;
-                    let record_length = RECORD_PREFIX_LEN + data.len() as u64;
-                    next_record_offset += record_length;
-                    process(
-                        mcap::parse_record(opcode, data)?,
-                        record_offset,
-                        record_length,
-                    )?;
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    // TODO: keep this in sync with mcap::sans_io::SummaryReader and mcap::read::ChannelAccumulator.
-    // A future mcap crate range-summary API should replace this CLI-local parser.
-    pub(crate) fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
-        let mut out = mcap::Summary::default();
-        let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
-        let mut channel_defs = HashMap::<u16, records::Channel>::new();
-
-        for record in mcap::read::LinearReader::sans_magic(summary) {
-            match record? {
-                Record::AttachmentIndex(index) => out.attachment_indexes.push(index),
-                Record::MetadataIndex(index) => out.metadata_indexes.push(index),
-                Record::Statistics(statistics) => out.stats = Some(statistics),
-                Record::ChunkIndex(index) => out.chunk_indexes.push(index),
-                Record::Schema { header, data } => {
-                    if header.id == 0 {
-                        return Err(mcap::McapError::InvalidSchemaId.into());
-                    }
-                    let schema = Arc::new(mcap::Schema {
-                        id: header.id,
-                        name: header.name,
-                        encoding: header.encoding,
-                        data: Cow::Owned(data.into_owned()),
-                    });
-                    match schemas.entry(schema.id) {
-                        std::collections::hash_map::Entry::Occupied(entry) => {
-                            let existing = entry.get();
-                            if existing.name != schema.name
-                                || existing.encoding != schema.encoding
-                                || existing.data.as_ref() != schema.data.as_ref()
-                            {
-                                return Err(mcap::McapError::ConflictingSchemas(
-                                    schema.name.clone(),
-                                )
-                                .into());
-                            }
-                        }
-                        std::collections::hash_map::Entry::Vacant(entry) => {
-                            entry.insert(schema);
-                        }
-                    }
-                }
-                Record::Channel(channel) => match channel_defs.entry(channel.id) {
-                    std::collections::hash_map::Entry::Occupied(entry) => {
-                        let existing = entry.get();
-                        if existing != &channel {
-                            return Err(mcap::McapError::ConflictingChannels(
-                                channel.topic.clone(),
-                            )
-                            .into());
-                        }
-                    }
-                    std::collections::hash_map::Entry::Vacant(entry) => {
-                        entry.insert(channel);
-                    }
-                },
-                _ => {}
-            }
-        }
-        out.channels = channel_defs
-            .into_iter()
-            .map(|(id, channel)| {
-                let schema = if channel.schema_id == 0 {
-                    None
-                } else {
-                    schemas.get(&channel.schema_id).cloned()
-                };
-                (
-                    id,
-                    Arc::new(mcap::Channel {
-                        id: channel.id,
-                        topic: channel.topic,
-                        schema,
-                        message_encoding: channel.message_encoding,
-                        metadata: channel.metadata,
-                    }),
-                )
-            })
-            .collect();
-        out.schemas = schemas;
-        Ok(out)
-    }
+pub(crate) fn read_header_from_bytes(mcap: &[u8]) -> Result<Option<records::Header>> {
+    crate::byte_source::read_header(&mut crate::byte_source::MemorySource::new(mcap.to_vec()))
 }
 
 #[cfg(test)]
@@ -731,11 +508,42 @@ mod tests {
     use std::borrow::Cow;
     use std::collections::BTreeMap;
 
-    use super::slice::{
-        collect_attachment_indexes_linear, collect_metadata_indexes_linear, parse_mcap,
-        parse_mcap_from_summary, parse_mcap_with_scan_fallback, parse_summary_section,
+    use super::{
+        collect_attachment_indexes_from_byte_source, collect_metadata_indexes_from_byte_source,
+        parse_mcap_from_byte_source, try_parsed_mcap_from_summary, ParsedMcap,
     };
+    use crate::byte_source::MemorySource;
+    use crate::source::SourceOptions;
     use mcap::records;
+
+    /// Runs the production parse flow over in-memory bytes.
+    fn parse_mcap(mcap: &[u8]) -> ParsedMcap {
+        parse_mcap_from_byte_source(
+            &mut MemorySource::new(mcap.to_vec()),
+            SourceOptions::default(),
+        )
+        .expect("parse mcap")
+    }
+
+    /// Like [`parse_mcap`], with the statistics-less summary scan fallback enabled.
+    fn parse_mcap_with_scan_fallback(mcap: &[u8]) -> ParsedMcap {
+        let options = SourceOptions {
+            scan_data_without_statistics: true,
+            ..SourceOptions::default()
+        };
+        parse_mcap_from_byte_source(&mut MemorySource::new(mcap.to_vec()), options)
+            .expect("parse mcap with scan fallback")
+    }
+
+    fn collect_attachment_indexes_linear(mcap: &[u8]) -> Vec<records::AttachmentIndex> {
+        collect_attachment_indexes_from_byte_source(&mut MemorySource::new(mcap.to_vec()))
+            .expect("attachment indexes")
+    }
+
+    fn collect_metadata_indexes_linear(mcap: &[u8]) -> Vec<records::MetadataIndex> {
+        collect_metadata_indexes_from_byte_source(&mut MemorySource::new(mcap.to_vec()))
+            .expect("metadata indexes")
+    }
 
     fn write_unindexed_attachment_and_metadata(emit_summary_records: bool) -> Vec<u8> {
         let mut buffer = Vec::new();
@@ -794,7 +602,7 @@ mod tests {
             (schema_id, channel_id)
         };
 
-        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        let parsed = parse_mcap(&buffer);
         assert!(parsed.header.is_some());
         assert!(parsed.channels.contains_key(&channel_id));
         assert!(parsed.schemas.contains_key(&schema_id));
@@ -831,12 +639,11 @@ mod tests {
             channel_id
         };
 
-        let summary_only = parse_mcap(&buffer).expect("parse mcap from summary");
+        let summary_only = parse_mcap(&buffer);
         assert!(summary_only.statistics.is_none());
         assert_eq!(summary_only.message_count, None);
 
-        let parsed =
-            parse_mcap_with_scan_fallback(&buffer, true).expect("parse mcap with scan fallback");
+        let parsed = parse_mcap_with_scan_fallback(&buffer);
         assert!(parsed.statistics.is_none());
         assert_eq!(parsed.message_count, Some(2));
         assert_eq!(parsed.message_start_time, Some(10));
@@ -858,8 +665,7 @@ mod tests {
             writer.finish().expect("finish writer");
         }
 
-        let parsed =
-            parse_mcap_with_scan_fallback(&buffer, true).expect("parse mcap with scan fallback");
+        let parsed = parse_mcap_with_scan_fallback(&buffer);
         assert!(parsed.statistics.is_none());
         assert_eq!(parsed.message_count, Some(0));
         assert_eq!(parsed.attachment_count, Some(0));
@@ -896,8 +702,13 @@ mod tests {
             (schema_id, channel_id)
         };
 
-        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        let parsed = parse_mcap(&buffer);
         assert!(parsed.header.is_some());
+        assert!(
+            !parsed.summary_available,
+            "summaryless input must take the linear scan"
+        );
+        assert_eq!(parsed.message_count, Some(1));
         assert!(parsed.channels.contains_key(&channel_id));
         assert!(parsed.schemas.contains_key(&schema_id));
     }
@@ -905,7 +716,7 @@ mod tests {
     #[test]
     fn parse_mcap_linear_collects_unindexed_attachment_and_metadata_offsets() {
         let buffer = write_unindexed_attachment_and_metadata(false);
-        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        let parsed = parse_mcap(&buffer);
 
         assert_eq!(parsed.attachment_indexes.len(), 1);
         assert_eq!(parsed.metadata_indexes.len(), 1);
@@ -922,13 +733,12 @@ mod tests {
     #[test]
     fn collect_linear_indexes_finds_records_when_summary_indexes_are_omitted() {
         let buffer = write_unindexed_attachment_and_metadata(true);
-        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        let parsed = parse_mcap(&buffer);
         assert!(parsed.attachment_indexes.is_empty());
         assert!(parsed.metadata_indexes.is_empty());
 
-        let attachment_indexes =
-            collect_attachment_indexes_linear(&buffer).expect("attachment indexes");
-        let metadata_indexes = collect_metadata_indexes_linear(&buffer).expect("metadata indexes");
+        let attachment_indexes = collect_attachment_indexes_linear(&buffer);
+        let metadata_indexes = collect_metadata_indexes_linear(&buffer);
         assert_eq!(attachment_indexes.len(), 1);
         assert_eq!(metadata_indexes.len(), 1);
         assert_eq!(attachment_indexes[0].name, "demo.bin");
@@ -974,7 +784,7 @@ mod tests {
             writer.finish().expect("finish writer");
         }
 
-        let indexes = collect_attachment_indexes_linear(&buffer).expect("attachment indexes");
+        let indexes = collect_attachment_indexes_linear(&buffer);
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "after-chunk.bin");
         let attachment = mcap::read::attachment(&buffer, &indexes[0]).expect("attachment");
@@ -1011,56 +821,27 @@ mod tests {
             (schema_id, channel_id)
         };
 
-        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        // SummaryReader rejects the summary (UnknownSchema), so this exercises the fallback to
+        // parsing the raw summary section rather than a linear scan.
+        let parsed = try_parsed_mcap_from_summary(
+            &mut MemorySource::new(buffer.clone()),
+            None,
+            SourceOptions::default(),
+        )
+        .expect("summary parse should fall back to the raw section")
+        .expect("summary should be present");
+        assert!(parsed.summary_available);
         let channel = parsed
             .channels
             .get(&channel_id)
             .expect("channel should be read from summary");
         assert_eq!(channel.schema_id, schema_id);
         assert!(!parsed.schemas.contains_key(&schema_id));
-    }
 
-    #[test]
-    fn parse_summary_section_accepts_channel_with_missing_schema() {
-        let mut buffer = Vec::new();
-        let (schema_id, channel_id) = {
-            let mut writer = mcap::WriteOptions::new()
-                .repeat_schemas(false)
-                .repeat_channels(true)
-                .create(std::io::Cursor::new(&mut buffer))
-                .expect("writer");
-            let schema_id = writer
-                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
-                .expect("schema");
-            let channel_id = writer
-                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
-                .expect("channel");
-            writer
-                .write_to_known_channel(
-                    &records::MessageHeader {
-                        channel_id,
-                        sequence: 1,
-                        log_time: 10,
-                        publish_time: 11,
-                    },
-                    br#"{"k":"v"}"#,
-                )
-                .expect("write message");
-            writer.finish().expect("finish writer");
-            (schema_id, channel_id)
-        };
-
-        let footer = mcap::read::footer(&buffer).expect("footer");
-        let footer_start = buffer.len() - super::FOOTER_RECORD_AND_END_MAGIC_LEN;
-        let summary = parse_summary_section(&buffer[footer.summary_start as usize..footer_start])
-            .expect("summary should parse without repeated schema");
-        let channel = summary
-            .channels
-            .get(&channel_id)
-            .expect("channel should be preserved");
-        assert_eq!(channel.id, channel_id);
-        assert!(channel.schema.is_none());
-        assert!(!summary.schemas.contains_key(&schema_id));
+        // The full parse flow takes the same fallback and never needs the scan.
+        let parsed = parse_mcap(&buffer);
+        assert!(parsed.summary_available);
+        assert!(parsed.channels.contains_key(&channel_id));
     }
 
     #[test]
@@ -1071,9 +852,15 @@ mod tests {
             writer.finish().expect("finish writer");
         }
 
-        let parsed = parse_mcap_from_summary(&buffer, None).expect("parse from summary");
+        let parsed = try_parsed_mcap_from_summary(
+            &mut MemorySource::new(buffer),
+            None,
+            SourceOptions::default(),
+        )
+        .expect("parse from summary");
         assert!(parsed.is_some());
         let parsed = parsed.expect("parsed summary output");
+        assert!(parsed.summary_available);
         if let Some(stats) = &parsed.statistics {
             assert_eq!(stats.message_count, 0);
             assert_eq!(stats.channel_count, 0);
