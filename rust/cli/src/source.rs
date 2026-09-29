@@ -237,7 +237,9 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
 
     let mut source = crate::byte_source::open_byte_source(Some(path), options)?;
     let header = crate::byte_source::read_header(source.as_mut())?;
-    if let Some(parsed) = parse::try_parsed_mcap_from_summary(source.as_mut(), header.clone())? {
+    if let Some(parsed) =
+        parse::try_parsed_mcap_from_summary(source.as_mut(), header.clone(), options)?
+    {
         let want_stats_scan = options.scan_data_without_statistics && parsed.statistics.is_none();
         if !want_stats_scan {
             return Ok(parsed);
@@ -2701,8 +2703,10 @@ mod tests {
         assert!(message.contains("Failed while fetching range from"));
     }
 
-    #[test]
-    fn remote_summary_read_requires_scan_for_oversized_summary_section() {
+    /// A file whose footer claims a summary section one byte over the no-opt-in budget. The
+    /// section itself is zeros; only the footer matters, since the cap must trigger before any
+    /// of it is fetched.
+    fn oversized_summary_body() -> &'static [u8] {
         let len = usize::try_from(super::MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN)
             .expect("remote indexed budget should fit usize")
             + crate::parse::FOOTER_RECORD_AND_END_MAGIC_LEN
@@ -2718,8 +2722,36 @@ mod tests {
         body[footer_start + 17..footer_start + 25].copy_from_slice(&0u64.to_le_bytes());
         body[footer_start + 25..footer_start + 29].copy_from_slice(&0u32.to_le_bytes());
         body[len - mcap::MAGIC.len()..].copy_from_slice(mcap::MAGIC);
+        Box::leak(body.into_boxed_slice())
+    }
 
-        let url = serve_http(Box::leak(body.into_boxed_slice()), true);
+    #[test]
+    fn remote_summary_driver_requires_scan_for_oversized_summary_section() {
+        // The command path: open_byte_source + the sans-io summary driver, as cat, du, get,
+        // list, filter, sort, and merge do. The cap must refuse before fetching the section.
+        let (url, requests) = serve_http_counting(oversized_summary_body(), true);
+        let mut source = crate::byte_source::open_byte_source(
+            Some(Path::new(&url)),
+            super::SourceOptions::default(),
+        )
+        .expect("remote open");
+        let after_open = requests.load(Ordering::SeqCst);
+        let err =
+            crate::byte_source::read_summary(source.as_mut(), super::SourceOptions::default())
+                .expect_err("oversized remote summary should require scan opt-in");
+        let message = format!("{err:#}");
+        assert!(message.contains("remote summary section"), "{message}");
+        assert!(message.contains("--allow-remote-scan"), "{message}");
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            after_open,
+            "the cap must be decided from the prefetched footer without fetching the section"
+        );
+    }
+
+    #[test]
+    fn remote_summary_read_requires_scan_for_oversized_summary_section() {
+        let url = serve_http(oversized_summary_body(), true);
         let mut reader = super::open_remote_range_reader(Path::new(&url))
             .expect("remote open")
             .expect("range support");
@@ -3002,9 +3034,10 @@ mod tests {
             super::SourceOptions::default(),
         )
         .expect("remote open");
-        let summary = crate::byte_source::read_summary(source.as_mut())
-            .expect("remote summary read")
-            .expect("summary should be present");
+        let summary =
+            crate::byte_source::read_summary(source.as_mut(), super::SourceOptions::default())
+                .expect("remote summary read")
+                .expect("summary should be present");
 
         assert!(summary.channels.contains_key(&channel_id));
     }
@@ -3089,9 +3122,10 @@ mod tests {
             super::SourceOptions::default(),
         )
         .expect("remote summary should use range GET, not HEAD");
-        let summary = crate::byte_source::read_summary(source.as_mut())
-            .expect("remote summary read")
-            .expect("summary should be present");
+        let summary =
+            crate::byte_source::read_summary(source.as_mut(), super::SourceOptions::default())
+                .expect("remote summary read")
+                .expect("summary should be present");
 
         assert!(summary.channels.contains_key(&channel_id));
     }
@@ -3320,9 +3354,10 @@ mod tests {
         let after_open = requests.load(Ordering::SeqCst);
         assert_eq!(after_open, 1, "open should cost exactly the tail prefetch");
 
-        let summary = crate::byte_source::read_summary(source.as_mut())
-            .expect("remote summary read")
-            .expect("summary should be present");
+        let summary =
+            crate::byte_source::read_summary(source.as_mut(), super::SourceOptions::default())
+                .expect("remote summary read")
+                .expect("summary should be present");
         assert!(summary.channels.contains_key(&channel_id));
         assert_eq!(
             requests.load(Ordering::SeqCst),

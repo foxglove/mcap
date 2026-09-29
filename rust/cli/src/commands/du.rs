@@ -37,7 +37,7 @@ pub fn run(ctx: &CommandContext, args: DuCommand) -> Result<()> {
     let mut input = byte_source::open_byte_source(Some(&args.file), source_options)?;
 
     let (usage, used_approximate) = if args.approximate {
-        match collect_usage_approximate(input.as_mut())? {
+        match collect_usage_approximate(input.as_mut(), source_options)? {
             Some(usage) => (usage, true),
             None => {
                 eprintln!(
@@ -99,8 +99,11 @@ fn collect_usage_exact(source: &mut dyn ByteSource) -> Result<Usage> {
     Ok(usage)
 }
 
-fn collect_usage_approximate(source: &mut dyn ByteSource) -> Result<Option<Usage>> {
-    let summary = match byte_source::read_summary(source) {
+fn collect_usage_approximate(
+    source: &mut dyn ByteSource,
+    source_options: source::SourceOptions,
+) -> Result<Option<Usage>> {
+    let summary = match byte_source::read_summary(source, source_options) {
         Ok(Some(summary)) => summary,
         Ok(None) | Err(_) => return Ok(None),
     };
@@ -707,9 +710,12 @@ mod tests {
         );
 
         let exact = collect_usage_exact(&mut MemorySource::new(mcap.clone())).expect("exact");
-        let approximate = collect_usage_approximate(&mut MemorySource::new(mcap))
-            .expect("approximate")
-            .expect("summary-backed approximate usage");
+        let approximate = collect_usage_approximate(
+            &mut MemorySource::new(mcap),
+            crate::source::SourceOptions::default(),
+        )
+        .expect("approximate")
+        .expect("summary-backed approximate usage");
         assert_eq!(approximate.total_message_size, exact.total_message_size);
         assert_eq!(approximate.topic_message_size, exact.topic_message_size);
     }
@@ -743,16 +749,22 @@ mod tests {
             writer.finish().expect("finish writer");
         }
 
-        let approximate =
-            collect_usage_approximate(&mut MemorySource::new(buffer)).expect("approximate");
+        let approximate = collect_usage_approximate(
+            &mut MemorySource::new(buffer),
+            crate::source::SourceOptions::default(),
+        )
+        .expect("approximate");
         assert!(approximate.is_none());
     }
 
     #[test]
     fn approximate_usage_falls_back_when_no_chunk_indexes() {
         let mcap = write_test_file(false, None, &[(0, 0, 10), (0, 1, 10)], &["/data"]);
-        let approximate =
-            collect_usage_approximate(&mut MemorySource::new(mcap)).expect("approximate");
+        let approximate = collect_usage_approximate(
+            &mut MemorySource::new(mcap),
+            crate::source::SourceOptions::default(),
+        )
+        .expect("approximate");
         assert!(approximate.is_none());
     }
 
