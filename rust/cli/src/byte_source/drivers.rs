@@ -1,6 +1,7 @@
 //! Drive mcap sans-io readers against a [`ByteSource`].
 
 use std::io::SeekFrom;
+use std::ops::ControlFlow;
 
 use anyhow::{bail, Context, Result};
 use mcap::sans_io::{
@@ -89,11 +90,24 @@ pub fn service_indexed_chunk(
 
 /// Walk every top-level record in file order via [`LinearReader`].
 ///
-/// Requires a seekable source. Starts at offset 0 and advances with each read.
+/// Requires a seekable source. Starts at offset 0 and advances with each read. To stop early
+/// (for example on a broken output pipe) use [`try_for_each_linear_record`].
 pub fn for_each_linear_record(
     source: &mut dyn ByteSource,
     options: LinearReaderOptions,
     mut visit: impl FnMut(u8, &[u8]) -> Result<()>,
+) -> Result<()> {
+    try_for_each_linear_record(source, options, |opcode, data| {
+        visit(opcode, data).map(|()| ControlFlow::Continue(()))
+    })
+}
+
+/// Like [`for_each_linear_record`], but `visit` can return [`ControlFlow::Break`] to stop the
+/// scan without reading or decompressing the rest of the file.
+pub fn try_for_each_linear_record(
+    source: &mut dyn ByteSource,
+    options: LinearReaderOptions,
+    mut visit: impl FnMut(u8, &[u8]) -> Result<ControlFlow<()>>,
 ) -> Result<()> {
     if !source.is_seekable() {
         bail!("linear record scan requires a seekable byte source");
@@ -111,7 +125,9 @@ pub fn for_each_linear_record(
                 pos = pos.saturating_add(n as u64);
             }
             LinearReadEvent::Record { opcode, data } => {
-                visit(opcode, data)?;
+                if visit(opcode, data)?.is_break() {
+                    return Ok(());
+                }
             }
         }
     }
