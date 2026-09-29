@@ -354,9 +354,11 @@ impl IndexedReader {
                 let dctx = self
                     .zstd_dctx
                     .get_or_insert_with(zstd::zstd_safe::DCtx::create);
-                let n = dctx.decompress(&mut slot.buf, compressed_data).map_err(|err| {
-                    McapError::DecompressionError(zstd::zstd_safe::get_error_name(err).into())
-                })?;
+                let n = dctx
+                    .decompress(&mut slot.buf, compressed_data)
+                    .map_err(|err| {
+                        McapError::DecompressionError(zstd::zstd_safe::get_error_name(err).into())
+                    })?;
                 if n != uncompressed_size {
                     return Err(McapError::DecompressionError(format!(
                         "zstd decompression error: expected {uncompressed_size}, got {n}"
