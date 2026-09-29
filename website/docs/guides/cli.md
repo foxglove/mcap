@@ -290,7 +290,7 @@ metadata:    0
 
 <!-- cspell: enable -->
 
-Indexed reads use the summary index at the end of the file to fetch only the bytes they need, minimizing latency and data transfer. Commands that only need indexed data — such as `info`, `list`, and single-record `get` — work against remote files without any extra flags.
+Indexed reads use the summary index at the end of the file to fetch only the bytes they need, minimizing latency and data transfer. Commands that only need indexed data — such as `info`, `list`, single-record `get`, and `du --approximate` — work against remote files without any extra flags, as long as the indexed data they fetch (the summary section, the requested records, or the message indexes for `du --approximate`) stays under 100 MB. Larger indexed reads ask for `--allow-remote-scan`.
 
 #### Allowing full remote scans
 
