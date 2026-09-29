@@ -21,7 +21,11 @@ cargo bench -p mcap-cli --bench commands -- merge
 cargo bench -p mcap-cli --bench commands -- indexed
 cargo bench -p mcap-cli --bench commands -- filter/linear
 cargo bench -p mcap-cli --bench commands -- merge/indexed/100KB
+cargo bench -p mcap-cli --bench commands -- du/linear/approximate
 ```
+
+The suites are `merge`, `filter`, `sort`, `compress`, `decompress`, `cat`, `info`, and `du`. The
+`du` suite runs both the exact and `--approximate` code paths.
 
 ## Workload controls
 
@@ -53,7 +57,8 @@ Each suite runs both `indexed` inputs (summary, chunk indexes, and message index
 `linear` inputs (summary omitted, forcing a scan fallback). It uses deterministic pseudo-random
 message payloads at `100B`, `1KB`, `10KB`, `100KB`, and `1MB` sizes. The benchmark validates
 each command output for basic MCAP correctness, expected message count, summary presence, and
-log-time ordering where applicable.
+log-time ordering where applicable. Read-only commands (`cat`, `info`, `du`) are validated
+against their stdout instead: line count, reported message count, and per-topic size rows.
 
 Workload and payload sizes use SI units (`1KB = 1,000 bytes`, `1MB = 1,000,000 bytes`). Criterion
 reports byte throughput using its native IEC units such as `MiB/s` and `GiB/s`.
