@@ -1973,13 +1973,19 @@ mod tests {
 
     /// Two chunks: the first holds the definitions and a message on a schemaless channel, the
     /// second a message on a channel whose schema the summary does not repeat.
+    ///
+    /// Each chunk is larger than the remote read-ahead window and stored uncompressed, so fetching
+    /// one chunk never also delivers the other; a test can then tell from the served ranges which
+    /// chunks a remote read fetched.
     fn build_two_chunk_mcap_without_repeated_schema() -> Vec<u8> {
+        let window = crate::byte_source::REMOTE_READ_AHEAD_BYTES;
         let mut buffer = Vec::new();
         {
-            // Definitions plus the first 200-byte message exceed the chunk target, so the second
-            // message lands in its own chunk (see `build_multi_chunk_chunk_local_mcap`).
+            // Definitions plus the first message exceed the chunk target, so the second message
+            // lands in its own chunk (see `build_multi_chunk_chunk_local_mcap`).
             let mut writer = mcap::WriteOptions::new()
                 .chunk_size(Some(150))
+                .compression(None)
                 .repeat_schemas(false)
                 .repeat_channels(true)
                 .create(Cursor::new(&mut buffer))
@@ -1991,7 +1997,11 @@ mod tests {
             let demo_id = writer
                 .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
                 .expect("channel");
-            for (channel_id, log_time, fill) in [(plain_id, 10u64, 1u8), (demo_id, 20, 2)] {
+            // Unequal payloads keep the chunk boundaries clear of the tail window's start.
+            for (channel_id, log_time, fill, len) in [
+                (plain_id, 10u64, 1u8, window + 1024),
+                (demo_id, 20, 2, window + 4096),
+            ] {
                 writer
                     .write_to_known_channel(
                         &mcap::records::MessageHeader {
@@ -2000,7 +2010,7 @@ mod tests {
                             log_time,
                             publish_time: log_time,
                         },
-                        &[fill; 200],
+                        &vec![fill; len],
                     )
                     .expect("write message");
             }
