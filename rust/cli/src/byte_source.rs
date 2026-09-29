@@ -8,7 +8,7 @@ mod drivers;
 pub use drivers::{for_each_linear_record, read_header, read_summary, service_indexed_chunk};
 
 use std::fs::File;
-use std::io::{IsTerminal as _, Read as _, Seek as _, SeekFrom, Write as _};
+use std::io::{BufReader, IsTerminal as _, Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -50,8 +50,15 @@ pub trait ByteSource {
 }
 
 /// Local file opened for seek+read (not memory-mapped).
+/// Read-ahead buffer for local files. Sans-io readers request one record at a time, so without
+/// buffering a linear scan of small records costs a seek plus a read syscall per record.
+const LOCAL_FILE_BUFFER_BYTES: usize = 256 * 1024;
+
 pub struct LocalFileSource {
-    file: File,
+    reader: BufReader<File>,
+    /// Logical offset the next sequential read would start at, or `None` after an I/O error left
+    /// the underlying position unknown.
+    pos: Option<u64>,
     path: PathBuf,
     size: u64,
     // Keeps a spool tempfile alive for stdin / non-range remote fallbacks.
@@ -67,7 +74,8 @@ impl LocalFileSource {
             .with_context(|| format!("couldn't stat '{}'", path.display()))?
             .len();
         Ok(Self {
-            file,
+            reader: BufReader::with_capacity(LOCAL_FILE_BUFFER_BYTES, file),
+            pos: Some(0),
             path: path.to_path_buf(),
             size,
             _temp_file: None,
@@ -87,7 +95,8 @@ impl LocalFileSource {
             .context("failed to stat temporary input file")?
             .len();
         Ok(Self {
-            file,
+            reader: BufReader::with_capacity(LOCAL_FILE_BUFFER_BYTES, file),
+            pos: Some(0),
             path: display_path,
             size,
             _temp_file: Some(temp_file),
@@ -113,7 +122,38 @@ impl ByteSource for LocalFileSource {
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
-        read_file_into(&mut self.file, self.size, offset, dest)
+        if dest.is_empty() || offset >= self.size {
+            return Ok(0);
+        }
+        let available = (self.size - offset) as usize;
+        let to_read = dest.len().min(available);
+        if self.pos != Some(offset) {
+            // `seek_relative` keeps the read-ahead buffer when the target is inside it, which is
+            // the common case for sequential record reads that follow a small backward skip.
+            let result = match self.pos {
+                Some(pos) => match i64::try_from(offset.abs_diff(pos)) {
+                    Ok(delta) if offset >= pos => self.reader.seek_relative(delta),
+                    Ok(delta) => self.reader.seek_relative(-delta),
+                    Err(_) => self.reader.seek(SeekFrom::Start(offset)).map(|_| ()),
+                },
+                None => self.reader.seek(SeekFrom::Start(offset)).map(|_| ()),
+            };
+            if let Err(err) = result {
+                self.pos = None;
+                return Err(err).context("failed to seek in local file");
+            }
+            self.pos = Some(offset);
+        }
+        match self.reader.read_exact(&mut dest[..to_read]) {
+            Ok(()) => {
+                self.pos = Some(offset + to_read as u64);
+                Ok(to_read)
+            }
+            Err(err) => {
+                self.pos = None;
+                Err(err).context("failed to read from local file")
+            }
+        }
     }
 }
 
@@ -266,19 +306,6 @@ fn spool_remote_to_local(path: &Path, options: SourceOptions) -> Result<LocalFil
         .context("failed to create temporary remote input file")?;
     read_remote_input_to_writer(path, temp_file.as_file_mut())?;
     LocalFileSource::from_temp_file(temp_file, PathBuf::from(redacted_display(path)))
-}
-
-fn read_file_into(file: &mut File, size: u64, offset: u64, dest: &mut [u8]) -> Result<usize> {
-    if dest.is_empty() || offset >= size {
-        return Ok(0);
-    }
-    let available = (size - offset) as usize;
-    let to_read = dest.len().min(available);
-    file.seek(SeekFrom::Start(offset))
-        .context("failed to seek in local file")?;
-    file.read_exact(&mut dest[..to_read])
-        .context("failed to read from local file")?;
-    Ok(to_read)
 }
 
 #[cfg(test)]
