@@ -156,14 +156,64 @@ impl ByteSource for LocalFileSource {
     }
 }
 
+/// Read-ahead window for remote sequential reads. Every range read is one HTTP request and the
+/// sans-io readers ask for one record prefix and one record body at a time, so without a window
+/// a linear scan would cost about two requests per record. Sized to match the tail prefetched at
+/// open, so an open remote source holds about the same memory as before the window existed.
+pub(crate) const REMOTE_READ_AHEAD_BYTES: usize = 256 * 1024;
+
 /// Remote object that supports byte-range reads.
 pub struct RemoteRangeSource {
     inner: RemoteRangeReader,
+    /// Bytes `[window_start, window_start + window.len())`, filled by `read_into` misses and
+    /// seeded with the tail prefetched at open so summary reads usually need no request at all.
+    window: Vec<u8>,
+    window_start: u64,
+    read_ahead_bytes: usize,
 }
 
 impl RemoteRangeSource {
-    pub(crate) fn new(inner: RemoteRangeReader) -> Self {
-        Self { inner }
+    pub(crate) fn new(mut inner: RemoteRangeReader) -> Self {
+        let (window_start, window) = inner.take_tail().unwrap_or_default();
+        Self {
+            inner,
+            window,
+            window_start,
+            read_ahead_bytes: REMOTE_READ_AHEAD_BYTES,
+        }
+    }
+
+    /// Shrinks the read-ahead window so tests can exercise window refills on small fixtures.
+    #[cfg(test)]
+    pub(crate) fn set_read_ahead_bytes(&mut self, bytes: usize) {
+        self.read_ahead_bytes = bytes;
+    }
+
+    fn window_end(&self) -> u64 {
+        self.window_start + self.window.len() as u64
+    }
+
+    /// The window's bytes for `[offset, offset + len)` when it holds all of them, or the
+    /// remainder when the window already reaches EOF.
+    fn window_slice(&self, offset: u64, len: usize) -> Option<&[u8]> {
+        if offset < self.window_start || offset >= self.window_end() {
+            return None;
+        }
+        let start = (offset - self.window_start) as usize;
+        let available = self.window.len() - start;
+        if available >= len || self.window_end() >= self.inner.size() {
+            Some(&self.window[start..start + available.min(len)])
+        } else {
+            None
+        }
+    }
+
+    fn fill_window(&mut self, offset: u64, len: usize) -> Result<()> {
+        self.window = self
+            .inner
+            .read_range(offset, len.max(self.read_ahead_bytes))?;
+        self.window_start = offset;
+        Ok(())
     }
 }
 
@@ -185,15 +235,32 @@ impl ByteSource for RemoteRangeSource {
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
-        // object_store range reads return an owned buffer; copy into `dest`.
-        let data = self.inner.read_range(offset, dest.len())?;
-        let n = data.len();
-        dest[..n].copy_from_slice(&data);
+        if dest.is_empty() || offset >= self.inner.size() {
+            return Ok(0);
+        }
+        if self.window_slice(offset, dest.len()).is_none() {
+            self.fill_window(offset, dest.len())?;
+        }
+        // After a fill the window starts at `offset`, so only a short server response leaves
+        // fewer bytes than requested; hand back what arrived and let the reader ask again.
+        let start = (offset - self.window_start) as usize;
+        let n = (self.window.len() - start).min(dest.len());
+        if n == 0 {
+            bail!(
+                "remote range read at offset {offset} returned no data for {}",
+                self.display_name()
+            );
+        }
+        dest[..n].copy_from_slice(&self.window[start..start + n]);
         Ok(n)
     }
 
     fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>> {
-        // Skip the trait-default zeroed Vec + second copy of read_range's buffer.
+        if let Some(slice) = self.window_slice(offset, len) {
+            return Ok(slice.to_vec());
+        }
+        // Chunk and attachment payloads are fetched exactly, without disturbing the window, so a
+        // single indexed read on a remote never pulls in read-ahead it will not use.
         self.inner.read_range(offset, len)
     }
 }

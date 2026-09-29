@@ -622,6 +622,11 @@ impl RemoteRangeReader {
         })
     }
 
+    /// Takes the tail prefetched at open time, if still present, as `(start_offset, bytes)`.
+    pub(crate) fn take_tail(&mut self) -> Option<(u64, Vec<u8>)> {
+        self.tail.take().map(|tail| (tail.start, tail.bytes))
+    }
+
     pub(crate) fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         if length == 0 || offset >= self.size {
             return Ok(Vec::new());
@@ -2134,5 +2139,129 @@ mod tests {
         assert!(message.contains("--allow-remote-scan"), "{message}");
         require_remote_indexed_read_budget(&remote, over_cap, opt_in, "remote attachment record")
             .expect("--allow-remote-scan lifts the cap");
+    }
+
+    /// Summaryless, chunked, uncompressed fixture of `message_count` 1 KiB messages.
+    fn linear_mcap_without_summary(message_count: u32) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(16 * 1024))
+                .compression(None)
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            for sequence in 0..message_count {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id,
+                            sequence,
+                            log_time: u64::from(sequence),
+                            publish_time: u64::from(sequence),
+                        },
+                        &[0u8; 1024],
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish writer");
+        }
+        buffer
+    }
+
+    fn count_remote_messages(source: &mut dyn crate::byte_source::ByteSource) -> usize {
+        let mut messages = 0usize;
+        crate::byte_source::for_each_linear_record(
+            source,
+            mcap::sans_io::LinearReaderOptions::default(),
+            |opcode, _data| {
+                if opcode == mcap::records::op::MESSAGE {
+                    messages += 1;
+                }
+                Ok(())
+            },
+        )
+        .expect("remote linear scan");
+        messages
+    }
+
+    #[test]
+    fn remote_linear_scan_uses_one_request_per_read_ahead_window() {
+        // 600 x 1 KiB messages, several times the read-ahead window: the scan should cost about
+        // one request per window, not one per record.
+        let body: &'static [u8] = Box::leak(linear_mcap_without_summary(600).into_boxed_slice());
+        let window = crate::byte_source::REMOTE_READ_AHEAD_BYTES;
+        assert!(body.len() > 2 * window);
+        let (url, requests) = serve_http_counting(body, true);
+        let mut source = crate::byte_source::open_byte_source(
+            Some(Path::new(&url)),
+            super::SourceOptions::new(true),
+        )
+        .expect("remote open");
+        let after_open = requests.load(Ordering::SeqCst);
+
+        assert_eq!(count_remote_messages(source.as_mut()), 600);
+        let scan_requests = requests.load(Ordering::SeqCst) - after_open;
+        let minimum = body.len().div_ceil(window);
+        assert!(
+            scan_requests >= minimum && scan_requests <= minimum + 2,
+            "expected about {minimum} window fills for {} bytes, got {scan_requests}",
+            body.len()
+        );
+    }
+
+    #[test]
+    fn remote_linear_scan_refills_window_across_boundaries() {
+        // Shrink the window to a fraction of the file so the scan must refill it several
+        // times, including for records that straddle a window boundary.
+        let body: &'static [u8] = Box::leak(linear_mcap_without_summary(600).into_boxed_slice());
+        let (url, requests) = serve_http_counting(body, true);
+        let reader = super::open_remote_range_reader(Path::new(&url))
+            .expect("remote open")
+            .expect("range support");
+        let mut source = crate::byte_source::RemoteRangeSource::new(reader);
+        let window = 64 * 1024;
+        source.set_read_ahead_bytes(window);
+        let after_open = requests.load(Ordering::SeqCst);
+
+        assert_eq!(count_remote_messages(&mut source), 600);
+        let scan_requests = requests.load(Ordering::SeqCst) - after_open;
+        let minimum = body.len().div_ceil(window);
+        assert!(
+            scan_requests >= minimum && scan_requests <= minimum + 2,
+            "expected about {minimum} window fills for {} bytes, got {scan_requests}",
+            body.len()
+        );
+    }
+
+    #[test]
+    fn remote_summary_read_reuses_prefetched_tail() {
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let (url, requests) = serve_http_counting(body, true);
+        let mut source = crate::byte_source::open_byte_source(
+            Some(Path::new(&url)),
+            super::SourceOptions::default(),
+        )
+        .expect("remote open");
+        let after_open = requests.load(Ordering::SeqCst);
+        assert_eq!(after_open, 1, "open should cost exactly the tail prefetch");
+
+        let summary = crate::byte_source::read_summary(source.as_mut())
+            .expect("remote summary read")
+            .expect("summary should be present");
+        assert!(summary.channels.contains_key(&channel_id));
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            after_open,
+            "the summary should be served from the prefetched tail without another request"
+        );
     }
 }
