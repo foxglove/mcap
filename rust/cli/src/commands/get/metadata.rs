@@ -183,8 +183,7 @@ mod tests {
         mcap_bytes
     }
 
-    /// Wraps [`MemorySource`] and records the byte range of every read, so a test can tell
-    /// whether a record was read at all and how many times.
+    /// Wraps [`MemorySource`] and records every read's byte range.
     struct RecordingSource {
         inner: MemorySource,
         reads: Vec<(u64, u64)>,
@@ -233,8 +232,8 @@ mod tests {
 
     #[test]
     fn missing_name_does_not_scan_when_metadata_indexes_are_complete() {
-        // Summary with statistics and a complete metadata index: a name that is not in the index
-        // is simply absent, so the data section must never be read.
+        // Complete index with statistics: a missing name is simply absent, and the data section
+        // must not be read.
         let mut source = RecordingSource::new(mcap_with_metadata(
             mcap::WriteOptions::new()
                 .emit_metadata_indexes(true)
@@ -256,8 +255,8 @@ mod tests {
 
     #[test]
     fn missing_name_does_not_rescan_summaryless_input() {
-        // No summary at all: the indexes come from one linear parse, and a name that is not
-        // found must not trigger a second scan of the data section.
+        // No summary: indexes come from one linear parse, and a missing name must not cause a
+        // rescan.
         let mut source = RecordingSource::new(mcap_with_metadata(
             mcap::WriteOptions::new()
                 .emit_summary_records(false)
