@@ -20,7 +20,7 @@ pub(crate) fn run(args: RewriteOptions, source_options: SourceOptions) -> Result
         source::ensure_distinct_local_input_output(input, output)?;
     }
     // A rewrite reads message data, so a remote input needs the scan opt-in. Refuse from the path
-    // before opening the source, so no request is sent (as main did).
+    // before opening the source, so no request is sent.
     if let Some(path) = args
         .file
         .as_deref()

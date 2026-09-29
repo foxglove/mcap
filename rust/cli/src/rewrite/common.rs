@@ -356,7 +356,7 @@ pub(crate) fn require_remote_scan_for_linear(
 }
 
 /// Errors when a remote source would read message-chunk payloads without `--allow-remote-scan`.
-/// Summary and named-record reads stay unflagged, as on main.
+/// Summary and named-record reads do not need the flag.
 pub(crate) fn require_remote_scan_for_chunks(
     source: &dyn ByteSource,
     options: SourceOptions,

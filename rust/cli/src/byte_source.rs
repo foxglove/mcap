@@ -151,7 +151,8 @@ impl ByteSource for LocalFileSource {
 
 /// Read-ahead window for sequential remote reads. Each range read is one HTTP request and the
 /// sans-io readers ask for a record's prefix and body separately, so an unbuffered scan costs
-/// about two requests per record. Sized like the tail prefetched at open, so memory is unchanged.
+/// about two requests per record. Sized like the tail prefetched at open, so an open remote
+/// source holds at most one window of bytes.
 pub(crate) const REMOTE_READ_AHEAD_BYTES: usize = 256 * 1024;
 
 /// Remote object that supports byte-range reads.
