@@ -65,7 +65,7 @@ fn filter_with_writer<W: Write + Seek>(
     opts: &ResolvedOptions,
     source_options: SourceOptions,
 ) -> Result<()> {
-    let summary = common::read_indexed_summary(input)?;
+    let summary = common::read_indexed_summary(input, source_options)?;
     if let Some(summary) = &summary {
         // An index-only read skips messages that live outside the chunk indexes (loose top-level
         // messages, or chunks missing message-index records). Divert to a lossless linear scan only

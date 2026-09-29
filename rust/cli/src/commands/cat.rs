@@ -224,7 +224,7 @@ fn cat_indexed(
     source_options: source::SourceOptions,
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<IndexedCatResult> {
-    let (summary, omitted_channels) = match byte_source::read_summary(source) {
+    let (summary, omitted_channels) = match byte_source::read_summary(source, source_options) {
         Ok(Some(summary)) => (summary, BTreeMap::new()),
         Ok(None) => return Ok(IndexedCatResult::NeedsLinear),
         // A spec-valid file may repeat a channel in the summary without repeating its schema,

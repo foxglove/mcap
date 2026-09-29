@@ -440,7 +440,10 @@ fn parse_data_end(record_bytes: &[u8], offset: u64) -> Result<records::DataEnd> 
 }
 
 fn collect_existing_summary(source: &mut dyn ByteSource) -> Result<ExistingSummaryData> {
-    if let Some(summary) = byte_source::read_summary(source).context("failed to read summary")? {
+    if let Some(summary) =
+        byte_source::read_summary(source, crate::source::SourceOptions::default())
+            .context("failed to read summary")?
+    {
         let mut data = ExistingSummaryData {
             statistics: summary.stats,
             channels: BTreeMap::new(),
