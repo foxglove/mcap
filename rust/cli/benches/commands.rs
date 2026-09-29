@@ -811,7 +811,7 @@ fn validate_du_output(stdout: &[u8], case: &InputCase, approximate: bool) {
             // over-count, never an under-count.
             let reported_bytes = parse_human_bytes(reported).unwrap_or_else(|| {
                 panic!(
-                    "unparseable du size {reported:?} for {topic} in {}",
+                    "unparsable du size {reported:?} for {topic} in {}",
                     case.path.display()
                 )
             });
