@@ -18,7 +18,8 @@ fn collect_metadata_records(
     source_options: source::SourceOptions,
 ) -> Result<Vec<(mcap::records::MetadataIndex, mcap::records::Metadata)>> {
     let header = byte_source::read_header(source)?;
-    let indexes = match parse::try_parsed_mcap_from_summary(source, header.clone())? {
+    let indexes = match parse::try_parsed_mcap_from_summary(source, header.clone(), source_options)?
+    {
         Some(parsed) if parse::metadata_indexes_need_scan(&parsed) => {
             parse::warn_index_scan("metadata");
             source::require_remote_scan_for_linear(source, source_options)?;

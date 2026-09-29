@@ -190,8 +190,11 @@ fn summary_section_has_chunk_indexes(source: &mut dyn ByteSource) -> Result<bool
 /// summary, no chunk indexes, or (via [`mcap::McapError::UnknownSchema`]) a summary that does not
 /// claim to be chunk-indexed. Returns an error for a summary that claims chunk indexes but is
 /// missing the channel/schema records an indexed read needs.
-pub(crate) fn read_indexed_summary(source: &mut dyn ByteSource) -> Result<Option<mcap::Summary>> {
-    match byte_source::read_summary(source) {
+pub(crate) fn read_indexed_summary(
+    source: &mut dyn ByteSource,
+    source_options: SourceOptions,
+) -> Result<Option<mcap::Summary>> {
+    match byte_source::read_summary(source, source_options) {
         Ok(Some(summary)) if summary.chunk_indexes.is_empty() => Ok(None),
         Ok(Some(summary)) if summary_supports_indexed_read(&summary) => Ok(Some(summary)),
         Ok(Some(_)) => Err(incomplete_indexed_summary_error()),

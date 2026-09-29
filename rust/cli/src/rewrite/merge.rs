@@ -210,10 +210,17 @@ fn merge_inputs<W: Write + Seek>(
 
     let summaries = sources
         .iter_mut()
-        // Treat summary lookup as best effort and fall back to linear scans when
-        // summary parsing fails.
-        .map(|source| byte_source::read_summary(source.as_mut()).unwrap_or_default())
-        .collect::<Vec<_>>();
+        .map(|source| {
+            match byte_source::read_summary(source.as_mut(), source_options) {
+                Ok(summary) => Ok(summary),
+                // A remote input without scan opt-in cannot fall back to a linear scan, so
+                // surface the summary error (for example the summary-size cap) as-is.
+                Err(err) if source.is_remote() && !source_options.allow_remote_scan => Err(err),
+                // Otherwise treat summary lookup as best effort and fall back to a linear scan.
+                Err(_) => Ok(None),
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     merge_messages(
         inputs,

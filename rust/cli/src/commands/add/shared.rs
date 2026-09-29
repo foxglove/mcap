@@ -460,7 +460,10 @@ fn read_exact_at(source: &mut dyn ByteSource, offset: u64, len: usize) -> Result
 }
 
 fn collect_existing_summary(source: &mut dyn ByteSource) -> Result<ExistingSummaryData> {
-    if let Some(summary) = byte_source::read_summary(source).context("failed to read summary")? {
+    if let Some(summary) =
+        byte_source::read_summary(source, crate::source::SourceOptions::default())
+            .context("failed to read summary")?
+    {
         let mut data = ExistingSummaryData {
             statistics: summary.stats,
             channels: BTreeMap::new(),
