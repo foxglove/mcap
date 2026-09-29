@@ -5,7 +5,10 @@
 
 mod drivers;
 
-pub use drivers::{for_each_linear_record, read_header, read_summary, service_indexed_chunk};
+pub use drivers::{
+    for_each_linear_record, read_header, read_summary, service_indexed_chunk,
+    try_for_each_linear_record,
+};
 
 use std::fs::File;
 use std::io::{BufReader, IsTerminal as _, Read as _, Seek as _, SeekFrom, Write as _};

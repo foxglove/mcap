@@ -496,13 +496,12 @@ fn cat_linear(
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
     let mut broken_pipe = false;
 
-    byte_source::for_each_linear_record(
+    // Stop the scan as soon as the output pipe breaks so `cat big.mcap | head` does not keep
+    // reading and decompressing (or, for remote inputs, fetching) the rest of the file.
+    byte_source::try_for_each_linear_record(
         source,
         mcap::sans_io::LinearReaderOptions::default(),
         |opcode, data| {
-            if broken_pipe {
-                return Ok(());
-            }
             let record = mcap::parse_record(opcode, data)?;
             if handle_linear_record(
                 sink,
@@ -514,8 +513,9 @@ fn cat_linear(
                 out,
             )? {
                 broken_pipe = true;
+                return Ok(std::ops::ControlFlow::Break(()));
             }
-            Ok(())
+            Ok(std::ops::ControlFlow::Continue(()))
         },
     )?;
 
@@ -1420,13 +1420,13 @@ mod tests {
     };
 
     use super::{
-        cat_indexed, cat_mcap, cat_streaming, flush_or_ignore_broken_pipe,
+        cat_indexed, cat_linear, cat_mcap, cat_streaming, flush_or_ignore_broken_pipe,
         needs_in_chunk_definitions, parse_ros1_field_type, planned_chunk_reads,
         write_message_fields, write_payload_preview, write_ros1_float, write_signed_decimal_time,
         CatOptions, CsvState, IndexedCatResult, JsonTranscoders, MessageWriter, OutputMode,
         OutputSink, Ros1MessageDef, MESSAGE_PREVIEW_LEN,
     };
-    use crate::byte_source::MemorySource;
+    use crate::byte_source::{ByteSource, MemorySource};
     use crate::cli::{CatCommand, CatFormat, TimeFormat};
     use crate::render;
     use crate::source::SourceOptions;
@@ -2171,6 +2171,132 @@ mod tests {
         let output = String::from_utf8(indexed_out).expect("valid utf8 output");
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines.as_slice(), NO_MESSAGE_INDEX_LOG_TIME_LINES);
+    }
+
+    /// Wraps [`MemorySource`] and counts the bytes handed out by `read_into`.
+    struct CountingSource {
+        inner: MemorySource,
+        bytes_read: usize,
+    }
+
+    impl ByteSource for CountingSource {
+        fn size(&self) -> anyhow::Result<Option<u64>> {
+            self.inner.size()
+        }
+
+        fn is_remote(&self) -> bool {
+            false
+        }
+
+        fn display_name(&self) -> String {
+            "memory://linear-fixture.mcap".into()
+        }
+
+        fn is_seekable(&self) -> bool {
+            true
+        }
+
+        fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> anyhow::Result<usize> {
+            let n = self.inner.read_into(offset, dest)?;
+            self.bytes_read += n;
+            Ok(n)
+        }
+    }
+
+    /// Fails every write with `BrokenPipe`, like stdout after `| head` exits.
+    struct BrokenPipeWriter;
+
+    impl std::io::Write for BrokenPipeWriter {
+        fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    /// Summaryless, chunked fixture with enough messages to span many chunks.
+    fn build_large_linear_mcap_without_summary(message_count: u32) -> Vec<u8> {
+        let mut cursor = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(1024))
+                .compression(None)
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .create(&mut cursor)
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("Example", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            for sequence in 0..message_count {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id,
+                            sequence,
+                            log_time: u64::from(sequence),
+                            publish_time: u64::from(sequence),
+                        },
+                        &[0u8; 64],
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish");
+        }
+        cursor.into_inner()
+    }
+
+    /// Runs `cat_linear` over `mcap` into `sink`; returns the broken-pipe flag and bytes read.
+    fn cat_linear_counting_reads(
+        mcap: &[u8],
+        sink: &mut OutputSink<impl std::io::Write>,
+    ) -> (bool, usize) {
+        let mut source = CountingSource {
+            inner: MemorySource::new(mcap.to_vec()),
+            bytes_read: 0,
+        };
+        let mut json_transcoders = JsonTranscoders::default();
+        let mut csv_state = CsvState::default();
+        let broken_pipe = cat_linear(
+            sink,
+            &mut source,
+            &CatOptions::default(),
+            &mut MessageWriter {
+                csv: &mut csv_state,
+                json: &mut json_transcoders,
+            },
+        )
+        .expect("broken pipe is not an error");
+        (broken_pipe, source.bytes_read)
+    }
+
+    #[test]
+    fn cat_linear_stops_reading_after_broken_pipe() {
+        let mcap = build_large_linear_mcap_without_summary(2_000);
+        let total = mcap.len();
+
+        // Control: with a working sink the scan reads the whole file.
+        let mut healthy = Vec::new();
+        let (broken_pipe, full_read) =
+            cat_linear_counting_reads(&mcap, &mut OutputSink::Plain(BufWriter::new(&mut healthy)));
+        assert!(!broken_pipe);
+        assert_eq!(full_read, total);
+
+        // Zero-capacity BufWriter forwards the first message line straight to the broken pipe.
+        let (broken_pipe, partial_read) = cat_linear_counting_reads(
+            &mcap,
+            &mut OutputSink::Plain(BufWriter::with_capacity(0, BrokenPipeWriter)),
+        );
+        assert!(broken_pipe);
+        assert!(
+            partial_read < total / 10,
+            "read {partial_read} of {total} bytes after the pipe broke"
+        );
     }
 
     #[test]
