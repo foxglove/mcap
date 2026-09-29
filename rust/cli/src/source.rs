@@ -10,7 +10,7 @@ use mcap::records::{self, Record};
 use memmap2::Mmap;
 use object_store::{
     path::Path as ObjectStorePath, Attribute, ClientConfigKey, GetOptions, GetRange, ObjectStore,
-    ObjectStoreExt,
+    ObjectStoreExt, ObjectStoreScheme, RetryConfig,
 };
 use tempfile::NamedTempFile;
 use url::Url;
@@ -44,6 +44,14 @@ const REMOTE_DOWNLOAD_STALL_TIMEOUT: Duration = Duration::from_secs(120);
 // Bounds waiting for each download GET's response head; sits above
 // object_store's 180s retry budget so internal retries can finish.
 const REMOTE_DOWNLOAD_RESPONSE_TIMEOUT: Duration = Duration::from_secs(240);
+// object_store resumes body errors itself inside `GetResult::into_stream`
+// when the response carried an ETag, sharing one retry budget with the
+// request head (default: 10 retries or 3 minutes, with backoff). Downloads
+// have their own resume loop in `download_chunked`, so the inner budget is
+// kept small: it absorbs brief blips, and anything longer surfaces as one
+// retryable error per attempt instead of hiding minutes of retries.
+const REMOTE_DOWNLOAD_STORE_RETRIES: usize = 3;
+const REMOTE_DOWNLOAD_STORE_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 // Consecutive zero-progress attempts before a chunked download gives up.
 // Any delivered bytes reset the budget, so only a dead connection exhausts it.
 const REMOTE_DOWNLOAD_NO_PROGRESS_ATTEMPTS: usize = 5;
@@ -591,7 +599,7 @@ impl ObjectStoreSource {
         let result = if matches!(remote_url.url.scheme(), "s3" | "s3a") {
             crate::sdk_s3::build_s3_store(&runtime, &remote_url.url, remote_url.options())
         } else {
-            object_store::parse_url_opts(&remote_url.url, remote_url.store_options(access))
+            build_object_store(&remote_url.url, remote_url.store_options(access), access)
         };
         // object_store errors repeat their source in Display, so flatten to a
         // single message instead of letting the anyhow chain print it twice.
@@ -791,6 +799,14 @@ impl ObjectStoreSource {
         })
     }
 
+    /// Stream `first` and then the remaining `chunk_bytes`-sized ranges to
+    /// `writer`, resuming from the last written byte when a body read fails.
+    ///
+    /// For object_store-backed stores (http, gs, az) whose responses carry an
+    /// ETag, object_store first retries body errors inside the stream itself,
+    /// bounded by `REMOTE_DOWNLOAD_STORE_RETRIES`; only failures it gives up
+    /// on reach this loop. Stores without that layer (the SDK S3 store, or
+    /// responses without an ETag) and stalls always come straight here.
     fn download_chunked(
         &self,
         first: object_store::GetResult,
@@ -1290,6 +1306,65 @@ pub(crate) fn redacted_display(path: &Path) -> String {
     path.to_str()
         .map(redact_url)
         .unwrap_or_else(|| path.display().to_string())
+}
+
+/// Build an object_store store for `url` the way `object_store::parse_url_opts`
+/// does, but with an explicit retry budget: downloads get the trimmed
+/// `REMOTE_DOWNLOAD_STORE_RETRIES` budget because `download_chunked` resumes
+/// on its own; indexed reads keep object_store's default since each range
+/// GET there is retried only by object_store.
+fn build_object_store(
+    url: &Url,
+    options: Vec<(String, String)>,
+    access: RemoteAccess,
+) -> object_store::Result<(Box<dyn ObjectStore>, ObjectStorePath)> {
+    let (scheme, object_path) = ObjectStoreScheme::parse(url)?;
+    let retry = match access {
+        RemoteAccess::Indexed => RetryConfig::default(),
+        RemoteAccess::Download => RetryConfig {
+            max_retries: REMOTE_DOWNLOAD_STORE_RETRIES,
+            retry_timeout: REMOTE_DOWNLOAD_STORE_RETRY_TIMEOUT,
+            ..RetryConfig::default()
+        },
+    };
+    // Mirrors object_store's private `builder_opts!`: unknown keys are skipped
+    // because the option list is the process environment.
+    macro_rules! build {
+        ($builder:ty, $url:expr) => {{
+            let builder = options.into_iter().fold(
+                <$builder>::new()
+                    .with_url($url.to_string())
+                    .with_retry(retry),
+                |builder, (key, value)| match key.to_ascii_lowercase().parse() {
+                    Ok(key) => builder.with_config(key, value),
+                    Err(_) => builder,
+                },
+            );
+            Box::new(builder.build()?) as Box<dyn ObjectStore>
+        }};
+    }
+    let store = match scheme {
+        ObjectStoreScheme::AmazonS3 => build!(object_store::aws::AmazonS3Builder, url),
+        ObjectStoreScheme::GoogleCloudStorage => {
+            build!(object_store::gcp::GoogleCloudStorageBuilder, url)
+        }
+        ObjectStoreScheme::MicrosoftAzure => {
+            build!(object_store::azure::MicrosoftAzureBuilder, url)
+        }
+        ObjectStoreScheme::Http => {
+            build!(
+                object_store::http::HttpBuilder,
+                &url[..url::Position::BeforePath]
+            )
+        }
+        scheme => {
+            return Err(object_store::Error::Generic {
+                store: "parse_url",
+                source: format!("unsupported remote scheme {scheme:?}").into(),
+            })
+        }
+    };
+    Ok((store, object_path))
 }
 
 fn read_remote_input_to_writer(path: &Path, writer: &mut impl Write) -> Result<()> {
@@ -1960,8 +2035,13 @@ mod tests {
     // A range-supporting server that truncates the first `truncated_bodies` GET
     // bodies to `truncated_len` of the promised length, like a connection dropped
     // mid-transfer.
+    // A range-supporting server that closes the first `truncated_bodies` GET
+    // bodies after `truncated_len(content_len)` bytes. With an `etag`, every
+    // response carries it, which switches on object_store's own in-stream
+    // resume.
     fn serve_http_truncating_bodies(
         body: &'static [u8],
+        etag: Option<&'static str>,
         truncated_bodies: usize,
         truncated_len: fn(usize) -> usize,
     ) -> (String, Arc<AtomicUsize>) {
@@ -1969,6 +2049,9 @@ mod tests {
         let addr = listener.local_addr().expect("test server addr");
         let request_count = Arc::new(AtomicUsize::new(0));
         let server_request_count = request_count.clone();
+        let etag_header = etag
+            .map(|etag| format!("ETag: {etag}\r\n"))
+            .unwrap_or_default();
         thread::spawn(move || {
             let mut remaining_truncations = truncated_bodies;
             for stream in listener.incoming().take(64) {
@@ -1995,7 +2078,7 @@ mod tests {
                     });
                 let Some((start, end)) = range else {
                     let response = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n{etag_header}Accept-Ranges: bytes\r\nConnection: close\r\n\r\n",
                         body.len()
                     );
                     stream
@@ -2010,7 +2093,7 @@ mod tests {
                 let start = start.min(end);
                 let content = &body[start..=end];
                 let response = format!(
-                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\n{etag_header}Accept-Ranges: bytes\r\nConnection: close\r\n\r\n",
                     content.len(),
                     body.len(),
                 );
@@ -2238,7 +2321,7 @@ mod tests {
     fn remote_http_download_resumes_after_mid_body_failures() {
         let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
         // The first two GET bodies are cut off halfway through.
-        let (url, requests) = serve_http_truncating_bodies(body, 2, |len| len / 2);
+        let (url, requests) = serve_http_truncating_bodies(body, None, 2, |len| len / 2);
         let mut out = Vec::new();
         let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
             .expect("open download source");
@@ -2254,10 +2337,34 @@ mod tests {
     }
 
     #[test]
+    fn remote_http_download_lets_object_store_resume_etag_bodies_first() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        // With an ETag, object_store resumes truncated bodies inside the
+        // stream, so its retries stay within the chunk being read: 0..8 -> 4
+        // bytes, 4..8 -> 2 bytes, 6..8 -> 2 bytes, then four full chunks.
+        // Without an ETag the second truncated GET is our own resume of
+        // 4..12 and the run takes six requests (see
+        // remote_http_download_resumes_after_mid_body_failures).
+        let (url, requests) = serve_http_truncating_bodies(body, Some("\"v1\""), 2, |len| len / 2);
+        let mut out = Vec::new();
+        let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+            .expect("open download source");
+        source
+            .download_to_writer(&mut out, 8)
+            .expect("download should complete through object_store's in-stream resume");
+        assert_eq!(out, body);
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            7,
+            "object_store's resumes should stay within the 0..8 chunk"
+        );
+    }
+
+    #[test]
     fn remote_http_download_gives_up_after_no_progress_attempts() {
         let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
         // Every GET body is closed before sending any bytes.
-        let (url, requests) = serve_http_truncating_bodies(body, usize::MAX, |_| 0);
+        let (url, requests) = serve_http_truncating_bodies(body, None, usize::MAX, |_| 0);
         let mut out = Vec::new();
         let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
             .expect("open download source");
@@ -2417,7 +2524,7 @@ mod tests {
             }
         }
         let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
-        let (url, requests) = serve_http_truncating_bodies(body, 0, |len| len);
+        let (url, requests) = serve_http_truncating_bodies(body, None, 0, |len| len);
         let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
             .expect("open download source");
         let err = source
