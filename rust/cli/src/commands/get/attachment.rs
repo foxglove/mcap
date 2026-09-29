@@ -121,12 +121,11 @@ mod tests {
     use std::borrow::Cow;
 
     use super::{attachment_indexes, select_attachment_index};
-    use crate::byte_source::MemorySource;
+    use crate::byte_source::{ByteSource, MemorySource};
     use crate::cli::GetAttachmentCommand;
     use crate::context::CommandContext;
-    use crate::parse;
     use crate::source::SourceOptions;
-    use mcap::records::{AttachmentIndex, Statistics};
+    use mcap::records::AttachmentIndex;
 
     fn attachment(name: &str, offset: u64) -> AttachmentIndex {
         AttachmentIndex {
@@ -141,10 +140,15 @@ mod tests {
     }
 
     fn mcap_with_attachment() -> Vec<u8> {
+        mcap_with_attachment_and_options(mcap::WriteOptions::new())
+    }
+
+    fn mcap_with_attachment_and_options(options: mcap::WriteOptions) -> Vec<u8> {
         let mut mcap_bytes = Vec::new();
         {
-            let mut writer =
-                mcap::Writer::new(std::io::Cursor::new(&mut mcap_bytes)).expect("writer");
+            let mut writer = options
+                .create(std::io::Cursor::new(&mut mcap_bytes))
+                .expect("writer");
             writer
                 .attach(&mcap::Attachment {
                     log_time: 1,
@@ -157,6 +161,54 @@ mod tests {
             writer.finish().expect("finish");
         }
         mcap_bytes
+    }
+
+    /// Wraps [`MemorySource`] and records the byte range of every read, so a test can tell
+    /// whether a record was read at all and how many times.
+    struct RecordingSource {
+        inner: MemorySource,
+        reads: Vec<(u64, u64)>,
+    }
+
+    impl RecordingSource {
+        fn new(bytes: Vec<u8>) -> Self {
+            Self {
+                inner: MemorySource::new(bytes),
+                reads: Vec::new(),
+            }
+        }
+
+        /// Number of reads whose range contains `byte_offset`.
+        fn reads_covering(&self, byte_offset: u64) -> usize {
+            self.reads
+                .iter()
+                .filter(|(start, end)| *start <= byte_offset && byte_offset < *end)
+                .count()
+        }
+    }
+
+    impl ByteSource for RecordingSource {
+        fn size(&self) -> anyhow::Result<Option<u64>> {
+            self.inner.size()
+        }
+
+        fn is_remote(&self) -> bool {
+            false
+        }
+
+        fn display_name(&self) -> String {
+            "memory://fixture.mcap".into()
+        }
+
+        fn is_seekable(&self) -> bool {
+            true
+        }
+
+        fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> anyhow::Result<usize> {
+            let n = self.inner.read_into(offset, dest)?;
+            self.reads.push((offset, offset + n as u64));
+            Ok(n)
+        }
     }
 
     #[test]
@@ -234,39 +286,41 @@ mod tests {
 
     #[test]
     fn missing_name_does_not_scan_when_attachment_indexes_are_complete() {
-        let mut source = MemorySource::new(mcap_with_attachment());
-        // Build a ParsedMcap-like path by using a complete summary fixture via real bytes.
+        // Summary with statistics and a complete attachment index: a name that is not in the
+        // index is simply absent, so the data section must never be read.
+        let mut source = RecordingSource::new(mcap_with_attachment());
         let indexes =
             attachment_indexes(&mut source, "missing", SourceOptions::default()).expect("indexes");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "a");
-        let _ = parse::ParsedMcap {
-            summary_available: true,
-            statistics: Some(Statistics {
-                attachment_count: 1,
-                ..Default::default()
-            }),
-            attachment_indexes: vec![attachment("a", 10)],
-            ..Default::default()
-        };
+        let record_last_byte = indexes[0].offset + indexes[0].length - 1;
+        assert_eq!(
+            source.reads_covering(record_last_byte),
+            0,
+            "attachment record must come from the summary index, not a scan: {:?}",
+            source.reads
+        );
     }
 
     #[test]
     fn missing_name_does_not_rescan_summaryless_input() {
-        // Linear-parsed attachment indexes are complete when summary_available is false.
-        let parsed = parse::ParsedMcap {
-            attachment_indexes: vec![attachment("a", 10)],
-            ..Default::default()
-        };
-        assert!(!parse::attachment_indexes_need_scan(&parsed));
-        let missing_requested_name = !parsed
-            .attachment_indexes
-            .iter()
-            .any(|index| index.name == "missing");
-        assert!(missing_requested_name);
-        // Without summary_available, the get path must not force a rescan.
-        assert!(
-            !(missing_requested_name && parsed.summary_available && parsed.statistics.is_none())
+        // No summary at all: the indexes come from one linear parse, and a name that is not
+        // found must not trigger a second scan of the data section.
+        let mut source = RecordingSource::new(mcap_with_attachment_and_options(
+            mcap::WriteOptions::new()
+                .emit_summary_records(false)
+                .emit_summary_offsets(false),
+        ));
+        let indexes =
+            attachment_indexes(&mut source, "missing", SourceOptions::default()).expect("indexes");
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].name, "a");
+        let record_last_byte = indexes[0].offset + indexes[0].length - 1;
+        assert_eq!(
+            source.reads_covering(record_last_byte),
+            1,
+            "attachment record must be read by exactly one scan: {:?}",
+            source.reads
         );
     }
 
