@@ -244,8 +244,8 @@ fn cat_indexed(
         }
         Err(err) => return Err(err),
     };
-    // Record channel topics (including zero-message channels) so an absent CSV topic can be
-    // reported as an error rather than a silently empty export.
+    // Record channel topics (even with zero messages) so an absent CSV topic errors instead of
+    // exporting silently empty.
     if matches!(opts.mode, OutputMode::Csv) {
         out.csv.seen_topics.extend(
             summary
@@ -507,8 +507,7 @@ fn cat_linear(
     let mut channels = mcap::read::ChannelAccumulator::default();
     let mut broken_pipe = false;
 
-    // Stop the scan as soon as the output pipe breaks so `cat big.mcap | head` does not keep
-    // reading and decompressing (or, for remote inputs, fetching) the rest of the file.
+    // Break on a broken pipe so `cat big.mcap | head` stops reading (or, for remotes, fetching).
     byte_source::try_for_each_linear_record(
         source,
         mcap::sans_io::LinearReaderOptions::default(),
