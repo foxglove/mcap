@@ -881,9 +881,10 @@ impl ObjectStoreSource {
                 )));
             }
             progress.note(&format!(
-                "Warning: remote download interrupted at {} / {}, retrying: {err:#}",
+                "Warning: remote download interrupted at {} / {}, retrying: {}",
                 human_bytes(offset),
-                human_bytes(total)
+                human_bytes(total),
+                single_line_error(&err)
             ));
         }
         Ok(())
@@ -979,9 +980,13 @@ impl ObjectStoreSource {
                 let bytes = match next {
                     Ok(Some(bytes)) => bytes,
                     Ok(None) => break,
+                    // object_store errors already print their cause chain, so
+                    // flatten rather than letting anyhow repeat it.
                     Err(err) => {
-                        return Err(DownloadError::Retryable(anyhow::Error::new(err).context(
-                            format!("failed to read remote input {}", self.display_url),
+                        return Err(DownloadError::Retryable(concise_remote_operation_error(
+                            "reading remote input from",
+                            &self.display_url,
+                            err,
                         )))
                     }
                 };
@@ -1017,11 +1022,25 @@ impl DownloadError {
     }
 }
 
+/// Flatten an error for a single-line warning. The CLI's remote errors put
+/// their detail on a second line for the final error output, which inside a
+/// warning would read like a separate fatal message.
+fn single_line_error(err: &anyhow::Error) -> String {
+    format!("{err:#}")
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join(": ")
+}
+
 struct DownloadProgress {
     tty: bool,
     total: u64,
     written: u64,
     last_report: Instant,
+    // The in-place progress line is on screen without a trailing newline.
+    line_open: bool,
 }
 
 impl DownloadProgress {
@@ -1031,6 +1050,7 @@ impl DownloadProgress {
             total,
             written: 0,
             last_report: Instant::now(),
+            line_open: false,
         }
     }
 
@@ -1044,29 +1064,39 @@ impl DownloadProgress {
     }
 
     // Print a standalone line without corrupting the in-place progress line.
-    fn note(&self, message: &str) {
-        if self.tty && self.written > 0 {
-            eprintln!();
-        }
-        eprintln!("{message}");
-        let _ = std::io::stderr().flush();
+    fn note(&mut self, message: &str) {
+        let _ = self.write_note(&mut std::io::stderr().lock(), message);
     }
 
-    fn report(&self, final_line: bool) {
+    fn write_note(&mut self, out: &mut impl Write, message: &str) -> std::io::Result<()> {
+        if self.line_open {
+            writeln!(out)?;
+            self.line_open = false;
+        }
+        writeln!(out, "{message}")?;
+        out.flush()
+    }
+
+    fn report(&mut self, final_line: bool) {
         if !self.tty {
             return;
         }
+        let _ = self.write_report(&mut std::io::stderr().lock(), final_line);
+    }
+
+    fn write_report(&mut self, out: &mut impl Write, final_line: bool) -> std::io::Result<()> {
         // Pad so a shorter update erases the tail of a longer previous line.
         let message = format!(
             "Downloading {} / {}",
             human_bytes(self.written),
             human_bytes(self.total)
         );
-        eprint!("\r{message:<48}");
+        write!(out, "\r{message:<48}")?;
         if final_line {
-            eprintln!();
+            writeln!(out)?;
         }
-        let _ = std::io::stderr().flush();
+        self.line_open = !final_line;
+        out.flush()
     }
 }
 
@@ -2373,6 +2403,53 @@ mod tests {
             requests.load(Ordering::SeqCst),
             7,
             "object_store's resumes should stay within the 0..8 chunk"
+        );
+    }
+
+    #[test]
+    fn single_line_error_joins_remote_error_lines() {
+        let err = super::remote_status_read_error("http://example.com/demo.mcap", "425 Too Early");
+        assert_eq!(
+            super::single_line_error(&err),
+            "failed to read http://example.com/demo.mcap: Remote server returned 425 Too Early"
+        );
+        let plain = anyhow::anyhow!("download stalled (no data for 120s)");
+        assert_eq!(
+            super::single_line_error(&plain),
+            "download stalled (no data for 120s)"
+        );
+    }
+
+    #[test]
+    fn download_progress_notes_break_the_progress_line_once() {
+        let mut progress = super::DownloadProgress {
+            tty: true,
+            total: 100,
+            written: 8,
+            last_report: std::time::Instant::now(),
+            line_open: false,
+        };
+        let mut out = Vec::new();
+        progress.write_report(&mut out, false).unwrap();
+        progress.write_note(&mut out, "Warning: first").unwrap();
+        progress.write_note(&mut out, "Warning: second").unwrap();
+        progress.write_report(&mut out, false).unwrap();
+        progress.write_report(&mut out, true).unwrap();
+        let text = String::from_utf8(out).unwrap();
+        let progress_line = format!(
+            "\r{:<48}",
+            format!(
+                "Downloading {} / {}",
+                crate::render::human_bytes(8),
+                crate::render::human_bytes(100)
+            )
+        );
+        assert_eq!(
+            text,
+            format!(
+                "{progress_line}\nWarning: first\nWarning: second\n{progress_line}{progress_line}\n"
+            ),
+            "notes should end the open progress line exactly once, got {text:?}"
         );
     }
 
