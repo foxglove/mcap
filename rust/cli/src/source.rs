@@ -831,6 +831,7 @@ impl ObjectStoreSource {
         chunk_bytes: u64,
     ) -> Result<()> {
         let total = first.meta.size;
+        let first_meta = first.meta.clone();
         // If-Match uses strong comparison (RFC 9110 §13.1.1), so a weak ETag
         // (`W/"..."`) would fail every resume with 412; fall back to the size
         // check below instead of pinning it.
@@ -848,7 +849,7 @@ impl ObjectStoreSource {
                 Some(response) => Ok(response),
                 None => {
                     let end = offset.saturating_add(chunk_bytes).min(total);
-                    self.resume_chunk_get(offset..end, &if_match, total)
+                    self.resume_chunk_get(offset..end, &if_match, &first_meta)
                 }
             };
             let err = match response {
@@ -892,26 +893,52 @@ impl ObjectStoreSource {
 
     /// Issue the ranged GET that resumes a chunked download at `range`.
     /// Failures are retryable except those that would fail identically on
-    /// every retry: the pinned ETag no longer matches (412), the object has
-    /// changed size since the first response, or the object is gone or no
-    /// longer readable (404/401/403).
+    /// every retry: the pinned ETag no longer matches (412), the object's
+    /// size or last-modified time differs from the first response, the
+    /// server returned a range other than the one requested, or the object
+    /// is gone or no longer readable (404/401/403).
+    ///
+    /// The size and last-modified checks are what guards a resume when the
+    /// server sends no ETag. Both backends report the Unix epoch for a
+    /// missing Last-Modified header, so two headerless responses compare
+    /// equal rather than tripping the check.
     fn resume_chunk_get(
         &self,
         range: std::ops::Range<u64>,
         if_match: &Option<String>,
-        expected_size: u64,
+        first: &object_store::ObjectMeta,
     ) -> std::result::Result<object_store::GetResult, DownloadError> {
+        let changed = |what: String| {
+            DownloadError::Fatal(anyhow::anyhow!(
+                "failed to read {}: remote object changed while downloading ({what})",
+                self.display_url
+            ))
+        };
         match self.get_opts_bounded(GetOptions {
-            range: Some(GetRange::Bounded(range)),
+            range: Some(GetRange::Bounded(range.clone())),
             if_match: if_match.clone(),
             ..GetOptions::default()
         }) {
-            Ok(Ok(response)) if response.meta.size != expected_size => {
+            Ok(Ok(response)) if response.meta.size != first.size => Err(changed(format!(
+                "size {} -> {}",
+                first.size, response.meta.size
+            ))),
+            Ok(Ok(response)) if response.meta.last_modified != first.last_modified => {
+                Err(changed(format!(
+                    "last modified {} -> {}",
+                    first.last_modified.to_rfc3339(),
+                    response.meta.last_modified.to_rfc3339()
+                )))
+            }
+            // Both backends validate Content-Range against the request, so
+            // this only fires for a store that does not; but the offset
+            // accounting below depends on it, so check here as well.
+            Ok(Ok(response)) if response.range.start != range.start => {
                 Err(DownloadError::Fatal(anyhow::anyhow!(
-                    "failed to read {}: remote object changed while downloading (size {} -> {})",
+                    "failed to read {}: remote server returned range {:?} for requested range {:?}",
                     self.display_url,
-                    expected_size,
-                    response.meta.size
+                    response.range,
+                    range
                 )))
             }
             Ok(Ok(response)) => Ok(response),
@@ -1697,6 +1724,8 @@ mod tests {
     use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+
+    use object_store::{path::Path as ObjectStorePath, ObjectStore};
     use std::thread;
 
     use super::load_path;
@@ -1862,6 +1891,8 @@ mod tests {
         Status(&'static str),
         // Serve the request from a different object.
         Body(&'static [u8]),
+        // Serve the request from a different object with this `Last-Modified`.
+        Modified(&'static [u8], &'static str),
     }
 
     type Script = Arc<dyn Fn(usize) -> ScriptedResponse + Send + Sync>;
@@ -1884,6 +1915,8 @@ mod tests {
         // compliant origin would: a weak ETag never matches, a strong one must
         // be equal.
         etag: Option<&'static str>,
+        // `Last-Modified` carried on every response served from `body`.
+        last_modified: Option<&'static str>,
         // Answer a resumed range (start > 0) that carries no `If-Match` with
         // 428, so a test can prove the client pinned the ETag. Not how real
         // servers behave: object_store's own in-stream resume sends no
@@ -1911,6 +1944,7 @@ mod tests {
                 unknown_range_total: false,
                 reject_suffix: false,
                 etag: None,
+                last_modified: None,
                 require_if_match: false,
                 script: None,
                 truncated_bodies: 0,
@@ -1972,9 +2006,10 @@ mod tests {
                         .script
                         .as_ref()
                         .map_or(ScriptedResponse::Normal, |script| script(index));
-                    let body = match scripted {
-                        ScriptedResponse::Normal => self.body,
-                        ScriptedResponse::Body(other) => other,
+                    let (body, last_modified) = match scripted {
+                        ScriptedResponse::Normal => (self.body, self.last_modified),
+                        ScriptedResponse::Body(other) => (other, self.last_modified),
+                        ScriptedResponse::Modified(other, modified) => (other, Some(modified)),
                         ScriptedResponse::Status(status) => {
                             write_status(&mut stream, status, b"");
                             continue;
@@ -2030,6 +2065,7 @@ mod tests {
                         .iter()
                         .map(|(name, value)| format!("{name}: {value}\r\n"))
                         .chain(self.etag.map(|etag| format!("ETag: {etag}\r\n")))
+                        .chain(last_modified.map(|value| format!("Last-Modified: {value}\r\n")))
                         .collect::<String>();
                     let content = match (self.supports_ranges, requested_range) {
                         (true, Some((start, end))) => {
@@ -2457,6 +2493,156 @@ mod tests {
             "a size change should not be retried"
         );
         assert_eq!(out, &body[..8], "nothing from the new object is written");
+    }
+
+    #[test]
+    fn remote_http_download_aborts_when_same_size_object_is_rewritten_mid_download() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let rewritten: &'static [u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+        assert_eq!(body.len(), rewritten.len());
+        // No ETag and no size change: only Last-Modified reveals the rewrite.
+        let (url, requests) = TestHttpServer {
+            last_modified: Some("Mon, 01 Sep 2025 00:00:00 GMT"),
+            script: Some(Arc::new(move |index| {
+                if index == 1 {
+                    ScriptedResponse::Modified(rewritten, "Tue, 02 Sep 2025 00:00:00 GMT")
+                } else {
+                    ScriptedResponse::Normal
+                }
+            })),
+            ..TestHttpServer::new(body)
+        }
+        .serve();
+        let mut out = Vec::new();
+        let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+            .expect("open download source");
+        let err = source
+            .download_to_writer(&mut out, 8)
+            .expect_err("a Last-Modified change should abort the download");
+        let message = err.to_string();
+        assert!(
+            message.contains("remote object changed") && message.contains("last modified"),
+            "unexpected error: {err:#}"
+        );
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
+        assert_eq!(out, &body[..8], "nothing from the new object is written");
+    }
+
+    // Delegates to an in-memory store but reports every resumed GET's range as
+    // starting one byte early, like a proxy serving the wrong offset through a
+    // backend without object_store's Content-Range validation.
+    #[derive(Debug)]
+    struct ShiftedRangeStore {
+        inner: object_store::memory::InMemory,
+        gets: AtomicUsize,
+    }
+
+    impl std::fmt::Display for ShiftedRangeStore {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("ShiftedRangeStore")
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ObjectStore for ShiftedRangeStore {
+        async fn get_opts(
+            &self,
+            location: &ObjectStorePath,
+            options: object_store::GetOptions,
+        ) -> object_store::Result<object_store::GetResult> {
+            let mut result = self.inner.get_opts(location, options).await?;
+            if self.gets.fetch_add(1, Ordering::SeqCst) > 0 {
+                result.range.start -= 1;
+                result.range.end -= 1;
+            }
+            Ok(result)
+        }
+
+        async fn put_opts(
+            &self,
+            location: &ObjectStorePath,
+            payload: object_store::PutPayload,
+            opts: object_store::PutOptions,
+        ) -> object_store::Result<object_store::PutResult> {
+            self.inner.put_opts(location, payload, opts).await
+        }
+
+        async fn put_multipart_opts(
+            &self,
+            location: &ObjectStorePath,
+            opts: object_store::PutMultipartOptions,
+        ) -> object_store::Result<Box<dyn object_store::MultipartUpload>> {
+            self.inner.put_multipart_opts(location, opts).await
+        }
+
+        fn delete_stream(
+            &self,
+            locations: futures_util::stream::BoxStream<
+                'static,
+                object_store::Result<ObjectStorePath>,
+            >,
+        ) -> futures_util::stream::BoxStream<'static, object_store::Result<ObjectStorePath>>
+        {
+            self.inner.delete_stream(locations)
+        }
+
+        fn list(
+            &self,
+            prefix: Option<&ObjectStorePath>,
+        ) -> futures_util::stream::BoxStream<'static, object_store::Result<object_store::ObjectMeta>>
+        {
+            self.inner.list(prefix)
+        }
+
+        async fn list_with_delimiter(
+            &self,
+            prefix: Option<&ObjectStorePath>,
+        ) -> object_store::Result<object_store::ListResult> {
+            self.inner.list_with_delimiter(prefix).await
+        }
+
+        async fn copy_opts(
+            &self,
+            from: &ObjectStorePath,
+            to: &ObjectStorePath,
+            options: object_store::CopyOptions,
+        ) -> object_store::Result<()> {
+            self.inner.copy_opts(from, to, options).await
+        }
+    }
+
+    #[test]
+    fn remote_download_aborts_when_resumed_range_starts_at_wrong_offset() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let store = ShiftedRangeStore {
+            inner: object_store::memory::InMemory::new(),
+            gets: AtomicUsize::new(0),
+        };
+        let path = ObjectStorePath::from("demo.mcap");
+        let runtime = super::object_store_runtime().expect("runtime");
+        runtime
+            .block_on(store.inner.put(&path, body.to_vec().into()))
+            .expect("put memory object");
+        let source = super::ObjectStoreSource {
+            runtime,
+            store: Arc::new(store),
+            path,
+            display_url: "memory:///demo.mcap".to_string(),
+        };
+        let mut out = Vec::new();
+        let err = source
+            .download_to_writer(&mut out, 8)
+            .expect_err("a resumed range at the wrong offset must not be written");
+        assert!(
+            err.to_string()
+                .contains("returned range 7..15 for requested range 8..16"),
+            "unexpected error: {err:#}"
+        );
+        assert_eq!(
+            out,
+            &body[..8],
+            "only the first, correctly ranged chunk is written"
+        );
     }
 
     #[test]
