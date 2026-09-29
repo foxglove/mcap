@@ -236,24 +236,7 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     }
 
     let mut source = crate::byte_source::open_byte_source(Some(path), options)?;
-    let header = crate::byte_source::read_header(source.as_mut())?;
-    if let Some(parsed) =
-        parse::try_parsed_mcap_from_summary(source.as_mut(), header.clone(), options)?
-    {
-        let want_stats_scan = options.scan_data_without_statistics && parsed.statistics.is_none();
-        if !want_stats_scan {
-            return Ok(parsed);
-        }
-        eprintln!(
-            "Warning: Statistics record not available; full scan may be slow. Run `mcap doctor` for details."
-        );
-        return parse::parse_mcap_linear_from_byte_source(source.as_mut(), header);
-    }
-
-    eprintln!(
-        "Warning: summary section not available; full scan may be slow. Run `mcap doctor` for details."
-    );
-    parse::parse_mcap_linear_from_byte_source(source.as_mut(), header)
+    parse::parse_mcap_from_byte_source(source.as_mut(), options)
 }
 
 pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<MaterializedInput> {
@@ -3056,9 +3039,9 @@ mod tests {
             super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
                 .expect("remote summary read")
                 .expect("summary should be present");
-        let summary =
-            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
-        assert!(summary.summary.channels.contains_key(&channel_id));
+        let summary = crate::parse::parsed_mcap_from_summary_section(None, &summary_bytes)
+            .expect("parse summary section");
+        assert!(summary.channels.contains_key(&channel_id));
         assert_eq!(
             requests.load(Ordering::SeqCst),
             1,
@@ -3076,9 +3059,9 @@ mod tests {
             super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
                 .expect("summary read")
                 .expect("summary should be present");
-        let summary =
-            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
-        assert!(summary.summary.channels.contains_key(&channel_id));
+        let summary = crate::parse::parsed_mcap_from_summary_section(None, &summary_bytes)
+            .expect("parse summary section");
+        assert!(summary.channels.contains_key(&channel_id));
     }
 
     #[test]
@@ -3103,9 +3086,9 @@ mod tests {
             super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
                 .expect("summary read with back-fill")
                 .expect("summary should be present");
-        let summary =
-            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
-        assert!(summary.summary.channels.contains_key(&channel_id));
+        let summary = crate::parse::parsed_mcap_from_summary_section(None, &summary_bytes)
+            .expect("parse summary section");
+        assert!(summary.channels.contains_key(&channel_id));
     }
 
     #[test]
@@ -3145,9 +3128,9 @@ mod tests {
             super::read_summary_bytes_from_remote(&mut reader, super::SourceOptions::default())
                 .expect("summary read")
                 .expect("summary should be present");
-        let summary =
-            crate::parse::parse_summary_section(&summary_bytes).expect("parse summary section");
-        assert!(summary.summary.channels.contains_key(&channel_id));
+        let summary = crate::parse::parsed_mcap_from_summary_section(None, &summary_bytes)
+            .expect("parse summary section");
+        assert!(summary.channels.contains_key(&channel_id));
         assert_eq!(
             requests.load(Ordering::SeqCst),
             3,
