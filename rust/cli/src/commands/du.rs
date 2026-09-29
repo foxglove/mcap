@@ -17,6 +17,10 @@ const RECORD_ENVELOPE_SIZE: usize = 9;
 const MESSAGE_HEADER_SIZE: u64 = 22;
 const MESSAGE_OVERHEAD: u64 = RECORD_ENVELOPE_SIZE as u64 + MESSAGE_HEADER_SIZE;
 const MAX_APPROX_WORKERS: usize = 16;
+/// Upper bound on message-index bytes held in memory at once by `--approximate`. Message indexes
+/// cost 16 bytes per message, so holding every chunk's index at once would scale with the file's
+/// message count rather than with one batch.
+const APPROX_INDEX_BATCH_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct Usage {
@@ -103,8 +107,19 @@ fn collect_usage_approximate(
     source: &mut dyn ByteSource,
     source_options: source::SourceOptions,
 ) -> Result<Option<Usage>> {
+    collect_usage_approximate_batched(source, source_options, APPROX_INDEX_BATCH_BYTES)
+}
+
+fn collect_usage_approximate_batched(
+    source: &mut dyn ByteSource,
+    source_options: source::SourceOptions,
+    index_batch_bytes: u64,
+) -> Result<Option<Usage>> {
     let summary = match byte_source::read_summary(source, source_options) {
         Ok(Some(summary)) => summary,
+        // A remote input without scan opt-in cannot fall back to the exact scan, so surface the
+        // summary error (for example the summary-size cap) instead of a misleading scan refusal.
+        Err(err) if source.is_remote() && !source_options.allow_remote_scan => return Err(err),
         Ok(None) | Err(_) => return Ok(None),
     };
 
@@ -134,6 +149,7 @@ fn collect_usage_approximate(
         total_chunk_on_disk += chunk.chunk_length;
         total_message_indexes_on_disk += chunk.message_index_length;
     }
+    require_remote_message_index_budget(source, &summary.chunk_indexes, source_options)?;
 
     usage
         .record_kind_size
@@ -174,8 +190,12 @@ fn collect_usage_approximate(
         .map(|(id, channel)| (*id, channel.topic.clone()))
         .collect();
 
-    let (topic_message_size, total_message_size) =
-        compute_topic_sizes_from_index(source, &summary.chunk_indexes, &channel_topics)?;
+    let (topic_message_size, total_message_size) = compute_topic_sizes_from_index(
+        source,
+        &summary.chunk_indexes,
+        &channel_topics,
+        index_batch_bytes,
+    )?;
 
     usage.topic_message_size = topic_message_size;
     usage.total_message_size = total_message_size;
@@ -235,41 +255,98 @@ fn process_message(
     Ok(())
 }
 
+/// Remote `--approximate` fetches every chunk's message index. That total scales with the
+/// file's message count, so it is capped like any other indexed read unless the scan flag is set.
+fn require_remote_message_index_budget(
+    source: &dyn ByteSource,
+    chunk_indexes: &[records::ChunkIndex],
+    source_options: source::SourceOptions,
+) -> Result<()> {
+    let total_bytes = chunk_indexes.iter().fold(0u64, |total, chunk| {
+        total.saturating_add(chunk.message_index_length)
+    });
+    source::require_remote_indexed_read_budget(
+        source,
+        total_bytes,
+        source_options,
+        "remote message indexes",
+    )
+}
+
+/// Sums per-topic message sizes from chunk message indexes, reading and parsing the indexes in
+/// batches of at most `index_batch_bytes` (always at least one chunk) so memory stays bounded by
+/// the batch rather than the file. Reads are sequential (`ByteSource` is not `Sync`); each
+/// batch is then parsed in parallel.
 fn compute_topic_sizes_from_index(
     source: &mut dyn ByteSource,
     chunk_indexes: &[records::ChunkIndex],
     channel_topics: &BTreeMap<u16, String>,
+    index_batch_bytes: u64,
 ) -> Result<(BTreeMap<String, u64>, u64)> {
-    // Fetch message-index bytes via read_at first (ByteSource isn't Sync), then parse in parallel.
-    let mut index_bufs = Vec::with_capacity(chunk_indexes.len());
-    for chunk in chunk_indexes {
-        index_bufs.push(read_chunk_message_index_bytes(source, chunk)?);
-    }
-
     let worker_count = std::thread::available_parallelism()
         .map(|parallelism| parallelism.get())
         .unwrap_or(1)
-        .min(MAX_APPROX_WORKERS)
-        .min(index_bufs.len());
+        .min(MAX_APPROX_WORKERS);
 
-    if worker_count <= 1 || index_bufs.len() <= 1 {
-        let mut topic_sizes = BTreeMap::<String, u64>::new();
-        let mut total_size = 0u64;
-        for (chunk, buf) in chunk_indexes.iter().zip(index_bufs) {
-            let Some(buf) = buf else {
-                continue;
-            };
-            let (chunk_topic_sizes, chunk_total_size) =
-                parse_chunk_message_indexes(&buf, chunk.uncompressed_size, channel_topics)?;
-            for (topic, size) in chunk_topic_sizes {
-                *topic_sizes.entry(topic).or_default() += size;
-            }
-            total_size += chunk_total_size;
+    let mut topic_sizes = BTreeMap::<String, u64>::new();
+    let mut total_size = 0u64;
+    let mut start = 0usize;
+    while start < chunk_indexes.len() {
+        let mut end = start;
+        let mut batch_bytes = 0u64;
+        while end < chunk_indexes.len()
+            && (end == start
+                || batch_bytes.saturating_add(chunk_indexes[end].message_index_length)
+                    <= index_batch_bytes)
+        {
+            batch_bytes = batch_bytes.saturating_add(chunk_indexes[end].message_index_length);
+            end += 1;
         }
-        return Ok((topic_sizes, total_size));
-    }
+        let batch = &chunk_indexes[start..end];
+        start = end;
 
-    compute_topic_sizes_from_bufs_parallel(&index_bufs, chunk_indexes, channel_topics, worker_count)
+        let index_bufs = batch
+            .iter()
+            .map(|chunk| read_chunk_message_index_bytes(source, chunk))
+            .collect::<Result<Vec<_>>>()?;
+        let batch_workers = worker_count.min(batch.len());
+        let (batch_sizes, batch_total) = if batch_workers <= 1 {
+            compute_topic_sizes_from_bufs_sequential(&index_bufs, batch, channel_topics)?
+        } else {
+            compute_topic_sizes_from_bufs_parallel(
+                &index_bufs,
+                batch,
+                channel_topics,
+                batch_workers,
+            )?
+        };
+        for (topic, size) in batch_sizes {
+            *topic_sizes.entry(topic).or_default() += size;
+        }
+        total_size += batch_total;
+    }
+    Ok((topic_sizes, total_size))
+}
+
+fn compute_topic_sizes_from_bufs_sequential(
+    index_bufs: &[Option<Vec<u8>>],
+    chunk_indexes: &[records::ChunkIndex],
+    channel_topics: &BTreeMap<u16, String>,
+) -> Result<(BTreeMap<String, u64>, u64)> {
+    let mut topic_sizes = BTreeMap::<String, u64>::new();
+    let mut total_size = 0u64;
+    for (chunk, buf) in chunk_indexes.iter().zip(index_bufs) {
+        let Some(buf) = buf else {
+            continue;
+        };
+        let (chunk_topic_sizes, chunk_total_size) =
+            parse_chunk_message_indexes(buf, chunk.uncompressed_size, channel_topics)?;
+        for (topic, size) in chunk_topic_sizes {
+            *topic_sizes.entry(topic).or_default() += size;
+        }
+        total_size += chunk_total_size;
+    }
+    Ok((topic_sizes, total_size))
 }
 
 fn read_chunk_message_index_bytes(
@@ -598,11 +675,13 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        collect_usage_approximate, collect_usage_exact, parse_chunk_message_indexes,
-        print_record_table, print_topic_table, record_kind_name,
+        collect_usage_approximate, collect_usage_approximate_batched, collect_usage_exact,
+        parse_chunk_message_indexes, print_record_table, print_topic_table, record_kind_name,
+        require_remote_message_index_budget,
     };
-    use crate::byte_source::MemorySource;
-    use mcap::records::{op, MessageHeader};
+    use crate::byte_source::{self, ByteSource, MemorySource};
+    use anyhow::Result;
+    use mcap::records::{self, op, MessageHeader};
 
     fn write_test_file(
         chunked: bool,
@@ -718,6 +797,115 @@ mod tests {
         .expect("summary-backed approximate usage");
         assert_eq!(approximate.total_message_size, exact.total_message_size);
         assert_eq!(approximate.topic_message_size, exact.topic_message_size);
+    }
+
+    #[test]
+    fn approximate_usage_matches_exact_with_one_chunk_per_batch() {
+        // Tiny chunks so the summary has several chunk indexes, and a one-byte batch budget so
+        // every batch holds exactly one chunk: batching must merge partial sums correctly.
+        let mcap = write_test_file(
+            true,
+            Some(64),
+            &[
+                (0, 0, 90),
+                (1, 1, 30),
+                (0, 2, 10),
+                (1, 3, 70),
+                (0, 4, 50),
+                (1, 5, 20),
+            ],
+            &["/left", "/right"],
+        );
+        let summary = byte_source::read_summary(
+            &mut MemorySource::new(mcap.clone()),
+            crate::source::SourceOptions::default(),
+        )
+        .expect("summary read")
+        .expect("summary present");
+        assert!(
+            summary.chunk_indexes.len() >= 3,
+            "fixture should span several chunks, got {}",
+            summary.chunk_indexes.len()
+        );
+
+        let exact = collect_usage_exact(&mut MemorySource::new(mcap.clone())).expect("exact");
+        let approximate = collect_usage_approximate_batched(
+            &mut MemorySource::new(mcap),
+            crate::source::SourceOptions::default(),
+            1,
+        )
+        .expect("approximate")
+        .expect("summary-backed approximate usage");
+        assert_eq!(approximate.total_message_size, exact.total_message_size);
+        assert_eq!(approximate.topic_message_size, exact.topic_message_size);
+    }
+
+    /// Minimal [`ByteSource`] whose only behavior is reporting whether it is remote.
+    struct FakeSource {
+        remote: bool,
+    }
+
+    impl ByteSource for FakeSource {
+        fn size(&self) -> Result<Option<u64>> {
+            Ok(Some(0))
+        }
+
+        fn is_remote(&self) -> bool {
+            self.remote
+        }
+
+        fn display_name(&self) -> String {
+            "fake://fixture.mcap".into()
+        }
+
+        fn is_seekable(&self) -> bool {
+            true
+        }
+
+        fn read_into(&mut self, _offset: u64, _dest: &mut [u8]) -> Result<usize> {
+            Ok(0)
+        }
+    }
+
+    #[test]
+    fn remote_message_index_budget_only_caps_remote_sources() {
+        let over_cap = crate::source::MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN / 2 + 1;
+        let chunk_indexes = (0..2)
+            .map(|_| records::ChunkIndex {
+                message_start_time: 0,
+                message_end_time: 0,
+                chunk_start_offset: 0,
+                chunk_length: 0,
+                message_index_offsets: BTreeMap::new(),
+                message_index_length: over_cap,
+                compression: String::new(),
+                compressed_size: 0,
+                uncompressed_size: 0,
+            })
+            .collect::<Vec<_>>();
+        let no_opt_in = crate::source::SourceOptions::new(false);
+        let opt_in = crate::source::SourceOptions::new(true);
+
+        require_remote_message_index_budget(
+            &FakeSource { remote: false },
+            &chunk_indexes,
+            no_opt_in,
+        )
+        .expect("local message indexes are never capped");
+        let err = require_remote_message_index_budget(
+            &FakeSource { remote: true },
+            &chunk_indexes,
+            no_opt_in,
+        )
+        .expect_err("remote message indexes over the cap need opt-in");
+        let message = format!("{err:#}");
+        assert!(
+            message.contains("remote message indexes would read"),
+            "{message}"
+        );
+        assert!(message.contains("--allow-remote-scan"), "{message}");
+        require_remote_message_index_budget(&FakeSource { remote: true }, &chunk_indexes, opt_in)
+            .expect("--allow-remote-scan lifts the cap");
     }
 
     #[test]
