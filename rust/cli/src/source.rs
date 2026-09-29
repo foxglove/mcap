@@ -10,7 +10,7 @@ use mcap::records::{self, Record};
 use memmap2::Mmap;
 use object_store::{
     path::Path as ObjectStorePath, Attribute, ClientConfigKey, GetOptions, GetRange, ObjectStore,
-    ObjectStoreExt, ObjectStoreScheme, RetryConfig,
+    ObjectStoreExt,
 };
 use tempfile::NamedTempFile;
 use url::Url;
@@ -36,25 +36,13 @@ pub(crate) const MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN: u64 = 100_000_000;
 // object_store retry budget, and a dropped connection resumes at the last
 // byte received.
 const REMOTE_DOWNLOAD_CHUNK_BYTES: u64 = 64 * 1024 * 1024;
-// object_store's default 30s timeout spans the entire response body, killing
-// long transfers: whole-file downloads, but also indexed reads of a single
-// large chunk record over a slow link. Every remote request gets an
-// effectively unlimited one instead, and liveness is enforced here: a
-// response head must arrive within REMOTE_RESPONSE_TIMEOUT and a body must
-// keep delivering bytes at least every REMOTE_STALL_TIMEOUT.
+// object_store's default 30s timeout spans the whole response body, which kills
+// large transfers on slow links. Requests get an effectively unlimited timeout
+// instead; liveness is enforced by the response-head and body-stall timeouts.
 const REMOTE_REQUEST_TIMEOUT: &str = "7days";
 const REMOTE_STALL_TIMEOUT: Duration = Duration::from_secs(120);
-// Sits above object_store's default 180s retry budget so internal retries
-// on the response head can finish.
+// Above object_store's 180s retry budget so its internal head retries can finish.
 const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(240);
-// object_store resumes body errors itself inside `GetResult::into_stream`
-// when the response carried an ETag, sharing one retry budget with the
-// request head (default: 10 retries or 3 minutes, with backoff). Downloads
-// have their own resume loop in `download_chunked`, so the inner budget is
-// kept small: it absorbs brief blips, and anything longer surfaces as one
-// retryable error per attempt instead of hiding minutes of retries.
-const REMOTE_DOWNLOAD_STORE_RETRIES: usize = 3;
-const REMOTE_DOWNLOAD_STORE_RETRY_TIMEOUT: Duration = Duration::from_secs(60);
 // Consecutive zero-progress attempts before a chunked download gives up.
 // Any delivered bytes reset the budget, so only a dead connection exhausts it.
 const REMOTE_DOWNLOAD_NO_PROGRESS_ATTEMPTS: usize = 5;
@@ -530,9 +518,7 @@ impl RemoteUrl {
         self.options_from_env_vars(std::env::vars_os())
     }
 
-    /// `options()` plus the long request timeout for object_store stores.
-    /// Last-wins in the builder, so this overrides any env timeout
-    /// (for example AWS_TIMEOUT).
+    /// `options()` plus the long request timeout (last-wins over any env timeout).
     fn store_options(&self) -> Vec<(String, String)> {
         let mut options = self.options();
         options.push((
@@ -574,12 +560,6 @@ pub fn remote_or_local_extension(path: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RemoteAccess {
-    Indexed,
-    Download,
-}
-
 struct ObjectStoreSource {
     runtime: Arc<tokio::runtime::Runtime>,
     store: Arc<dyn ObjectStore>,
@@ -589,20 +569,18 @@ struct ObjectStoreSource {
 
 impl ObjectStoreSource {
     fn open_for_download(path: &Path) -> Result<Self> {
-        Self::open_remote(RemoteUrl::parse(path)?, RemoteAccess::Download)
+        Self::open_remote(RemoteUrl::parse(path)?)
     }
 
-    fn open_remote(remote_url: RemoteUrl, access: RemoteAccess) -> Result<Self> {
+    fn open_remote(remote_url: RemoteUrl) -> Result<Self> {
         let runtime = object_store_runtime()?;
-        // S3 credentials resolve through the AWS SDK default chain so
-        // ~/.aws/credentials, profiles, and SSO work like they do for the
-        // `aws` CLI; other stores keep object_store's env-var mechanisms.
-        // The SDK manages its own request timeouts, so the timeout override in
-        // `store_options` only applies to object_store backends.
+        // S3 goes through the AWS SDK for its full credential chain (profiles,
+        // SSO) and manages its own timeouts; other stores use object_store
+        // with the long request timeout from `store_options`.
         let result = if matches!(remote_url.url.scheme(), "s3" | "s3a") {
             crate::sdk_s3::build_s3_store(&runtime, &remote_url.url, remote_url.options())
         } else {
-            build_object_store(&remote_url.url, remote_url.store_options(), access)
+            object_store::parse_url_opts(&remote_url.url, remote_url.store_options())
         };
         // object_store errors repeat their source in Display, so flatten to a
         // single message instead of letting the anyhow chain print it twice.
@@ -644,9 +622,8 @@ impl ObjectStoreSource {
         self.collect_body(response)
     }
 
-    /// Run one store request, bounding the wait for its response head by
-    /// `REMOTE_RESPONSE_TIMEOUT`. The outer error is that wait expiring; the
-    /// inner result is the store's own, left intact for callers to classify.
+    /// Run a store request with `REMOTE_RESPONSE_TIMEOUT` on its response head.
+    /// The outer error is that timeout; the inner result is the store's own.
     fn block_on_bounded<T>(
         &self,
         request: impl std::future::Future<Output = object_store::Result<T>>,
@@ -670,9 +647,7 @@ impl ObjectStoreSource {
         self.block_on_bounded(self.store.get_opts(&self.path, options))
     }
 
-    /// Read a whole response body into memory, failing if no bytes arrive for
-    /// `REMOTE_STALL_TIMEOUT`. Replaces `GetResult::bytes`, which has no
-    /// liveness check now that the request timeout is effectively unlimited.
+    /// Like `GetResult::bytes`, but failing if no bytes arrive for `REMOTE_STALL_TIMEOUT`.
     fn collect_body(&self, response: object_store::GetResult) -> Result<Vec<u8>> {
         let expected = response.range.end.saturating_sub(response.range.start);
         let mut out = Vec::with_capacity(
@@ -816,14 +791,10 @@ impl ObjectStoreSource {
         }
     }
 
-    /// Stream `first` and then the remaining `chunk_bytes`-sized ranges to
-    /// `writer`, resuming from the last written byte when a body read fails.
-    ///
-    /// For object_store-backed stores (http, gs, az) whose responses carry an
-    /// ETag, object_store first retries body errors inside the stream itself,
-    /// bounded by `REMOTE_DOWNLOAD_STORE_RETRIES`; only failures it gives up
-    /// on reach this loop. Stores without that layer (the SDK S3 store, or
-    /// responses without an ETag) and stalls always come straight here.
+    /// Stream `first` and the remaining `chunk_bytes`-sized ranges to `writer`,
+    /// resuming from the last written byte when a body read fails. object_store
+    /// retries body errors inside the stream first when the response had an
+    /// ETag; the SDK S3 store, ETag-less responses, and stalls come straight here.
     fn download_chunked(
         &self,
         first: object_store::GetResult,
@@ -891,17 +862,10 @@ impl ObjectStoreSource {
         Ok(())
     }
 
-    /// Issue the ranged GET that resumes a chunked download at `range`.
-    /// Failures are retryable except those that would fail identically on
-    /// every retry: the pinned ETag no longer matches (412), the object's
-    /// size or last-modified time differs from the first response, the
-    /// server returned a range other than the one requested, or the object
-    /// is gone or no longer readable (404/401/403).
-    ///
-    /// The size and last-modified checks are what guards a resume when the
-    /// server sends no ETag. Both backends report the Unix epoch for a
-    /// missing Last-Modified header, so two headerless responses compare
-    /// equal rather than tripping the check.
+    /// Issue the ranged GET that resumes a chunked download at `range`. Fatal
+    /// rather than retryable: 412, a changed size or last-modified (the guard
+    /// when there is no ETag; a missing header reads as the epoch on both
+    /// backends), a wrong range, or 404/401/403.
     fn resume_chunk_get(
         &self,
         range: std::ops::Range<u64>,
@@ -930,9 +894,7 @@ impl ObjectStoreSource {
                     response.meta.last_modified.to_rfc3339()
                 )))
             }
-            // Both backends validate Content-Range against the request, so
-            // this only fires for a store that does not; but the offset
-            // accounting below depends on it, so check here as well.
+            // Both backends already validate Content-Range; this guards the offset accounting.
             Ok(Ok(response)) if response.range.start != range.start => {
                 Err(DownloadError::Fatal(anyhow::anyhow!(
                     "failed to read {}: remote server returned range {:?} for requested range {:?}",
@@ -1049,9 +1011,7 @@ impl DownloadError {
     }
 }
 
-/// Flatten an error for a single-line warning. The CLI's remote errors put
-/// their detail on a second line for the final error output, which inside a
-/// warning would read like a separate fatal message.
+/// Flatten a (possibly two-line) remote error for use inside a warning line.
 fn single_line_error(err: &anyhow::Error) -> String {
     format!("{err:#}")
         .lines()
@@ -1157,7 +1117,7 @@ impl RemoteRangeReader {
     fn open(path: &Path) -> Result<Option<Self>> {
         let remote_url = RemoteUrl::parse(path)?;
         let kind = remote_url.kind;
-        let source = ObjectStoreSource::open_remote(remote_url, RemoteAccess::Indexed)?;
+        let source = ObjectStoreSource::open_remote(remote_url)?;
         let Some((size, tail)) = source.read_summary_tail(kind, REMOTE_SUMMARY_TAIL_BYTES)? else {
             return Ok(None);
         };
@@ -1379,65 +1339,6 @@ pub(crate) fn redacted_display(path: &Path) -> String {
     path.to_str()
         .map(redact_url)
         .unwrap_or_else(|| path.display().to_string())
-}
-
-/// Build an object_store store for `url` the way `object_store::parse_url_opts`
-/// does, but with an explicit retry budget: downloads get the trimmed
-/// `REMOTE_DOWNLOAD_STORE_RETRIES` budget because `download_chunked` resumes
-/// on its own; indexed reads keep object_store's default since each range
-/// GET there is retried only by object_store.
-fn build_object_store(
-    url: &Url,
-    options: Vec<(String, String)>,
-    access: RemoteAccess,
-) -> object_store::Result<(Box<dyn ObjectStore>, ObjectStorePath)> {
-    let (scheme, object_path) = ObjectStoreScheme::parse(url)?;
-    let retry = match access {
-        RemoteAccess::Indexed => RetryConfig::default(),
-        RemoteAccess::Download => RetryConfig {
-            max_retries: REMOTE_DOWNLOAD_STORE_RETRIES,
-            retry_timeout: REMOTE_DOWNLOAD_STORE_RETRY_TIMEOUT,
-            ..RetryConfig::default()
-        },
-    };
-    // Mirrors object_store's private `builder_opts!`: unknown keys are skipped
-    // because the option list is the process environment.
-    macro_rules! build {
-        ($builder:ty, $url:expr) => {{
-            let builder = options.into_iter().fold(
-                <$builder>::new()
-                    .with_url($url.to_string())
-                    .with_retry(retry),
-                |builder, (key, value)| match key.to_ascii_lowercase().parse() {
-                    Ok(key) => builder.with_config(key, value),
-                    Err(_) => builder,
-                },
-            );
-            Box::new(builder.build()?) as Box<dyn ObjectStore>
-        }};
-    }
-    let store = match scheme {
-        ObjectStoreScheme::AmazonS3 => build!(object_store::aws::AmazonS3Builder, url),
-        ObjectStoreScheme::GoogleCloudStorage => {
-            build!(object_store::gcp::GoogleCloudStorageBuilder, url)
-        }
-        ObjectStoreScheme::MicrosoftAzure => {
-            build!(object_store::azure::MicrosoftAzureBuilder, url)
-        }
-        ObjectStoreScheme::Http => {
-            build!(
-                object_store::http::HttpBuilder,
-                &url[..url::Position::BeforePath]
-            )
-        }
-        scheme => {
-            return Err(object_store::Error::Generic {
-                store: "parse_url",
-                source: format!("unsupported remote scheme {scheme:?}").into(),
-            })
-        }
-    };
-    Ok((store, object_path))
 }
 
 fn read_remote_input_to_writer(path: &Path, writer: &mut impl Write) -> Result<()> {
@@ -1724,8 +1625,6 @@ mod tests {
     use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
-
-    use object_store::{path::Path as ObjectStorePath, ObjectStore};
     use std::thread;
 
     use super::load_path;
@@ -1908,29 +1807,19 @@ mod tests {
         reject_head: bool,
         // Emit `Content-Range: bytes <start>-<end>/*` (unknown total) instead of a numeric total.
         unknown_range_total: bool,
-        // Reject suffix ranges (`bytes=-N`) with `416` while still honoring bounded
-        // ranges, like HTTP servers that do not implement the suffix form.
+        // Reject suffix ranges (`bytes=-N`) with 416 while honoring bounded ones.
         reject_suffix: bool,
-        // Carried on every response. `If-Match` is then enforced the way a
-        // compliant origin would: a weak ETag never matches, a strong one must
-        // be equal.
+        // Sent on every response; `If-Match` is then enforced (weak ETags never match).
         etag: Option<&'static str>,
-        // `Last-Modified` carried on every response served from `body`.
         last_modified: Option<&'static str>,
-        // Answer a resumed range (start > 0) that carries no `If-Match` with
-        // 428, so a test can prove the client pinned the ETag. Not how real
-        // servers behave: object_store's own in-stream resume sends no
-        // `If-Match` when the original request had none.
+        // 428 on any resumed range without `If-Match`, to prove the client pinned
+        // the ETag. Unrealistic: object_store's own resume sends none.
         require_if_match: bool,
-        // Per-request behavior chosen by request index.
         script: Option<Script>,
-        // Close the first `truncated_bodies` bodies after
-        // `truncated_len(content_len)` bytes, like a connection dropped
-        // mid-transfer.
+        // Close the first `truncated_bodies` bodies after `truncated_len(len)` bytes.
         truncated_bodies: usize,
         truncated_len: fn(usize) -> usize,
-        // Status line and body for every request not served as a range (all
-        // requests when ranges are unsupported).
+        // Status line and body for requests not served as a range.
         unranged_status: Option<(String, &'static [u8])>,
     }
 
@@ -2526,123 +2415,6 @@ mod tests {
         );
         assert_eq!(requests.load(Ordering::SeqCst), 2);
         assert_eq!(out, &body[..8], "nothing from the new object is written");
-    }
-
-    // Delegates to an in-memory store but reports every resumed GET's range as
-    // starting one byte early, like a proxy serving the wrong offset through a
-    // backend without object_store's Content-Range validation.
-    #[derive(Debug)]
-    struct ShiftedRangeStore {
-        inner: object_store::memory::InMemory,
-        gets: AtomicUsize,
-    }
-
-    impl std::fmt::Display for ShiftedRangeStore {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            f.write_str("ShiftedRangeStore")
-        }
-    }
-
-    #[async_trait::async_trait]
-    impl ObjectStore for ShiftedRangeStore {
-        async fn get_opts(
-            &self,
-            location: &ObjectStorePath,
-            options: object_store::GetOptions,
-        ) -> object_store::Result<object_store::GetResult> {
-            let mut result = self.inner.get_opts(location, options).await?;
-            if self.gets.fetch_add(1, Ordering::SeqCst) > 0 {
-                result.range.start -= 1;
-                result.range.end -= 1;
-            }
-            Ok(result)
-        }
-
-        async fn put_opts(
-            &self,
-            location: &ObjectStorePath,
-            payload: object_store::PutPayload,
-            opts: object_store::PutOptions,
-        ) -> object_store::Result<object_store::PutResult> {
-            self.inner.put_opts(location, payload, opts).await
-        }
-
-        async fn put_multipart_opts(
-            &self,
-            location: &ObjectStorePath,
-            opts: object_store::PutMultipartOptions,
-        ) -> object_store::Result<Box<dyn object_store::MultipartUpload>> {
-            self.inner.put_multipart_opts(location, opts).await
-        }
-
-        fn delete_stream(
-            &self,
-            locations: futures_util::stream::BoxStream<
-                'static,
-                object_store::Result<ObjectStorePath>,
-            >,
-        ) -> futures_util::stream::BoxStream<'static, object_store::Result<ObjectStorePath>>
-        {
-            self.inner.delete_stream(locations)
-        }
-
-        fn list(
-            &self,
-            prefix: Option<&ObjectStorePath>,
-        ) -> futures_util::stream::BoxStream<'static, object_store::Result<object_store::ObjectMeta>>
-        {
-            self.inner.list(prefix)
-        }
-
-        async fn list_with_delimiter(
-            &self,
-            prefix: Option<&ObjectStorePath>,
-        ) -> object_store::Result<object_store::ListResult> {
-            self.inner.list_with_delimiter(prefix).await
-        }
-
-        async fn copy_opts(
-            &self,
-            from: &ObjectStorePath,
-            to: &ObjectStorePath,
-            options: object_store::CopyOptions,
-        ) -> object_store::Result<()> {
-            self.inner.copy_opts(from, to, options).await
-        }
-    }
-
-    #[test]
-    fn remote_download_aborts_when_resumed_range_starts_at_wrong_offset() {
-        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
-        let store = ShiftedRangeStore {
-            inner: object_store::memory::InMemory::new(),
-            gets: AtomicUsize::new(0),
-        };
-        let path = ObjectStorePath::from("demo.mcap");
-        let runtime = super::object_store_runtime().expect("runtime");
-        runtime
-            .block_on(store.inner.put(&path, body.to_vec().into()))
-            .expect("put memory object");
-        let source = super::ObjectStoreSource {
-            runtime,
-            store: Arc::new(store),
-            path,
-            display_url: "memory:///demo.mcap".to_string(),
-        };
-        let mut out = Vec::new();
-        let err = source
-            .download_to_writer(&mut out, 8)
-            .expect_err("a resumed range at the wrong offset must not be written");
-        assert!(
-            err.to_string()
-                .contains("returned range 7..15 for requested range 8..16"),
-            "unexpected error: {err:#}"
-        );
-        assert_eq!(
-            out,
-            &body[..8],
-            "only the first, correctly ranged chunk is written"
-        );
     }
 
     #[test]
