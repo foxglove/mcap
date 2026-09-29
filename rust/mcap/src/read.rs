@@ -1,9 +1,12 @@
-//! Read MCAP data from a memory-mapped file.
+//! Read MCAP data from a byte slice already in memory.
 //!
-//! MCAPs are read from a byte slice instead of a [`std::io::Read`] trait object.
-//! Consider [memory-mapping](https://docs.rs/memmap2/0.9.5/memmap2/struct.Mmap.html)
-//! the file - the OS will load (and cache!) it on-demand, without any
-//! further system calls.
+//! These readers take a `&[u8]` and are a convenience for data you already hold, such as a
+//! single chunk, an attachment, or a small file. To read a file of any size with bounded memory,
+//! use the streaming readers in [`crate::sans_io`] instead: [`crate::sans_io::LinearReader`] for
+//! sequential scans, [`crate::sans_io::IndexedReader`] for random access through the summary,
+//! and [`crate::sans_io::SummaryReader`] for the summary section alone. They pull bytes on
+//! request from any source, so memory scales with the largest record or chunk rather than with
+//! the file.
 use std::{
     borrow::Cow,
     collections::{hash_map::Entry, BTreeMap, HashMap},
