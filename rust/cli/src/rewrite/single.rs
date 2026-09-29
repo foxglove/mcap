@@ -19,6 +19,15 @@ pub(crate) fn run(args: RewriteOptions, source_options: SourceOptions) -> Result
     if let (Some(input), Some(output)) = (args.file.as_deref(), opts.output.as_deref()) {
         source::ensure_distinct_local_input_output(input, output)?;
     }
+    // A rewrite reads message data, so a remote input always needs the scan opt-in. Refuse from
+    // the path alone, before opening the source, so no request is sent (as main did).
+    if let Some(path) = args
+        .file
+        .as_deref()
+        .filter(|path| source::is_remote_url(path))
+    {
+        source::require_remote_scan_allowed(path, source_options)?;
+    }
     let mut input = byte_source::open_byte_source(args.file.as_deref(), source_options)?;
 
     let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
@@ -32,6 +41,10 @@ fn filter_to_writer<W: Write + Seek>(
     disable_seeking: bool,
     source_options: SourceOptions,
 ) -> Result<()> {
+    // Both the indexed and the linear path read message data from the source, so a remote input
+    // without opt-in is refused before the header read, the summary read, or the message-index
+    // probe issues any range request.
+    common::require_remote_scan_for_chunks(input, source_options)?;
     let profile = common::read_header(input)?
         .map(|header| header.profile)
         .unwrap_or_default();
@@ -65,8 +78,6 @@ fn filter_with_writer<W: Write + Seek>(
         if !summary.chunk_indexes.is_empty()
             && !common::summary_has_unindexed_messages(input, &summary)?
         {
-            // Message-chunk reads need the same opt-in as on main (summary-only stays unflagged).
-            common::require_remote_scan_for_chunks(input, source_options)?;
             return filter_indexed(input, &summary, writer, opts, source_options);
         }
     }
@@ -1938,6 +1949,11 @@ mod tests {
         )
         .expect_err("indexed remote filter should require --allow-remote-scan");
         assert!(err.to_string().contains("--allow-remote-scan"));
+        assert_eq!(
+            source.bytes_read.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the refusal must come before any range read"
+        );
     }
 
     #[test]

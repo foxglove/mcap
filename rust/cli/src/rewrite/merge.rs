@@ -160,6 +160,12 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
         }
     }
 
+    // A merge reads message data from every input, so a remote input always needs the scan
+    // opt-in. Refuse from the paths alone, before opening any source, so no request is sent.
+    for path in opts.files.iter().filter(|path| source::is_remote_url(path)) {
+        source::require_remote_scan_allowed(path, source_options)?;
+    }
+
     let mut sources = Vec::with_capacity(opts.files.len());
     let mut inputs = Vec::with_capacity(opts.files.len());
     for path in &opts.files {
@@ -1062,11 +1068,9 @@ mod tests {
     }
 
     #[test]
-    fn run_rejects_remote_input_without_range_support_or_scan_opt_in() {
-        // Opening a remote URL without range support requires --allow-remote-scan. A
-        // non-resolvable host fails at open time; cloud URLs that need credentials still
-        // attempt range open. Use a path that open_byte_source rejects before download when
-        // range support is unavailable — HTTP without opt-in when range open fails.
+    fn run_rejects_remote_input_without_scan_opt_in() {
+        // The refusal comes from the path alone: no host is contacted, so an unroutable
+        // address must still produce the opt-in error rather than a connection error.
         let err = run(
             merge_options(
                 vec!["http://127.0.0.1:1/a.mcap".into()],
@@ -1074,14 +1078,11 @@ mod tests {
             ),
             SourceOptions::default(),
         )
-        .expect_err("unreachable remote merge input should fail");
+        .expect_err("remote merge input should require opt-in");
 
         let message = err.to_string();
         assert!(
-            message.contains("--allow-remote-scan")
-                || message.contains("failed")
-                || message.contains("Connection")
-                || message.contains("error"),
+            message.contains("--allow-remote-scan"),
             "unexpected error: {message}"
         );
     }
