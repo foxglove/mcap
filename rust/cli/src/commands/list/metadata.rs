@@ -34,13 +34,12 @@ fn collect_metadata_records(
     let total_bytes = indexes
         .iter()
         .fold(0u64, |total, index| total.saturating_add(index.length));
-    if source.is_remote() {
-        source::require_remote_indexed_read_budget(
-            total_bytes,
-            source_options,
-            "remote metadata records",
-        )?;
-    }
+    source::require_remote_indexed_read_budget(
+        &*source,
+        total_bytes,
+        source_options,
+        "remote metadata records",
+    )?;
 
     let mut records = Vec::new();
     for index in indexes {
