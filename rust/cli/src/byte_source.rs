@@ -49,11 +49,12 @@ pub trait ByteSource {
     }
 }
 
-/// Local file opened for seek+read (not memory-mapped).
-/// Read-ahead buffer for local files. Sans-io readers request one record at a time, so without
-/// buffering a linear scan of small records costs a seek plus a read syscall per record.
-const LOCAL_FILE_BUFFER_BYTES: usize = 256 * 1024;
+/// Read-ahead buffer for sequential local reads. Sans-io readers request one record at a time,
+/// so without buffering a linear scan of small records costs a seek plus a read syscall per
+/// record. Kept modest because `merge` holds one source per input.
+const LOCAL_FILE_BUFFER_BYTES: usize = 64 * 1024;
 
+/// Local file opened for seek+read (not memory-mapped).
 pub struct LocalFileSource {
     reader: BufReader<File>,
     /// Logical offset the next sequential read would start at, or `None` after an I/O error left
@@ -127,31 +128,26 @@ impl ByteSource for LocalFileSource {
         }
         let available = (self.size - offset) as usize;
         let to_read = dest.len().min(available);
-        if self.pos != Some(offset) {
-            // `seek_relative` keeps the read-ahead buffer when the target is inside it, which is
-            // the common case for sequential record reads that follow a small backward skip.
-            let result = match self.pos {
-                Some(pos) => match i64::try_from(offset.abs_diff(pos)) {
-                    Ok(delta) if offset >= pos => self.reader.seek_relative(delta),
-                    Ok(delta) => self.reader.seek_relative(-delta),
-                    Err(_) => self.reader.seek(SeekFrom::Start(offset)).map(|_| ()),
-                },
-                None => self.reader.seek(SeekFrom::Start(offset)).map(|_| ()),
-            };
-            if let Err(err) = result {
-                self.pos = None;
-                return Err(err).context("failed to seek in local file");
-            }
-            self.pos = Some(offset);
-        }
-        match self.reader.read_exact(&mut dest[..to_read]) {
+        let dest = &mut dest[..to_read];
+        let result = if self.pos == Some(offset) {
+            // Sequential continuation: go through the read-ahead buffer so a run of small record
+            // reads costs one syscall per buffer fill rather than one per record.
+            self.reader.read_exact(dest)
+        } else {
+            // Random access: the seek discards the buffer, and reading straight into `dest` keeps
+            // a small footer or index read from pulling in a full buffer of read-ahead.
+            self.reader
+                .seek(SeekFrom::Start(offset))
+                .and_then(|_| self.reader.get_mut().read_exact(dest))
+        };
+        match result {
             Ok(()) => {
                 self.pos = Some(offset + to_read as u64);
                 Ok(to_read)
             }
             Err(err) => {
                 self.pos = None;
-                Err(err).context("failed to read from local file")
+                Err(err).with_context(|| format!("failed to read local file at offset {offset}"))
             }
         }
     }
@@ -338,6 +334,54 @@ mod tests {
             writer.finish().expect("finish");
         }
         buffer
+    }
+
+    #[test]
+    fn local_file_source_read_into_tracks_position_across_access_patterns() {
+        let expected = (0..(3 * LOCAL_FILE_BUFFER_BYTES + 123))
+            .map(|i| (i * 7 % 251) as u8)
+            .collect::<Vec<u8>>();
+        let mut temp = NamedTempFile::new().expect("temp file");
+        temp.write_all(&expected).expect("write temp file");
+        let mut source = LocalFileSource::open_path(temp.path()).expect("open local");
+        let size = expected.len();
+
+        let mut check = |offset: usize, len: usize, want: usize| {
+            let mut dest = vec![0u8; len];
+            let n = source
+                .read_into(offset as u64, &mut dest)
+                .expect("read_into");
+            assert_eq!(n, want, "read {len} bytes at offset {offset}");
+            let start = offset.min(size);
+            assert_eq!(
+                &dest[..n],
+                &expected[start..start + n],
+                "bytes at offset {offset}"
+            );
+        };
+
+        // Sequential reads, first through a direct read then through the read-ahead buffer.
+        check(0, 10, 10);
+        check(10, 100, 100);
+        check(110, 5, 5);
+        // Backward re-read of bytes the buffer already holds.
+        check(20, 50, 50);
+        // Sequential read that spans a buffer refill boundary.
+        check(
+            70,
+            LOCAL_FILE_BUFFER_BYTES + 10,
+            LOCAL_FILE_BUFFER_BYTES + 10,
+        );
+        // Forward jump past the buffered window, then continue sequentially from there.
+        check(2 * LOCAL_FILE_BUFFER_BYTES + 7, 33, 33);
+        check(2 * LOCAL_FILE_BUFFER_BYTES + 40, 33, 33);
+        // Reads that touch EOF clamp, and reads at or past EOF return nothing.
+        check(size - 5, 100, 5);
+        check(size, 10, 0);
+        check(size + 10, 10, 0);
+        check(0, 0, 0);
+        // Sequential continuation still works after the EOF clamp left `pos` at the end.
+        check(3, 8, 8);
     }
 
     #[test]
