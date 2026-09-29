@@ -33,7 +33,7 @@ const REMOTE_SUMMARY_TAIL_BYTES: u64 = 250_000;
 // multiple metadata records selected from indexes) from becoming unexpectedly large.
 pub(crate) const MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN: u64 = 100_000_000;
 // Ranged GET size for whole-file downloads. It bounds what one request covers;
-// each part starts a fresh connection, ETag check, and object_store retry
+// each part is a new request with its own ETag check and object_store retry
 // budget. Resumes are at byte granularity, so the size does not affect how much
 // is re-fetched after a dropped connection.
 const REMOTE_DOWNLOAD_CHUNK_BYTES: u64 = 64 * 1024 * 1024;
