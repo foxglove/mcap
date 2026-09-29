@@ -110,11 +110,8 @@ fn bench_read_messages(c: &mut Criterion) {
     let mcap_data_zstd = create_test_mcap(N, Some(mcap::Compression::Zstd));
     // A zero target closes the current chunk after every message. This intentionally amplifies
     // per-chunk decompression setup cost while keeping the indexed-reader code path unchanged.
-    let mcap_data_zstd_small_chunks = create_test_mcap_with_chunk_size(
-        SMALL_CHUNK_N,
-        Some(mcap::Compression::Zstd),
-        Some(0),
-    );
+    let mcap_data_zstd_small_chunks =
+        create_test_mcap_with_chunk_size(SMALL_CHUNK_N, Some(mcap::Compression::Zstd), Some(0));
     {
         let mut group = c.benchmark_group("mcap_read_linear");
         group.throughput(criterion::Throughput::Elements(N as u64));
