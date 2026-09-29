@@ -63,8 +63,9 @@ class _MessageRun:
     """One chunk's messages, sorted into log time order and drained in place.
 
     Messages in a chunk are usually written in log time order already, so ``sort()``
-    here is a single linear pass through C timsort. Keeping them as one run lets the
-    queue heap hold one entry per chunk rather than one per message.
+    here is a single linear pass, since the built-in sort detects an ordered run.
+    Keeping them as one run lets the queue heap hold one entry per chunk rather than
+    one per message.
 
     The attributes are read and written by the owning :py:class:`LogTimeOrderQueue`.
     """
@@ -137,10 +138,10 @@ class LogTimeOrderQueue(_MessageQueue):
 
     Messages arrive one chunk at a time, so rather than heap every message the queue
     keeps each chunk's messages as a sorted run and heaps the runs. The heap then holds
-    one entry per pending chunk index and per undrained run, so it is sized by the
-    number of chunks in flight rather than by the number of messages. While a run holds
-    the smallest keys in the queue its messages are handed out with no heap work at
-    all, which covers the whole of a file whose chunks do not overlap in time.
+    one entry per pending chunk index and per run not yet drained, so it is sized by
+    the number of chunks in flight rather than by the number of messages. While a run
+    holds the smallest keys in the queue its messages are handed out with no heap work
+    at all, which covers the whole of a file whose chunks do not overlap in time.
     """
 
     def __init__(self, reverse: bool = False):
