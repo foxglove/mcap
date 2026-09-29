@@ -51,8 +51,10 @@ const REMOTE_RESPONSE_ATTEMPTS: usize = 3;
 // that REMOTE_RESPONSE_TIMEOUT wraps. Its budget is set so a full retry sequence
 // (retry_timeout, then at most one more backoff sleep and one quick response)
 // always finishes inside that bound; otherwise a throttled request would be
-// reported as a hang and its status lost.
-const REMOTE_STORE_RETRIES: usize = 5;
+// reported as a hang and its status lost. The retry timeout is the real limit;
+// the count is a backstop high enough that it does not end the sequence first
+// (worst-case backoff sleeps for 10 retries sum to ~31s, beyond the 15s).
+const REMOTE_STORE_RETRIES: usize = 10;
 const REMOTE_STORE_RETRY_TIMEOUT: Duration = Duration::from_secs(15);
 const REMOTE_STORE_MAX_BACKOFF: Duration = Duration::from_secs(5);
 const _: () = assert!(
