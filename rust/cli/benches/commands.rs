@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -164,11 +164,16 @@ impl SuiteSelection {
     fn from_args() -> Self {
         // Mirror documented Criterion filters (`-- merge`, `-- indexed`) so filtered runs only
         // generate inputs for selected suites. This intentionally handles positional filters, not
-        // arbitrary Criterion flag values. Regex alternation such as `cat|info` is split so each
-        // alternative selects its suite.
+        // arbitrary Criterion flag values. Simple regex forms such as `cat|info`, `(cat|info)`,
+        // or `^cli/du` are split into their alternatives so each one selects its suite.
         let filters = std::env::args()
             .skip(1)
             .filter(|arg| !arg.starts_with('-'))
+            .map(|arg| {
+                arg.chars()
+                    .filter(|c| !matches!(c, '(' | ')' | '^' | '$'))
+                    .collect::<String>()
+            })
             .collect::<Vec<_>>();
         let selected = |name: &str| {
             filters.iter().any(|filter| {
@@ -410,7 +415,8 @@ fn bench_cat(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[
                             OsString::from("--time-format"),
                             OsString::from("nanoseconds"),
                         ];
-                        let (duration, stdout) = run_mcap_capturing(&config.mcap_bin, args);
+                        let (duration, stdout) =
+                            run_mcap_capturing(&config.mcap_bin, args, iteration == 0);
                         if iteration == 0 {
                             validate_cat_output(&stdout, case.message_count, &case.path);
                         }
@@ -434,7 +440,8 @@ fn bench_info(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &
                 bench.iter_custom(|iters| {
                     run_measured(iters, |iteration| {
                         let args = vec![OsString::from("info"), case.path.as_os_str().to_owned()];
-                        let (duration, stdout) = run_mcap_capturing(&config.mcap_bin, args);
+                        let (duration, stdout) =
+                            run_mcap_capturing(&config.mcap_bin, args, iteration == 0);
                         if iteration == 0 {
                             validate_info_output(&stdout, case.message_count, &case.path);
                         }
@@ -449,7 +456,13 @@ fn bench_info(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &
 
 fn bench_du(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
     let mut group = c.benchmark_group(format!("cli/du/{}", mode.label()));
-    for (variant, extra_args) in [("exact", &[][..]), ("approximate", &["--approximate"][..])] {
+    // `--approximate` needs chunk and message indexes from the summary; on linear inputs the CLI
+    // warns and falls back to the exact scan, which would just duplicate the `exact` series.
+    let variants: &[(&str, &[&str])] = match mode {
+        InputMode::Indexed => &[("exact", &[]), ("approximate", &["--approximate"])],
+        InputMode::Linear => &[("exact", &[])],
+    };
+    for &(variant, extra_args) in variants {
         for case in cases {
             group.throughput(Throughput::Bytes(config.total_bytes()));
             group.bench_with_input(
@@ -461,9 +474,10 @@ fn bench_du(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[I
                             let mut args = vec![OsString::from("du")];
                             args.extend(extra_args.iter().map(OsString::from));
                             args.push(case.path.as_os_str().to_owned());
-                            let (duration, stdout) = run_mcap_capturing(&config.mcap_bin, args);
+                            let (duration, stdout) =
+                                run_mcap_capturing(&config.mcap_bin, args, iteration == 0);
                             if iteration == 0 {
-                                validate_du_output(&stdout, case.message_count, &case.path);
+                                validate_du_output(&stdout, case, variant == "approximate");
                             }
                             duration
                         })
@@ -705,15 +719,27 @@ where
 }
 
 fn run_mcap(bin: &Path, args: Vec<OsString>) -> Duration {
-    run_mcap_capturing(bin, args).0
+    run_mcap_capturing(bin, args, false).0
 }
 
 /// Runs the CLI and returns the wall-clock duration together with its stdout, for commands
-/// whose result is printed rather than written to an output file.
-fn run_mcap_capturing(bin: &Path, args: Vec<OsString>) -> (Duration, Vec<u8>) {
+/// whose result is printed rather than written to an output file. When `capture_stdout` is
+/// false, stdout is discarded so the harness does not spend the timed region draining a pipe;
+/// the returned buffer is then empty.
+fn run_mcap_capturing(
+    bin: &Path,
+    args: Vec<OsString>,
+    capture_stdout: bool,
+) -> (Duration, Vec<u8>) {
+    let stdout = if capture_stdout {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    };
     let start = Instant::now();
     let output = Command::new(bin)
         .args(args)
+        .stdout(stdout)
         .output()
         .expect("run mcap command");
     let duration = start.elapsed();
@@ -755,22 +781,80 @@ fn validate_info_output(stdout: &[u8], expected_count: usize, input: &Path) {
     );
 }
 
-fn validate_du_output(stdout: &[u8], message_count: usize, input: &Path) {
+fn validate_du_output(stdout: &[u8], case: &InputCase, approximate: bool) {
     let stdout = String::from_utf8_lossy(stdout);
-    // Messages alternate between the two topics, so `/bench/other` only exists once the input
-    // holds at least two messages.
-    let expected_topics = if message_count >= 2 {
-        &["/bench/selected", "/bench/other"][..]
-    } else {
-        &["/bench/selected"][..]
-    };
-    for topic in expected_topics {
-        assert!(
-            stdout.lines().any(|line| line.starts_with(topic)),
-            "du output is missing topic {topic} for {}:\n{stdout}",
-            input.display()
-        );
+    // Messages alternate between the two topics starting with `/bench/selected`, so `/bench/other`
+    // only exists once the input holds at least two messages.
+    let other_count = case.message_count - case.selected_count;
+    let expected = [
+        ("/bench/selected", case.selected_count),
+        ("/bench/other", other_count),
+    ];
+    for (topic, count) in expected {
+        if count == 0 {
+            continue;
+        }
+        let row = stdout
+            .lines()
+            .find(|line| line.starts_with(topic))
+            .unwrap_or_else(|| {
+                panic!(
+                    "du output is missing topic {topic} for {}:\n{stdout}",
+                    case.path.display()
+                )
+            });
+        let reported = row.split('\t').nth(1).map(str::trim).unwrap_or_default();
+        let want_bytes = (count * case.payload_size) as u64;
+        if approximate {
+            // `--approximate` derives sizes from message index offsets, so non-message records
+            // interleaved in a chunk are attributed to the preceding message. Accept a small
+            // over-count, never an under-count.
+            let reported_bytes = parse_human_bytes(reported).unwrap_or_else(|| {
+                panic!(
+                    "unparseable du size {reported:?} for {topic} in {}",
+                    case.path.display()
+                )
+            });
+            let max_bytes = want_bytes + want_bytes / 100 + 1_000;
+            assert!(
+                reported_bytes >= want_bytes && reported_bytes <= max_bytes,
+                "approximate du size {reported} for {topic} is outside [{want_bytes}, {max_bytes}] bytes in {}:\n{stdout}",
+                case.path.display()
+            );
+        } else {
+            assert_eq!(
+                reported,
+                human_bytes(want_bytes),
+                "unexpected du size for {topic} in {}:\n{stdout}",
+                case.path.display()
+            );
+        }
     }
+}
+
+const BYTE_PREFIXES: [&str; 6] = ["B", "kB", "MB", "GB", "TB", "PB"];
+
+/// Mirrors the CLI's `render::human_bytes` (SI prefixes, two decimals) so the bench can check
+/// du's per-topic sizes without depending on the binary crate.
+fn human_bytes(num_bytes: u64) -> String {
+    for (index, prefix) in BYTE_PREFIXES.iter().enumerate() {
+        let displayed = num_bytes as f64 / 1000f64.powi(index as i32);
+        let rounded = (displayed * 100.0).round() / 100.0;
+        if rounded < 1000.0 {
+            return format!("{rounded:.2} {prefix}");
+        }
+    }
+    let last = BYTE_PREFIXES.len() - 1;
+    let displayed = num_bytes as f64 / 1000f64.powi(last as i32);
+    format!("{displayed:.2} {}", BYTE_PREFIXES[last])
+}
+
+/// Inverse of [`human_bytes`], to within the two decimals the CLI prints.
+fn parse_human_bytes(text: &str) -> Option<u64> {
+    let (value, prefix) = text.split_once(' ')?;
+    let index = BYTE_PREFIXES.iter().position(|p| *p == prefix)?;
+    let value = value.parse::<f64>().ok()?;
+    Some((value * 1000f64.powi(index as i32)).round() as u64)
 }
 
 fn validate_output(path: &Path, expected_count: usize, require_ordered: bool) {
