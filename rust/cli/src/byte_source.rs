@@ -67,7 +67,7 @@ pub struct LocalFileSource {
 }
 
 impl LocalFileSource {
-    fn open_path(path: &Path) -> Result<Self> {
+    pub(crate) fn open_path(path: &Path) -> Result<Self> {
         let file =
             File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
         let size = file
