@@ -17,9 +17,8 @@ const RECORD_ENVELOPE_SIZE: usize = 9;
 const MESSAGE_HEADER_SIZE: u64 = 22;
 const MESSAGE_OVERHEAD: u64 = RECORD_ENVELOPE_SIZE as u64 + MESSAGE_HEADER_SIZE;
 const MAX_APPROX_WORKERS: usize = 16;
-/// Upper bound on message-index bytes held in memory at once by `--approximate`. Message indexes
-/// cost 16 bytes per message, so holding every chunk's index at once would scale with the file's
-/// message count rather than with one batch.
+/// Cap on message-index bytes held at once by `--approximate`. Indexes cost 16 bytes per
+/// message, so holding every chunk's index would scale with the file's message count.
 const APPROX_INDEX_BATCH_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -117,8 +116,8 @@ fn collect_usage_approximate_batched(
 ) -> Result<Option<Usage>> {
     let summary = match byte_source::read_summary(source, source_options) {
         Ok(Some(summary)) => summary,
-        // A remote input without scan opt-in cannot fall back to the exact scan, so surface the
-        // summary error (for example the summary-size cap) instead of a misleading scan refusal.
+        // A remote input without opt-in cannot fall back to the exact scan; surface the summary
+        // error (e.g. the summary-size cap) rather than a misleading scan refusal.
         Err(err) if source.is_remote() && !source_options.allow_remote_scan => return Err(err),
         Ok(None) | Err(_) => return Ok(None),
     };
@@ -255,8 +254,8 @@ fn process_message(
     Ok(())
 }
 
-/// Remote `--approximate` fetches every chunk's message index. That total scales with the
-/// file's message count, so it is capped like any other indexed read unless the scan flag is set.
+/// Remote `--approximate` fetches every chunk's message index, a total that scales with the
+/// message count, so it is capped like any indexed read unless the scan flag is set.
 fn require_remote_message_index_budget(
     source: &dyn ByteSource,
     chunk_indexes: &[records::ChunkIndex],
@@ -273,10 +272,9 @@ fn require_remote_message_index_budget(
     )
 }
 
-/// Sums per-topic message sizes from chunk message indexes, reading and parsing the indexes in
-/// batches of at most `index_batch_bytes` (always at least one chunk) so memory stays bounded by
-/// the batch rather than the file. Reads are sequential (`ByteSource` is not `Sync`); each
-/// batch is then parsed in parallel.
+/// Sums per-topic message sizes from chunk message indexes in batches of at most
+/// `index_batch_bytes` (at least one chunk), so memory is bounded by the batch. Reads are
+/// sequential (`ByteSource` is not `Sync`); each batch is parsed in parallel.
 fn compute_topic_sizes_from_index(
     source: &mut dyn ByteSource,
     chunk_indexes: &[records::ChunkIndex],
@@ -801,8 +799,8 @@ mod tests {
 
     #[test]
     fn approximate_usage_matches_exact_with_one_chunk_per_batch() {
-        // Tiny chunks so the summary has several chunk indexes, and a one-byte batch budget so
-        // every batch holds exactly one chunk: batching must merge partial sums correctly.
+        // Tiny chunks give several chunk indexes; a one-byte budget puts one chunk per batch, so
+        // the partial sums must merge correctly.
         let mcap = write_test_file(
             true,
             Some(64),

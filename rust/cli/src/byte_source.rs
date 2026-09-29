@@ -1,7 +1,5 @@
-//! Random-access byte sources for sans-io MCAP reads.
-//!
-//! Local files use seek+read (no mmap). Remote URLs prefer HTTP range requests.
-//! Stdin is spooled to a temp file when opened through [`open_byte_source`].
+//! Random-access byte sources for sans-io MCAP reads: local files via seek+read, remote URLs
+//! via HTTP range requests, and stdin spooled to a temp file (see [`open_byte_source`]).
 
 mod drivers;
 
@@ -32,15 +30,12 @@ pub trait ByteSource {
     /// Whether random access is available.
     fn is_seekable(&self) -> bool;
 
-    /// Read up to `dest.len()` bytes at `offset` into `dest`.
-    ///
-    /// Returns the number of bytes read (0 at EOF). Prefer this in sans-io event loops so
-    /// drivers can fill `reader.insert(need)` without an intermediate allocation.
+    /// Read up to `dest.len()` bytes at `offset` into `dest`, returning the count (0 at EOF).
+    /// Sans-io drivers use this to fill `reader.insert(need)` without an extra allocation.
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize>;
 
-    /// Read `[offset, offset+len)` into a new buffer. `len` may be clamped to EOF.
-    ///
-    /// Hot paths should call [`Self::read_into`] instead to reuse caller buffers.
+    /// Read `[offset, offset+len)` into a new buffer, clamped to EOF. Hot paths should prefer
+    /// [`Self::read_into`].
     fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>> {
         if len == 0 {
             return Ok(Vec::new());
@@ -52,16 +47,15 @@ pub trait ByteSource {
     }
 }
 
-/// Read-ahead buffer for sequential local reads. Sans-io readers request one record at a time,
-/// so without buffering a linear scan of small records costs a seek plus a read syscall per
-/// record. Kept modest because `merge` holds one source per input.
+/// Read-ahead buffer for sequential reads. Sans-io readers request one record at a time, so
+/// without it a scan costs a seek and a read per record. Small because `merge` opens one source
+/// per input.
 const LOCAL_FILE_BUFFER_BYTES: usize = 64 * 1024;
 
 /// Local file opened for seek+read (not memory-mapped).
 pub struct LocalFileSource {
     reader: BufReader<File>,
-    /// Logical offset the next sequential read would start at, or `None` after an I/O error left
-    /// the underlying position unknown.
+    /// Offset the next sequential read starts at; `None` after an I/O error left it unknown.
     pos: Option<u64>,
     path: PathBuf,
     size: u64,
@@ -133,12 +127,11 @@ impl ByteSource for LocalFileSource {
         let to_read = dest.len().min(available);
         let dest = &mut dest[..to_read];
         let result = if self.pos == Some(offset) {
-            // Sequential continuation: go through the read-ahead buffer so a run of small record
-            // reads costs one syscall per buffer fill rather than one per record.
+            // Sequential: read through the buffer, one syscall per fill instead of per record.
             self.reader.read_exact(dest)
         } else {
-            // Random access: the seek discards the buffer, and reading straight into `dest` keeps
-            // a small footer or index read from pulling in a full buffer of read-ahead.
+            // Random access: seek (discarding the buffer) and read straight into `dest`, so a small
+            // footer or index read does not pull in a full buffer of read-ahead.
             self.reader
                 .seek(SeekFrom::Start(offset))
                 .and_then(|_| self.reader.get_mut().read_exact(dest))
@@ -156,17 +149,16 @@ impl ByteSource for LocalFileSource {
     }
 }
 
-/// Read-ahead window for remote sequential reads. Every range read is one HTTP request and the
-/// sans-io readers ask for one record prefix and one record body at a time, so without a window
-/// a linear scan would cost about two requests per record. Sized to match the tail prefetched at
-/// open, so an open remote source holds about the same memory as before the window existed.
+/// Read-ahead window for sequential remote reads. Each range read is one HTTP request and the
+/// sans-io readers ask for a record's prefix and body separately, so an unbuffered scan costs
+/// about two requests per record. Sized like the tail prefetched at open, so memory is unchanged.
 pub(crate) const REMOTE_READ_AHEAD_BYTES: usize = 256 * 1024;
 
 /// Remote object that supports byte-range reads.
 pub struct RemoteRangeSource {
     inner: RemoteRangeReader,
-    /// Bytes `[window_start, window_start + window.len())`, filled by `read_into` misses and
-    /// seeded with the tail prefetched at open so summary reads usually need no request at all.
+    /// Bytes `[window_start, window_start + window.len())`, filled on `read_into` misses and seeded
+    /// with the tail prefetched at open, so summary reads usually need no request.
     window: Vec<u8>,
     window_start: u64,
     read_ahead_bytes: usize,
@@ -183,7 +175,7 @@ impl RemoteRangeSource {
         }
     }
 
-    /// Shrinks the read-ahead window so tests can exercise window refills on small fixtures.
+    /// Shrinks the window so tests can exercise refills on small fixtures.
     #[cfg(test)]
     pub(crate) fn set_read_ahead_bytes(&mut self, bytes: usize) {
         self.read_ahead_bytes = bytes;
@@ -193,8 +185,8 @@ impl RemoteRangeSource {
         self.window_start + self.window.len() as u64
     }
 
-    /// The window's bytes for `[offset, offset + len)` when it holds all of them, or the
-    /// remainder when the window already reaches EOF.
+    /// The window's bytes for `[offset, offset + len)` if fully held, or what remains when the
+    /// window reaches EOF.
     fn window_slice(&self, offset: u64, len: usize) -> Option<&[u8]> {
         if offset < self.window_start || offset >= self.window_end() {
             return None;
@@ -241,8 +233,8 @@ impl ByteSource for RemoteRangeSource {
         if self.window_slice(offset, dest.len()).is_none() {
             self.fill_window(offset, dest.len())?;
         }
-        // After a fill the window starts at `offset`, so only a short server response leaves
-        // fewer bytes than requested; hand back what arrived and let the reader ask again.
+        // The window now starts at `offset`, so only a short server response yields fewer bytes
+        // than asked; return what arrived and let the reader ask again.
         let start = (offset - self.window_start) as usize;
         let n = (self.window.len() - start).min(dest.len());
         if n == 0 {
@@ -259,8 +251,8 @@ impl ByteSource for RemoteRangeSource {
         if let Some(slice) = self.window_slice(offset, len) {
             return Ok(slice.to_vec());
         }
-        // Chunk and attachment payloads are fetched exactly, without disturbing the window, so a
-        // single indexed read on a remote never pulls in read-ahead it will not use.
+        // Chunk and attachment payloads are fetched exactly and bypass the window, so a single
+        // indexed read never over-fetches.
         self.inner.read_range(offset, len)
     }
 }
@@ -308,12 +300,9 @@ impl ByteSource for MemorySource {
     }
 }
 
-/// Open a path, remote URL, or stdin as a [`ByteSource`].
-///
-/// - `None` spools stdin to a tempfile (seek+read, no mmap).
-/// - Remote URLs use range requests when available.
-/// - Non-range remotes require `--allow-remote-scan` and fall back to a full download into a tempfile.
-/// - Local paths use seek+read (no mmap).
+/// Open a local path, remote URL, or stdin (`None`, spooled to a tempfile) as a [`ByteSource`].
+/// Remotes use range requests when available; otherwise they need `--allow-remote-scan` and are
+/// downloaded to a tempfile.
 pub fn open_byte_source(
     path: Option<&Path>,
     options: SourceOptions,

@@ -862,10 +862,9 @@ pub(crate) fn remote_scan_opt_in_suffix() -> &'static str {
 }
 
 /// Errors when a remote [`ByteSource`] would fetch more than
-/// [`MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN`] for indexed records without `--allow-remote-scan`.
-///
-/// Local sources are never capped: reading one attachment or metadata record at a time is
-/// bounded by the record, not the file, and there is no download to protect against.
+/// [`MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN`] of indexed records without `--allow-remote-scan`.
+/// Local sources are never capped: one record at a time is bounded by the record, and there is
+/// no download to protect.
 pub(crate) fn require_remote_indexed_read_budget(
     source: &dyn crate::byte_source::ByteSource,
     total_bytes: u64,
@@ -879,7 +878,7 @@ pub(crate) fn require_remote_indexed_read_budget(
 }
 
 /// The byte-count half of [`require_remote_indexed_read_budget`], for paths that are remote by
-/// construction (such as the remote summary fetch) and have no [`ByteSource`] to consult.
+/// construction (e.g. the remote summary fetch) and have no [`ByteSource`].
 fn require_remote_read_budget_bytes(
     total_bytes: u64,
     options: SourceOptions,
@@ -1659,9 +1658,8 @@ mod tests {
         assert!(message.contains("Failed while fetching range from"));
     }
 
-    /// A file whose footer claims a summary section one byte over the no-opt-in budget. The
-    /// section itself is zeros; only the footer matters, since the cap must trigger before any
-    /// of it is fetched.
+    /// A file whose footer claims a summary one byte over the no-opt-in budget. The section is
+    /// zeros; only the footer matters, since the cap must trigger before any fetch.
     fn oversized_summary_body() -> &'static [u8] {
         let len = usize::try_from(super::MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN)
             .expect("remote indexed budget should fit usize")
@@ -1683,8 +1681,8 @@ mod tests {
 
     #[test]
     fn remote_summary_driver_requires_scan_for_oversized_summary_section() {
-        // The command path: open_byte_source + the sans-io summary driver, as cat, du, get,
-        // list, filter, sort, and merge do. The cap must refuse before fetching the section.
+        // The command path (open_byte_source + the sans-io summary driver, as cat, du, get, list,
+        // filter, sort, and merge use). The cap must refuse before fetching the section.
         let (url, requests) = serve_http_counting(oversized_summary_body(), true);
         let mut source = crate::byte_source::open_byte_source(
             Some(Path::new(&url)),
@@ -2211,8 +2209,8 @@ mod tests {
 
     #[test]
     fn remote_linear_scan_uses_one_request_per_read_ahead_window() {
-        // 600 x 1 KiB messages, several times the read-ahead window: the scan should cost about
-        // one request per window, not one per record.
+        // 600 x 1 KiB messages, several windows' worth: about one request per window, not per
+        // record.
         let body: &'static [u8] = Box::leak(linear_mcap_without_summary(600).into_boxed_slice());
         let window = crate::byte_source::REMOTE_READ_AHEAD_BYTES;
         assert!(body.len() > 2 * window);
@@ -2236,8 +2234,8 @@ mod tests {
 
     #[test]
     fn remote_linear_scan_refills_window_across_boundaries() {
-        // Shrink the window to a fraction of the file so the scan must refill it several
-        // times, including for records that straddle a window boundary.
+        // Shrink the window so the scan refills it several times, including across record
+        // boundaries.
         let body: &'static [u8] = Box::leak(linear_mcap_without_summary(600).into_boxed_slice());
         let (url, requests) = serve_http_counting(body, true);
         let reader = super::open_remote_range_reader(Path::new(&url))

@@ -345,8 +345,8 @@ mod tests {
         )
         .expect_err("cloud input should fail before producing output");
         let message = err.to_string();
-        // The refusal comes from the path alone, before any network or credential lookup, and
-        // the redacted display must not leak the query string.
+        // Refused from the path alone, before any network or credential lookup; the query string
+        // must stay redacted.
         assert!(!message.contains("token=secret"));
         assert!(
             message.contains("--allow-remote-scan"),
