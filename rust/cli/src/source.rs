@@ -9,8 +9,8 @@ use futures_util::TryStreamExt;
 use mcap::records::{self, Record};
 use memmap2::Mmap;
 use object_store::{
-    path::Path as ObjectStorePath, Attribute, ClientConfigKey, GetOptions, GetRange, ObjectStore,
-    ObjectStoreExt,
+    path::Path as ObjectStorePath, Attribute, BackoffConfig, ClientConfigKey, GetOptions, GetRange,
+    ObjectStore, ObjectStoreExt, ObjectStoreScheme, RetryConfig,
 };
 use tempfile::NamedTempFile;
 use url::Url;
@@ -46,6 +46,19 @@ const REMOTE_STALL_TIMEOUT: Duration = Duration::from_secs(120);
 // load balancer dropping one request costs seconds rather than minutes.
 const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_RESPONSE_ATTEMPTS: usize = 3;
+// object_store retries 5xx, 429, and connection errors inside the request future
+// that REMOTE_RESPONSE_TIMEOUT wraps. Its budget is set so a full retry sequence
+// (retry_timeout, then at most one more backoff sleep and one quick response)
+// always finishes inside that bound; otherwise a throttled request would be
+// reported as a hang and its status lost.
+const REMOTE_STORE_RETRIES: usize = 5;
+const REMOTE_STORE_RETRY_TIMEOUT: Duration = Duration::from_secs(15);
+const REMOTE_STORE_MAX_BACKOFF: Duration = Duration::from_secs(5);
+const _: () = assert!(
+    REMOTE_STORE_RETRY_TIMEOUT.as_secs() + REMOTE_STORE_MAX_BACKOFF.as_secs()
+        < REMOTE_RESPONSE_TIMEOUT.as_secs(),
+    "object_store's retry sequence must end before the response-head timeout"
+);
 // Consecutive zero-progress attempts before a chunked download gives up.
 // Any delivered bytes reset the budget, so only a dead connection exhausts it.
 const REMOTE_DOWNLOAD_NO_PROGRESS_ATTEMPTS: usize = 5;
@@ -580,12 +593,12 @@ impl ObjectStoreSource {
     fn open_remote(remote_url: RemoteUrl) -> Result<Self> {
         let runtime = object_store_runtime()?;
         // S3 goes through the AWS SDK for its full credential chain (profiles,
-        // SSO) and manages its own timeouts; other stores use object_store
-        // with the long request timeout from `store_options`.
+        // SSO) and manages its own timeouts and retries; other stores use
+        // object_store with the timeout and retry budget chosen above.
         let result = if matches!(remote_url.url.scheme(), "s3" | "s3a") {
             crate::sdk_s3::build_s3_store(&runtime, &remote_url.url, remote_url.options())
         } else {
-            object_store::parse_url_opts(&remote_url.url, remote_url.store_options())
+            build_object_store(&remote_url.url, remote_url.store_options())
         };
         // object_store errors repeat their source in Display, so flatten to a
         // single message instead of letting the anyhow chain print it twice.
@@ -1381,6 +1394,62 @@ pub(crate) fn redacted_display(path: &Path) -> String {
     path.to_str()
         .map(redact_url)
         .unwrap_or_else(|| path.display().to_string())
+}
+
+/// Build an object_store store for `url` like `object_store::parse_url_opts`,
+/// which offers no way to set the retry budget, but with `REMOTE_STORE_*`
+/// applied so object_store's retries always finish inside the head timeout.
+fn build_object_store(
+    url: &Url,
+    options: Vec<(String, String)>,
+) -> object_store::Result<(Box<dyn ObjectStore>, ObjectStorePath)> {
+    let (scheme, object_path) = ObjectStoreScheme::parse(url)?;
+    let retry = RetryConfig {
+        backoff: BackoffConfig {
+            max_backoff: REMOTE_STORE_MAX_BACKOFF,
+            ..BackoffConfig::default()
+        },
+        max_retries: REMOTE_STORE_RETRIES,
+        retry_timeout: REMOTE_STORE_RETRY_TIMEOUT,
+    };
+    // Mirrors object_store's private `builder_opts!`: unknown keys are skipped
+    // because the option list is the process environment.
+    macro_rules! build {
+        ($builder:ty, $url:expr) => {{
+            let builder = options.into_iter().fold(
+                <$builder>::new()
+                    .with_url($url.to_string())
+                    .with_retry(retry),
+                |builder, (key, value)| match key.to_ascii_lowercase().parse() {
+                    Ok(key) => builder.with_config(key, value),
+                    Err(_) => builder,
+                },
+            );
+            Box::new(builder.build()?) as Box<dyn ObjectStore>
+        }};
+    }
+    let store = match scheme {
+        ObjectStoreScheme::AmazonS3 => build!(object_store::aws::AmazonS3Builder, url),
+        ObjectStoreScheme::GoogleCloudStorage => {
+            build!(object_store::gcp::GoogleCloudStorageBuilder, url)
+        }
+        ObjectStoreScheme::MicrosoftAzure => {
+            build!(object_store::azure::MicrosoftAzureBuilder, url)
+        }
+        ObjectStoreScheme::Http => {
+            build!(
+                object_store::http::HttpBuilder,
+                &url[..url::Position::BeforePath]
+            )
+        }
+        scheme => {
+            return Err(object_store::Error::Generic {
+                store: "parse_url",
+                source: format!("unsupported remote scheme {scheme:?}").into(),
+            })
+        }
+    };
+    Ok((store, object_path))
 }
 
 fn read_remote_input_to_writer(path: &Path, writer: &mut impl Write) -> Result<()> {
@@ -2465,6 +2534,27 @@ mod tests {
         );
         assert_eq!(requests.load(Ordering::SeqCst), 2);
         assert_eq!(out, &body[..8], "nothing from the new object is written");
+    }
+
+    #[test]
+    fn remote_range_read_absorbs_a_short_server_error_burst_inside_object_store() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        // Two 503s then success: object_store retries these itself, well inside
+        // the head timeout, so the read succeeds without any CLI-level retry.
+        let (url, requests) = serve_http_scripted(body, None, |index| {
+            if index < 2 {
+                ScriptedResponse::Status("503 Service Unavailable")
+            } else {
+                ScriptedResponse::Normal
+            }
+        });
+        let source =
+            super::ObjectStoreSource::open_for_download(Path::new(&url)).expect("open source");
+        let bytes = source
+            .get_range(0..8)
+            .expect("object_store should retry a short 5xx burst");
+        assert_eq!(bytes, &body[..8]);
+        assert_eq!(requests.load(Ordering::SeqCst), 3);
     }
 
     #[test]
