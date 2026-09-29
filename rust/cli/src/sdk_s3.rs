@@ -237,11 +237,8 @@ impl ObjectStore for SdkS3Store {
             Some((start, end, total)) => (start..end + 1, total),
             None => (0..content_length, content_length),
         };
-        // Like object_store's own HTTP client, refuse a 206 whose
-        // Content-Range does not match the request: callers (the chunked
-        // download's resume in particular) write the body at the offset they
-        // asked for, so trusting a misbehaving proxy here would silently
-        // misplace bytes.
+        // Like object_store's HTTP client, refuse a 206 whose Content-Range does
+        // not match the request; the download resume writes at the requested offset.
         if let Some(requested) = &options.range {
             let expected =
                 requested

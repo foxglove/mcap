@@ -32,28 +32,22 @@ const REMOTE_SUMMARY_TAIL_BYTES: u64 = 250_000;
 // Guards aggregate remote reads that should stay index-like (summary bytes, or
 // multiple metadata records selected from indexes) from becoming unexpectedly large.
 pub(crate) const MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN: u64 = 100_000_000;
-// Ranged GET size for whole-file downloads. It bounds what one request covers;
-// each part is a new request with its own ETag check and object_store retry
-// budget. Resumes are at byte granularity, so the size does not affect how much
-// is re-fetched after a dropped connection.
+// Ranged GET size for whole-file downloads; each part is a new request with its
+// own ETag check and retry budget. Resumes are byte-granular, so this size does
+// not affect how much is re-fetched.
 const REMOTE_DOWNLOAD_CHUNK_BYTES: u64 = 64 * 1024 * 1024;
-// object_store's default 30s timeout spans the whole response body, which kills
-// large transfers on slow links. Requests get an effectively unlimited timeout
-// instead; liveness is enforced by the response-head and body-stall timeouts.
+// object_store's default 30s timeout spans the whole body and kills large
+// transfers; use an effectively unlimited one and enforce liveness below instead.
 const REMOTE_REQUEST_TIMEOUT: &str = "7days";
 const REMOTE_STALL_TIMEOUT: Duration = Duration::from_secs(120);
-// A connection that hangs before the response head never errors, so object_store's
-// own retries never see it. Bound that wait here and retry it a few times, so a
-// load balancer dropping one request costs seconds rather than minutes.
+// A hung connection never errors, so object_store's retries never see it. Bound
+// the wait for the response head here and retry it a few times.
 const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_RESPONSE_ATTEMPTS: usize = 3;
-// object_store retries 5xx, 429, and connection errors inside the request future
-// that REMOTE_RESPONSE_TIMEOUT wraps. Its budget is set so a full retry sequence
-// (retry_timeout, then at most one more backoff sleep and one quick response)
-// always finishes inside that bound; otherwise a throttled request would be
-// reported as a hang and its status lost. The retry timeout is the real limit;
-// the count is a backstop high enough that it does not end the sequence first
-// (worst-case backoff sleeps for 10 retries sum to ~31s, beyond the 15s).
+// object_store retries 5xx/429/connection errors inside the future that
+// REMOTE_RESPONSE_TIMEOUT wraps, so its retry timeout plus one final backoff
+// sleep must end inside that bound or throttling would read as a hang. The
+// retry count is only a backstop; the timeout ends the sequence first.
 const REMOTE_STORE_RETRIES: usize = 10;
 const REMOTE_STORE_RETRY_TIMEOUT: Duration = Duration::from_secs(15);
 const REMOTE_STORE_MAX_BACKOFF: Duration = Duration::from_secs(5);
@@ -647,9 +641,8 @@ impl ObjectStoreSource {
         self.collect_body(response)
     }
 
-    /// Run a store request, retrying up to `attempts` times when its response
-    /// head does not arrive within `response_timeout`. The outer error is that
-    /// timeout on the last attempt; the inner result is the store's own.
+    /// Run a store request, retrying up to `attempts` times when no response
+    /// head arrives within `response_timeout`. The inner result is the store's own.
     fn block_on_bounded<T, F>(
         &self,
         attempts: usize,
@@ -817,9 +810,8 @@ impl ObjectStoreSource {
         Ok(Some((size, self.bounded_tail(size, tail_bytes)?)))
     }
 
-    /// Download the object to `writer` in ranged parts of `chunk_bytes`.
-    /// Falls back to an unranged GET when the store ignores `Range` or the
-    /// object is empty (unsatisfiable `bytes=0..N`).
+    /// Download the object to `writer` in `chunk_bytes` ranged parts, falling back
+    /// to an unranged GET when the store ignores `Range` or the object is empty.
     fn download_to_writer(&self, writer: &mut impl Write, chunk_bytes: u64) -> Result<()> {
         if chunk_bytes == 0 {
             bail!("remote download chunk size must be non-zero");
@@ -843,10 +835,8 @@ impl ObjectStoreSource {
         }
     }
 
-    /// Stream `first` and the remaining `chunk_bytes`-sized ranges to `writer`,
-    /// resuming from the last written byte when a body read fails. object_store
-    /// retries body errors inside the stream first when the response had an
-    /// ETag; the SDK S3 store, ETag-less responses, and stalls come straight here.
+    /// Stream `first` and the remaining ranges to `writer`, resuming from the last
+    /// written byte on body errors. object_store retries ETag'd bodies in-stream first.
     fn download_chunked(
         &self,
         first: object_store::GetResult,
@@ -855,9 +845,8 @@ impl ObjectStoreSource {
     ) -> Result<()> {
         let total = first.meta.size;
         let first_meta = first.meta.clone();
-        // If-Match uses strong comparison (RFC 9110 §13.1.1), so a weak ETag
-        // (`W/"..."`) would fail every resume with 412; fall back to the size
-        // check below instead of pinning it.
+        // If-Match is a strong comparison (RFC 9110 §13.1.1): a weak ETag would
+        // 412 every resume, so rely on the size check instead.
         let if_match = first
             .meta
             .e_tag
@@ -914,10 +903,9 @@ impl ObjectStoreSource {
         Ok(())
     }
 
-    /// Issue the ranged GET that resumes a chunked download at `range`. Fatal
-    /// rather than retryable: 412, a changed size or last-modified (the guard
-    /// when there is no ETag; a missing header reads as the epoch on both
-    /// backends), a wrong range, or 404/401/403.
+    /// Resume GET at `range`. Fatal: 412, a changed size or last-modified (the
+    /// no-ETag guard; a missing header is the epoch on both backends), a wrong
+    /// range, or 404/401/403.
     fn resume_chunk_get(
         &self,
         range: std::ops::Range<u64>,
@@ -1050,10 +1038,8 @@ impl ObjectStoreSource {
     }
 }
 
-// How a download GET failed: `Retryable` failures (network errors, stalls)
-// leave the object re-fetchable from the current offset; `Fatal` ones (local
-// write errors, a changed or no longer readable object) would fail
-// identically on retry.
+// `Retryable` failures leave the object re-fetchable from the current offset;
+// `Fatal` ones (write errors, a changed or unreadable object) would repeat.
 enum DownloadError {
     Retryable(anyhow::Error),
     Fatal(anyhow::Error),
@@ -1399,9 +1385,8 @@ pub(crate) fn redacted_display(path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-/// Build an object_store store for `url` like `object_store::parse_url_opts`,
-/// which offers no way to set the retry budget, but with `REMOTE_STORE_*`
-/// applied so object_store's retries always finish inside the head timeout.
+/// Like `object_store::parse_url_opts`, which cannot set a retry budget, with
+/// `REMOTE_STORE_*` applied so retries end inside the head timeout.
 fn build_object_store(
     url: &Url,
     options: Vec<(String, String)>,
@@ -1912,9 +1897,8 @@ mod tests {
 
     type Script = Arc<dyn Fn(usize) -> ScriptedResponse + Send + Sync>;
 
-    // The one HTTP test server behind every `serve_http*` helper. Each request
-    // uses a fresh connection (`Connection: close`), so connections accepted ==
-    // requests, and the returned counter can be used to assert round trips.
+    // The one HTTP test server behind every `serve_http*` helper. It answers
+    // `Connection: close`, so the returned counter counts requests.
     struct TestHttpServer {
         body: &'static [u8],
         supports_ranges: bool,
@@ -2176,9 +2160,7 @@ mod tests {
         .serve()
     }
 
-    // Serve `range_body` for range requests and `status` for everything else,
-    // like an object that is readable through ranges but whose HEAD or
-    // unranged GET fails.
+    // Ranged requests get `range_body`; everything else gets `status`.
     fn serve_http_status_with_range_body(
         range_body: &'static [u8],
         status_code: u16,
@@ -2204,10 +2186,8 @@ mod tests {
         .0
     }
 
-    // A range-supporting server that closes the first `truncated_bodies` GET
-    // bodies after `truncated_len(content_len)` bytes. With an `etag`, every
-    // response carries it, which switches on object_store's own in-stream
-    // resume.
+    // Truncates the first `truncated_bodies` bodies to `truncated_len(len)` bytes.
+    // An `etag` switches on object_store's own in-stream resume.
     fn serve_http_truncating_bodies(
         body: &'static [u8],
         etag: Option<&'static str>,
@@ -2341,12 +2321,9 @@ mod tests {
     #[test]
     fn remote_http_download_lets_object_store_resume_etag_bodies_first() {
         let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
-        // With an ETag, object_store resumes truncated bodies inside the
-        // stream, so its retries stay within the chunk being read: 0..8 -> 4
-        // bytes, 4..8 -> 2 bytes, 6..8 -> 2 bytes, then four full chunks.
-        // Without an ETag the second truncated GET is our own resume of
-        // 4..12 and the run takes six requests (see
-        // remote_http_download_resumes_after_mid_body_failures).
+        // With an ETag, object_store resumes in-stream within the current chunk:
+        // 0..8 (4 bytes), 4..8 (2), 6..8, then four full chunks = 7 requests.
+        // Without one, our own resume of 4..12 makes it six.
         let (url, requests) = serve_http_truncating_bodies(body, Some("\"v1\""), 2, |len| len / 2);
         let mut out = Vec::new();
         let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
@@ -2577,9 +2554,7 @@ mod tests {
         .serve();
         let mut source =
             super::ObjectStoreSource::open_for_download(Path::new(&url)).expect("open source");
-        // Generous enough that the retried request's normal response cannot
-        // miss the timeout on a loaded CI runner; the hung first request still
-        // decides the outcome.
+        // Long enough that a healthy retry cannot miss the timeout on a loaded CI runner.
         source.response_timeout = std::time::Duration::from_secs(2);
         let bytes = source
             .get_range(0..8)
