@@ -1,13 +1,17 @@
 #[path = "common/logsetup.rs"]
 mod logsetup;
+#[path = "common/messages.rs"]
+mod messages;
 
-use std::{fs, io::BufWriter};
+use std::{
+    fs,
+    io::{BufReader, BufWriter},
+};
 
 use anyhow::{Context, Result};
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use clap::Parser;
 use log::*;
-use memmap2::Mmap;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -21,20 +25,16 @@ struct Args {
     mcap: Utf8PathBuf,
 }
 
-fn map_mcap(p: &Utf8Path) -> Result<Mmap> {
-    let fd = fs::File::open(p).context("Couldn't open MCAP file")?;
-    unsafe { Mmap::map(&fd) }.context("Couldn't map MCAP file")
-}
-
 fn run() -> Result<()> {
     let args = Args::parse();
     logsetup::init_logger(args.verbose, args.color);
 
-    let mapped = map_mcap(&args.mcap)?;
+    let input = BufReader::new(fs::File::open(&args.mcap).context("Couldn't open MCAP file")?);
 
     let mut out = mcap::Writer::new(BufWriter::new(fs::File::create("out.mcap")?))?;
 
-    for message in mcap::MessageStream::new(&mapped)? {
+    // Stream records one at a time; memory scales with the largest record, not the file.
+    for message in messages::MessageReader::new(input) {
         let message = message?;
         let ts = message.publish_time;
         info!(

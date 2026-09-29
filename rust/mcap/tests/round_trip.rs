@@ -7,7 +7,6 @@ use std::io::BufWriter;
 
 use anyhow::Result;
 use itertools::Itertools;
-use memmap2::Mmap;
 use rayon::prelude::*;
 use tempfile::tempfile;
 
@@ -30,7 +29,7 @@ fn demo_round_trip_for_opts(opts: WriteOptions) -> Result<()> {
 
     drop(writer);
 
-    let ours = unsafe { Mmap::map(&tmp) }?;
+    let ours = read_back(&mut tmp)?;
 
     // Compare the message stream of our MCAP to the reference one.
     for (theirs, ours) in

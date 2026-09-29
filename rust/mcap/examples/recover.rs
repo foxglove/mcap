@@ -1,14 +1,18 @@
 #[path = "common/logsetup.rs"]
 mod logsetup;
+#[path = "common/messages.rs"]
+mod messages;
 
-use std::{fs, io::BufWriter};
+use std::{
+    fs,
+    io::{BufReader, BufWriter},
+};
 
 use anyhow::{ensure, Context, Result};
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8PathBuf;
 use clap::Parser;
-use enumset::enum_set;
 use log::*;
-use memmap2::Mmap;
+use mcap::sans_io::LinearReaderOptions;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -30,11 +34,6 @@ struct Args {
     output: Option<Utf8PathBuf>,
 }
 
-fn map_mcap(p: &Utf8Path) -> Result<Mmap> {
-    let fd = fs::File::open(p).context("Couldn't open MCAP file")?;
-    unsafe { Mmap::map(&fd) }.context("Couldn't map MCAP file")
-}
-
 fn make_output_path(input: Utf8PathBuf) -> Result<Utf8PathBuf> {
     use std::str::FromStr;
     let file_stem = input.file_stem().context("no file stem for input path")?;
@@ -47,7 +46,7 @@ fn run() -> Result<()> {
     logsetup::init_logger(args.verbose, args.color);
     debug!("{args:?}");
 
-    let mapped = map_mcap(&args.input)?;
+    let input = BufReader::new(fs::File::open(&args.input).context("Couldn't open MCAP file")?);
     let output_path = args.output.unwrap_or(make_output_path(args.input)?);
     ensure!(
         !output_path.exists(),
@@ -58,10 +57,12 @@ fn run() -> Result<()> {
 
     info!("recovering as many messages as possible...");
     let mut recovered_count = 0;
-    for maybe_message in mcap::MessageStream::new_with_options(
-        &mapped,
-        enum_set!(mcap::read::Options::IgnoreEndMagic),
-    )? {
+    // A truncated file has no trailing magic, so do not require one; the reader stops with an
+    // error at the first record it cannot complete, and everything before it is kept.
+    for maybe_message in messages::MessageReader::with_options(
+        input,
+        LinearReaderOptions::default().with_skip_end_magic(true),
+    ) {
         match maybe_message {
             Ok(message) => {
                 out.write(&message)?;

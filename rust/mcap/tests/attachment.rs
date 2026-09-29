@@ -6,14 +6,13 @@ use mcap::records::AttachmentHeader;
 use std::{borrow::Cow, io::BufWriter};
 
 use anyhow::Result;
-use memmap2::Mmap;
 use tempfile::tempfile;
 
 const DEFAULT_LIBRARY_LENGTH: u64 = mcap::LIBRARY_IDENTIFIER.len() as u64;
 
 #[test]
 fn smoke() -> Result<()> {
-    let mapped = map_mcap("../../tests/conformance/data/OneAttachment/OneAttachment.mcap")?;
+    let mapped = read_mcap("../../tests/conformance/data/OneAttachment/OneAttachment.mcap")?;
     let attachments = mcap::read::LinearReader::new(&mapped)?
         .filter_map(|record| match record.unwrap() {
             mcap::records::Record::Attachment { header, data, crc } => Some((header, data, crc)),
@@ -64,7 +63,7 @@ fn test_attach_in_multiple_parts() -> Result<()> {
 
     drop(writer);
 
-    let ours = unsafe { Mmap::map(&tmp) }?;
+    let ours = read_back(&mut tmp)?;
     let summary = mcap::Summary::read(&ours)?;
 
     let expected_summary = Some(mcap::Summary {
@@ -104,7 +103,7 @@ fn test_attach_in_multiple_parts() -> Result<()> {
 
 #[test]
 fn round_trip() -> Result<()> {
-    let mapped = map_mcap("../../tests/conformance/data/OneAttachment/OneAttachment.mcap")?;
+    let mapped = read_mcap("../../tests/conformance/data/OneAttachment/OneAttachment.mcap")?;
     let attachments =
         mcap::read::LinearReader::new(&mapped)?.filter_map(|record| match record.unwrap() {
             mcap::records::Record::Attachment { header, data, .. } => Some((header, data)),
@@ -126,7 +125,7 @@ fn round_trip() -> Result<()> {
     }
     drop(writer);
 
-    let ours = unsafe { Mmap::map(&tmp) }?;
+    let ours = read_back(&mut tmp)?;
     let summary = mcap::Summary::read(&ours)?;
 
     let expected_summary = Some(mcap::Summary {
