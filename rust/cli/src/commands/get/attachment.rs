@@ -22,6 +22,7 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
     let length = usize::try_from(index.length)
         .context("indexed record is too large to read on this platform")?;
     source::require_remote_indexed_read_budget(
+        input.as_ref(),
         index.length,
         source_options,
         "remote attachment record",
