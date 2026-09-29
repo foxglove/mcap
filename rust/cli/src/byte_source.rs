@@ -8,7 +8,7 @@ mod drivers;
 pub use drivers::{for_each_linear_record, read_header, read_summary, service_indexed_chunk};
 
 use std::fs::File;
-use std::io::{IsTerminal as _, Read as _, Seek as _, SeekFrom, Write as _};
+use std::io::{BufReader, IsTerminal as _, Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -49,9 +49,17 @@ pub trait ByteSource {
     }
 }
 
+/// Read-ahead buffer for sequential local reads. Sans-io readers request one record at a time,
+/// so without buffering a linear scan of small records costs a seek plus a read syscall per
+/// record. Kept modest because `merge` holds one source per input.
+const LOCAL_FILE_BUFFER_BYTES: usize = 64 * 1024;
+
 /// Local file opened for seek+read (not memory-mapped).
 pub struct LocalFileSource {
-    file: File,
+    reader: BufReader<File>,
+    /// Logical offset the next sequential read would start at, or `None` after an I/O error left
+    /// the underlying position unknown.
+    pos: Option<u64>,
     path: PathBuf,
     size: u64,
     // Keeps a spool tempfile alive for stdin / non-range remote fallbacks.
@@ -67,7 +75,8 @@ impl LocalFileSource {
             .with_context(|| format!("couldn't stat '{}'", path.display()))?
             .len();
         Ok(Self {
-            file,
+            reader: BufReader::with_capacity(LOCAL_FILE_BUFFER_BYTES, file),
+            pos: Some(0),
             path: path.to_path_buf(),
             size,
             _temp_file: None,
@@ -87,7 +96,8 @@ impl LocalFileSource {
             .context("failed to stat temporary input file")?
             .len();
         Ok(Self {
-            file,
+            reader: BufReader::with_capacity(LOCAL_FILE_BUFFER_BYTES, file),
+            pos: Some(0),
             path: display_path,
             size,
             _temp_file: Some(temp_file),
@@ -113,7 +123,33 @@ impl ByteSource for LocalFileSource {
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
-        read_file_into(&mut self.file, self.size, offset, dest)
+        if dest.is_empty() || offset >= self.size {
+            return Ok(0);
+        }
+        let available = (self.size - offset) as usize;
+        let to_read = dest.len().min(available);
+        let dest = &mut dest[..to_read];
+        let result = if self.pos == Some(offset) {
+            // Sequential continuation: go through the read-ahead buffer so a run of small record
+            // reads costs one syscall per buffer fill rather than one per record.
+            self.reader.read_exact(dest)
+        } else {
+            // Random access: the seek discards the buffer, and reading straight into `dest` keeps
+            // a small footer or index read from pulling in a full buffer of read-ahead.
+            self.reader
+                .seek(SeekFrom::Start(offset))
+                .and_then(|_| self.reader.get_mut().read_exact(dest))
+        };
+        match result {
+            Ok(()) => {
+                self.pos = Some(offset + to_read as u64);
+                Ok(to_read)
+            }
+            Err(err) => {
+                self.pos = None;
+                Err(err).with_context(|| format!("failed to read local file at offset {offset}"))
+            }
+        }
     }
 }
 
@@ -268,19 +304,6 @@ fn spool_remote_to_local(path: &Path, options: SourceOptions) -> Result<LocalFil
     LocalFileSource::from_temp_file(temp_file, PathBuf::from(redacted_display(path)))
 }
 
-fn read_file_into(file: &mut File, size: u64, offset: u64, dest: &mut [u8]) -> Result<usize> {
-    if dest.is_empty() || offset >= size {
-        return Ok(0);
-    }
-    let available = (size - offset) as usize;
-    let to_read = dest.len().min(available);
-    file.seek(SeekFrom::Start(offset))
-        .context("failed to seek in local file")?;
-    file.read_exact(&mut dest[..to_read])
-        .context("failed to read from local file")?;
-    Ok(to_read)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,6 +334,54 @@ mod tests {
             writer.finish().expect("finish");
         }
         buffer
+    }
+
+    #[test]
+    fn local_file_source_read_into_tracks_position_across_access_patterns() {
+        let expected = (0..(3 * LOCAL_FILE_BUFFER_BYTES + 123))
+            .map(|i| (i * 7 % 251) as u8)
+            .collect::<Vec<u8>>();
+        let mut temp = NamedTempFile::new().expect("temp file");
+        temp.write_all(&expected).expect("write temp file");
+        let mut source = LocalFileSource::open_path(temp.path()).expect("open local");
+        let size = expected.len();
+
+        let mut check = |offset: usize, len: usize, want: usize| {
+            let mut dest = vec![0u8; len];
+            let n = source
+                .read_into(offset as u64, &mut dest)
+                .expect("read_into");
+            assert_eq!(n, want, "read {len} bytes at offset {offset}");
+            let start = offset.min(size);
+            assert_eq!(
+                &dest[..n],
+                &expected[start..start + n],
+                "bytes at offset {offset}"
+            );
+        };
+
+        // Sequential reads, first through a direct read then through the read-ahead buffer.
+        check(0, 10, 10);
+        check(10, 100, 100);
+        check(110, 5, 5);
+        // Backward re-read of bytes the buffer already holds.
+        check(20, 50, 50);
+        // Sequential read that spans a buffer refill boundary.
+        check(
+            70,
+            LOCAL_FILE_BUFFER_BYTES + 10,
+            LOCAL_FILE_BUFFER_BYTES + 10,
+        );
+        // Forward jump past the buffered window, then continue sequentially from there.
+        check(2 * LOCAL_FILE_BUFFER_BYTES + 7, 33, 33);
+        check(2 * LOCAL_FILE_BUFFER_BYTES + 40, 33, 33);
+        // Reads that touch EOF clamp, and reads at or past EOF return nothing.
+        check(size - 5, 100, 5);
+        check(size, 10, 0);
+        check(size + 10, 10, 0);
+        check(0, 0, 0);
+        // Sequential continuation still works after the EOF clamp left `pos` at the end.
+        check(3, 8, 8);
     }
 
     #[test]
