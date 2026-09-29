@@ -162,10 +162,8 @@ struct SuiteSelection {
 
 impl SuiteSelection {
     fn from_args() -> Self {
-        // Mirror documented Criterion filters (`-- merge`, `-- indexed`) so filtered runs only
-        // generate inputs for selected suites. This intentionally handles positional filters, not
-        // arbitrary Criterion flag values. Simple regex forms such as `cat|info`, `(cat|info)`,
-        // or `^cli/du` are split into their alternatives so each one selects its suite.
+        // Mirror the documented Criterion filters (`-- merge`, `-- indexed`, `cat|info`, `^cli/du`)
+        // so filtered runs only generate inputs for the selected suites. Positional filters only.
         let filters = std::env::args()
             .skip(1)
             .filter(|arg| !arg.starts_with('-'))
@@ -456,8 +454,7 @@ fn bench_info(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &
 
 fn bench_du(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
     let mut group = c.benchmark_group(format!("cli/du/{}", mode.label()));
-    // `--approximate` needs chunk and message indexes from the summary; on linear inputs the CLI
-    // warns and falls back to the exact scan, which would just duplicate the `exact` series.
+    // Without a summary `--approximate` falls back to the exact scan and would duplicate `exact`.
     let variants: &[(&str, &[&str])] = match mode {
         InputMode::Indexed => &[("exact", &[]), ("approximate", &["--approximate"])],
         InputMode::Linear => &[("exact", &[])],
@@ -722,10 +719,8 @@ fn run_mcap(bin: &Path, args: Vec<OsString>) -> Duration {
     run_mcap_capturing(bin, args, false).0
 }
 
-/// Runs the CLI and returns the wall-clock duration together with its stdout, for commands
-/// whose result is printed rather than written to an output file. When `capture_stdout` is
-/// false, stdout is discarded so the harness does not spend the timed region draining a pipe;
-/// the returned buffer is then empty.
+/// Runs the CLI and returns its wall-clock duration and stdout. Without `capture_stdout` the
+/// child's stdout goes to /dev/null so draining a pipe is not timed, and the buffer is empty.
 fn run_mcap_capturing(
     bin: &Path,
     args: Vec<OsString>,
@@ -783,8 +778,7 @@ fn validate_info_output(stdout: &[u8], expected_count: usize, input: &Path) {
 
 fn validate_du_output(stdout: &[u8], case: &InputCase, approximate: bool) {
     let stdout = String::from_utf8_lossy(stdout);
-    // Messages alternate between the two topics starting with `/bench/selected`, so `/bench/other`
-    // only exists once the input holds at least two messages.
+    // Topics alternate starting with `/bench/selected`; `/bench/other` needs 2+ messages.
     let other_count = case.message_count - case.selected_count;
     let expected = [
         ("/bench/selected", case.selected_count),
@@ -806,9 +800,8 @@ fn validate_du_output(stdout: &[u8], case: &InputCase, approximate: bool) {
         let reported = row.split('\t').nth(1).map(str::trim).unwrap_or_default();
         let want_bytes = (count * case.payload_size) as u64;
         if approximate {
-            // `--approximate` derives sizes from message index offsets, so non-message records
-            // interleaved in a chunk are attributed to the preceding message. Accept a small
-            // over-count, never an under-count.
+            // `--approximate` attributes interleaved non-message records to the preceding message,
+            // so accept a small over-count but never an under-count.
             let reported_bytes = parse_human_bytes(reported).unwrap_or_else(|| {
                 panic!(
                     "unparsable du size {reported:?} for {topic} in {}",
@@ -834,8 +827,8 @@ fn validate_du_output(stdout: &[u8], case: &InputCase, approximate: bool) {
 
 const BYTE_PREFIXES: [&str; 6] = ["B", "kB", "MB", "GB", "TB", "PB"];
 
-/// Mirrors the CLI's `render::human_bytes` (SI prefixes, two decimals) so the bench can check
-/// du's per-topic sizes without depending on the binary crate.
+/// Mirrors the CLI's `render::human_bytes` (SI prefixes, two decimals); the bench cannot import
+/// the binary crate.
 fn human_bytes(num_bytes: u64) -> String {
     for (index, prefix) in BYTE_PREFIXES.iter().enumerate() {
         let displayed = num_bytes as f64 / 1000f64.powi(index as i32);

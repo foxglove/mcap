@@ -44,9 +44,9 @@ pub fn read_header(source: &mut dyn ByteSource) -> Result<Option<mcap::records::
 
 /// Load the MCAP summary section via [`SummaryReader`].
 ///
-/// Returns `Ok(None)` when the file has no summary section. On a remote source the summary
-/// section is capped like any other indexed read: if it exceeds the no-opt-in budget the read is
-/// refused before any of it is fetched, unless `--allow-remote-scan` was given.
+/// Returns `Ok(None)` when the file has no summary section. On a remote source the section is
+/// capped like any indexed read: over the no-opt-in budget it is refused before being fetched
+/// unless `--allow-remote-scan` was given.
 pub fn read_summary(
     source: &mut dyn ByteSource,
     source_options: SourceOptions,
@@ -80,9 +80,9 @@ pub fn read_summary(
     Ok(reader.finish())
 }
 
-/// Reads the footer (already in the remote read-ahead window after open) to learn the summary
-/// section length, and applies the remote indexed-read budget to it before [`SummaryReader`]
-/// starts fetching the section. Malformed footers are left for the reader to report.
+/// Reads the footer (already in the remote read-ahead window) for the summary length and applies
+/// the remote indexed-read budget before [`SummaryReader`] fetches anything. Malformed footers
+/// are left for the reader to report.
 fn require_remote_summary_budget(
     source: &mut dyn ByteSource,
     size: u64,
