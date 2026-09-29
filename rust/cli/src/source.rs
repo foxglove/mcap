@@ -1853,160 +1853,139 @@ mod tests {
         (buffer, channel_id)
     }
 
-    fn serve_http_with_headers(
+    // What the test server does with the request at a given 0-based index.
+    #[derive(Clone, Copy)]
+    enum ScriptedResponse {
+        // Serve the request normally from the configured body.
+        Normal,
+        // Respond with this status line and an empty body.
+        Status(&'static str),
+        // Serve the request from a different object.
+        Body(&'static [u8]),
+    }
+
+    type Script = Arc<dyn Fn(usize) -> ScriptedResponse + Send + Sync>;
+
+    // The one HTTP test server behind every `serve_http*` helper. Each request
+    // uses a fresh connection (`Connection: close`), so connections accepted ==
+    // requests, and the returned counter can be used to assert round trips.
+    struct TestHttpServer {
         body: &'static [u8],
         supports_ranges: bool,
         extra_headers: &'static [(&'static str, &'static str)],
-    ) -> String {
-        serve_http_with_options(body, supports_ranges, extra_headers, false, false, false).0
-    }
-
-    // Like `serve_http` but also returns a counter of HTTP requests received, so tests
-    // can assert how many round trips an operation makes. Each request uses a fresh
-    // connection (`Connection: close`), so connections accepted == requests.
-    fn serve_http_counting(
-        body: &'static [u8],
-        supports_ranges: bool,
-    ) -> (String, Arc<AtomicUsize>) {
-        serve_http_with_options(body, supports_ranges, &[], false, false, false)
-    }
-
-    // A server that honors bounded ranges (`bytes=S-E`) but rejects suffix ranges
-    // (`bytes=-N`) with `416`, like HTTP servers/proxies that omit the suffix form.
-    fn serve_http_bounded_only(body: &'static [u8]) -> (String, Arc<AtomicUsize>) {
-        serve_http_with_options(body, true, &[], false, false, true)
-    }
-
-    fn serve_http_status_with_range_body(
-        range_body: &'static [u8],
-        status_code: u16,
-        reason: &'static str,
-        status_body: &'static [u8],
-    ) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
-        let addr = listener.local_addr().expect("test server addr");
-        thread::spawn(move || {
-            for stream in listener.incoming().take(8) {
-                let mut stream = stream.expect("accept test connection");
-                let mut request = [0u8; 4096];
-                let read = stream.read(&mut request).expect("read request");
-                let request = String::from_utf8_lossy(&request[..read]);
-                let is_head = request.starts_with("HEAD ");
-                let has_range = request.lines().any(|line| {
-                    line.starts_with("Range: bytes=") || line.starts_with("range: bytes=")
-                });
-                if has_range {
-                    let end = range_body.len().saturating_sub(1);
-                    let response = format!(
-                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes 0-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
-                        range_body.len(),
-                        range_body.len()
-                    );
-                    stream
-                        .write_all(response.as_bytes())
-                        .expect("write range headers");
-                    if !is_head {
-                        stream.write_all(range_body).expect("write range body");
-                    }
-                } else {
-                    let response = format!(
-                        "HTTP/1.1 {status_code} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                        status_body.len()
-                    );
-                    stream
-                        .write_all(response.as_bytes())
-                        .expect("write status headers");
-                    if !is_head {
-                        stream.write_all(status_body).expect("write status body");
-                    }
-                }
-            }
-        });
-        format!("http://{addr}/demo.mcap")
-    }
-
-    fn serve_http_status(status_code: u16, reason: &'static str, body: &'static [u8]) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
-        let addr = listener.local_addr().expect("test server addr");
-        thread::spawn(move || {
-            for stream in listener.incoming().take(8) {
-                let mut stream = stream.expect("accept test connection");
-                let mut request = [0u8; 4096];
-                let read = stream.read(&mut request).expect("read request");
-                let request = String::from_utf8_lossy(&request[..read]);
-                let is_head = request.starts_with("HEAD ");
-                let response = format!(
-                    "HTTP/1.1 {status_code} {reason}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    body.len()
-                );
-                stream
-                    .write_all(response.as_bytes())
-                    .expect("write status headers");
-                if !is_head {
-                    stream.write_all(body).expect("write status body");
-                }
-            }
-        });
-        format!("http://{addr}/demo.mcap")
-    }
-
-    fn serve_http_with_options(
-        body: &'static [u8],
-        supports_ranges: bool,
-        extra_headers: &'static [(&'static str, &'static str)],
+        // Answer HEAD with 403, like servers that only allow GET.
         reject_head: bool,
         // Emit `Content-Range: bytes <start>-<end>/*` (unknown total) instead of a numeric total.
         unknown_range_total: bool,
         // Reject suffix ranges (`bytes=-N`) with `416` while still honoring bounded
         // ranges, like HTTP servers that do not implement the suffix form.
         reject_suffix: bool,
-    ) -> (String, Arc<AtomicUsize>) {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
-        let addr = listener.local_addr().expect("test server addr");
-        let request_count = Arc::new(AtomicUsize::new(0));
-        let server_request_count = request_count.clone();
-        thread::spawn(move || {
-            for stream in listener.incoming().take(64) {
-                let mut stream = stream.expect("accept test connection");
-                server_request_count.fetch_add(1, Ordering::SeqCst);
-                let mut request = [0u8; 4096];
-                let read = stream.read(&mut request).expect("read request");
-                let request = String::from_utf8_lossy(&request[..read]);
-                let is_head = request.starts_with("HEAD ");
-                if reject_head && is_head {
-                    stream
-                        .write_all(b"HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n")
-                        .expect("write HEAD rejection");
-                    continue;
-                }
-                let range_spec = request
-                    .lines()
-                    .find_map(|line| line.strip_prefix("Range: bytes="))
-                    .or_else(|| {
-                        request
-                            .lines()
-                            .find_map(|line| line.strip_prefix("range: bytes="))
-                    });
-                if reject_suffix
-                    && range_spec.is_some_and(|spec| spec.trim_start().starts_with('-'))
-                {
-                    stream
-                        .write_all(
-                            format!(
-                                "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{}\r\nConnection: close\r\n\r\n",
-                                body.len()
+        // Carried on every response. `If-Match` is then enforced the way a
+        // compliant origin would: a weak ETag never matches, a strong one must
+        // be equal.
+        etag: Option<&'static str>,
+        // Answer a resumed range (start > 0) that carries no `If-Match` with
+        // 428, so a test can prove the client pinned the ETag. Not how real
+        // servers behave: object_store's own in-stream resume sends no
+        // `If-Match` when the original request had none.
+        require_if_match: bool,
+        // Per-request behavior chosen by request index.
+        script: Option<Script>,
+        // Close the first `truncated_bodies` bodies after
+        // `truncated_len(content_len)` bytes, like a connection dropped
+        // mid-transfer.
+        truncated_bodies: usize,
+        truncated_len: fn(usize) -> usize,
+        // Status line and body for every request not served as a range (all
+        // requests when ranges are unsupported).
+        unranged_status: Option<(String, &'static [u8])>,
+    }
+
+    impl TestHttpServer {
+        fn new(body: &'static [u8]) -> Self {
+            Self {
+                body,
+                supports_ranges: true,
+                extra_headers: &[],
+                reject_head: false,
+                unknown_range_total: false,
+                reject_suffix: false,
+                etag: None,
+                require_if_match: false,
+                script: None,
+                truncated_bodies: 0,
+                truncated_len: |len| len,
+                unranged_status: None,
+            }
+        }
+
+        fn serve(self) -> (String, Arc<AtomicUsize>) {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
+            let addr = listener.local_addr().expect("test server addr");
+            let request_count = Arc::new(AtomicUsize::new(0));
+            let server_request_count = request_count.clone();
+            thread::spawn(move || {
+                let mut remaining_truncations = self.truncated_bodies;
+                for stream in listener.incoming().take(64) {
+                    let mut stream = stream.expect("accept test connection");
+                    let index = server_request_count.fetch_add(1, Ordering::SeqCst);
+                    let mut request = [0u8; 4096];
+                    let read = stream.read(&mut request).expect("read request");
+                    let request = String::from_utf8_lossy(&request[..read]);
+                    let is_head = request.starts_with("HEAD ");
+                    let header = |name: &str| {
+                        request.lines().find_map(|line| {
+                            let (key, value) = line.split_once(':')?;
+                            key.eq_ignore_ascii_case(name).then(|| value.trim())
+                        })
+                    };
+                    let write_status = |stream: &mut TcpStream, status: &str, body: &[u8]| {
+                        stream
+                            .write_all(
+                                format!(
+                                    "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                    body.len()
+                                )
+                                .as_bytes(),
                             )
-                            .as_bytes(),
-                        )
-                        .expect("write 416");
-                    continue;
-                }
-                let requested_range =
-                    range_spec
-                        .and_then(|range| range.split_once('-'))
+                            .expect("write status");
+                        if !is_head {
+                            stream.write_all(body).expect("write status body");
+                        }
+                    };
+                    let write_416 = |stream: &mut TcpStream, total: usize| {
+                        stream
+                            .write_all(
+                                format!(
+                                    "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{total}\r\nConnection: close\r\n\r\n"
+                                )
+                                .as_bytes(),
+                            )
+                            .expect("write 416");
+                    };
+
+                    if self.reject_head && is_head {
+                        write_status(&mut stream, "403 Forbidden", b"");
+                        continue;
+                    }
+                    let scripted = self
+                        .script
+                        .as_ref()
+                        .map_or(ScriptedResponse::Normal, |script| script(index));
+                    let body = match scripted {
+                        ScriptedResponse::Normal => self.body,
+                        ScriptedResponse::Body(other) => other,
+                        ScriptedResponse::Status(status) => {
+                            write_status(&mut stream, status, b"");
+                            continue;
+                        }
+                    };
+                    let range_spec = header("Range").and_then(|spec| spec.strip_prefix("bytes="));
+                    // Resolve `S-E` (bounded), `-N` (suffix), and `S-` (open ended)
+                    // to an inclusive (start, end) over the body.
+                    let requested_range = range_spec
+                        .and_then(|spec| spec.split_once('-'))
                         .and_then(|(start, end)| {
-                            // Supports `S-E` (bounded), `-N` (suffix), and `S-` (open ended)
-                            // forms, resolving each to an inclusive (start, end) over the body.
                             let len = body.len();
                             match (start.trim(), end.trim()) {
                                 ("", suffix) => {
@@ -2021,66 +2000,163 @@ mod tests {
                                 }
                             }
                         });
-                if let (true, Some((start, end))) = (supports_ranges, requested_range) {
-                    if start >= body.len() {
-                        stream
-                            .write_all(
-                                format!(
-                                    "HTTP/1.1 416 Range Not Satisfiable\r\nContent-Range: bytes */{}\r\nConnection: close\r\n\r\n",
-                                    body.len()
-                                )
-                                .as_bytes(),
-                            )
-                            .expect("write 416");
+                    if let Some(etag) = self.etag {
+                        match header("If-Match") {
+                            Some(_) if etag.starts_with("W/") => {
+                                write_status(&mut stream, "412 Precondition Failed", b"");
+                                continue;
+                            }
+                            Some(if_match) if if_match != etag => {
+                                write_status(&mut stream, "412 Precondition Failed", b"");
+                                continue;
+                            }
+                            None if self.require_if_match
+                                && requested_range.is_some_and(|(start, _)| start > 0) =>
+                            {
+                                write_status(&mut stream, "428 Precondition Required", b"");
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
+                    if self.reject_suffix
+                        && range_spec.is_some_and(|spec| spec.trim_start().starts_with('-'))
+                    {
+                        write_416(&mut stream, body.len());
                         continue;
                     }
-                    let end = end.min(body.len().saturating_sub(1));
-                    let start = start.min(end);
-                    let content = &body[start..=end];
-                    let extra_headers = extra_headers
+                    let headers = self
+                        .extra_headers
                         .iter()
                         .map(|(name, value)| format!("{name}: {value}\r\n"))
+                        .chain(self.etag.map(|etag| format!("ETag: {etag}\r\n")))
                         .collect::<String>();
-                    let total = if unknown_range_total {
-                        "*".to_string()
-                    } else {
-                        body.len().to_string()
+                    let content = match (self.supports_ranges, requested_range) {
+                        (true, Some((start, end))) => {
+                            if start >= body.len() {
+                                write_416(&mut stream, body.len());
+                                continue;
+                            }
+                            let end = end.min(body.len().saturating_sub(1));
+                            let start = start.min(end);
+                            let content = &body[start..=end];
+                            let total = if self.unknown_range_total {
+                                "*".to_string()
+                            } else {
+                                body.len().to_string()
+                            };
+                            let response = format!(
+                                "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{total}\r\nAccept-Ranges: bytes\r\n{headers}Connection: close\r\n\r\n",
+                                content.len(),
+                            );
+                            stream
+                                .write_all(response.as_bytes())
+                                .expect("write headers");
+                            content
+                        }
+                        _ => {
+                            if let Some((status, status_body)) = &self.unranged_status {
+                                write_status(&mut stream, status, status_body);
+                                continue;
+                            }
+                            let accept_ranges = if self.supports_ranges {
+                                "bytes"
+                            } else {
+                                "none"
+                            };
+                            let response = format!(
+                                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: {accept_ranges}\r\n{headers}Connection: close\r\n\r\n",
+                                body.len()
+                            );
+                            stream
+                                .write_all(response.as_bytes())
+                                .expect("write headers");
+                            body
+                        }
                     };
-                    let response = format!(
-                        "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{total}\r\nAccept-Ranges: bytes\r\n{extra_headers}Connection: close\r\n\r\n",
-                        content.len(),
-                    );
-                    stream
-                        .write_all(response.as_bytes())
-                        .expect("write headers");
-                    if !is_head {
-                        stream.write_all(content).expect("write range body");
+                    if is_head {
+                        continue;
                     }
-                } else {
-                    let accept_ranges = if supports_ranges { "bytes" } else { "none" };
-                    let extra_headers = extra_headers
-                        .iter()
-                        .map(|(name, value)| format!("{name}: {value}\r\n"))
-                        .collect::<String>();
-                    let response = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: {accept_ranges}\r\n{extra_headers}Connection: close\r\n\r\n",
-                        body.len()
-                    );
-                    stream
-                        .write_all(response.as_bytes())
-                        .expect("write headers");
-                    if !is_head {
-                        stream.write_all(body).expect("write body");
+                    if remaining_truncations > 0 {
+                        remaining_truncations -= 1;
+                        // Fewer bytes than Content-Length promised: the client
+                        // sees a body error.
+                        stream
+                            .write_all(&content[..(self.truncated_len)(content.len())])
+                            .expect("write truncated body");
+                        continue;
                     }
+                    stream.write_all(content).expect("write body");
                 }
-            }
-        });
-        (format!("http://{addr}/demo.mcap"), request_count)
+            });
+            (format!("http://{addr}/demo.mcap"), request_count)
+        }
     }
 
-    // A range-supporting server that truncates the first `truncated_bodies` GET
-    // bodies to `truncated_len` of the promised length, like a connection dropped
-    // mid-transfer.
+    fn serve_http_with_headers(
+        body: &'static [u8],
+        supports_ranges: bool,
+        extra_headers: &'static [(&'static str, &'static str)],
+    ) -> String {
+        TestHttpServer {
+            supports_ranges,
+            extra_headers,
+            ..TestHttpServer::new(body)
+        }
+        .serve()
+        .0
+    }
+
+    // Like `serve_http` but also returns the request counter.
+    fn serve_http_counting(
+        body: &'static [u8],
+        supports_ranges: bool,
+    ) -> (String, Arc<AtomicUsize>) {
+        TestHttpServer {
+            supports_ranges,
+            ..TestHttpServer::new(body)
+        }
+        .serve()
+    }
+
+    // A server that honors bounded ranges (`bytes=S-E`) but rejects suffix ranges
+    // (`bytes=-N`) with `416`, like HTTP servers/proxies that omit the suffix form.
+    fn serve_http_bounded_only(body: &'static [u8]) -> (String, Arc<AtomicUsize>) {
+        TestHttpServer {
+            reject_suffix: true,
+            ..TestHttpServer::new(body)
+        }
+        .serve()
+    }
+
+    // Serve `range_body` for range requests and `status` for everything else,
+    // like an object that is readable through ranges but whose HEAD or
+    // unranged GET fails.
+    fn serve_http_status_with_range_body(
+        range_body: &'static [u8],
+        status_code: u16,
+        reason: &'static str,
+        status_body: &'static [u8],
+    ) -> String {
+        TestHttpServer {
+            unranged_status: Some((format!("{status_code} {reason}"), status_body)),
+            ..TestHttpServer::new(range_body)
+        }
+        .serve()
+        .0
+    }
+
+    // Answer every request with `status_code`.
+    fn serve_http_status(status_code: u16, reason: &'static str, body: &'static [u8]) -> String {
+        TestHttpServer {
+            supports_ranges: false,
+            unranged_status: Some((format!("{status_code} {reason}"), body)),
+            ..TestHttpServer::new(b"")
+        }
+        .serve()
+        .0
+    }
+
     // A range-supporting server that closes the first `truncated_bodies` GET
     // bodies after `truncated_len(content_len)` bytes. With an `etag`, every
     // response carries it, which switches on object_store's own in-stream
@@ -2091,88 +2167,13 @@ mod tests {
         truncated_bodies: usize,
         truncated_len: fn(usize) -> usize,
     ) -> (String, Arc<AtomicUsize>) {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
-        let addr = listener.local_addr().expect("test server addr");
-        let request_count = Arc::new(AtomicUsize::new(0));
-        let server_request_count = request_count.clone();
-        let etag_header = etag
-            .map(|etag| format!("ETag: {etag}\r\n"))
-            .unwrap_or_default();
-        thread::spawn(move || {
-            let mut remaining_truncations = truncated_bodies;
-            for stream in listener.incoming().take(64) {
-                let mut stream = stream.expect("accept test connection");
-                server_request_count.fetch_add(1, Ordering::SeqCst);
-                let mut request = [0u8; 4096];
-                let read = stream.read(&mut request).expect("read request");
-                let request = String::from_utf8_lossy(&request[..read]);
-                let is_head = request.starts_with("HEAD ");
-                let range = request
-                    .lines()
-                    .find_map(|line| line.strip_prefix("Range: bytes="))
-                    .or_else(|| {
-                        request
-                            .lines()
-                            .find_map(|line| line.strip_prefix("range: bytes="))
-                    })
-                    .and_then(|spec| spec.split_once('-'))
-                    .and_then(|(start, end)| {
-                        Some((
-                            start.trim().parse::<usize>().ok()?,
-                            end.trim().parse::<usize>().ok()?,
-                        ))
-                    });
-                let Some((start, end)) = range else {
-                    let response = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n{etag_header}Accept-Ranges: bytes\r\nConnection: close\r\n\r\n",
-                        body.len()
-                    );
-                    stream
-                        .write_all(response.as_bytes())
-                        .expect("write headers");
-                    if !is_head {
-                        stream.write_all(body).expect("write body");
-                    }
-                    continue;
-                };
-                let end = end.min(body.len().saturating_sub(1));
-                let start = start.min(end);
-                let content = &body[start..=end];
-                let response = format!(
-                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\n{etag_header}Accept-Ranges: bytes\r\nConnection: close\r\n\r\n",
-                    content.len(),
-                    body.len(),
-                );
-                stream
-                    .write_all(response.as_bytes())
-                    .expect("write headers");
-                if is_head {
-                    continue;
-                }
-                if remaining_truncations > 0 {
-                    remaining_truncations -= 1;
-                    // Fewer bytes than Content-Length promised: the client
-                    // sees a body error.
-                    stream
-                        .write_all(&content[..truncated_len(content.len())])
-                        .expect("write truncated body");
-                    continue;
-                }
-                stream.write_all(content).expect("write body");
-            }
-        });
-        (format!("http://{addr}/demo.mcap"), request_count)
-    }
-
-    // What `serve_http_scripted` does with the request at a given index.
-    #[derive(Clone, Copy)]
-    enum ScriptedResponse {
-        // Serve the requested range of the configured body.
-        Normal,
-        // Respond with this status line and an empty body.
-        Status(&'static str),
-        // Serve the requested range of a different object.
-        Body(&'static [u8]),
+        TestHttpServer {
+            etag,
+            truncated_bodies,
+            truncated_len,
+            ..TestHttpServer::new(body)
+        }
+        .serve()
     }
 
     // A range-supporting server that responds to the 0-based `failing_index`th
@@ -2192,110 +2193,18 @@ mod tests {
     }
 
     // A range-supporting server whose response to each request is chosen by
-    // `script`. With an `etag`, every response carries it and `If-Match` is
-    // enforced the way a compliant origin would: a weak ETag never matches, a
-    // strong one must be equal. A strong ETag also *requires* `If-Match` on
-    // resumed ranges (428) so tests can prove the client pinned it.
+    // `script`; see `TestHttpServer::etag` for how an ETag is enforced.
     fn serve_http_scripted(
         body: &'static [u8],
         etag: Option<&'static str>,
-        script: impl Fn(usize) -> ScriptedResponse + Send + 'static,
+        script: impl Fn(usize) -> ScriptedResponse + Send + Sync + 'static,
     ) -> (String, Arc<AtomicUsize>) {
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
-        let addr = listener.local_addr().expect("test server addr");
-        let request_count = Arc::new(AtomicUsize::new(0));
-        let server_request_count = request_count.clone();
-        thread::spawn(move || {
-            for stream in listener.incoming().take(64) {
-                let mut stream = stream.expect("accept test connection");
-                let index = server_request_count.fetch_add(1, Ordering::SeqCst);
-                let mut request = [0u8; 4096];
-                let read = stream.read(&mut request).expect("read request");
-                let request = String::from_utf8_lossy(&request[..read]);
-                let is_head = request.starts_with("HEAD ");
-                let header = |name: &str| {
-                    request.lines().find_map(|line| {
-                        let (key, value) = line.split_once(':')?;
-                        key.eq_ignore_ascii_case(name).then(|| value.trim())
-                    })
-                };
-                let etag_header = etag
-                    .map(|etag| format!("ETag: {etag}\r\n"))
-                    .unwrap_or_default();
-                let write_status = |stream: &mut TcpStream, status: &str| {
-                    stream
-                        .write_all(
-                            format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
-                                .as_bytes(),
-                        )
-                        .expect("write failure status");
-                };
-                let body = match script(index) {
-                    ScriptedResponse::Normal => body,
-                    ScriptedResponse::Body(other) => other,
-                    ScriptedResponse::Status(status) => {
-                        write_status(&mut stream, status);
-                        continue;
-                    }
-                };
-                let range = header("Range")
-                    .and_then(|spec| spec.strip_prefix("bytes="))
-                    .and_then(|spec| spec.split_once('-'))
-                    .and_then(|(start, end)| {
-                        Some((
-                            start.trim().parse::<usize>().ok()?,
-                            end.trim().parse::<usize>().ok()?,
-                        ))
-                    });
-                if let Some(etag) = etag {
-                    match header("If-Match") {
-                        Some(_) if etag.starts_with("W/") => {
-                            write_status(&mut stream, "412 Precondition Failed");
-                            continue;
-                        }
-                        Some(if_match) if if_match != etag => {
-                            write_status(&mut stream, "412 Precondition Failed");
-                            continue;
-                        }
-                        None if !etag.starts_with("W/")
-                            && range.is_some_and(|(start, _)| start > 0) =>
-                        {
-                            write_status(&mut stream, "428 Precondition Required");
-                            continue;
-                        }
-                        _ => {}
-                    }
-                }
-                let Some((start, end)) = range else {
-                    let response = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n{etag_header}Accept-Ranges: bytes\r\nConnection: close\r\n\r\n",
-                        body.len()
-                    );
-                    stream
-                        .write_all(response.as_bytes())
-                        .expect("write headers");
-                    if !is_head {
-                        stream.write_all(body).expect("write body");
-                    }
-                    continue;
-                };
-                let end = end.min(body.len().saturating_sub(1));
-                let start = start.min(end);
-                let content = &body[start..=end];
-                let response = format!(
-                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\n{etag_header}Accept-Ranges: bytes\r\nConnection: close\r\n\r\n",
-                    content.len(),
-                    body.len(),
-                );
-                stream
-                    .write_all(response.as_bytes())
-                    .expect("write headers");
-                if !is_head {
-                    stream.write_all(content).expect("write body");
-                }
-            }
-        });
-        (format!("http://{addr}/demo.mcap"), request_count)
+        TestHttpServer {
+            etag,
+            script: Some(Arc::new(script)),
+            ..TestHttpServer::new(body)
+        }
+        .serve()
     }
 
     #[test]
@@ -2554,8 +2463,12 @@ mod tests {
     fn remote_http_download_pins_strong_etag_on_resume() {
         let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
         // The server answers 428 to any resumed range without If-Match.
-        let (url, requests) =
-            serve_http_scripted(body, Some("\"v1\""), |_| ScriptedResponse::Normal);
+        let (url, requests) = TestHttpServer {
+            etag: Some("\"v1\""),
+            require_if_match: true,
+            ..TestHttpServer::new(body)
+        }
+        .serve();
         let mut out = Vec::new();
         let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
             .expect("open download source");
@@ -2571,8 +2484,11 @@ mod tests {
         let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
         // A compliant server never matches a weak ETag under If-Match, so
         // sending it would 412 every resume.
-        let (url, requests) =
-            serve_http_scripted(body, Some("W/\"v1\""), |_| ScriptedResponse::Normal);
+        let (url, requests) = TestHttpServer {
+            etag: Some("W/\"v1\""),
+            ..TestHttpServer::new(body)
+        }
+        .serve();
         let mut out = Vec::new();
         let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
             .expect("open download source");
@@ -2783,7 +2699,11 @@ mod tests {
         // assumption documented in `read_summary_tail`.
         let (buffer, _) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let (url, _requests) = serve_http_with_options(body, true, &[], false, true, false);
+        let (url, _requests) = TestHttpServer {
+            unknown_range_total: true,
+            ..TestHttpServer::new(body)
+        }
+        .serve();
         let err =
             match super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default()) {
                 Ok(_) => panic!("unknown range total should surface as an error, not a bogus size"),
@@ -3153,7 +3073,11 @@ mod tests {
     fn remote_mcap_summary_uses_range_get_when_head_is_rejected() {
         let (buffer, channel_id) = summary_mcap_with_channel();
         let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
-        let (url, _requests) = serve_http_with_options(body, true, &[], true, false, false);
+        let (url, _requests) = TestHttpServer {
+            reject_head: true,
+            ..TestHttpServer::new(body)
+        }
+        .serve();
         let remote = super::try_open_remote_mcap(Path::new(&url), super::SourceOptions::default())
             .expect("remote summary should use range GET, not HEAD")
             .expect("summary should be present");
