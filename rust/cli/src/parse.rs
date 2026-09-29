@@ -48,7 +48,8 @@ pub(crate) fn parsed_mcap_from_summary_section(
     Ok(out)
 }
 
-/// Convert a library [`mcap::Summary`] (from [`SummaryReader`] / [`ByteSource`]) into [`ParsedMcap`].
+/// Convert a library [`mcap::Summary`] (from [`SummaryReader`] / [`ByteSource`]) into
+/// [`ParsedMcap`].
 pub(crate) fn parsed_mcap_from_library_summary(
     header: Option<records::Header>,
     summary: &mcap::Summary,
@@ -90,9 +91,8 @@ pub(crate) fn parsed_mcap_from_library_summary(
     out
 }
 
-/// Parses a seekable local (or spooled) input: the summary section when present, else a linear
-/// scan. With `scan_data_without_statistics`, a summary that lacks a statistics record also
-/// triggers the scan so message counts and time bounds can be derived.
+/// Parses a seekable input: the summary when present, else a linear scan. With
+/// `scan_data_without_statistics`, a summary lacking statistics also triggers the scan.
 pub(crate) fn parse_mcap_from_byte_source(
     source: &mut dyn crate::byte_source::ByteSource,
     options: crate::source::SourceOptions,
@@ -496,8 +496,7 @@ fn collect_definition_record(
     }
 }
 
-/// Test helper: reads the leading header record of an in-memory MCAP through the production
-/// [`ByteSource`] driver.
+/// Test helper: reads the leading header record of in-memory bytes via the production driver.
 #[cfg(test)]
 pub(crate) fn read_header_from_bytes(mcap: &[u8]) -> Result<Option<records::Header>> {
     crate::byte_source::read_header(&mut crate::byte_source::MemorySource::new(mcap.to_vec()))
@@ -821,8 +820,8 @@ mod tests {
             (schema_id, channel_id)
         };
 
-        // SummaryReader rejects the summary (UnknownSchema), so this exercises the fallback to
-        // parsing the raw summary section rather than a linear scan.
+        // SummaryReader rejects this summary (UnknownSchema), exercising the raw-section fallback
+        // rather than a linear scan.
         let parsed = try_parsed_mcap_from_summary(
             &mut MemorySource::new(buffer.clone()),
             None,

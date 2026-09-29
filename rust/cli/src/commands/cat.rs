@@ -222,9 +222,8 @@ fn cat_indexed(
     let summary = match byte_source::read_summary(source, source_options) {
         Ok(Some(summary)) => summary,
         Ok(None) => return Ok(IndexedCatResult::NeedsLinear),
-        // A spec-valid file may repeat a channel in the summary without repeating its schema,
-        // leaving the schema defined only inside a chunk. That can't be resolved from the summary
-        // alone, so fall back to a linear scan, which registers in-chunk definitions as it reads.
+        // A summary may repeat a channel without its schema (defined only inside a chunk), which
+        // the summary alone cannot resolve; a linear scan registers in-chunk definitions.
         Err(err)
             if err.chain().any(|cause| {
                 cause
@@ -236,8 +235,8 @@ fn cat_indexed(
         }
         Err(err) => return Err(err),
     };
-    // Record channel topics (including zero-message channels) so an absent CSV topic can be
-    // reported as an error rather than a silently empty export.
+    // Record channel topics (even with zero messages) so an absent CSV topic errors instead of
+    // exporting silently empty.
     if matches!(opts.mode, OutputMode::Csv) {
         out.csv.seen_topics.extend(
             summary
@@ -496,8 +495,7 @@ fn cat_linear(
     let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
     let mut broken_pipe = false;
 
-    // Stop the scan as soon as the output pipe breaks so `cat big.mcap | head` does not keep
-    // reading and decompressing (or, for remote inputs, fetching) the rest of the file.
+    // Break on a broken pipe so `cat big.mcap | head` stops reading (or, for remotes, fetching).
     byte_source::try_for_each_linear_record(
         source,
         mcap::sans_io::LinearReaderOptions::default(),

@@ -160,8 +160,8 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
         }
     }
 
-    // A merge reads message data from every input, so a remote input always needs the scan
-    // opt-in. Refuse from the paths alone, before opening any source, so no request is sent.
+    // A merge reads message data from every input, so remote inputs need the scan opt-in. Refuse
+    // from the paths before opening any source, so no request is sent.
     for path in opts.files.iter().filter(|path| source::is_remote_url(path)) {
         source::require_remote_scan_allowed(path, source_options)?;
     }
@@ -219,10 +219,10 @@ fn merge_inputs<W: Write + Seek>(
         .map(|source| {
             match byte_source::read_summary(source.as_mut(), source_options) {
                 Ok(summary) => Ok(summary),
-                // A remote input without scan opt-in cannot fall back to a linear scan, so
-                // surface the summary error (for example the summary-size cap) as-is.
+                // A remote input without opt-in cannot fall back to a linear scan, so surface the
+                // summary error (e.g. the summary-size cap).
                 Err(err) if source.is_remote() && !source_options.allow_remote_scan => Err(err),
-                // Otherwise treat summary lookup as best effort and fall back to a linear scan.
+                // Otherwise summary lookup is best effort; fall back to a linear scan.
                 Err(_) => Ok(None),
             }
         })
@@ -1069,8 +1069,8 @@ mod tests {
 
     #[test]
     fn run_rejects_remote_input_without_scan_opt_in() {
-        // The refusal comes from the path alone: no host is contacted, so an unroutable
-        // address must still produce the opt-in error rather than a connection error.
+        // Refused from the path alone: no host is contacted, so even an unroutable address yields
+        // the opt-in error, not a connection error.
         let err = run(
             merge_options(
                 vec!["http://127.0.0.1:1/a.mcap".into()],

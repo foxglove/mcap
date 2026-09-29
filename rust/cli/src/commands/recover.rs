@@ -124,8 +124,7 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome>
     if let (Some(input), Some(output)) = (args.file.as_deref(), args.output.as_deref()) {
         source::ensure_distinct_local_input_output(input, output)?;
     }
-    // Path / URL / stdin all go through ByteSource. Stdin is spooled to a tempfile;
-    // remote inputs use range reads (or a full spool when ranges are unavailable).
+    // Path, URL, and stdin all go through ByteSource (stdin spooled; remotes ranged or spooled).
     let mut input = byte_source::open_byte_source(args.file.as_deref(), source_options)?;
     source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
     let compression = resolve_compression(&args.compression)?;

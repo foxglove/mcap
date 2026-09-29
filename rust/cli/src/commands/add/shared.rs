@@ -74,9 +74,8 @@ pub(crate) fn amend_mcap_file(
 
     let backup_path = make_tail_backup_path(file)?;
     let (layout, mut existing_summary) = {
-        // Bounded reads only: the head magic, the footer and data end records, and the summary
-        // section. Summaryless files are scanned as a stream to recover schemas and channels.
-        // The whole file is never held in memory.
+        // Bounded reads only: head magic, footer, data end record, and summary section. Summaryless
+        // files are scanned as a stream. The whole file is never held in memory.
         let mut source = LocalFileSource::open_path(file)?;
         read_existing(&mut source)?
     };
@@ -229,8 +228,8 @@ to restore manually: truncate '{}' to {} bytes and append the backup file conten
     }
 }
 
-/// Copies `[tail_start, EOF)` of `file` (the old data end record, summary, and footer) to
-/// `backup_path` so a failed in-place update can be restored by hand.
+/// Copies `[tail_start, EOF)` (old data end, summary, footer) to `backup_path` so a failed
+/// in-place update can be restored by hand.
 fn write_tail_backup(file: &Path, tail_start: u64, backup_path: &Path) -> Result<()> {
     let mut input =
         fs::File::open(file).with_context(|| format!("failed to open '{}'", file.display()))?;
@@ -354,9 +353,8 @@ fn amend_mcap_bytes(
     Ok(output)
 }
 
-/// Everything the amend needs from the existing file: the layout from the footer and data end
-/// records, and the summary contents. Only the head magic, the file tail, and the summary
-/// section are read for indexed files; summaryless files are scanned as a stream.
+/// The layout (from the footer and data end records) and summary contents the amend needs.
+/// Indexed files read only the head magic, tail, and summary; summaryless files stream a scan.
 fn read_existing(source: &mut dyn ByteSource) -> Result<(ExistingLayout, ExistingSummaryData)> {
     let layout = parse_existing_layout(source)?;
     let summary = collect_existing_summary(source)?;
@@ -368,8 +366,7 @@ fn parse_existing_layout(source: &mut dyn ByteSource) -> Result<ExistingLayout> 
     let size = source
         .size()?
         .context("input size is unknown; add requires a seekable local file")?;
-    // An MCAP must be at least large enough for a header magic, a footer record, and a footer
-    // magic.
+    // Minimum size: header magic, footer record, footer magic.
     let footer_start = size
         .checked_sub(2 * magic_len + FOOTER_RECORD_LEN)
         .context("input is too short to contain a footer")?
@@ -504,11 +501,9 @@ fn collect_existing_summary(source: &mut dyn ByteSource) -> Result<ExistingSumma
     }
 
     let mut data = ExistingSummaryData::default();
-    // Summaryless files do not contain summary index records in practice.
-    // This streaming linear scan (descending into chunks, one record in memory
-    // at a time) can recover schema/channel definitions from data records, but
-    // cannot synthesize attachment/metadata/chunk index offsets for
-    // pre-existing records without offset-aware parsing.
+    // Summaryless files have no index records. This streaming scan (descending into chunks, one
+    // record in memory at a time) recovers schema/channel definitions but cannot synthesize
+    // attachment/metadata/chunk index offsets without offset-aware parsing.
     byte_source::for_each_linear_record(source, LinearReaderOptions::default(), |opcode, body| {
         let record = mcap::parse_record(opcode, body).context("failed to parse MCAP record")?;
         collect_record(&mut data, record)

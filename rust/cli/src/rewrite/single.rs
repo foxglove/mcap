@@ -19,8 +19,8 @@ pub(crate) fn run(args: RewriteOptions, source_options: SourceOptions) -> Result
     if let (Some(input), Some(output)) = (args.file.as_deref(), opts.output.as_deref()) {
         source::ensure_distinct_local_input_output(input, output)?;
     }
-    // A rewrite reads message data, so a remote input always needs the scan opt-in. Refuse from
-    // the path alone, before opening the source, so no request is sent (as main did).
+    // A rewrite reads message data, so a remote input needs the scan opt-in. Refuse from the path
+    // before opening the source, so no request is sent.
     if let Some(path) = args
         .file
         .as_deref()
@@ -41,9 +41,8 @@ fn filter_to_writer<W: Write + Seek>(
     disable_seeking: bool,
     source_options: SourceOptions,
 ) -> Result<()> {
-    // Both the indexed and the linear path read message data from the source, so a remote input
-    // without opt-in is refused before the header read, the summary read, or the message-index
-    // probe issues any range request.
+    // Both paths read message data, so a remote input without opt-in is refused before the header
+    // read, summary read, or message-index probe issues any request.
     common::require_remote_scan_for_chunks(input, source_options)?;
     let profile = common::read_header(input)?
         .map(|header| header.profile)
