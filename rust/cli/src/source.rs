@@ -3332,4 +3332,26 @@ mod tests {
         require_remote_indexed_read_budget(&remote, over_cap, opt_in, "remote attachment record")
             .expect("--allow-remote-scan lifts the cap");
     }
+
+    #[test]
+    fn remote_summary_read_reuses_prefetched_tail() {
+        let (buffer, channel_id) = summary_mcap_with_channel();
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let (url, requests) = serve_http_counting(body, true);
+        let mut source =
+            crate::byte_source::open_byte_source(Path::new(&url), super::SourceOptions::default())
+                .expect("remote open");
+        let after_open = requests.load(Ordering::SeqCst);
+        assert_eq!(after_open, 1, "open should cost exactly the tail prefetch");
+
+        let summary = crate::byte_source::read_summary(source.as_mut())
+            .expect("remote summary read")
+            .expect("summary should be present");
+        assert!(summary.channels.contains_key(&channel_id));
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            after_open,
+            "the summary should be served from the prefetched tail without another request"
+        );
+    }
 }
