@@ -2484,7 +2484,10 @@ mod tests {
         .serve();
         let mut source =
             super::ObjectStoreSource::open_for_download(Path::new(&url)).expect("open source");
-        source.response_timeout = std::time::Duration::from_millis(200);
+        // Generous enough that the retried request's normal response cannot
+        // miss the timeout on a loaded CI runner; the hung first request still
+        // decides the outcome.
+        source.response_timeout = std::time::Duration::from_secs(2);
         let bytes = source
             .get_range(0..8)
             .expect("a hung response head should be retried");
