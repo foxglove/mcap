@@ -395,9 +395,14 @@ pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<Material
     let mut temp_file = builder
         .tempfile()
         .context("failed to create temporary remote input file")?;
-    read_remote_input_to_writer(path, temp_file.as_file_mut())?;
-    std::io::Write::flush(temp_file.as_file_mut())
+    // Downloads arrive as many small network frames; buffer them so the
+    // temp file sees large writes instead of one syscall per frame.
+    let mut writer = std::io::BufWriter::new(temp_file.as_file_mut());
+    read_remote_input_to_writer(path, &mut writer)?;
+    writer
+        .flush()
         .context("failed to flush temporary remote input file")?;
+    drop(writer);
     Ok(MaterializedInput {
         temp_file: Some(temp_file),
         local_path: None,
@@ -793,7 +798,14 @@ impl ObjectStoreSource {
         chunk_bytes: u64,
     ) -> Result<()> {
         let total = first.meta.size;
-        let etag = first.meta.e_tag.clone();
+        // If-Match uses strong comparison (RFC 9110 §13.1.1), so a weak ETag
+        // (`W/"..."`) would fail every resume with 412; fall back to the size
+        // check below instead of pinning it.
+        let if_match = first
+            .meta
+            .e_tag
+            .clone()
+            .filter(|etag| !etag.starts_with("W/"));
         let mut progress = DownloadProgress::new(total);
         let mut offset = 0u64;
         let mut pending = Some(first);
@@ -803,7 +815,7 @@ impl ObjectStoreSource {
                 Some(response) => Ok(response),
                 None => {
                     let end = offset.saturating_add(chunk_bytes).min(total);
-                    self.resume_chunk_get(offset..end, &etag)
+                    self.resume_chunk_get(offset..end, &if_match, total)
                 }
             };
             let err = match response {
@@ -844,19 +856,30 @@ impl ObjectStoreSource {
         Ok(())
     }
 
-    /// Issue the ranged GET that resumes a chunked download at `range`. Failures
-    /// are retryable except a precondition failure: the pinned ETag no longer
-    /// matches, so every retry would fail the same way.
+    /// Issue the ranged GET that resumes a chunked download at `range`.
+    /// Failures are retryable except those that would fail identically on
+    /// every retry: the pinned ETag no longer matches (412), the object has
+    /// changed size since the first response, or the object is gone or no
+    /// longer readable (404/401/403).
     fn resume_chunk_get(
         &self,
         range: std::ops::Range<u64>,
-        etag: &Option<String>,
+        if_match: &Option<String>,
+        expected_size: u64,
     ) -> std::result::Result<object_store::GetResult, DownloadError> {
         match self.get_opts_for_download(GetOptions {
             range: Some(GetRange::Bounded(range)),
-            if_match: etag.clone(),
+            if_match: if_match.clone(),
             ..GetOptions::default()
         }) {
+            Ok(Ok(response)) if response.meta.size != expected_size => {
+                Err(DownloadError::Fatal(anyhow::anyhow!(
+                    "failed to read {}: remote object changed while downloading (size {} -> {})",
+                    self.display_url,
+                    expected_size,
+                    response.meta.size
+                )))
+            }
             Ok(Ok(response)) => Ok(response),
             Ok(Err(object_store::Error::Precondition { .. })) => {
                 Err(DownloadError::Fatal(anyhow::anyhow!(
@@ -864,6 +887,15 @@ impl ObjectStoreSource {
                     self.display_url
                 )))
             }
+            Ok(Err(
+                err @ (object_store::Error::NotFound { .. }
+                | object_store::Error::PermissionDenied { .. }
+                | object_store::Error::Unauthenticated { .. }),
+            )) => Err(DownloadError::Fatal(concise_remote_operation_error(
+                "reading remote input from",
+                &self.display_url,
+                err,
+            ))),
             Ok(Err(err)) => Err(DownloadError::Retryable(concise_remote_operation_error(
                 "reading remote input from",
                 &self.display_url,
@@ -938,7 +970,8 @@ impl ObjectStoreSource {
 
 // How a download GET failed: `Retryable` failures (network errors, stalls)
 // leave the object re-fetchable from the current offset; `Fatal` ones (local
-// write errors, ETag mismatch) would fail identically on retry.
+// write errors, a changed or no longer readable object) would fail
+// identically on retry.
 enum DownloadError {
     Retryable(anyhow::Error),
     Fatal(anyhow::Error),
@@ -1539,7 +1572,7 @@ fn read_header_from_seekable(
 mod tests {
     use std::collections::BTreeMap;
     use std::io::{Read, Seek, SeekFrom, Write};
-    use std::net::TcpListener;
+    use std::net::{TcpListener, TcpStream};
     use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
@@ -2002,12 +2035,42 @@ mod tests {
         (format!("http://{addr}/demo.mcap"), request_count)
     }
 
+    // What `serve_http_scripted` does with the request at a given index.
+    #[derive(Clone, Copy)]
+    enum ScriptedResponse {
+        // Serve the requested range of the configured body.
+        Normal,
+        // Respond with this status line and an empty body.
+        Status(&'static str),
+        // Serve the requested range of a different object.
+        Body(&'static [u8]),
+    }
+
     // A range-supporting server that responds to the 0-based `failing_index`th
     // request with `status` and serves every other request normally.
     fn serve_http_failing_request(
         body: &'static [u8],
         failing_index: usize,
         status: &'static str,
+    ) -> (String, Arc<AtomicUsize>) {
+        serve_http_scripted(body, None, move |index| {
+            if index == failing_index {
+                ScriptedResponse::Status(status)
+            } else {
+                ScriptedResponse::Normal
+            }
+        })
+    }
+
+    // A range-supporting server whose response to each request is chosen by
+    // `script`. With an `etag`, every response carries it and `If-Match` is
+    // enforced the way a compliant origin would: a weak ETag never matches, a
+    // strong one must be equal. A strong ETag also *requires* `If-Match` on
+    // resumed ranges (428) so tests can prove the client pinned it.
+    fn serve_http_scripted(
+        body: &'static [u8],
+        etag: Option<&'static str>,
+        script: impl Fn(usize) -> ScriptedResponse + Send + 'static,
     ) -> (String, Arc<AtomicUsize>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
         let addr = listener.local_addr().expect("test server addr");
@@ -2021,23 +2084,33 @@ mod tests {
                 let read = stream.read(&mut request).expect("read request");
                 let request = String::from_utf8_lossy(&request[..read]);
                 let is_head = request.starts_with("HEAD ");
-                if index == failing_index {
+                let header = |name: &str| {
+                    request.lines().find_map(|line| {
+                        let (key, value) = line.split_once(':')?;
+                        key.eq_ignore_ascii_case(name).then(|| value.trim())
+                    })
+                };
+                let etag_header = etag
+                    .map(|etag| format!("ETag: {etag}\r\n"))
+                    .unwrap_or_default();
+                let write_status = |stream: &mut TcpStream, status: &str| {
                     stream
                         .write_all(
                             format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
                                 .as_bytes(),
                         )
                         .expect("write failure status");
-                    continue;
-                }
-                let range = request
-                    .lines()
-                    .find_map(|line| line.strip_prefix("Range: bytes="))
-                    .or_else(|| {
-                        request
-                            .lines()
-                            .find_map(|line| line.strip_prefix("range: bytes="))
-                    })
+                };
+                let body = match script(index) {
+                    ScriptedResponse::Normal => body,
+                    ScriptedResponse::Body(other) => other,
+                    ScriptedResponse::Status(status) => {
+                        write_status(&mut stream, status);
+                        continue;
+                    }
+                };
+                let range = header("Range")
+                    .and_then(|spec| spec.strip_prefix("bytes="))
                     .and_then(|spec| spec.split_once('-'))
                     .and_then(|(start, end)| {
                         Some((
@@ -2045,9 +2118,28 @@ mod tests {
                             end.trim().parse::<usize>().ok()?,
                         ))
                     });
+                if let Some(etag) = etag {
+                    match header("If-Match") {
+                        Some(_) if etag.starts_with("W/") => {
+                            write_status(&mut stream, "412 Precondition Failed");
+                            continue;
+                        }
+                        Some(if_match) if if_match != etag => {
+                            write_status(&mut stream, "412 Precondition Failed");
+                            continue;
+                        }
+                        None if !etag.starts_with("W/")
+                            && range.is_some_and(|(start, _)| start > 0) =>
+                        {
+                            write_status(&mut stream, "428 Precondition Required");
+                            continue;
+                        }
+                        _ => {}
+                    }
+                }
                 let Some((start, end)) = range else {
                     let response = format!(
-                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n{etag_header}Accept-Ranges: bytes\r\nConnection: close\r\n\r\n",
                         body.len()
                     );
                     stream
@@ -2062,7 +2154,7 @@ mod tests {
                 let start = start.min(end);
                 let content = &body[start..=end];
                 let response = format!(
-                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
+                    "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\n{etag_header}Accept-Ranges: bytes\r\nConnection: close\r\n\r\n",
                     content.len(),
                     body.len(),
                 );
@@ -2186,8 +2278,9 @@ mod tests {
     #[test]
     fn remote_http_download_retries_transient_resume_head_failure() {
         let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
-        // The second connection is the first resume GET; fail its head request.
-        let (url, requests) = serve_http_failing_request(body, 1, "404 Not Found");
+        // The second connection is the first resume GET; fail its head request
+        // with a status object_store neither classifies nor retries itself.
+        let (url, requests) = serve_http_failing_request(body, 1, "425 Too Early");
         let mut out = Vec::new();
         let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
             .expect("open download source");
@@ -2200,6 +2293,94 @@ mod tests {
             6,
             "five range requests plus one retried head failure"
         );
+    }
+
+    #[test]
+    fn remote_http_download_aborts_on_permanent_resume_head_failure() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        for status in ["404 Not Found", "403 Forbidden", "401 Unauthorized"] {
+            let (url, requests) = serve_http_failing_request(body, 1, status);
+            let mut out = Vec::new();
+            let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+                .expect("open download source");
+            let err = source
+                .download_to_writer(&mut out, 8)
+                .expect_err("a permanent resume head failure should abort the download");
+            let code = status.split(' ').next().unwrap();
+            assert!(
+                format!("{err:#}").contains(code),
+                "error for {status} should name the status: {err:#}"
+            );
+            assert_eq!(
+                requests.load(Ordering::SeqCst),
+                2,
+                "{status} should not be retried"
+            );
+        }
+    }
+
+    #[test]
+    fn remote_http_download_aborts_when_object_size_changes_mid_download() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let replaced: &'static [u8] = b"a different object entirely";
+        // No ETag, so nothing pins the object: the size check is the only
+        // guard against splicing two objects together.
+        let (url, requests) = serve_http_scripted(body, None, move |index| {
+            if index == 1 {
+                ScriptedResponse::Body(replaced)
+            } else {
+                ScriptedResponse::Normal
+            }
+        });
+        let mut out = Vec::new();
+        let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+            .expect("open download source");
+        let err = source
+            .download_to_writer(&mut out, 8)
+            .expect_err("a size change should abort the download");
+        assert!(
+            err.to_string().contains("remote object changed"),
+            "unexpected error: {err:#}"
+        );
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            2,
+            "a size change should not be retried"
+        );
+        assert_eq!(out, &body[..8], "nothing from the new object is written");
+    }
+
+    #[test]
+    fn remote_http_download_pins_strong_etag_on_resume() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        // The server answers 428 to any resumed range without If-Match.
+        let (url, requests) =
+            serve_http_scripted(body, Some("\"v1\""), |_| ScriptedResponse::Normal);
+        let mut out = Vec::new();
+        let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+            .expect("open download source");
+        source
+            .download_to_writer(&mut out, 8)
+            .expect("resumes should carry the strong ETag in If-Match");
+        assert_eq!(out, body);
+        assert_eq!(requests.load(Ordering::SeqCst), 5);
+    }
+
+    #[test]
+    fn remote_http_download_does_not_pin_weak_etag_on_resume() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        // A compliant server never matches a weak ETag under If-Match, so
+        // sending it would 412 every resume.
+        let (url, requests) =
+            serve_http_scripted(body, Some("W/\"v1\""), |_| ScriptedResponse::Normal);
+        let mut out = Vec::new();
+        let source = super::ObjectStoreSource::open_for_download(Path::new(&url))
+            .expect("open download source");
+        source
+            .download_to_writer(&mut out, 8)
+            .expect("resumes must not send a weak ETag in If-Match");
+        assert_eq!(out, body);
+        assert_eq!(requests.load(Ordering::SeqCst), 5);
     }
 
     #[test]
