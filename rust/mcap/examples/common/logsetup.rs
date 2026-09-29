@@ -1,3 +1,5 @@
+use std::io::IsTerminal;
+
 use anyhow::*;
 use simplelog::*;
 
@@ -29,7 +31,7 @@ pub fn init_logger(verbosity: u8, color: Color) {
     let color = match color {
         Color::Always => ColorChoice::AlwaysAnsi,
         Color::Auto => {
-            if atty::is(atty::Stream::Stderr) {
+            if std::io::stderr().is_terminal() {
                 ColorChoice::Auto
             } else {
                 ColorChoice::Never
