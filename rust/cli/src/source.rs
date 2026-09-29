@@ -41,8 +41,11 @@ const REMOTE_DOWNLOAD_CHUNK_BYTES: u64 = 64 * 1024 * 1024;
 // instead; liveness is enforced by the response-head and body-stall timeouts.
 const REMOTE_REQUEST_TIMEOUT: &str = "7days";
 const REMOTE_STALL_TIMEOUT: Duration = Duration::from_secs(120);
-// Above object_store's 180s retry budget so its internal head retries can finish.
-const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(240);
+// A connection that hangs before the response head never errors, so object_store's
+// own retries never see it. Bound that wait here and retry it a few times, so a
+// load balancer dropping one request costs seconds rather than minutes.
+const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
+const REMOTE_RESPONSE_ATTEMPTS: usize = 3;
 // Consecutive zero-progress attempts before a chunked download gives up.
 // Any delivered bytes reset the budget, so only a dead connection exhausts it.
 const REMOTE_DOWNLOAD_NO_PROGRESS_ATTEMPTS: usize = 5;
@@ -565,6 +568,8 @@ struct ObjectStoreSource {
     store: Arc<dyn ObjectStore>,
     path: ObjectStorePath,
     display_url: String,
+    // `REMOTE_RESPONSE_TIMEOUT`; a field so tests can shorten it.
+    response_timeout: Duration,
 }
 
 impl ObjectStoreSource {
@@ -595,11 +600,12 @@ impl ObjectStoreSource {
             store: Arc::from(store),
             path: object_path,
             display_url: remote_url.display_url,
+            response_timeout: REMOTE_RESPONSE_TIMEOUT,
         })
     }
 
     fn stat(&self) -> Result<object_store::ObjectMeta> {
-        self.block_on_bounded(self.store.head(&self.path))?
+        self.block_on_bounded(REMOTE_RESPONSE_ATTEMPTS, || self.store.head(&self.path))?
             .map_err(|err| concise_remote_stat_error(&self.display_url, err))
     }
 
@@ -611,10 +617,13 @@ impl ObjectStoreSource {
     /// encoding. The range is assumed to be valid (non-empty, within the object).
     fn get_range(&self, range: std::ops::Range<u64>) -> Result<Vec<u8>> {
         let response = self
-            .get_opts_bounded(GetOptions {
-                range: Some(GetRange::Bounded(range)),
-                ..GetOptions::default()
-            })?
+            .get_opts_bounded(
+                REMOTE_RESPONSE_ATTEMPTS,
+                GetOptions {
+                    range: Some(GetRange::Bounded(range)),
+                    ..GetOptions::default()
+                },
+            )?
             .map_err(|err| {
                 concise_remote_operation_error("fetching range from", &self.display_url, err)
             })?;
@@ -622,29 +631,47 @@ impl ObjectStoreSource {
         self.collect_body(response)
     }
 
-    /// Run a store request with `REMOTE_RESPONSE_TIMEOUT` on its response head.
-    /// The outer error is that timeout; the inner result is the store's own.
-    fn block_on_bounded<T>(
+    /// Run a store request, retrying up to `attempts` times when its response
+    /// head does not arrive within `response_timeout`. The outer error is that
+    /// timeout on the last attempt; the inner result is the store's own.
+    fn block_on_bounded<T, F>(
         &self,
-        request: impl std::future::Future<Output = object_store::Result<T>>,
-    ) -> Result<object_store::Result<T>> {
+        attempts: usize,
+        mut request: impl FnMut() -> F,
+    ) -> Result<object_store::Result<T>>
+    where
+        F: std::future::Future<Output = object_store::Result<T>>,
+    {
         self.runtime.block_on(async {
-            match tokio::time::timeout(REMOTE_RESPONSE_TIMEOUT, request).await {
-                Ok(result) => Ok(result),
-                Err(_) => Err(anyhow::anyhow!(
-                    "failed to read {}: timed out waiting for response ({}s)",
-                    self.display_url,
-                    REMOTE_RESPONSE_TIMEOUT.as_secs()
-                )),
+            let mut attempt = 0;
+            loop {
+                attempt += 1;
+                match tokio::time::timeout(self.response_timeout, request()).await {
+                    Ok(result) => return Ok(result),
+                    Err(_) if attempt < attempts => eprintln!(
+                        "Warning: no response from {} after {:?}, retrying",
+                        self.display_url, self.response_timeout
+                    ),
+                    Err(_) => {
+                        return Err(anyhow::anyhow!(
+                            "failed to read {}: timed out waiting for response ({:?}, {attempt} attempts)",
+                            self.display_url,
+                            self.response_timeout
+                        ))
+                    }
+                }
             }
         })
     }
 
     fn get_opts_bounded(
         &self,
+        attempts: usize,
         options: GetOptions,
     ) -> Result<std::result::Result<object_store::GetResult, object_store::Error>> {
-        self.block_on_bounded(self.store.get_opts(&self.path, options))
+        self.block_on_bounded(attempts, || {
+            self.store.get_opts(&self.path, options.clone())
+        })
     }
 
     /// Like `GetResult::bytes`, but failing if no bytes arrive for `REMOTE_STALL_TIMEOUT`.
@@ -682,10 +709,13 @@ impl ObjectStoreSource {
     /// ranges but reject suffix ranges, and to learn the size without a HEAD (which
     /// some HTTP servers reject).
     fn probe_bounded_range_size(&self) -> Result<Option<u64>> {
-        match self.get_opts_bounded(GetOptions {
-            range: Some(GetRange::Bounded(0..1)),
-            ..GetOptions::default()
-        })? {
+        match self.get_opts_bounded(
+            REMOTE_RESPONSE_ATTEMPTS,
+            GetOptions {
+                range: Some(GetRange::Bounded(0..1)),
+                ..GetOptions::default()
+            },
+        )? {
             Ok(response) => {
                 validate_identity_content_encoding(&response.attributes, &self.display_url)?;
                 // A `*` total in `Content-Range` fails object_store's parse and
@@ -721,10 +751,13 @@ impl ObjectStoreSource {
             // A suffix request proves range support, discovers the size via
             // `Content-Range`, and returns the tail in one round trip. If the object
             // is shorter than `tail_bytes`, servers return the entire object.
-            match self.get_opts_bounded(GetOptions {
-                range: Some(GetRange::Suffix(tail_bytes)),
-                ..GetOptions::default()
-            })? {
+            match self.get_opts_bounded(
+                REMOTE_RESPONSE_ATTEMPTS,
+                GetOptions {
+                    range: Some(GetRange::Suffix(tail_bytes)),
+                    ..GetOptions::default()
+                },
+            )? {
                 Ok(response) => {
                     validate_identity_content_encoding(&response.attributes, &self.display_url)?;
                     // Relies on object_store parsing a numeric total from
@@ -775,10 +808,13 @@ impl ObjectStoreSource {
         if chunk_bytes == 0 {
             bail!("remote download chunk size must be non-zero");
         }
-        match self.get_opts_bounded(GetOptions {
-            range: Some(GetRange::Bounded(0..chunk_bytes)),
-            ..GetOptions::default()
-        })? {
+        match self.get_opts_bounded(
+            REMOTE_RESPONSE_ATTEMPTS,
+            GetOptions {
+                range: Some(GetRange::Bounded(0..chunk_bytes)),
+                ..GetOptions::default()
+            },
+        )? {
             Ok(response) => self.download_chunked(response, writer, chunk_bytes),
             Err(err) if remote_range_not_supported(&err) || remote_range_unsatisfiable(&err) => {
                 self.download_unranged(writer)
@@ -878,11 +914,15 @@ impl ObjectStoreSource {
                 self.display_url
             ))
         };
-        match self.get_opts_bounded(GetOptions {
-            range: Some(GetRange::Bounded(range.clone())),
-            if_match: if_match.clone(),
-            ..GetOptions::default()
-        }) {
+        // One attempt: the download loop counts and retries head timeouts itself.
+        match self.get_opts_bounded(
+            1,
+            GetOptions {
+                range: Some(GetRange::Bounded(range.clone())),
+                if_match: if_match.clone(),
+                ..GetOptions::default()
+            },
+        ) {
             Ok(Ok(response)) if response.meta.size != first.size => Err(changed(format!(
                 "size {} -> {}",
                 first.size, response.meta.size
@@ -924,14 +964,14 @@ impl ObjectStoreSource {
                 &self.display_url,
                 err,
             ))),
-            // The REMOTE_RESPONSE_TIMEOUT wait expired.
+            // The response-head wait expired.
             Err(err) => Err(DownloadError::Retryable(err)),
         }
     }
 
     fn download_unranged(&self, writer: &mut impl Write) -> Result<()> {
         let response = self
-            .get_opts_bounded(GetOptions::default())?
+            .get_opts_bounded(REMOTE_RESPONSE_ATTEMPTS, GetOptions::default())?
             .map_err(|err| {
                 concise_remote_operation_error("reading remote input from", &self.display_url, err)
             })?;
@@ -1138,6 +1178,7 @@ impl RemoteRangeReader {
                 store,
                 path,
                 display_url: "memory:///test".to_string(),
+                response_timeout: REMOTE_RESPONSE_TIMEOUT,
             },
             kind: RemoteUrlKind::CloudSuffix,
             size,
@@ -1166,6 +1207,7 @@ impl RemoteRangeReader {
                 store,
                 path,
                 display_url: "memory:///test".to_string(),
+                response_timeout: REMOTE_RESPONSE_TIMEOUT,
             },
             kind: RemoteUrlKind::CloudSuffix,
             size,
@@ -1792,6 +1834,8 @@ mod tests {
         Body(&'static [u8]),
         // Serve the request from a different object with this `Last-Modified`.
         Modified(&'static [u8], &'static str),
+        // Accept the request and never answer it, like a hung connection.
+        Hang,
     }
 
     type Script = Arc<dyn Fn(usize) -> ScriptedResponse + Send + Sync>;
@@ -1849,6 +1893,8 @@ mod tests {
             let server_request_count = request_count.clone();
             thread::spawn(move || {
                 let mut remaining_truncations = self.truncated_bodies;
+                // Hung connections are kept open here so the client sees a stall, not a reset.
+                let mut hung = Vec::new();
                 for stream in listener.incoming().take(64) {
                     let mut stream = stream.expect("accept test connection");
                     let index = server_request_count.fetch_add(1, Ordering::SeqCst);
@@ -1901,6 +1947,10 @@ mod tests {
                         ScriptedResponse::Modified(other, modified) => (other, Some(modified)),
                         ScriptedResponse::Status(status) => {
                             write_status(&mut stream, status, b"");
+                            continue;
+                        }
+                        ScriptedResponse::Hang => {
+                            hung.push(stream);
                             continue;
                         }
                     };
@@ -2415,6 +2465,55 @@ mod tests {
         );
         assert_eq!(requests.load(Ordering::SeqCst), 2);
         assert_eq!(out, &body[..8], "nothing from the new object is written");
+    }
+
+    #[test]
+    fn remote_range_read_retries_a_hung_response_head() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        // The first connection is accepted but never answered.
+        let (url, requests) = TestHttpServer {
+            script: Some(Arc::new(|index| {
+                if index == 0 {
+                    ScriptedResponse::Hang
+                } else {
+                    ScriptedResponse::Normal
+                }
+            })),
+            ..TestHttpServer::new(body)
+        }
+        .serve();
+        let mut source =
+            super::ObjectStoreSource::open_for_download(Path::new(&url)).expect("open source");
+        source.response_timeout = std::time::Duration::from_millis(200);
+        let bytes = source
+            .get_range(0..8)
+            .expect("a hung response head should be retried");
+        assert_eq!(bytes, &body[..8]);
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
+    }
+
+    #[test]
+    fn remote_range_read_gives_up_after_response_attempts() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let (url, requests) = TestHttpServer {
+            script: Some(Arc::new(|_| ScriptedResponse::Hang)),
+            ..TestHttpServer::new(body)
+        }
+        .serve();
+        let mut source =
+            super::ObjectStoreSource::open_for_download(Path::new(&url)).expect("open source");
+        source.response_timeout = std::time::Duration::from_millis(200);
+        let err = source
+            .get_range(0..8)
+            .expect_err("a server that never answers should fail");
+        assert!(
+            err.to_string().contains("timed out waiting for response"),
+            "unexpected error: {err:#}"
+        );
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            super::REMOTE_RESPONSE_ATTEMPTS
+        );
     }
 
     #[test]
