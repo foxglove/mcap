@@ -651,7 +651,7 @@ mod tests {
     fn memory_source_summary_reader_finds_channel() {
         let bytes = write_summary_mcap();
         let mut source = MemorySource::new(bytes);
-        let summary = read_summary(&mut source)
+        let summary = read_summary(&mut source, SourceOptions::default())
             .expect("summary read")
             .expect("summary should exist");
         assert!(summary.channels.values().any(|ch| ch.topic == "/demo"));
@@ -670,7 +670,7 @@ mod tests {
         assert!(!local.is_remote());
         assert_eq!(local.size(), Some(bytes.len() as u64));
 
-        let summary = read_summary(&mut local)
+        let summary = read_summary(&mut local, SourceOptions::default())
             .expect("summary read")
             .expect("summary should exist");
         assert!(summary.channels.values().any(|ch| ch.topic == "/demo"));
@@ -698,7 +698,7 @@ mod tests {
     fn service_indexed_chunk_feeds_messages() {
         let bytes = write_summary_mcap();
         let mut source = MemorySource::new(bytes);
-        let summary = read_summary(&mut source)
+        let summary = read_summary(&mut source, SourceOptions::default())
             .expect("summary read")
             .expect("summary should exist");
         let mut reader = mcap::sans_io::IndexedReader::new(&summary).expect("indexed reader");
