@@ -32,9 +32,10 @@ const REMOTE_SUMMARY_TAIL_BYTES: u64 = 250_000;
 // Guards aggregate remote reads that should stay index-like (summary bytes, or
 // multiple metadata records selected from indexes) from becoming unexpectedly large.
 pub(crate) const MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN: u64 = 100_000_000;
-// Ranged GET size for whole-file downloads. Each part gets a fresh
-// object_store retry budget, and a dropped connection resumes at the last
-// byte received.
+// Ranged GET size for whole-file downloads. It bounds what one request covers;
+// each part starts a fresh connection, ETag check, and object_store retry
+// budget. Resumes are at byte granularity, so the size does not affect how much
+// is re-fetched after a dropped connection.
 const REMOTE_DOWNLOAD_CHUNK_BYTES: u64 = 64 * 1024 * 1024;
 // object_store's default 30s timeout spans the whole response body, which kills
 // large transfers on slow links. Requests get an effectively unlimited timeout
