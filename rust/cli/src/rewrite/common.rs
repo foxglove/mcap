@@ -313,8 +313,7 @@ fn message_index_count(prefix: &[u8], offset: u64, size: Option<u64>) -> Option<
 }
 
 /// Errors when a remote source would read message-chunk payloads without `--allow-remote-scan`.
-///
-/// Matches main's policy: summary / named-record reads are unflagged; message data is not.
+/// Summary and named-record reads do not need the flag.
 pub(crate) fn require_remote_scan_for_chunks(
     source: &dyn ByteSource,
     options: SourceOptions,

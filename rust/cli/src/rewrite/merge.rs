@@ -250,10 +250,10 @@ fn merge_inputs<W: Write + Seek>(
         .map(|source| {
             match byte_source::read_summary(source.as_mut(), source_options) {
                 Ok(summary) => Ok(summary),
-                // A remote input without scan opt-in cannot fall back to a linear scan, so
-                // surface the summary error (for example the summary-size cap) as-is.
+                // A remote input without opt-in cannot fall back to a linear scan, so surface the
+                // summary error (e.g. the summary-size cap).
                 Err(err) if source.is_remote() && !source_options.allow_remote_scan => Err(err),
-                // Otherwise treat summary lookup as best effort and fall back to a linear scan.
+                // Otherwise summary lookup is best effort; fall back to a linear scan.
                 Err(_) => Ok(None),
             }
         })
