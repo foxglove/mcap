@@ -44,7 +44,8 @@ fn attachment_indexes(
     source_options: source::SourceOptions,
 ) -> Result<Vec<mcap::records::AttachmentIndex>> {
     let header = byte_source::read_header(source)?;
-    let parsed = match parse::try_parsed_mcap_from_summary(source, header.clone())? {
+    let parsed = match parse::try_parsed_mcap_from_summary(source, header.clone(), source_options)?
+    {
         Some(parsed) => parsed,
         None => {
             source::require_remote_scan_for_linear(source, source_options)?;
