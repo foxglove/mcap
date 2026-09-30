@@ -237,6 +237,27 @@ impl ObjectStore for SdkS3Store {
             Some((start, end, total)) => (start..end + 1, total),
             None => (0..content_length, content_length),
         };
+        // Like object_store's HTTP client, refuse a 206 whose Content-Range does
+        // not match the request; the download resume writes at the requested offset.
+        if let Some(requested) = &options.range {
+            let expected =
+                requested
+                    .as_range(size)
+                    .map_err(|err| object_store::Error::Generic {
+                        store: "S3",
+                        source: format!(
+                            "server returned range {range:?} for an unsatisfiable request: {err}"
+                        )
+                        .into(),
+                    })?;
+            if range != expected {
+                return Err(object_store::Error::Generic {
+                    store: "S3",
+                    source: format!("requested range {expected:?} but server returned {range:?}")
+                        .into(),
+                });
+            }
+        }
         let meta = ObjectMeta {
             location: location.clone(),
             last_modified: smithy_datetime_to_chrono(response.last_modified()),
@@ -519,6 +540,16 @@ mod tests {
     }
 
     fn serve_fake_s3(body: &'static [u8], status: Option<&'static str>) -> FakeS3 {
+        serve_fake_s3_with(body, status, false)
+    }
+
+    // `ignore_range_start` mimics a proxy that honors the range length but
+    // serves from offset 0, reporting that in Content-Range.
+    fn serve_fake_s3_with(
+        body: &'static [u8],
+        status: Option<&'static str>,
+        ignore_range_start: bool,
+    ) -> FakeS3 {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake s3");
         let addr = listener.local_addr().expect("addr");
         let heads = Arc::new(Mutex::new(Vec::new()));
@@ -567,6 +598,11 @@ mod tests {
                 let response = match range {
                     Some((start, end)) => {
                         let end = end.min(body.len().saturating_sub(1));
+                        let (start, end) = if ignore_range_start {
+                            (0, end - start)
+                        } else {
+                            (start, end)
+                        };
                         let content = &body[start..=end];
                         let mut response = format!(
                             "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nETag: \"fake\"\r\nConnection: close\r\n\r\n",
@@ -724,6 +760,27 @@ mod tests {
         assert!(
             heads.iter().any(|head| head.contains("AKIATEST")),
             "request should be SigV4-signed, got:\n{heads:?}"
+        );
+    }
+
+    #[test]
+    fn ranged_get_rejects_mismatched_content_range() {
+        let body: &'static [u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let server = serve_fake_s3_with(body, None, true);
+        let store = test_store(&server.url);
+        let err = test_runtime()
+            .block_on(store.get_opts(
+                &ObjectStorePath::from("demo.mcap"),
+                GetOptions {
+                    range: Some(GetRange::Bounded(8..16)),
+                    ..GetOptions::default()
+                },
+            ))
+            .expect_err("a 206 for the wrong range must not be returned as data");
+        let message = err.to_string();
+        assert!(
+            message.contains("8..16") && message.contains("0..8"),
+            "error should name both ranges: {message}"
         );
     }
 
