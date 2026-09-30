@@ -13,8 +13,8 @@ use crate::{
 /// the largest record or chunk rather than the file.
 ///
 /// This is the streaming counterpart of [`crate::MessageStream`]: it applies the same
-/// validation, validates chunk CRCs by default, stops at the end of the data section, and yields
-/// nothing further after the first error.
+/// schema/channel validation, stops at the end of the data section, and yields nothing further
+/// after the first error.
 ///
 /// ```no_run
 /// use std::{fs, io::BufReader};
@@ -35,7 +35,7 @@ pub struct MessageReader<R> {
 }
 
 impl<R: Read> MessageReader<R> {
-    /// Creates a reader with chunk CRC validation enabled.
+    /// Creates a reader with [`LinearReaderOptions::default`].
     pub fn new(source: R) -> Self {
         Self {
             source,

@@ -25,9 +25,9 @@ pub enum MessageReadEvent {
 
 /// Streams linked messages from any source of bytes.
 ///
-/// Like [`crate::MessageStream`], it stops at the end of the data section and validates chunk
-/// CRCs by default; yielded messages own their data so they can outlive the reader's buffer.
-/// After the first error it yields nothing further.
+/// Like [`crate::MessageStream`], it stops at the end of the data section; yielded messages own
+/// their data so they can outlive the reader's buffer. After the first error it yields nothing
+/// further.
 pub struct MessageReader {
     reader: LinearReader,
     channeler: ChannelAccumulator<'static>,
@@ -41,9 +41,9 @@ impl Default for MessageReader {
 }
 
 impl MessageReader {
-    /// Creates a reader with chunk CRC validation enabled, matching [`crate::MessageStream`].
+    /// Creates a reader with [`LinearReaderOptions::default`].
     pub fn new() -> Self {
-        Self::new_with_options(LinearReaderOptions::default().with_validate_chunk_crcs(true))
+        Self::new_with_options(LinearReaderOptions::default())
     }
 
     /// Creates a reader with the given options. `emit_chunks` is always disabled, because the
@@ -272,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    fn validates_chunk_crcs_by_default_only() {
+    fn validates_chunk_crcs_only_when_asked() {
         let mut mcap = two_channel_mcap(true);
         // The last chunk ends with a message, so its final byte is payload: flipping it keeps
         // every record parseable and only the CRC disagrees. (The first chunk ends with a
@@ -288,21 +288,24 @@ mod tests {
         let records = records_len_at + 8;
         mcap[records + records_len as usize - 1] ^= 0xFF;
 
-        let strict = drain(&mut MessageReader::new(), &mcap);
+        // Like LinearReader, the defaults do not validate chunk CRCs.
+        let lenient = drain(&mut MessageReader::new(), &mcap);
+        assert!(
+            lenient.iter().all(|item| item.is_ok()),
+            "new() must not validate chunk CRCs: {lenient:?}"
+        );
+
+        let strict = drain(
+            &mut MessageReader::new_with_options(
+                LinearReaderOptions::default().with_validate_chunk_crcs(true),
+            ),
+            &mcap,
+        );
         assert!(
             strict
                 .iter()
                 .any(|item| matches!(item, Err(McapError::BadChunkCrc { .. }))),
-            "default options must report the bad chunk CRC"
-        );
-
-        let lenient = drain(
-            &mut MessageReader::new_with_options(LinearReaderOptions::default()),
-            &mcap,
-        );
-        assert!(
-            lenient.iter().all(|item| item.is_ok()),
-            "validation can be opted out"
+            "with_validate_chunk_crcs(true) must report the bad chunk CRC: {strict:?}"
         );
     }
 
