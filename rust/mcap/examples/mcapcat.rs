@@ -1,7 +1,7 @@
 #[path = "common/logsetup.rs"]
 mod logsetup;
-#[path = "common/messages.rs"]
-mod messages;
+#[path = "common/summary.rs"]
+mod summary;
 
 use std::{fs, io::BufReader, process};
 
@@ -29,7 +29,7 @@ fn run() -> Result<()> {
     // Stream records one at a time; memory scales with the largest record, not the file.
     let mut file = BufReader::new(fs::File::open(&args.mcap).context("Couldn't open MCAP file")?);
 
-    for message in messages::MessageReader::new(&mut file) {
+    for message in mcap::io::MessageReader::new(&mut file) {
         let message = message?;
         let ts = message.publish_time;
         println!(
@@ -53,7 +53,7 @@ fn run() -> Result<()> {
     }
 
     // The summary lives at the end of the file; read just that section.
-    info!("{:#?}", messages::read_summary(&mut file)?);
+    info!("{:#?}", summary::read_summary(&mut file)?);
     Ok(())
 }
 
