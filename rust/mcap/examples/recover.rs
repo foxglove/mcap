@@ -57,8 +57,9 @@ fn run() -> Result<()> {
 
     info!("recovering as many messages as possible...");
     let mut recovered_count = 0;
-    // A truncated file lacks trailing magic; the reader stops at the first incomplete record and
-    // everything before it is kept.
+    // A truncated file lacks trailing magic, so do not require one, and a damaged chunk should
+    // not end recovery, so leave chunk CRC validation off. The reader stops at the first record
+    // it cannot parse; everything before it is kept.
     for maybe_message in messages::MessageReader::with_options(
         input,
         LinearReaderOptions::default().with_skip_end_magic(true),
