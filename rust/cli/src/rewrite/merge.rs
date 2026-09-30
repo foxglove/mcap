@@ -4,7 +4,6 @@
 //! unique to merging live here (cross-input schema/channel remapping and coalescing, metadata
 //! deduplication, and the k-way merge heap).
 use std::cmp::Ordering;
-use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, BinaryHeap, HashMap, HashSet};
 use std::io::{Seek, Write};
 use std::path::PathBuf;
@@ -402,8 +401,7 @@ impl MaterializedInputMessages {
         // each message's channel and apply the same schema/channel conflict checks.
         common::require_remote_scan_for_linear(source, source_options)?;
 
-        let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
-        let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+        let mut channels = mcap::read::ChannelAccumulator::default();
         let mut messages = Vec::new();
         let mut input_order = 0usize;
 
@@ -415,13 +413,13 @@ impl MaterializedInputMessages {
                     .with_context(|| format!("failed reading messages from '{name}'"))?
                 {
                     mcap::records::Record::Schema { header, data } => {
-                        add_schema_record(&mut schemas, header, data)?;
+                        channels.add_schema(header, std::borrow::Cow::Owned(data.into_owned()))?;
                     }
                     mcap::records::Record::Channel(channel) => {
-                        add_channel_record(&mut channels, &schemas, channel)?;
+                        channels.add_channel(channel)?;
                     }
                     mcap::records::Record::Message { header, data } => {
-                        let Some(channel) = channels.get(&header.channel_id).cloned() else {
+                        let Some(channel) = channels.get(header.channel_id) else {
                             return Err(mcap::McapError::UnknownChannel(
                                 header.sequence,
                                 header.channel_id,
@@ -660,83 +658,6 @@ fn reserve_next_channel_id(id_maps: &mut IdMaps) -> Result<u16> {
     let id = id_maps.next_output_channel_id;
     id_maps.next_output_channel_id = id_maps.next_output_channel_id.wrapping_add(1);
     Ok(id)
-}
-
-/// Same rules as `mcap::read::ChannelAccumulator::add_schema` (used by `MessageStream`).
-fn add_schema_record(
-    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
-    header: mcap::records::SchemaHeader,
-    data: std::borrow::Cow<'_, [u8]>,
-) -> Result<()> {
-    if header.id == 0 {
-        return Err(mcap::McapError::InvalidSchemaId.into());
-    }
-    match schemas.entry(header.id) {
-        Entry::Occupied(entry) => {
-            let existing = entry.get();
-            if existing.name != header.name
-                || existing.encoding != header.encoding
-                || existing.data.as_ref() != data.as_ref()
-            {
-                return Err(mcap::McapError::ConflictingSchemas(header.name).into());
-            }
-            Ok(())
-        }
-        Entry::Vacant(entry) => {
-            entry.insert(Arc::new(mcap::Schema {
-                id: header.id,
-                name: header.name,
-                encoding: header.encoding,
-                data: std::borrow::Cow::Owned(data.into_owned()),
-            }));
-            Ok(())
-        }
-    }
-}
-
-/// Same rules as `mcap::read::ChannelAccumulator::add_channel` (used by `MessageStream`).
-fn add_channel_record(
-    channels: &mut HashMap<u16, Arc<mcap::Channel<'static>>>,
-    schemas: &HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel: mcap::records::Channel,
-) -> Result<()> {
-    let schema = if channel.schema_id == 0 {
-        None
-    } else {
-        match schemas.get(&channel.schema_id) {
-            Some(schema) => Some(schema.clone()),
-            None => {
-                return Err(mcap::McapError::UnknownSchema(
-                    channel.topic.clone(),
-                    channel.schema_id,
-                )
-                .into());
-            }
-        }
-    };
-    match channels.entry(channel.id) {
-        Entry::Occupied(entry) => {
-            let existing = entry.get();
-            if existing.topic != channel.topic
-                || existing.schema.as_ref().map(|s| s.id).unwrap_or(0) != channel.schema_id
-                || existing.message_encoding != channel.message_encoding
-                || existing.metadata != channel.metadata
-            {
-                return Err(mcap::McapError::ConflictingChannels(channel.topic).into());
-            }
-            Ok(())
-        }
-        Entry::Vacant(entry) => {
-            entry.insert(Arc::new(mcap::Channel {
-                id: channel.id,
-                topic: channel.topic,
-                schema,
-                message_encoding: channel.message_encoding,
-                metadata: channel.metadata,
-            }));
-            Ok(())
-        }
-    }
 }
 
 fn make_channel_key(
