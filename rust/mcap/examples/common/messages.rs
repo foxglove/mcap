@@ -1,9 +1,6 @@
-//! Example helpers for reading MCAP files through the sans-io readers.
-//!
-//! [`MessageReader`] turns any [`Read`] source into an iterator of linked [`Message`]s, the way
-//! [`mcap::MessageStream`] does for a byte slice, but streaming one record at a time so memory
-//! scales with the largest record or chunk instead of the file. [`read_summary`] loads only the
-//! summary section from any [`Read`] + [`Seek`] source.
+//! Example helpers for the sans-io readers: [`MessageReader`] streams linked [`Message`]s from
+//! any [`Read`] source, like [`mcap::MessageStream`] over a slice but one record at a time, and
+//! [`read_summary`] loads only the summary section from a [`Read`] + [`Seek`] source.
 #![allow(dead_code)]
 
 use std::{

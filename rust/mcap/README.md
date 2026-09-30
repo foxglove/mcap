@@ -11,10 +11,9 @@ A library for reading and writing
   Users shouldn't have to manually track channel and schema IDs.
 
 - **Bounded memory:** Writers shouldn't hold large buffers (e.g., the current
-  chunk) in memory. Readers stream records from any source of bytes through the
-  sans-io APIs, so memory scales with the largest record or chunk rather than
-  with the file, and random access goes through the summary with bounded range
-  reads.
+  chunk) in memory. Readers stream records through the sans-io APIs, so memory
+  scales with the largest record or chunk, not the file; random access goes
+  through the summary with bounded range reads.
 
 - **Resilience:** Like MCAP itself, the library should let you recover every
   valid message from an incomplete file or chunk.

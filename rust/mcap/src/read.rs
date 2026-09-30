@@ -1,11 +1,10 @@
 //! Read MCAP data from a byte slice already in memory.
 //!
-//! These readers take a `&[u8]` and are a convenience for data you already hold, such as a
-//! single chunk, an attachment, or a small file. To read a file of any size with bounded memory,
-//! use the streaming readers in [`crate::sans_io`] instead: [`crate::sans_io::LinearReader`] for
-//! sequential scans, [`crate::sans_io::IndexedReader`] for random access through the summary,
-//! and [`crate::sans_io::SummaryReader`] for the summary section alone. They pull bytes on
-//! request from any source, so memory scales with the largest record or chunk rather than with
+//! These readers suit data you already hold, such as a chunk, an attachment, or a small file.
+//! For files of any size use the streaming readers in [`crate::sans_io`]:
+//! [`crate::sans_io::LinearReader`] for sequential scans, [`crate::sans_io::IndexedReader`] for
+//! random access through the summary, and [`crate::sans_io::SummaryReader`] for the summary
+//! alone. They pull bytes on request, so memory scales with the largest record or chunk, not
 //! the file.
 use std::{
     borrow::Cow,

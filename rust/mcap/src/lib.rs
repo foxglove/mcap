@@ -8,8 +8,8 @@
 //! use mcap::sans_io::{LinearReadEvent, LinearReader};
 //!
 //! fn read_it() -> Result<()> {
-//!     // The sans-io readers stream one record at a time from any source of bytes, so memory
-//!     // scales with the largest record (or chunk), not with the file.
+//!     // Sans-io readers stream one record at a time, so memory scales with the largest
+//!     // record (or chunk), not the file.
 //!     let mut file = fs::File::open("in.mcap")?;
 //!     let mut reader = LinearReader::new();
 //!     while let Some(event) = reader.next_event() {
@@ -30,8 +30,8 @@
 //! ```
 //!
 //! See [`sans_io::IndexedReader`] for random access through the summary and
-//! [`sans_io::SummaryReader`] for reading only the summary section. The readers in [`read`]
-//! take a byte slice and are a convenience for data you already hold in memory.
+//! [`sans_io::SummaryReader`] for the summary alone. The [`read`] readers take a byte slice and
+//! suit data already in memory.
 //!
 //! or writing:
 //! ```no_run
