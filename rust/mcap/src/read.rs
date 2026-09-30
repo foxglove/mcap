@@ -2,9 +2,8 @@
 //!
 //! These readers suit data you already hold, such as a chunk, an attachment, or a small file.
 //! For files of any size use the streaming readers: [`crate::io::MessageReader`] for linked
-//! messages (the counterpart of [`MessageStream`]), and in [`crate::sans_io`],
-//! [`crate::sans_io::LinearReader`] for raw records, [`crate::sans_io::IndexedReader`] for
-//! random access through the summary, and [`crate::sans_io::SummaryReader`] for the summary
+//! messages, [`crate::sans_io::LinearReader`] for raw records, [`crate::sans_io::IndexedReader`]
+//! for random access through the summary, and [`crate::sans_io::SummaryReader`] for the summary
 //! alone. They pull bytes on request, so memory scales with the largest record or chunk, not
 //! the file.
 use std::{
@@ -294,12 +293,12 @@ impl<'a> Iterator for ChunkFlattener<'a> {
     }
 }
 
-/// Links schema and channel records as they are read, with the checks [`MessageStream`] applies:
-/// schema ID 0 is invalid, a redefined schema or channel must match the first definition, and a
-/// channel must reference a schema already seen (or ID 0 for none).
+/// Links schema and channel records as they are read, with [`MessageStream`]'s checks: schema
+/// ID 0 is invalid, a redefinition must match the first, and a channel's schema must already
+/// have been seen (or be ID 0 for none).
 ///
-/// Use this when driving [`crate::sans_io::LinearReader`] yourself and handling records other
-/// than messages; [`crate::sans_io::MessageReader`] wraps it for the common case.
+/// Use this when driving [`crate::sans_io::LinearReader`] yourself;
+/// [`crate::sans_io::MessageReader`] wraps it for the common case.
 #[derive(Debug, Default)]
 pub struct ChannelAccumulator<'a> {
     pub(crate) schemas: HashMap<u16, Arc<Schema<'a>>>,
@@ -307,8 +306,8 @@ pub struct ChannelAccumulator<'a> {
 }
 
 impl ChannelAccumulator<'static> {
-    /// Starts from the schemas and channels a [`Summary`] already links, so records read from
-    /// chunks afterwards are checked against them.
+    /// Starts from a [`Summary`]'s schemas and channels, so chunk records read afterwards are
+    /// checked against them.
     pub fn from_summary(summary: &Summary) -> Self {
         Self {
             schemas: summary.schemas.clone(),

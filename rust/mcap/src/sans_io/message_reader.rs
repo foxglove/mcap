@@ -1,8 +1,7 @@
 //! A [sans-io](https://sans-io.readthedocs.io/) reader that yields linked [`Message`]s.
 //!
-//! [`MessageReader`] composes [`LinearReader`] with the same schema/channel bookkeeping that
-//! [`crate::MessageStream`] uses, so it applies the same validation (schema ID 0, conflicting
-//! redefinitions, unknown channels) while streaming from any source of bytes. Use
+//! [`MessageReader`] composes [`LinearReader`] with the bookkeeping [`crate::MessageStream`]
+//! uses, so it applies the same validation while streaming from any source of bytes. Use
 //! [`crate::io::MessageReader`] unless you are driving the reads yourself.
 use std::{borrow::Cow, sync::Arc};
 
@@ -16,8 +15,8 @@ use crate::{
 /// What the caller should do next to progress through the file.
 #[derive(Debug)]
 pub enum MessageReadEvent {
-    /// The reader needs more data. Call [`MessageReader::insert`] then
-    /// [`MessageReader::notify_read`]. The value is a hint for how much to insert.
+    /// More data is needed: call [`MessageReader::insert`] then [`MessageReader::notify_read`].
+    /// The value is a size hint.
     ReadRequest(usize),
     /// The next message in file order, linked to its channel and schema.
     Message(Message<'static>),
@@ -25,9 +24,8 @@ pub enum MessageReadEvent {
 
 /// Streams linked messages from any source of bytes.
 ///
-/// Like [`crate::MessageStream`], it stops at the end of the data section; yielded messages own
-/// their data so they can outlive the reader's buffer. After the first error it yields nothing
-/// further.
+/// Like [`crate::MessageStream`], it stops at the end of the data section and yields nothing
+/// after the first error. Messages own their data, so they outlive the reader's buffer.
 pub struct MessageReader {
     reader: LinearReader,
     channeler: ChannelAccumulator<'static>,
@@ -56,8 +54,7 @@ impl MessageReader {
         }
     }
 
-    /// Yields the next event the caller should act on, or `None` when the data section has
-    /// been fully read or an error has already been returned.
+    /// The next event, or `None` once the data section is read or an error has been returned.
     pub fn next_event(&mut self) -> Option<McapResult<MessageReadEvent>> {
         if self.done {
             return None;
@@ -96,9 +93,9 @@ impl MessageReader {
                                 return Some(Err(err));
                             }
                         }
-                        // The summary that follows repeats schemas and channels and holds
-                        // nothing a message reader needs, so stop here rather than re-check
-                        // it, or fail on a summary that is damaged or cut off.
+                        // The summary repeats schemas and channels and holds nothing a message
+                        // reader needs, so stop rather than re-check it or fail on one that is
+                        // damaged or cut off.
                         Record::DataEnd(_) => return None,
                         Record::Message { header, data } => {
                             let Some(channel) = self.channeler.get(header.channel_id) else {
@@ -269,9 +266,9 @@ mod tests {
     #[test]
     fn validates_chunk_crcs_only_when_asked() {
         let mut mcap = two_channel_mcap(true);
-        // The last chunk ends with a message, so its final byte is payload: flipping it keeps
-        // every record parseable and only the CRC disagrees. (The first chunk ends with a
-        // channel record, whose last byte is a length field.)
+        // The last chunk ends with a message, so its final byte is payload: flipping it leaves
+        // every record parseable and only the CRC wrong. (The first chunk ends with a channel
+        // record, whose last byte is a length field.)
         let chunk = *super::test_support::record_offsets(&mcap, crate::records::op::CHUNK)
             .last()
             .expect("a chunk");
@@ -333,8 +330,7 @@ mod tests {
         let mcap = two_channel_mcap(true);
         let summary_start = crate::read::footer(&mcap).expect("footer").summary_start as usize;
 
-        // A summary that is cut off (or damaged) must not turn into an error after the last
-        // message.
+        // A summary that is cut off or damaged must not become an error after the last message.
         let items = drain(&mut MessageReader::new(), &mcap[..summary_start + 20]);
         assert_eq!(items.len(), 4, "{items:?}");
         assert!(items.iter().all(|item| item.is_ok()), "{items:?}");

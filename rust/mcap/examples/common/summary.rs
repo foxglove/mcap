@@ -1,5 +1,5 @@
 //! Example helper: [`read_summary`] loads only the summary section from a [`Read`] + [`Seek`]
-//! source. Linked messages come from [`mcap::io::MessageReader`] in the library.
+//! source. For messages, use [`mcap::io::MessageReader`].
 #![allow(dead_code)]
 
 use std::io::{Read, Seek};
