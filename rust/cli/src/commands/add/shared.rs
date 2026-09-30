@@ -1,13 +1,17 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::{Seek, Write};
+use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
 use binrw::prelude::*;
 use mcap::records::{self, op, Record};
+use mcap::sans_io::LinearReaderOptions;
 
+use crate::byte_source::{self, ByteSource, LocalFileSource};
+
+const RECORD_PREFIX_LEN: usize = 1 + 8;
 const FOOTER_RECORD_LEN: u64 = 1 + 8 + 20;
 // NOTE: this assumes the current MCAP spec shape for DataEnd
 // (opcode + u64 length + u32 crc payload). If DataEnd ever gains fields,
@@ -62,27 +66,20 @@ pub(crate) fn amend_mcap_file(
     attachments: &[AttachmentToAdd],
     metadata: &[records::Metadata],
 ) -> Result<()> {
+    if crate::source::is_remote_url(file) {
+        bail!(
+            "add only supports local files; remote inputs are not supported for in-place amendment"
+        );
+    }
+
     let backup_path = make_tail_backup_path(file)?;
     let (layout, mut existing_summary) = {
-        let mapped = crate::source::map_file(file)
-            .with_context(|| format!("failed to read '{}'", file.display()))?;
-        let layout = parse_existing_layout(&mapped)?;
-        let tail_start = layout.old_data_end_offset as usize;
-        let tail = mapped
-            .get(tail_start..)
-            .with_context(|| format!("data end offset out of range for '{}'", file.display()))?;
-        fs::write(&backup_path, tail)
-            .with_context(|| format!("failed to write tail backup '{}'", backup_path.display()))?;
-        let backup_file = fs::OpenOptions::new()
-            .read(true)
-            .open(&backup_path)
-            .with_context(|| format!("failed to reopen tail backup '{}'", backup_path.display()))?;
-        backup_file
-            .sync_all()
-            .with_context(|| format!("failed to sync tail backup '{}'", backup_path.display()))?;
-        let summary = collect_existing_summary(&mapped)?;
-        (layout, summary)
+        // Bounded reads only: head magic, footer, data end record, and summary section. Summaryless
+        // files are scanned as a stream. The whole file is never held in memory.
+        let mut source = LocalFileSource::open_path(file)?;
+        read_existing(&mut source)?
     };
+    write_tail_backup(file, layout.old_data_end_offset, &backup_path)?;
 
     let write_result: Result<()> = (|| {
         let mut writable_file = fs::OpenOptions::new()
@@ -231,6 +228,24 @@ to restore manually: truncate '{}' to {} bytes and append the backup file conten
     }
 }
 
+/// Copies `[tail_start, EOF)` (old data end, summary, footer) to `backup_path` so a failed
+/// in-place update can be restored by hand.
+fn write_tail_backup(file: &Path, tail_start: u64, backup_path: &Path) -> Result<()> {
+    let mut input =
+        fs::File::open(file).with_context(|| format!("failed to open '{}'", file.display()))?;
+    input
+        .seek(SeekFrom::Start(tail_start))
+        .with_context(|| format!("failed to seek to file tail in '{}'", file.display()))?;
+    let mut backup = fs::File::create(backup_path)
+        .with_context(|| format!("failed to create tail backup '{}'", backup_path.display()))?;
+    std::io::copy(&mut input, &mut backup)
+        .with_context(|| format!("failed to write tail backup '{}'", backup_path.display()))?;
+    backup
+        .sync_all()
+        .with_context(|| format!("failed to sync tail backup '{}'", backup_path.display()))?;
+    Ok(())
+}
+
 fn make_tail_backup_path(file: &Path) -> Result<PathBuf> {
     let file_name = file
         .file_name()
@@ -251,8 +266,8 @@ fn amend_mcap_bytes(
     attachments: &[AttachmentToAdd],
     metadata: &[records::Metadata],
 ) -> Result<Vec<u8>> {
-    let layout = parse_existing_layout(input)?;
-    let mut existing_summary = collect_existing_summary(input)?;
+    let mut source = byte_source::MemorySource::new(input.to_vec());
+    let (layout, mut existing_summary) = read_existing(&mut source)?;
 
     let mut output = Vec::with_capacity(input.len() + 1024);
     output.extend_from_slice(&input[..layout.old_data_end_offset as usize]);
@@ -338,12 +353,47 @@ fn amend_mcap_bytes(
     Ok(output)
 }
 
-fn parse_existing_layout(input: &[u8]) -> Result<ExistingLayout> {
-    let footer = mcap::read::footer(input).context("failed to read footer")?;
-    let footer_start = input
-        .len()
-        .checked_sub(mcap::MAGIC.len() + FOOTER_RECORD_LEN as usize)
-        .context("input is too short to contain a footer")? as u64;
+/// The layout (from the footer and data end records) and summary contents the amend needs.
+/// Indexed files read only the head magic, tail, and summary; summaryless files stream a scan.
+fn read_existing(source: &mut dyn ByteSource) -> Result<(ExistingLayout, ExistingSummaryData)> {
+    let layout = parse_existing_layout(source)?;
+    let summary = collect_existing_summary(source)?;
+    Ok((layout, summary))
+}
+
+fn parse_existing_layout(source: &mut dyn ByteSource) -> Result<ExistingLayout> {
+    let magic_len = mcap::MAGIC.len() as u64;
+    let size = source
+        .size()?
+        .context("input size is unknown; add requires a seekable local file")?;
+    // Minimum size: header magic, footer record, footer magic.
+    let footer_start = size
+        .checked_sub(2 * magic_len + FOOTER_RECORD_LEN)
+        .context("input is too short to contain a footer")?
+        + magic_len;
+
+    let head = read_exact_at(source, 0, mcap::MAGIC.len())?;
+    if head != mcap::MAGIC {
+        bail!("input does not start with MCAP magic");
+    }
+    let tail = read_exact_at(
+        source,
+        footer_start,
+        (FOOTER_RECORD_LEN + magic_len) as usize,
+    )?;
+    if !tail.ends_with(mcap::MAGIC) {
+        bail!("input does not end with MCAP magic");
+    }
+    let footer = match parse_record_bytes(&tail[..FOOTER_RECORD_LEN as usize])
+        .context("failed to read footer")?
+    {
+        Record::Footer(footer) => footer,
+        other => bail!(
+            "expected footer record at offset {footer_start}, found opcode {:02x}",
+            other.opcode()
+        ),
+    };
+
     let old_data_end_offset = if footer.summary_start > 0 {
         footer
             .summary_start
@@ -355,7 +405,10 @@ fn parse_existing_layout(input: &[u8]) -> Result<ExistingLayout> {
             .context("footer starts before data end record")?
     };
 
-    let data_end = parse_data_end(input, old_data_end_offset)?;
+    let data_end_bytes =
+        read_exact_at(source, old_data_end_offset, DATA_END_RECORD_LEN as usize)
+            .with_context(|| format!("data end offset out of range: {old_data_end_offset}"))?;
+    let data_end = parse_data_end(&data_end_bytes, old_data_end_offset)?;
     Ok(ExistingLayout {
         emit_summary_offsets: footer.summary_offset_start != 0,
         // A data section CRC of 0 is ambiguous: it can mean either "CRC disabled"
@@ -367,17 +420,9 @@ fn parse_existing_layout(input: &[u8]) -> Result<ExistingLayout> {
     })
 }
 
-fn parse_data_end(input: &[u8], offset: u64) -> Result<records::DataEnd> {
-    let start = offset as usize;
-    let Some(slice) = input.get(start..) else {
-        bail!("data end offset out of range: {offset}");
-    };
-    let mut reader = mcap::read::LinearReader::sans_magic(slice);
-    let record = reader
-        .next()
-        .context("missing data end record")?
-        .context("failed to parse data end record")?;
-    match record {
+/// Parses the data end record from its serialized bytes; `offset` is only used for messages.
+fn parse_data_end(record_bytes: &[u8], offset: u64) -> Result<records::DataEnd> {
+    match parse_record_bytes(record_bytes).context("failed to parse data end record")? {
         Record::DataEnd(data_end) => Ok(data_end),
         other => bail!(
             "expected data end record at offset {offset}, found opcode {:02x}",
@@ -386,8 +431,36 @@ fn parse_data_end(input: &[u8], offset: u64) -> Result<records::DataEnd> {
     }
 }
 
-fn collect_existing_summary(input: &[u8]) -> Result<ExistingSummaryData> {
-    if let Some(summary) = mcap::Summary::read(input).context("failed to read summary")? {
+/// Parses one serialized record (opcode, little-endian u64 body length, body).
+fn parse_record_bytes(bytes: &[u8]) -> Result<Record<'_>> {
+    let (prefix, body) = bytes
+        .split_at_checked(RECORD_PREFIX_LEN)
+        .context("record is shorter than its opcode and length prefix")?;
+    let opcode = prefix[0];
+    let body_len = u64::from_le_bytes(prefix[1..].try_into().expect("8-byte length"));
+    let body = usize::try_from(body_len)
+        .ok()
+        .and_then(|len| body.get(..len))
+        .with_context(|| format!("record body of {body_len} bytes is truncated"))?;
+    Ok(mcap::parse_record(opcode, body)?)
+}
+
+fn read_exact_at(source: &mut dyn ByteSource, offset: u64, len: usize) -> Result<Vec<u8>> {
+    let bytes = source.read_at(offset, len)?;
+    if bytes.len() != len {
+        bail!(
+            "short read at offset {offset}: expected {len} bytes, got {}",
+            bytes.len()
+        );
+    }
+    Ok(bytes)
+}
+
+fn collect_existing_summary(source: &mut dyn ByteSource) -> Result<ExistingSummaryData> {
+    if let Some(summary) =
+        byte_source::read_summary(source, crate::source::SourceOptions::default())
+            .context("failed to read summary")?
+    {
         let mut data = ExistingSummaryData {
             statistics: summary.stats,
             channels: BTreeMap::new(),
@@ -428,29 +501,14 @@ fn collect_existing_summary(input: &[u8]) -> Result<ExistingSummaryData> {
     }
 
     let mut data = ExistingSummaryData::default();
-    // Summaryless files do not contain summary index records in practice.
-    // This linear scan can recover schema/channel definitions from data
-    // records, but cannot synthesize attachment/metadata/chunk index offsets
-    // for pre-existing records without offset-aware parsing.
-    for record in mcap::read::LinearReader::new(input).context("failed to scan MCAP records")? {
-        let record = record.context("failed to parse MCAP record")?;
-        if let Record::Chunk {
-            header: chunk_header,
-            data: chunk_data,
-        } = record
-        {
-            for nested in mcap::read::ChunkReader::new(chunk_header, chunk_data.as_ref())
-                .context("failed to parse chunk records")?
-            {
-                collect_record(
-                    &mut data,
-                    nested.context("failed to parse nested chunk record")?,
-                )?;
-            }
-        } else {
-            collect_record(&mut data, record)?;
-        }
-    }
+    // Summaryless files have no index records. This streaming scan (descending into chunks, one
+    // record in memory at a time) recovers schema/channel definitions but cannot synthesize
+    // attachment/metadata/chunk index offsets without offset-aware parsing.
+    byte_source::for_each_linear_record(source, LinearReaderOptions::default(), |opcode, body| {
+        let record = mcap::parse_record(opcode, body).context("failed to parse MCAP record")?;
+        collect_record(&mut data, record)
+    })
+    .context("failed to scan MCAP records")?;
     Ok(data)
 }
 
@@ -755,9 +813,10 @@ mod tests {
     use std::time::{SystemTime, UNIX_EPOCH};
 
     use super::{
-        amend_mcap_bytes, amend_mcap_file, parse_data_end, AttachmentToAdd, DATA_END_RECORD_LEN,
-        FOOTER_RECORD_LEN,
+        amend_mcap_bytes, amend_mcap_file, parse_data_end, read_existing, AttachmentToAdd,
+        DATA_END_RECORD_LEN, FOOTER_RECORD_LEN,
     };
+    use crate::byte_source::{ByteSource, MemorySource};
     use anyhow::Result;
     use mcap::records::{self, MessageHeader};
     use mcap::sans_io::linear_reader::{LinearReadEvent, LinearReader, LinearReaderOptions};
@@ -859,7 +918,7 @@ mod tests {
                 metadata: BTreeMap::new(),
             }],
         )?;
-        let library = crate::parse::read_header(&output)
+        let library = crate::parse::read_header_from_bytes(&output)
             .expect("read header")
             .expect("header present")
             .library;
@@ -886,7 +945,7 @@ mod tests {
             (output.len() as u64)
                 .saturating_sub(mcap::MAGIC.len() as u64 + FOOTER_RECORD_LEN + DATA_END_RECORD_LEN)
         };
-        let data_end = parse_data_end(&output, data_end_offset)?;
+        let data_end = parse_data_end(&output[data_end_offset as usize..], data_end_offset)?;
         assert_eq!(data_end.data_section_crc, 0);
         Ok(())
     }
@@ -1037,6 +1096,106 @@ mod tests {
         )?;
         let footer = mcap::read::footer(&output)?;
         assert_eq!(footer.summary_offset_start, 0);
+        Ok(())
+    }
+
+    /// Wraps [`MemorySource`] and records the byte range of every read.
+    struct RecordingSource {
+        inner: MemorySource,
+        reads: Vec<(u64, u64)>,
+    }
+
+    impl ByteSource for RecordingSource {
+        fn size(&self) -> Result<Option<u64>> {
+            self.inner.size()
+        }
+
+        fn is_remote(&self) -> bool {
+            false
+        }
+
+        fn display_name(&self) -> String {
+            "memory://add-fixture.mcap".into()
+        }
+
+        fn is_seekable(&self) -> bool {
+            true
+        }
+
+        fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
+            let n = self.inner.read_into(offset, dest)?;
+            self.reads.push((offset, offset + n as u64));
+            Ok(n)
+        }
+    }
+
+    #[test]
+    fn read_existing_never_touches_data_section_of_indexed_input() -> Result<()> {
+        let input = make_input_mcap(true, true, true, true)?;
+        let mut source = RecordingSource {
+            inner: MemorySource::new(input.clone()),
+            reads: Vec::new(),
+        };
+        let (layout, summary) = read_existing(&mut source)?;
+        assert_eq!(
+            summary.channels.len(),
+            1,
+            "summary should be read from the file tail"
+        );
+        assert_eq!(summary.schemas.len(), 1);
+
+        // The data section spans from the header magic to the data end record.
+        let data_start = mcap::MAGIC.len() as u64;
+        let data_end = layout.old_data_end_offset;
+        assert!(
+            data_end > data_start + 100,
+            "fixture data section should be non-trivial, got [{data_start}, {data_end})"
+        );
+        assert!(!source.reads.is_empty());
+        for (start, end) in &source.reads {
+            assert!(
+                *end <= data_start || *start >= data_end,
+                "read [{start}, {end}) overlaps the data section [{data_start}, {data_end})"
+            );
+        }
+        // Nothing beyond the head magic and the tail should ever be requested.
+        let tail_len = input.len() as u64 - data_end;
+        let total_read: u64 = source.reads.iter().map(|(start, end)| end - start).sum();
+        assert!(
+            total_read <= data_start + 2 * tail_len,
+            "read {total_read} bytes for a {tail_len}-byte tail"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn read_existing_streams_data_section_of_summaryless_input() -> Result<()> {
+        let input = make_input_mcap(true, true, false, false)?;
+        let mut source = RecordingSource {
+            inner: MemorySource::new(input.clone()),
+            reads: Vec::new(),
+        };
+        let (layout, summary) = read_existing(&mut source)?;
+        assert_eq!(
+            summary.channels.len(),
+            1,
+            "channels are recovered from the scan"
+        );
+        assert_eq!(summary.schemas.len(), 1);
+        assert!(summary.chunk_indexes.is_empty());
+
+        // The scan reads the data section, but in record-sized pieces rather than one load.
+        let largest_read = source
+            .reads
+            .iter()
+            .map(|(start, end)| end - start)
+            .max()
+            .unwrap_or(0);
+        assert!(
+            largest_read < layout.old_data_end_offset,
+            "largest read of {largest_read} bytes loads the whole {}-byte data section",
+            layout.old_data_end_offset
+        );
         Ok(())
     }
 

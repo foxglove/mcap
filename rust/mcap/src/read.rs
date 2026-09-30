@@ -1,8 +1,9 @@
 //! Read MCAP data from a byte slice already in memory.
 //!
 //! These readers suit data you already hold, such as a chunk, an attachment, or a small file.
-//! For files of any size use the streaming readers in [`crate::sans_io`]:
-//! [`crate::sans_io::LinearReader`] for sequential scans, [`crate::sans_io::IndexedReader`] for
+//! For files of any size use the streaming readers: [`crate::io::MessageReader`] for linked
+//! messages (the counterpart of [`MessageStream`]), and in [`crate::sans_io`],
+//! [`crate::sans_io::LinearReader`] for raw records, [`crate::sans_io::IndexedReader`] for
 //! random access through the summary, and [`crate::sans_io::SummaryReader`] for the summary
 //! alone. They pull bytes on request, so memory scales with the largest record or chunk, not
 //! the file.
@@ -293,15 +294,32 @@ impl<'a> Iterator for ChunkFlattener<'a> {
     }
 }
 
-/// Parses schemas and channels and wires them together
+/// Links schema and channel records as they are read, with the checks [`MessageStream`] applies:
+/// schema ID 0 is invalid, a redefined schema or channel must match the first definition, and a
+/// channel must reference a schema already seen (or ID 0 for none).
+///
+/// Use this when driving [`crate::sans_io::LinearReader`] yourself and handling records other
+/// than messages; [`crate::sans_io::MessageReader`] wraps it for the common case.
 #[derive(Debug, Default)]
-pub(crate) struct ChannelAccumulator<'a> {
+pub struct ChannelAccumulator<'a> {
     pub(crate) schemas: HashMap<u16, Arc<Schema<'a>>>,
     pub(crate) channels: HashMap<u16, Arc<Channel<'a>>>,
 }
 
+impl ChannelAccumulator<'static> {
+    /// Starts from the schemas and channels a [`Summary`] already links, so records read from
+    /// chunks afterwards are checked against them.
+    pub fn from_summary(summary: &Summary) -> Self {
+        Self {
+            schemas: summary.schemas.clone(),
+            channels: summary.channels.clone(),
+        }
+    }
+}
+
 impl<'a> ChannelAccumulator<'a> {
-    pub(crate) fn add_schema(
+    /// Records a schema, rejecting ID 0 and a redefinition that differs from the first.
+    pub fn add_schema(
         &mut self,
         header: records::SchemaHeader,
         data: Cow<'a, [u8]>,
@@ -334,7 +352,8 @@ impl<'a> ChannelAccumulator<'a> {
         }
     }
 
-    pub(crate) fn add_channel(&mut self, chan: records::Channel) -> McapResult<()> {
+    /// Records a channel, linking it to its schema and rejecting a differing redefinition.
+    pub fn add_channel(&mut self, chan: records::Channel) -> McapResult<()> {
         // The schema ID can be 0 for "no schema",
         // Or must reference some previously-read schema.
         let schema = if chan.schema_id == 0 {
@@ -374,8 +393,14 @@ impl<'a> ChannelAccumulator<'a> {
         }
     }
 
-    pub(crate) fn get(&self, chan_id: u16) -> Option<Arc<Channel<'a>>> {
+    /// Gets a channel seen so far by ID.
+    pub fn get(&self, chan_id: u16) -> Option<Arc<Channel<'a>>> {
         self.channels.get(&chan_id).cloned()
+    }
+
+    /// All channels seen so far, including ones with no messages yet.
+    pub fn channels(&self) -> impl Iterator<Item = &Arc<Channel<'a>>> {
+        self.channels.values()
     }
 }
 

@@ -1,7 +1,5 @@
 #[path = "common/logsetup.rs"]
 mod logsetup;
-#[path = "common/messages.rs"]
-mod messages;
 
 use std::{
     fs,
@@ -60,7 +58,7 @@ fn run() -> Result<()> {
     // A truncated file lacks trailing magic, so do not require one, and a damaged chunk should
     // not end recovery, so leave chunk CRC validation off. The reader stops at the first record
     // it cannot parse; everything before it is kept.
-    for maybe_message in messages::MessageReader::with_options(
+    for maybe_message in mcap::io::MessageReader::new_with_options(
         input,
         LinearReaderOptions::default().with_skip_end_magic(true),
     ) {

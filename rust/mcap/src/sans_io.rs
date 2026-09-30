@@ -2,10 +2,12 @@
 pub mod decompressor;
 pub mod indexed_reader;
 pub mod linear_reader;
+pub mod message_reader;
 pub mod summary_reader;
 
 pub use indexed_reader::{IndexedReadEvent, IndexedReader, IndexedReaderOptions};
 pub use linear_reader::{LinearReadEvent, LinearReader, LinearReaderOptions};
+pub use message_reader::{MessageReadEvent, MessageReader};
 pub use summary_reader::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};
 
 #[cfg(feature = "lz4")]
