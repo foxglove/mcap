@@ -77,6 +77,7 @@
 //! }
 //! ```
 
+pub mod io;
 pub mod read;
 pub mod records;
 #[cfg(feature = "tokio")]
