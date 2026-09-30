@@ -1,5 +1,8 @@
 //! Blocking [`std::io`] adapters for the sans-io readers.
-use std::{io::Read, sync::Arc};
+use std::{
+    io::{self, Read},
+    sync::Arc,
+};
 
 use crate::{
     sans_io::{LinearReaderOptions, MessageReadEvent, MessageReader as SansIoReader},
@@ -71,13 +74,19 @@ impl<R: Read> Iterator for MessageReader<R> {
         while let Some(event) = self.reader.next_event() {
             match event {
                 Ok(MessageReadEvent::ReadRequest(need)) => {
-                    match self.source.read(self.reader.insert(need)) {
-                        Ok(n) => self.reader.notify_read(n),
-                        Err(err) => {
-                            self.done = true;
-                            return Some(Err(err.into()));
+                    // `Interrupted` means retry, per the `Read` contract. Retry before
+                    // `notify_read`, since notifying zero bytes would signal EOF.
+                    let read = loop {
+                        match self.source.read(self.reader.insert(need)) {
+                            Ok(n) => break n,
+                            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+                            Err(err) => {
+                                self.done = true;
+                                return Some(Err(err.into()));
+                            }
                         }
-                    }
+                    };
+                    self.reader.notify_read(read);
                 }
                 Ok(MessageReadEvent::Message(message)) => return Some(Ok(message)),
                 Err(err) => {
@@ -147,6 +156,37 @@ mod tests {
         let items: Vec<_> = MessageReader::new(Cursor::new(truncated)).collect();
         assert!(matches!(items.last(), Some(Err(McapError::UnexpectedEof))));
         assert_eq!(items.iter().filter(|item| item.is_err()).count(), 1);
+    }
+
+    /// Returns `Interrupted` on every other call, like a signal landing mid-read.
+    struct InterruptEveryOther<'a> {
+        bytes: &'a [u8],
+        interrupt_next: bool,
+    }
+
+    impl Read for InterruptEveryOther<'_> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            self.interrupt_next = !self.interrupt_next;
+            if self.interrupt_next {
+                return Err(io::Error::from(io::ErrorKind::Interrupted));
+            }
+            let n = buf.len().min(self.bytes.len());
+            buf[..n].copy_from_slice(&self.bytes[..n]);
+            self.bytes = &self.bytes[n..];
+            Ok(n)
+        }
+    }
+
+    #[test]
+    fn retries_interrupted_reads() {
+        let mcap = two_channel_mcap(true);
+        let messages = MessageReader::new(InterruptEveryOther {
+            bytes: &mcap,
+            interrupt_next: false,
+        })
+        .collect::<McapResult<Vec<_>>>()
+        .expect("interruptions are retried, not surfaced");
+        assert_eq!(messages.len(), 4);
     }
 
     #[test]
