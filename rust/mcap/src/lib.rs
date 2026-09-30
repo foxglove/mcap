@@ -2,37 +2,23 @@
 //! both reading:
 //!
 //! ```no_run
-//! use std::{fs, io::Read};
+//! use std::{fs, io::BufReader};
 //!
-//! use anyhow::Result;
-//! use mcap::sans_io::{LinearReadEvent, LinearReader};
-//!
-//! fn read_it() -> Result<()> {
-//!     // Sans-io readers stream one record at a time, so memory scales with the largest
-//!     // record (or chunk), not the file.
-//!     let mut file = fs::File::open("in.mcap")?;
-//!     let mut reader = LinearReader::new();
-//!     while let Some(event) = reader.next_event() {
-//!         match event? {
-//!             LinearReadEvent::ReadRequest(need) => {
-//!                 let read = file.read(reader.insert(need))?;
-//!                 reader.notify_read(read);
-//!             }
-//!             LinearReadEvent::Record { opcode, data } => {
-//!                 let record = mcap::parse_record(opcode, data)?;
-//!                 println!("{:?}", record);
-//!                 // Or whatever else you'd like to do...
-//!             }
-//!         }
+//! fn read_it() -> mcap::McapResult<()> {
+//!     // Streams one record at a time, so memory scales with the largest record (or chunk),
+//!     // not the file. Each message is linked to its channel and schema.
+//!     let file = BufReader::new(fs::File::open("in.mcap")?);
+//!     for message in mcap::io::MessageReader::new(file) {
+//!         println!("{:?}", message?);
+//!         // Or whatever else you'd like to do...
 //!     }
 //!     Ok(())
 //! }
 //! ```
 //!
-//! For [`Message`]s linked to their [`Channel`] and [`Schema`], see the `mcapcat` example in
-//! the repository. See [`sans_io::IndexedReader`] for random access through the summary and
-//! [`sans_io::SummaryReader`] for the summary alone. The [`read`] readers take a byte slice and
-//! suit data already in memory.
+//! See [`sans_io::LinearReader`] for raw records, [`sans_io::IndexedReader`] for random access
+//! through the summary, and [`sans_io::SummaryReader`] for the summary alone. The [`read`]
+//! readers take a byte slice and suit data already in memory.
 //!
 //! or writing:
 //! ```no_run
@@ -77,6 +63,7 @@
 //! }
 //! ```
 
+pub mod io;
 pub mod read;
 pub mod records;
 #[cfg(feature = "tokio")]

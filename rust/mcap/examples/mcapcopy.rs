@@ -1,7 +1,5 @@
 #[path = "common/logsetup.rs"]
 mod logsetup;
-#[path = "common/messages.rs"]
-mod messages;
 
 use std::{
     fs,
@@ -34,7 +32,7 @@ fn run() -> Result<()> {
     let mut out = mcap::Writer::new(BufWriter::new(fs::File::create("out.mcap")?))?;
 
     // Stream records one at a time; memory scales with the largest record, not the file.
-    for message in messages::MessageReader::new(input) {
+    for message in mcap::io::MessageReader::new(input) {
         let message = message?;
         let ts = message.publish_time;
         info!(
