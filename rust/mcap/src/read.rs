@@ -397,11 +397,6 @@ impl<'a> ChannelAccumulator<'a> {
     pub fn get(&self, chan_id: u16) -> Option<Arc<Channel<'a>>> {
         self.channels.get(&chan_id).cloned()
     }
-
-    /// All channels seen so far, including ones with no messages yet.
-    pub fn channels(&self) -> impl Iterator<Item = &Arc<Channel<'a>>> {
-        self.channels.values()
-    }
 }
 
 /// Reads all messages from the MCAP file---in the order they were written---and
@@ -898,4 +893,45 @@ pub fn metadata(mcap: &[u8], index: &records::MetadataIndex) -> McapResult<recor
     }
 
     Ok(m)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sans_io::message_reader::test_support::two_channel_mcap;
+
+    #[test]
+    fn accumulator_seeded_from_summary_checks_chunk_definitions_against_it() {
+        let mcap = two_channel_mcap(true);
+        let summary = Summary::read(&mcap).expect("read").expect("summary");
+        let summary_channel = summary.channels.get(&1).expect("channel 1 in summary");
+
+        let mut accumulator = ChannelAccumulator::from_summary(&summary);
+        assert_eq!(
+            accumulator.get(1).as_deref(),
+            Some(summary_channel.as_ref())
+        );
+
+        // A chunk's repeat of a summary channel is accepted when it matches...
+        let matching = records::Channel {
+            id: summary_channel.id,
+            schema_id: summary_channel.schema.as_ref().map(|s| s.id).unwrap_or(0),
+            topic: summary_channel.topic.clone(),
+            message_encoding: summary_channel.message_encoding.clone(),
+            metadata: summary_channel.metadata.clone(),
+        };
+        accumulator
+            .add_channel(matching.clone())
+            .expect("a matching redefinition is accepted");
+
+        // ...and rejected when it conflicts.
+        let conflicting = records::Channel {
+            topic: "/renamed".to_string(),
+            ..matching
+        };
+        assert!(matches!(
+            accumulator.add_channel(conflicting),
+            Err(McapError::ConflictingChannels(topic)) if topic == "/renamed"
+        ));
+    }
 }

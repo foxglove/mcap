@@ -136,11 +136,6 @@ impl MessageReader {
     pub fn get_channel(&self, channel_id: u16) -> Option<Arc<Channel<'static>>> {
         self.channeler.get(channel_id)
     }
-
-    /// All channels seen so far, including ones with no messages yet.
-    pub fn channels(&self) -> impl Iterator<Item = &Arc<Channel<'static>>> {
-        self.channeler.channels()
-    }
 }
 
 #[cfg(test)]
