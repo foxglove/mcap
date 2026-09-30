@@ -3,8 +3,7 @@
 //! [`MessageReader`] composes [`LinearReader`] with the same schema/channel bookkeeping that
 //! [`crate::MessageStream`] uses, so it applies the same validation (schema ID 0, conflicting
 //! redefinitions, unknown channels) while streaming from any source of bytes. Use
-//! [`crate::io::MessageReader`] (or `mcap::tokio::MessageReader` with the `tokio` feature) unless
-//! you are driving the reads yourself.
+//! [`crate::io::MessageReader`] unless you are driving the reads yourself.
 use std::{borrow::Cow, sync::Arc};
 
 use crate::{
