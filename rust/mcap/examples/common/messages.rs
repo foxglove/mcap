@@ -25,11 +25,16 @@ pub struct MessageReader<R> {
     reader: LinearReader,
     schemas: HashMap<u16, Arc<Schema<'static>>>,
     channels: HashMap<u16, Arc<Channel<'static>>>,
+    /// Set after the first error so the iterator ends instead of repeating it forever.
+    done: bool,
 }
 
 impl<R: Read> MessageReader<R> {
     pub fn new(source: R) -> Self {
-        Self::with_options(source, LinearReaderOptions::default())
+        Self::with_options(
+            source,
+            LinearReaderOptions::default().with_validate_chunk_crcs(true),
+        )
     }
 
     pub fn with_options(source: R, options: LinearReaderOptions) -> Self {
@@ -38,6 +43,7 @@ impl<R: Read> MessageReader<R> {
             reader: LinearReader::new_with_options(options),
             schemas: HashMap::new(),
             channels: HashMap::new(),
+            done: false,
         }
     }
 }
@@ -46,6 +52,19 @@ impl<R: Read> Iterator for MessageReader<R> {
     type Item = Result<Message<'static>>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            return None;
+        }
+        let item = self.next_message();
+        if !matches!(item, Some(Ok(_))) {
+            self.done = true;
+        }
+        item
+    }
+}
+
+impl<R: Read> MessageReader<R> {
+    fn next_message(&mut self) -> Option<Result<Message<'static>>> {
         loop {
             let event = match self.reader.next_event()? {
                 Ok(event) => event,
