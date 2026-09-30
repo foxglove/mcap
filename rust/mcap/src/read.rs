@@ -35,15 +35,19 @@ use crate::{
     Attachment, Channel, McapError, McapResult, Message, Schema, MAGIC,
 };
 
-/// Nonstandard reading options, e.g.,
-/// to be more lenient when trying to recover incomplete/damaged files.
+/// Nonstandard reading options, e.g. to be more lenient with damaged files or stricter about
+/// checking them.
 ///
 /// More may be added in future releases.
 #[derive(EnumSetType, Debug)]
+#[non_exhaustive]
 pub enum Options {
     /// Don't require the MCAP file to end with its magic bytes. [`RawMessageStream`] and
     /// [`MessageStream`] then end at the data end record.
     IgnoreEndMagic,
+    /// Check chunk CRCs, failing with [`McapError::BadChunkCrc`] on a mismatch. Off by default.
+    /// [`LinearReader`] yields chunks whole and ignores this.
+    ValidateChunkCrcs,
 }
 
 /// Scans a mapped MCAP file from start to end, returning each record.
@@ -71,7 +75,6 @@ impl<'a> LinearReader<'a> {
                     LinearReaderOptions::default()
                         .with_record_length_limit(buf.len())
                         .with_skip_end_magic(options.contains(Options::IgnoreEndMagic))
-                        .with_validate_chunk_crcs(true)
                         .with_emit_chunks(true),
                 ),
             },
@@ -286,7 +289,7 @@ impl<'a> ChunkFlattener<'a> {
                 reader: SansIoReader::new_with_options(
                     LinearReaderOptions::default()
                         .with_skip_end_magic(options.contains(Options::IgnoreEndMagic))
-                        .with_validate_chunk_crcs(true),
+                        .with_validate_chunk_crcs(options.contains(Options::ValidateChunkCrcs)),
                 ),
             },
         })
@@ -413,8 +416,8 @@ impl<'a> ChannelAccumulator<'a> {
     }
 }
 
-/// Reads all messages from the MCAP file---in the order they were written---and
-/// perform needed validation (CRCs, etc.) as we go.
+/// Reads all messages from the MCAP file, in the order they were written, linking each to its
+/// channel and schema. Chunk CRCs are checked only with [`Options::ValidateChunkCrcs`].
 ///
 /// Unlike [`MessageStream`], this iterator returns the raw [`MessageHeader`](records::MessageHeader)
 /// and message data instead of constructing a [`Message`].
