@@ -412,6 +412,8 @@ pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<Material
     writer
         .flush()
         .context("failed to flush temporary remote input file")?;
+    // `writer` mutably borrows `temp_file` and has a `Drop` impl, so the borrow
+    // lasts until it is dropped; release it before moving `temp_file` out.
     drop(writer);
     Ok(MaterializedInput {
         temp_file: Some(temp_file),
