@@ -44,10 +44,8 @@ const REMOTE_STALL_TIMEOUT: Duration = Duration::from_secs(120);
 // the wait for the response head here and retry it a few times.
 const REMOTE_RESPONSE_TIMEOUT: Duration = Duration::from_secs(30);
 const REMOTE_RESPONSE_ATTEMPTS: usize = 3;
-// object_store retries 5xx/429/connection errors inside the future that
-// REMOTE_RESPONSE_TIMEOUT wraps, so its retry timeout plus one final backoff
-// sleep must end inside that bound or throttling would read as a hang. The
-// retry count is only a backstop; the timeout ends the sequence first.
+// object_store's retries run inside the REMOTE_RESPONSE_TIMEOUT window, so they
+// must finish within it or a throttled request would be reported as a hang.
 const REMOTE_STORE_RETRIES: usize = 10;
 const REMOTE_STORE_RETRY_TIMEOUT: Duration = Duration::from_secs(15);
 const REMOTE_STORE_MAX_BACKOFF: Duration = Duration::from_secs(5);
