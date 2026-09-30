@@ -369,8 +369,12 @@ impl MaterializedInputMessages {
         // A summaryless or incompletely-indexed input can't be read in log-time order on the fly,
         // so read every message (in stored order) and sort. `mcap::MessageStream` resolves each
         // message's channel and applies the same schema/channel conflict checks merge needs.
-        let stream = mcap::MessageStream::new(input.data)
-            .with_context(|| format!("failed to stream records from '{}'", input.name))?;
+        // Keep checking chunk CRCs: a corrupt input must fail, not be rewritten with a valid CRC.
+        let stream = mcap::MessageStream::new_with_options(
+            input.data,
+            mcap::read::Options::ValidateChunkCrcs.into(),
+        )
+        .with_context(|| format!("failed to stream records from '{}'", input.name))?;
         let mut messages = Vec::new();
         for (input_order, message) in stream.enumerate() {
             let message = message
@@ -718,12 +722,22 @@ mod tests {
     }
 
     fn build_non_indexed_mcap(profile: &str, messages: &[TestMessage]) -> Vec<u8> {
+        build_non_indexed_mcap_with_options(profile, messages, false)
+    }
+
+    /// Chunks, when requested, are left uncompressed so a test can corrupt their bytes.
+    fn build_non_indexed_mcap_with_options(
+        profile: &str,
+        messages: &[TestMessage],
+        chunked: bool,
+    ) -> Vec<u8> {
         let mut output = Cursor::new(Vec::<u8>::new());
         {
             let mut writer = mcap::WriteOptions::new()
                 .profile(profile)
                 .library("test-recorder/0.0")
-                .use_chunks(false)
+                .use_chunks(chunked)
+                .compression(None)
                 .emit_summary_records(false)
                 .emit_summary_offsets(false)
                 .create(&mut output)
@@ -1128,6 +1142,43 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(ordered_log_times, vec![1, 5, 10]);
+    }
+
+    #[test]
+    fn merge_rejects_a_corrupt_chunk_in_a_non_indexed_input() {
+        // The unsorted-input path must fail on a chunk whose CRC does not match, rather than
+        // decode it and write it back out with a fresh, valid CRC.
+        let mut input = build_non_indexed_mcap_with_options(
+            "profile",
+            &[
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/left".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 10,
+                    payload: vec![2],
+                },
+                TestMessage {
+                    channel_id: 1,
+                    topic: "/left".to_string(),
+                    metadata: BTreeMap::new(),
+                    log_time: 1,
+                    payload: vec![1],
+                },
+            ],
+            true,
+        );
+        common::corrupt_first_chunk_message(&mut input);
+
+        let err = merge_bytes(&[("left", input.as_slice())], CoalesceChannels::Auto, false)
+            .expect_err("a corrupt chunk must fail the merge");
+        assert!(
+            err.chain().any(|cause| matches!(
+                cause.downcast_ref::<mcap::McapError>(),
+                Some(mcap::McapError::BadChunkCrc { .. })
+            )),
+            "{err:?}"
+        );
     }
 
     #[test]

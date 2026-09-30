@@ -189,3 +189,33 @@ fn reads_through_the_summary_to_the_end_magic() -> Result<()> {
     }
     Ok(())
 }
+
+#[test]
+fn validates_chunk_crcs_only_with_the_option() -> Result<()> {
+    let mut buffer = chunked_fixture()?;
+
+    // Flip the last byte of the last chunk. It ends with a message, so this lands in payload:
+    // every record still parses and only the CRC disagrees.
+    let summary = mcap::read::Summary::read(&buffer)?.expect("fixture has a summary");
+    let index = summary.chunk_indexes.last().expect("fixture has a chunk");
+    let last_byte = usize::try_from(index.chunk_start_offset + index.chunk_length)? - 1;
+    buffer[last_byte] ^= 0xFF;
+
+    // Default: no CRC check.
+    let messages = mcap::MessageStream::new(&buffer)?.collect::<mcap::McapResult<Vec<_>>>()?;
+    assert_eq!(messages.len(), 4);
+
+    // Opt in: the mismatch is reported.
+    let items = mcap::MessageStream::new_with_options(
+        &buffer,
+        enumset::enum_set!(mcap::read::Options::ValidateChunkCrcs),
+    )?
+    .collect::<Vec<_>>();
+    assert!(
+        items
+            .iter()
+            .any(|item| matches!(item, Err(mcap::McapError::BadChunkCrc { .. }))),
+        "{items:?}"
+    );
+    Ok(())
+}

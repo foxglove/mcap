@@ -356,6 +356,47 @@ where
     Ok(())
 }
 
+/// Flips the last byte of the first message inside the file's first chunk, which must be
+/// uncompressed, so every record still parses and only the chunk's CRC disagrees.
+#[cfg(test)]
+pub(crate) fn corrupt_first_chunk_message(bytes: &mut [u8]) {
+    const PREFIX: usize = 1 + 8;
+    let len_at =
+        |at: usize| u64::from_le_bytes(bytes[at + 1..at + PREFIX].try_into().unwrap()) as usize;
+    let mut at = mcap::MAGIC.len();
+    while at + PREFIX <= bytes.len() {
+        let len = len_at(at);
+        if bytes[at] != mcap::records::op::CHUNK {
+            at += PREFIX + len;
+            continue;
+        }
+        // Chunk body: start/end time (16), uncompressed size (8), crc (4), compression
+        // (4 + name), records length (8), records.
+        let body = at + PREFIX;
+        let compression_len =
+            u32::from_le_bytes(bytes[body + 28..body + 32].try_into().unwrap()) as usize;
+        assert_eq!(compression_len, 0, "the chunk must be uncompressed");
+        let records_len_at = body + 32;
+        let records_len = u64::from_le_bytes(
+            bytes[records_len_at..records_len_at + 8]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        let mut record = records_len_at + 8;
+        let end = record + records_len;
+        while record + PREFIX <= end {
+            let record_len = len_at(record);
+            if bytes[record] == mcap::records::op::MESSAGE {
+                bytes[record + PREFIX + record_len - 1] ^= 0xFF;
+                return;
+            }
+            record += PREFIX + record_len;
+        }
+        panic!("no message in the first chunk");
+    }
+    panic!("no chunk in the file");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
