@@ -108,6 +108,7 @@ mod tests {
     use crate::sans_io::message_reader::test_support::{
         payload, truncated_in_last_message, two_channel_mcap,
     };
+    use crate::McapError;
 
     #[test]
     fn matches_message_stream() {
@@ -238,6 +239,4 @@ mod tests {
         );
         assert_eq!(items.iter().filter(|item| item.is_err()).count(), 1);
     }
-
-    use crate::McapError;
 }
