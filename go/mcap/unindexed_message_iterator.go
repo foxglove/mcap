@@ -9,8 +9,7 @@ type unindexedMessageIterator struct {
 	schemas  slicemap[Schema]
 	channels slicemap[Channel]
 	topics   map[string]bool
-	start    uint64
-	end      uint64
+	bounds   logTimeBounds
 
 	recordBuf []byte
 
@@ -61,7 +60,7 @@ func (it *unindexedMessageIterator) NextInto(msg *Message) (*Schema, *Channel, *
 				// channel ID, it has no option but to skip.
 				continue
 			}
-			if msg.LogTime >= it.start && msg.LogTime < it.end {
+			if it.bounds.includesLogTime(msg.LogTime) {
 				schema := it.schemas.Get(channel.SchemaID)
 				if schema == nil && channel.SchemaID != 0 {
 					return nil, nil, nil, fmt.Errorf("channel %d with unrecognized schema ID %d", msg.ChannelID, channel.SchemaID)
