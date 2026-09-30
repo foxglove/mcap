@@ -149,6 +149,22 @@ mod tests {
         assert_eq!(items.iter().filter(|item| item.is_err()).count(), 1);
     }
 
+    #[test]
+    fn stops_before_the_summary() {
+        let mcap = two_channel_mcap(true);
+        let summary_start = crate::read::footer(&mcap).expect("footer").summary_start as u64;
+        let mut reader = MessageReader::new(Cursor::new(&mcap));
+        let messages = reader
+            .by_ref()
+            .collect::<McapResult<Vec<_>>>()
+            .expect("messages");
+        assert_eq!(messages.len(), 4);
+        assert!(
+            reader.into_inner().position() <= summary_start,
+            "the reader must not consume the summary section"
+        );
+    }
+
     /// Fails after `ok_bytes` bytes, like a disk error mid-file.
     struct FailAfter<'a> {
         bytes: &'a [u8],

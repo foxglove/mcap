@@ -97,6 +97,10 @@ impl MessageReader {
                                 return Some(Err(err));
                             }
                         }
+                        // The summary that follows repeats schemas and channels and holds
+                        // nothing a message reader needs, so stop here rather than re-check
+                        // it, or fail on a summary that is damaged or cut off.
+                        Record::DataEnd(_) => return None,
                         Record::Message { header, data } => {
                             let Some(channel) = self.channeler.get(header.channel_id) else {
                                 return Some(Err(McapError::UnknownChannel(
@@ -324,6 +328,36 @@ mod tests {
         assert!(
             matches!(items.as_slice(), [Err(McapError::UnknownChannel(1, 99))]),
             "{items:?}"
+        );
+    }
+
+    #[test]
+    fn stops_at_the_data_end_record() {
+        let mcap = two_channel_mcap(true);
+        let summary_start = crate::read::footer(&mcap).expect("footer").summary_start as usize;
+
+        // A summary that is cut off (or damaged) must not turn into an error after the last
+        // message.
+        let items = drain(&mut MessageReader::new(), &mcap[..summary_start + 20]);
+        assert_eq!(items.len(), 4, "{items:?}");
+        assert!(items.iter().all(|item| item.is_ok()), "{items:?}");
+
+        // On an intact file the summary bytes are never requested.
+        let mut reader = MessageReader::new();
+        let mut bytes: &[u8] = &mcap;
+        while let Some(event) = reader.next_event() {
+            if let Ok(MessageReadEvent::ReadRequest(need)) = event {
+                let n = need.min(bytes.len());
+                reader.insert(n).copy_from_slice(&bytes[..n]);
+                reader.notify_read(n);
+                bytes = &bytes[n..];
+            }
+        }
+        assert!(
+            bytes.len() >= mcap.len() - summary_start,
+            "the summary section was read: {} bytes left of {} after summary_start {summary_start}",
+            bytes.len(),
+            mcap.len()
         );
     }
 
