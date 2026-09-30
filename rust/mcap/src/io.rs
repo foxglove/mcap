@@ -13,8 +13,10 @@ use crate::{
 /// incrementally. Memory scales with the largest record or chunk, not the file.
 ///
 /// It applies the same schema/channel validation as [`crate::MessageStream`], which walks a
-/// complete in-memory buffer, and yields nothing after the first error. Unlike `MessageStream`,
-/// it stops at the data end record and does not read or check the summary section.
+/// complete in-memory buffer, and yields nothing after the first error. Like `MessageStream`, it
+/// reads to the end of the file without re-checking the summary, so a truncated file or a bad
+/// end magic is reported after the last message. With `skip_end_magic` it ends at the data end
+/// record.
 ///
 /// Every yielded message owns a copy of its data, whether it came from a chunk or not, so
 /// messages have unbounded lifetimes and can be sent between threads.
@@ -194,19 +196,31 @@ mod tests {
     }
 
     #[test]
-    fn stops_before_the_summary() {
+    fn reads_through_the_summary_to_the_end_magic() {
         let mcap = two_channel_mcap(true);
-        let summary_start = crate::read::footer(&mcap).expect("footer").summary_start as u64;
+        let summary_start = crate::read::footer(&mcap).expect("footer").summary_start as usize;
+
+        // An intact file is read to its end.
         let mut reader = MessageReader::new(Cursor::new(&mcap));
         let messages = reader
             .by_ref()
             .collect::<McapResult<Vec<_>>>()
             .expect("messages");
         assert_eq!(messages.len(), 4);
-        assert!(
-            reader.into_inner().position() <= summary_start,
-            "the reader must not consume the summary section"
-        );
+        assert_eq!(reader.into_inner().position() as usize, mcap.len());
+
+        // Truncated summary: every message, then the error, unless the magic is not checked.
+        let truncated = &mcap[..summary_start + 20];
+        let items = MessageReader::new(Cursor::new(truncated)).collect::<Vec<_>>();
+        assert_eq!(items.len(), 5, "{items:?}");
+        assert!(matches!(items[4], Err(McapError::UnexpectedEof)));
+        let messages = MessageReader::new_with_options(
+            Cursor::new(truncated),
+            LinearReaderOptions::default().with_skip_end_magic(true),
+        )
+        .collect::<McapResult<Vec<_>>>()
+        .expect("messages");
+        assert_eq!(messages.len(), 4);
     }
 
     /// Fails after `ok_bytes` bytes, like a disk error mid-file.

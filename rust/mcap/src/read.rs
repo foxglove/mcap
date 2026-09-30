@@ -34,7 +34,8 @@ use crate::{
 /// More may be added in future releases.
 #[derive(EnumSetType, Debug)]
 pub enum Options {
-    /// Don't require the MCAP file to end with its magic bytes.
+    /// Don't require the MCAP file to end with its magic bytes. [`RawMessageStream`] and
+    /// [`MessageStream`] then end at the data end record.
     IgnoreEndMagic,
 }
 
@@ -285,6 +286,13 @@ impl<'a> ChunkFlattener<'a> {
     }
 }
 
+impl ChunkFlattener<'_> {
+    /// Whether the record most recently returned came from inside a chunk.
+    fn in_chunk(&self) -> bool {
+        self.inner.reader.in_chunk()
+    }
+}
+
 impl<'a> Iterator for ChunkFlattener<'a> {
     type Item = McapResult<records::Record<'a>>;
 
@@ -407,11 +415,15 @@ impl<'a> ChannelAccumulator<'a> {
 /// message's [`Channel`], but just want to be able to discriminate them _by_ their channel
 /// (e.g., build some map of `Channel -> Vec<Message>`).
 ///
-/// This stops at the end of the data section and does not read the summary.
+/// Like the other MCAP libraries' streaming readers, this reads to the end of the file without
+/// re-checking the summary, so a truncated file or a bad end magic is reported after the last
+/// message. With [`Options::IgnoreEndMagic`] it ends at the data end record.
 pub struct RawMessageStream<'a> {
     records: ChunkFlattener<'a>,
     done: bool,
     channeler: ChannelAccumulator<'static>,
+    ignore_end_magic: bool,
+    past_data_end: bool,
 }
 
 impl<'a> RawMessageStream<'a> {
@@ -426,6 +438,8 @@ impl<'a> RawMessageStream<'a> {
             records,
             done: false,
             channeler: ChannelAccumulator::default(),
+            ignore_end_magic: options.contains(Options::IgnoreEndMagic),
+            past_data_end: false,
         })
     }
 
@@ -456,6 +470,11 @@ impl<'a> Iterator for RawMessageStream<'a> {
                 None => break None,
             };
 
+            // Summary records are parsed but not re-checked.
+            if self.past_data_end {
+                continue;
+            }
+
             match record {
                 // Insert schemas into self so we know when subsequent channels reference them.
                 Record::Schema { header, data } => {
@@ -475,6 +494,16 @@ impl<'a> Iterator for RawMessageStream<'a> {
                 Record::Message { header, data } => {
                     break Some(Ok(RawMessage { header, data }));
                 }
+
+                // The summary repeats schemas and channels, so read on to the end magic without
+                // re-checking it, or stop here if the magic is not to be checked. A chunk may not
+                // hold a data end record, so one inside a chunk is skipped like any stray record.
+                Record::DataEnd(_) if !self.records.in_chunk() => {
+                    if self.ignore_end_magic {
+                        break None;
+                    }
+                    self.past_data_end = true;
+                }
                 _skip => {}
             };
         };
@@ -489,7 +518,9 @@ impl<'a> Iterator for RawMessageStream<'a> {
 /// Like [`RawMessageStream`], but constructs a [`Message`]
 /// (complete with its [`Channel`]) from the raw header and data.
 ///
-/// This stops at the end of the data section and does not read the summary.
+/// Like the other MCAP libraries' streaming readers, this reads to the end of the file without
+/// re-checking the summary, so a truncated file or a bad end magic is reported after the last
+/// message. With [`Options::IgnoreEndMagic`] it ends at the data end record.
 ///
 /// Because tying the lifetime of each message to the underlying MCAP memory map
 /// makes it very difficult to send between threads or use in async land,

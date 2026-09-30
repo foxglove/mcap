@@ -7,7 +7,7 @@ use std::{borrow::Cow, sync::Arc};
 
 use crate::{
     read::ChannelAccumulator,
-    records::Record,
+    records::{op, Record},
     sans_io::{LinearReadEvent, LinearReader, LinearReaderOptions},
     Channel, McapError, McapResult, Message,
 };
@@ -25,13 +25,16 @@ pub enum MessageReadEvent {
 /// Streams linked messages from any source of bytes.
 ///
 /// It applies the same schema/channel validation as [`crate::MessageStream`] and yields nothing
-/// after the first error. Unlike `MessageStream`, it stops at the data end record and does not
-/// read or check the summary section. Messages own their data, so they outlive the reader's
-/// buffer.
+/// after the first error. Like `MessageStream`, it reads to the end of the file without
+/// re-checking the summary, so a truncated file or a bad end magic is reported after the last
+/// message. With `skip_end_magic` it ends at the data end record. Messages own their data, so
+/// they outlive the reader's buffer.
 pub struct MessageReader {
     reader: LinearReader,
     channeler: ChannelAccumulator<'static>,
     done: bool,
+    skip_end_magic: bool,
+    past_data_end: bool,
 }
 
 impl Default for MessageReader {
@@ -49,14 +52,17 @@ impl MessageReader {
     /// Creates a reader with the given options. `emit_chunks` is always disabled, because the
     /// reader must see the records inside each chunk.
     pub fn new_with_options(options: LinearReaderOptions) -> Self {
+        let skip_end_magic = options.skip_end_magic;
         Self {
             reader: LinearReader::new_with_options(options.with_emit_chunks(false)),
             channeler: ChannelAccumulator::default(),
             done: false,
+            skip_end_magic,
+            past_data_end: false,
         }
     }
 
-    /// The next event, or `None` once the data section is read or an error has been returned.
+    /// The next event, or `None` once the file is read or an error has been returned.
     pub fn next_event(&mut self) -> Option<McapResult<MessageReadEvent>> {
         if self.done {
             return None;
@@ -78,11 +84,30 @@ impl MessageReader {
                 LinearReadEvent::ReadRequest(need) => {
                     return Some(Ok(MessageReadEvent::ReadRequest(need)));
                 }
+                // The summary repeats schemas and channels, so read on to the end magic without
+                // re-checking it, or stop here if the magic is not to be checked. A chunk may not
+                // hold a data end record, so one inside a chunk is skipped like any stray record.
+                LinearReadEvent::Record {
+                    opcode: op::DATA_END,
+                    ..
+                } => {
+                    if self.reader.in_chunk() {
+                        continue;
+                    }
+                    if self.skip_end_magic {
+                        return None;
+                    }
+                    self.past_data_end = true;
+                }
                 LinearReadEvent::Record { opcode, data } => {
                     let record = match crate::parse_record(opcode, data) {
                         Ok(record) => record,
                         Err(err) => return Some(Err(err)),
                     };
+                    // Summary records are parsed but not re-checked.
+                    if self.past_data_end {
+                        continue;
+                    }
                     match record {
                         Record::Schema { header, data } => {
                             let data = Cow::Owned(data.into_owned());
@@ -95,10 +120,6 @@ impl MessageReader {
                                 return Some(Err(err));
                             }
                         }
-                        // The summary repeats schemas and channels and holds nothing a message
-                        // reader needs, so stop rather than re-check it or fail on one that is
-                        // damaged or cut off.
-                        Record::DataEnd(_) => return None,
                         Record::Message { header, data } => {
                             let Some(channel) = self.channeler.get(header.channel_id) else {
                                 return Some(Err(McapError::UnknownChannel(
@@ -213,6 +234,43 @@ pub(crate) mod test_support {
         &mcap[..last + RECORD_PREFIX + MESSAGE_HEADER + 5]
     }
 
+    /// A chunk body's fixed fields: start/end time, uncompressed size, CRC.
+    const CHUNK_FIXED: usize = 8 + 8 + 8 + 4;
+
+    /// The file with a (never valid) data end record spliced into its first chunk, which must be
+    /// uncompressed. The chunk's CRC is cleared so the splice does not fail it.
+    pub(crate) fn with_data_end_in_first_chunk(mcap: &[u8]) -> Vec<u8> {
+        let chunk = record_offsets(mcap, crate::records::op::CHUNK)[0];
+        let body = chunk + RECORD_PREFIX;
+        let compression_len_at = body + CHUNK_FIXED;
+        let compression_len = u32::from_le_bytes(
+            mcap[compression_len_at..compression_len_at + 4]
+                .try_into()
+                .unwrap(),
+        ) as usize;
+        assert_eq!(compression_len, 0, "the chunk must be uncompressed");
+        let records_len_at = compression_len_at + 4;
+        let records_at = records_len_at + 8;
+
+        // Opcode, length, and a data section CRC of zero.
+        let mut data_end = vec![crate::records::op::DATA_END];
+        data_end.extend_from_slice(&4u64.to_le_bytes());
+        data_end.extend_from_slice(&0u32.to_le_bytes());
+        let added = data_end.len() as u64;
+
+        let mut out = mcap.to_vec();
+        let grow = |out: &mut [u8], at: usize| {
+            let old = u64::from_le_bytes(out[at..at + 8].try_into().unwrap());
+            out[at..at + 8].copy_from_slice(&(old + added).to_le_bytes());
+        };
+        grow(&mut out, chunk + 1); // record length
+        grow(&mut out, body + 16); // uncompressed size
+        grow(&mut out, records_len_at); // records length
+        out[body + 24..body + 28].copy_from_slice(&0u32.to_le_bytes()); // crc
+        out.splice(records_at..records_at, data_end);
+        out
+    }
+
     /// The payload the writer used for message `sequence`.
     pub(crate) fn payload(sequence: u32) -> Cow<'static, [u8]> {
         Cow::Owned(vec![sequence as u8; 32])
@@ -270,6 +328,72 @@ mod tests {
         assert!(matches!(items.last(), Some(Err(McapError::UnexpectedEof))));
         assert_eq!(items.iter().filter(|item| item.is_err()).count(), 1);
         assert!(reader.next_event().is_none(), "the reader stays finished");
+    }
+
+    #[test]
+    fn a_data_end_record_inside_a_chunk_does_not_end_the_stream() {
+        let mcap = two_channel_mcap(true);
+        assert!(
+            super::test_support::record_offsets(&mcap, crate::records::op::CHUNK).len() >= 2,
+            "the fixture needs messages in a later chunk"
+        );
+        let mcap = super::test_support::with_data_end_in_first_chunk(&mcap);
+
+        let items = drain(&mut MessageReader::new(), &mcap);
+        assert!(items.iter().all(|item| item.is_ok()), "{items:?}");
+        assert_eq!(items.len(), 4);
+
+        let messages = crate::MessageStream::new(&mcap)
+            .expect("stream")
+            .collect::<McapResult<Vec<_>>>()
+            .expect("messages");
+        assert_eq!(messages.len(), 4);
+
+        let raw = crate::read::RawMessageStream::new(&mcap)
+            .expect("stream")
+            .collect::<McapResult<Vec<_>>>()
+            .expect("messages");
+        assert_eq!(raw.len(), 4);
+    }
+
+    #[test]
+    fn reads_through_the_summary_to_the_end_magic() {
+        let mcap = two_channel_mcap(true);
+        let summary_start = crate::read::footer(&mcap).expect("footer").summary_start as usize;
+        assert!(summary_start > 0, "the fixture needs a summary section");
+        // The summary opens with the schema: opcode, length, id (2), name length (4), name.
+        assert_eq!(mcap[summary_start], crate::records::op::SCHEMA);
+        let name_at = summary_start + 9 + 2 + 4;
+
+        // A summary that disagrees with the data (a renamed schema) is not an error.
+        let mut damaged = mcap.clone();
+        damaged[name_at] = b'X';
+        let items = drain(&mut MessageReader::new(), &damaged);
+        assert!(items.iter().all(|item| item.is_ok()), "{items:?}");
+        assert_eq!(items.len(), 4);
+
+        // Truncated summary or bad end magic: every message, then the error.
+        let truncated = &mcap[..summary_start + 20];
+        let items = drain(&mut MessageReader::new(), truncated);
+        assert_eq!(items.len(), 5, "{items:?}");
+        assert!(items[..4].iter().all(|item| item.is_ok()));
+        assert!(matches!(items[4], Err(McapError::UnexpectedEof)));
+
+        let mut bad_magic = mcap.clone();
+        *bad_magic.last_mut().unwrap() ^= 0xFF;
+        let items = drain(&mut MessageReader::new(), &bad_magic);
+        assert_eq!(items.len(), 5, "{items:?}");
+        assert!(matches!(items[4], Err(McapError::BadMagic)));
+
+        // With skip_end_magic the reader ends at the data end record.
+        for file in [truncated, &bad_magic[..]] {
+            let mut reader = MessageReader::new_with_options(
+                LinearReaderOptions::default().with_skip_end_magic(true),
+            );
+            let items = drain(&mut reader, file);
+            assert!(items.iter().all(|item| item.is_ok()), "{items:?}");
+            assert_eq!(items.len(), 4);
+        }
     }
 
     #[test]
@@ -331,35 +455,6 @@ mod tests {
         assert!(
             matches!(items.as_slice(), [Err(McapError::UnknownChannel(1, 99))]),
             "{items:?}"
-        );
-    }
-
-    #[test]
-    fn stops_at_the_data_end_record() {
-        let mcap = two_channel_mcap(true);
-        let summary_start = crate::read::footer(&mcap).expect("footer").summary_start as usize;
-
-        // A summary that is cut off or damaged must not become an error after the last message.
-        let items = drain(&mut MessageReader::new(), &mcap[..summary_start + 20]);
-        assert_eq!(items.len(), 4, "{items:?}");
-        assert!(items.iter().all(|item| item.is_ok()), "{items:?}");
-
-        // On an intact file the summary bytes are never requested.
-        let mut reader = MessageReader::new();
-        let mut bytes: &[u8] = &mcap;
-        while let Some(event) = reader.next_event() {
-            if let Ok(MessageReadEvent::ReadRequest(need)) = event {
-                let n = need.min(bytes.len());
-                reader.insert(n).copy_from_slice(&bytes[..n]);
-                reader.notify_read(n);
-                bytes = &bytes[n..];
-            }
-        }
-        assert!(
-            bytes.len() >= mcap.len() - summary_start,
-            "the summary section was read: {} bytes left of {} after summary_start {summary_start}",
-            bytes.len(),
-            mcap.len()
         );
     }
 
