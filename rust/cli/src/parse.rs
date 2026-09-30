@@ -1,6 +1,5 @@
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
+use std::collections::BTreeMap;
 
 use anyhow::{bail, Context as _, Result};
 use mcap::records::{self, Record};
@@ -450,8 +449,7 @@ pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'
 
 pub(crate) fn collect_chunk_definitions_from_record_bytes(
     chunk: &[u8],
-    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &mut HashMap<u16, records::Channel>,
+    channels: &mut mcap::read::ChannelAccumulator<'static>,
 ) -> Result<()> {
     if chunk.len() < 9 || chunk[0] != records::op::CHUNK {
         return Err(mcap::McapError::BadIndex.into());
@@ -468,32 +466,15 @@ pub(crate) fn collect_chunk_definitions_from_record_bytes(
     };
 
     for record in mcap::read::ChunkReader::new(header, data.as_ref())? {
-        collect_definition_record(record?, schemas, channel_defs);
+        match record? {
+            Record::Schema { header, data } => {
+                channels.add_schema(header, Cow::Owned(data.into_owned()))?;
+            }
+            Record::Channel(channel) => channels.add_channel(channel)?,
+            _ => {}
+        }
     }
     Ok(())
-}
-
-fn collect_definition_record(
-    record: Record<'_>,
-    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &mut HashMap<u16, records::Channel>,
-) {
-    match record {
-        Record::Schema { header, data } => {
-            schemas.entry(header.id).or_insert_with(|| {
-                Arc::new(mcap::Schema {
-                    id: header.id,
-                    name: header.name,
-                    encoding: header.encoding,
-                    data: Cow::Owned(data.into_owned()),
-                })
-            });
-        }
-        Record::Channel(channel) => {
-            channel_defs.entry(channel.id).or_insert(channel);
-        }
-        _ => {}
-    }
 }
 
 /// Test helper: reads the leading header record of in-memory bytes via the production driver.

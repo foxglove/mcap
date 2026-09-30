@@ -2,7 +2,7 @@
 //! writes a new one, choosing an indexed or linear read path, applying record selection, and
 //! placing records in the standard layout. Multi-input merges go through [`super::merge`] instead.
 use std::borrow::Cow;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::io::{Seek, Write};
 use std::sync::Arc;
 
@@ -376,9 +376,7 @@ fn filter_linear<W: Write + Seek>(
         })?;
     }
 
-    let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
-    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
-    let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+    let mut channels = mcap::read::ChannelAccumulator::default();
     // Collected during the message pass and written last.
     let mut pending_attachments = Vec::<mcap::Attachment<'static>>::new();
     // Messages buffered for the sorted path. This holds the whole selected message set in memory,
@@ -392,36 +390,23 @@ fn filter_linear<W: Write + Seek>(
         |opcode, data| {
             match mcap::parse_record(opcode, data)? {
                 mcap::records::Record::Schema { header, data } => {
-                    let schema = Arc::new(mcap::Schema {
-                        id: header.id,
-                        name: header.name,
-                        encoding: header.encoding,
-                        data: Cow::Owned(data.into_owned()),
-                    });
-                    schemas.insert(schema.id, schema);
+                    channels.add_schema(header, Cow::Owned(data.into_owned()))?;
                 }
                 mcap::records::Record::Channel(channel) => {
-                    if channel.schema_id == 0 || schemas.contains_key(&channel.schema_id) {
-                        let resolved = build_channel(&channel, &schemas)?;
-                        channels.insert(channel.id, resolved);
-                    }
-                    channel_defs.insert(channel.id, channel);
+                    channels.add_channel(channel)?;
                 }
                 mcap::records::Record::Message { header, data } => {
                     if header.log_time < opts.start || header.log_time >= opts.end {
                         return Ok(());
                     }
 
-                    let channel = if let Some(channel) = channels.get(&header.channel_id) {
-                        channel.clone()
-                    } else {
-                        let Some(channel_def) = channel_defs.get(&header.channel_id) else {
-                            bail!("message references unknown channel {}", header.channel_id);
-                        };
-                        let resolved = build_channel(channel_def, &schemas)?;
-                        channels.insert(header.channel_id, resolved.clone());
-                        resolved
-                    };
+                    let channel =
+                        channels
+                            .get(header.channel_id)
+                            .ok_or(mcap::McapError::UnknownChannel(
+                                header.sequence,
+                                header.channel_id,
+                            ))?;
 
                     if !include_topic(&channel.topic, opts) {
                         return Ok(());
@@ -479,33 +464,6 @@ fn filter_linear<W: Write + Seek>(
     }
 
     Ok(())
-}
-
-/// Resolves a channel record against the known schemas into an owned [`mcap::Channel`]. Used by the
-/// linear path to rebuild channels as it flattens the data section.
-fn build_channel(
-    channel: &mcap::records::Channel,
-    schemas: &HashMap<u16, Arc<mcap::Schema<'static>>>,
-) -> Result<Arc<mcap::Channel<'static>>> {
-    let schema = if channel.schema_id == 0 {
-        None
-    } else {
-        Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
-            anyhow::anyhow!(
-                "encountered channel with topic {} with unknown schema ID {}",
-                channel.topic,
-                channel.schema_id
-            )
-        })?)
-    };
-
-    Ok(Arc::new(mcap::Channel {
-        id: channel.id,
-        topic: channel.topic.clone(),
-        schema,
-        message_encoding: channel.message_encoding.clone(),
-        metadata: channel.metadata.clone(),
-    }))
 }
 
 #[cfg(test)]

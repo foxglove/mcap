@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{self, IsTerminal as _, Write as _};
-use std::sync::Arc;
 
 use anyhow::{bail, Context as _, Result};
 use log::warn;
@@ -263,9 +262,7 @@ fn cat_indexed(
     }
 
     let needs_in_chunk_definitions = needs_in_chunk_definitions(&summary);
-    let mut schemas = summary.schemas.clone();
-    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
-    let mut channels = summary.channels.clone();
+    let mut channels = mcap::read::ChannelAccumulator::from_summary(&summary);
 
     let included_topics: BTreeSet<String> = summary
         .channels
@@ -324,11 +321,7 @@ fn cat_indexed(
                 )
             })?;
             let chunk = source.read_at(chunk_index.chunk_start_offset, chunk_len)?;
-            parse::collect_chunk_definitions_from_record_bytes(
-                &chunk,
-                &mut schemas,
-                &mut channel_defs,
-            )?;
+            parse::collect_chunk_definitions_from_record_bytes(&chunk, &mut channels)?;
             let data_offset = chunk_index.compressed_data_offset()?;
             let compressed_start = usize::try_from(data_offset - chunk_index.chunk_start_offset)
                 .with_context(|| {
@@ -374,7 +367,12 @@ fn cat_indexed(
             }
             mcap::sans_io::IndexedReadEvent::Message { header, data } => {
                 let channel =
-                    resolve_channel(header.channel_id, &schemas, &channel_defs, &mut channels)?;
+                    channels
+                        .get(header.channel_id)
+                        .ok_or(mcap::McapError::UnknownChannel(
+                            header.sequence,
+                            header.channel_id,
+                        ))?;
                 if !opts.include_topic(&channel.topic) {
                     continue;
                 }
@@ -416,24 +414,6 @@ fn needs_in_chunk_definitions(summary: &mcap::Summary) -> bool {
             .keys()
             .any(|channel_id| !summary.channels.contains_key(channel_id))
     })
-}
-
-fn resolve_channel(
-    channel_id: u16,
-    schemas: &HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &HashMap<u16, mcap::records::Channel>,
-    channels: &mut HashMap<u16, Arc<mcap::Channel<'static>>>,
-) -> Result<Arc<mcap::Channel<'static>>> {
-    if let Some(channel) = channels.get(&channel_id) {
-        return Ok(channel.clone());
-    }
-
-    let channel_def = channel_defs
-        .get(&channel_id)
-        .ok_or_else(|| anyhow::anyhow!("unknown channel {channel_id}"))?;
-    let channel = build_channel(channel_def, schemas)?;
-    channels.insert(channel_id, channel.clone());
-    Ok(channel)
 }
 
 // Keep this planner conservative: it intentionally mirrors IndexedReader chunk filtering as an
@@ -490,9 +470,7 @@ fn cat_linear(
     // Scan records (not just messages) so channel definitions are observed even for topics with no
     // messages; this feeds `seen_topics` for the CSV absent-vs-empty distinction in a single pass.
     // The reader descends into chunks, emitting their inner records directly.
-    let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
-    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
-    let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+    let mut channels = mcap::read::ChannelAccumulator::default();
     let mut broken_pipe = false;
 
     // Break on a broken pipe so `cat big.mcap | head` stops reading (or, for remotes, fetching).
@@ -501,15 +479,7 @@ fn cat_linear(
         mcap::sans_io::LinearReaderOptions::default(),
         |opcode, data| {
             let record = mcap::parse_record(opcode, data)?;
-            if handle_linear_record(
-                sink,
-                record,
-                opts,
-                &mut schemas,
-                &mut channel_defs,
-                &mut channels,
-                out,
-            )? {
+            if handle_linear_record(sink, record, opts, &mut channels, out)? {
                 broken_pipe = true;
                 return Ok(std::ops::ControlFlow::Break(()));
             }
@@ -527,9 +497,7 @@ fn cat_streaming(
     csv_state: &mut CsvState,
 ) -> Result<bool> {
     let mut reader = mcap::sans_io::LinearReader::new();
-    let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
-    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
-    let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+    let mut channels = mcap::read::ChannelAccumulator::default();
     let mut json_transcoders = JsonTranscoders::default();
     let mut out = MessageWriter {
         csv: csv_state,
@@ -546,15 +514,7 @@ fn cat_streaming(
             }
             mcap::sans_io::LinearReadEvent::Record { data, opcode } => {
                 let record = mcap::parse_record(opcode, data)?;
-                if handle_linear_record(
-                    sink,
-                    record,
-                    opts,
-                    &mut schemas,
-                    &mut channel_defs,
-                    &mut channels,
-                    &mut out,
-                )? {
+                if handle_linear_record(sink, record, opts, &mut channels, &mut out)? {
                     return Ok(true);
                 }
             }
@@ -568,37 +528,31 @@ fn handle_linear_record(
     sink: &mut OutputSink<impl std::io::Write>,
     record: mcap::records::Record<'_>,
     opts: &CatOptions,
-    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &mut HashMap<u16, mcap::records::Channel>,
-    channels: &mut HashMap<u16, Arc<mcap::Channel<'static>>>,
+    channels: &mut mcap::read::ChannelAccumulator<'static>,
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<bool> {
     match record {
         mcap::records::Record::Schema { header, data } => {
-            let schema = Arc::new(mcap::Schema {
-                id: header.id,
-                name: header.name,
-                encoding: header.encoding,
-                data: Cow::Owned(data.into_owned()),
-            });
-            schemas.insert(schema.id, schema);
+            channels.add_schema(header, Cow::Owned(data.into_owned()))?;
         }
         mcap::records::Record::Channel(channel) => {
             if matches!(opts.mode, OutputMode::Csv) {
                 out.csv.seen_topics.insert(channel.topic.clone());
             }
-            if channel.schema_id == 0 || schemas.contains_key(&channel.schema_id) {
-                let resolved = build_channel(&channel, schemas)?;
-                channels.insert(channel.id, resolved);
-            }
-            channel_defs.insert(channel.id, channel);
+            channels.add_channel(channel)?;
         }
         mcap::records::Record::Message { header, data } => {
             if !opts.include_time(header.log_time) {
                 return Ok(false);
             }
 
-            let channel = resolve_channel(header.channel_id, schemas, channel_defs, channels)?;
+            let channel =
+                channels
+                    .get(header.channel_id)
+                    .ok_or(mcap::McapError::UnknownChannel(
+                        header.sequence,
+                        header.channel_id,
+                    ))?;
 
             if !opts.include_topic(&channel.topic) {
                 return Ok(false);
@@ -617,31 +571,6 @@ fn handle_linear_record(
     }
 
     Ok(false)
-}
-
-fn build_channel(
-    channel: &mcap::records::Channel,
-    schemas: &HashMap<u16, Arc<mcap::Schema<'static>>>,
-) -> Result<Arc<mcap::Channel<'static>>> {
-    let schema = if channel.schema_id == 0 {
-        None
-    } else {
-        Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
-            anyhow::anyhow!(
-                "encountered channel with topic {} with unknown schema ID {}",
-                channel.topic,
-                channel.schema_id
-            )
-        })?)
-    };
-
-    Ok(Arc::new(mcap::Channel {
-        id: channel.id,
-        topic: channel.topic.clone(),
-        schema,
-        message_encoding: channel.message_encoding.clone(),
-        metadata: channel.metadata.clone(),
-    }))
 }
 
 struct CatMessage<'a, 'schema, 'data> {
