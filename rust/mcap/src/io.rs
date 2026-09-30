@@ -9,12 +9,11 @@ use crate::{
     Channel, McapResult, Message,
 };
 
-/// Streams linked [`Message`]s from any [`Read`] source, in file order, with memory bounded by
-/// the largest record or chunk rather than the file.
+/// Streams linked [`Message`]s from any [`Read`] source in file order; memory scales with the
+/// largest record or chunk, not the file.
 ///
-/// This is the streaming counterpart of [`crate::MessageStream`]: it applies the same
-/// schema/channel validation, stops at the end of the data section, and yields nothing further
-/// after the first error.
+/// The streaming counterpart of [`crate::MessageStream`]: same schema/channel validation,
+/// stops at the end of the data section, yields nothing after the first error.
 ///
 /// ```no_run
 /// use std::{fs, io::BufReader};
@@ -74,8 +73,8 @@ impl<R: Read> Iterator for MessageReader<R> {
         while let Some(event) = self.reader.next_event() {
             match event {
                 Ok(MessageReadEvent::ReadRequest(need)) => {
-                    // `Interrupted` means retry, per the `Read` contract. Retry before
-                    // `notify_read`, since notifying zero bytes would signal EOF.
+                    // `Read` says retry on `Interrupted`. Retry before `notify_read`, since
+                    // notifying zero bytes would signal EOF.
                     let read = loop {
                         match self.source.read(self.reader.insert(need)) {
                             Ok(n) => break n,
