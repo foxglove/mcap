@@ -120,3 +120,72 @@ fn run_round_trip(use_chunks: bool) -> Result<()> {
 
     Ok(())
 }
+
+/// Four messages on one channel, in uncompressed chunks with a summary.
+fn chunked_fixture() -> Result<Vec<u8>> {
+    let mut buffer = Vec::new();
+    let mut writer = mcap::WriteOptions::default()
+        .use_chunks(true)
+        .compression(None)
+        .create(std::io::Cursor::new(&mut buffer))?;
+    let schema_id = writer.add_schema("Example", "c", &[4, 5, 6])?;
+    let channel_id = writer.add_channel(schema_id, "example", "a", &Default::default())?;
+    for sequence in 0..4 {
+        writer.write_to_known_channel(
+            &mcap::records::MessageHeader {
+                channel_id,
+                sequence,
+                log_time: u64::from(sequence),
+                publish_time: u64::from(sequence),
+            },
+            &[sequence as u8; 8],
+        )?;
+    }
+    writer.finish()?;
+    drop(writer);
+    Ok(buffer)
+}
+
+#[test]
+fn reads_through_the_summary_to_the_end_magic() -> Result<()> {
+    let buffer = chunked_fixture()?;
+    let summary_start = mcap::read::footer(&buffer)?.summary_start as usize;
+    assert!(summary_start > 0, "fixture needs a summary section");
+    // The summary opens with the schema: opcode, length, id (2), name length (4), name.
+    assert_eq!(buffer[summary_start], mcap::records::op::SCHEMA);
+    let name_at = summary_start + 9 + 2 + 4;
+
+    // A summary that disagrees with the data (a renamed schema) is not an error.
+    let mut damaged = buffer.clone();
+    damaged[name_at] = b'X';
+    let messages = mcap::MessageStream::new(&damaged)?.collect::<mcap::McapResult<Vec<_>>>()?;
+    assert_eq!(messages.len(), 4);
+    let raw = mcap::read::RawMessageStream::new(&damaged)?.collect::<mcap::McapResult<Vec<_>>>()?;
+    assert_eq!(raw.len(), 4);
+
+    // Truncated summary: every message, then the error.
+    let truncated = &buffer[..summary_start + 20];
+    let items = mcap::MessageStream::new(truncated)?.collect::<Vec<_>>();
+    assert_eq!(items.len(), 5, "{items:?}");
+    assert!(items[..4].iter().all(|item| item.is_ok()));
+    assert!(matches!(items[4], Err(mcap::McapError::UnexpectedEof)));
+
+    // Bad end magic: the same.
+    let mut bad_magic = buffer.clone();
+    *bad_magic.last_mut().unwrap() ^= 0xFF;
+    let items = mcap::MessageStream::new(&bad_magic)?.collect::<Vec<_>>();
+    assert_eq!(items.len(), 5, "{items:?}");
+    assert!(matches!(items[4], Err(mcap::McapError::BadMagic)));
+
+    // With IgnoreEndMagic the stream ends at the data end record.
+    let lenient = enumset::enum_set!(mcap::read::Options::IgnoreEndMagic);
+    for file in [truncated, &bad_magic[..]] {
+        let messages = mcap::MessageStream::new_with_options(file, lenient)?
+            .collect::<mcap::McapResult<Vec<_>>>()?;
+        assert_eq!(messages.len(), 4);
+        let raw = mcap::read::RawMessageStream::new_with_options(file, lenient)?
+            .collect::<mcap::McapResult<Vec<_>>>()?;
+        assert_eq!(raw.len(), 4);
+    }
+    Ok(())
+}
