@@ -1,8 +1,9 @@
 //! Read MCAP data from a byte slice already in memory.
 //!
 //! These readers suit data you already hold, such as a chunk, an attachment, or a small file.
-//! For files of any size use the streaming readers in [`crate::sans_io`]:
-//! [`crate::sans_io::LinearReader`] for sequential scans, [`crate::sans_io::IndexedReader`] for
+//! For files of any size use the streaming readers: [`crate::io::MessageReader`] for linked
+//! messages (the counterpart of [`MessageStream`]), and in [`crate::sans_io`],
+//! [`crate::sans_io::LinearReader`] for raw records, [`crate::sans_io::IndexedReader`] for
 //! random access through the summary, and [`crate::sans_io::SummaryReader`] for the summary
 //! alone. They pull bytes on request, so memory scales with the largest record or chunk, not
 //! the file.
