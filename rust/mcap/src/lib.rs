@@ -2,27 +2,38 @@
 //! both reading:
 //!
 //! ```no_run
-//! use std::fs;
+//! use std::{fs, io::Read};
 //!
-//! use anyhow::{Context, Result};
-//! use camino::Utf8Path;
-//! use memmap2::Mmap;
-//!
-//! fn map_mcap<P: AsRef<Utf8Path>>(p: P) -> Result<Mmap> {
-//!     let fd = fs::File::open(p.as_ref()).context("Couldn't open MCAP file")?;
-//!     unsafe { Mmap::map(&fd) }.context("Couldn't map MCAP file")
-//! }
+//! use anyhow::Result;
+//! use mcap::sans_io::{LinearReadEvent, LinearReader};
 //!
 //! fn read_it() -> Result<()> {
-//!     let mapped = map_mcap("in.mcap")?;
-//!
-//!     for message in mcap::MessageStream::new(&mapped)? {
-//!         println!("{:?}", message?);
-//!         // Or whatever else you'd like to do...
+//!     // Sans-io readers stream one record at a time, so memory scales with the largest
+//!     // record (or chunk), not the file.
+//!     let mut file = fs::File::open("in.mcap")?;
+//!     let mut reader = LinearReader::new();
+//!     while let Some(event) = reader.next_event() {
+//!         match event? {
+//!             LinearReadEvent::ReadRequest(need) => {
+//!                 let read = file.read(reader.insert(need))?;
+//!                 reader.notify_read(read);
+//!             }
+//!             LinearReadEvent::Record { opcode, data } => {
+//!                 let record = mcap::parse_record(opcode, data)?;
+//!                 println!("{:?}", record);
+//!                 // Or whatever else you'd like to do...
+//!             }
+//!         }
 //!     }
 //!     Ok(())
 //! }
 //! ```
+//!
+//! For [`Message`]s linked to their [`Channel`] and [`Schema`], see the `mcapcat` example in
+//! the repository. See [`sans_io::IndexedReader`] for random access through the summary and
+//! [`sans_io::SummaryReader`] for the summary alone. The [`read`] readers take a byte slice and
+//! suit data already in memory.
+//!
 //! or writing:
 //! ```no_run
 //! use std::{collections::BTreeMap, fs, io::BufWriter};

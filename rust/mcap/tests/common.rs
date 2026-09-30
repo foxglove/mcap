@@ -1,20 +1,31 @@
-use std::fs;
+use std::{
+    fs,
+    io::{Read, Seek, SeekFrom},
+};
 
 use anyhow::{Context, Result};
 use camino::Utf8Path;
-use memmap2::Mmap;
 
-pub fn map_mcap<P: AsRef<Utf8Path>>(p: P) -> Result<Mmap> {
+/// Reads a fixture into memory for the slice-based readers under test.
+pub fn read_mcap<P: AsRef<Utf8Path>>(p: P) -> Result<Vec<u8>> {
     let p = p.as_ref();
-    let fd = fs::File::open(p).with_context(|| format!("Couldn't open {p}"))?;
-    unsafe { Mmap::map(&fd) }.with_context(|| format!("Couldn't map {p}"))
+    fs::read(p).with_context(|| format!("Couldn't read {p}"))
 }
 
 #[allow(dead_code)]
-pub fn mcap_test_file() -> Result<Mmap> {
+pub fn mcap_test_file() -> Result<Vec<u8>> {
     if cfg!(feature = "zstd") {
-        map_mcap("tests/data/compressed.mcap")
+        read_mcap("tests/data/compressed.mcap")
     } else {
-        map_mcap("tests/data/uncompressed.mcap")
+        read_mcap("tests/data/uncompressed.mcap")
     }
+}
+
+/// Reads back everything written to a temporary file.
+#[allow(dead_code)]
+pub fn read_back(file: &mut fs::File) -> Result<Vec<u8>> {
+    file.seek(SeekFrom::Start(0))?;
+    let mut bytes = Vec::new();
+    file.read_to_end(&mut bytes)?;
+    Ok(bytes)
 }

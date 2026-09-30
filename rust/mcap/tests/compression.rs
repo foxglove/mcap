@@ -6,7 +6,6 @@ use std::io::BufWriter;
 
 use anyhow::Result;
 use itertools::Itertools;
-use memmap2::Mmap;
 use tempfile::tempfile;
 
 fn round_trip(comp: Option<mcap::Compression>) -> Result<()> {
@@ -26,7 +25,7 @@ fn round_trip(comp: Option<mcap::Compression>) -> Result<()> {
     }
     drop(writer);
 
-    let ours = unsafe { Mmap::map(&tmp) }?;
+    let ours = read_back(&mut tmp)?;
 
     // Compare the message stream of our MCAP to the reference one.
     for (theirs, ours) in

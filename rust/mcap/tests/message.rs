@@ -5,12 +5,11 @@ use common::*;
 use std::{borrow::Cow, io::BufWriter, sync::Arc};
 
 use anyhow::Result;
-use memmap2::Mmap;
 use tempfile::tempfile;
 
 #[test]
 fn smoke() -> Result<()> {
-    let mapped = map_mcap("../../tests/conformance/data/OneMessage/OneMessage.mcap")?;
+    let mapped = read_mcap("../../tests/conformance/data/OneMessage/OneMessage.mcap")?;
     let messages = mcap::MessageStream::new(&mapped)?.collect::<mcap::McapResult<Vec<_>>>()?;
 
     assert_eq!(messages.len(), 1);
@@ -50,7 +49,7 @@ fn round_trip_no_chunks() -> Result<()> {
 }
 
 fn run_round_trip(use_chunks: bool) -> Result<()> {
-    let mapped = map_mcap("../../tests/conformance/data/OneMessage/OneMessage.mcap")?;
+    let mapped = read_mcap("../../tests/conformance/data/OneMessage/OneMessage.mcap")?;
     let messages = mcap::MessageStream::new(&mapped)?;
 
     let mut tmp = tempfile()?;
@@ -63,7 +62,7 @@ fn run_round_trip(use_chunks: bool) -> Result<()> {
     }
     drop(writer);
 
-    let ours = unsafe { Mmap::map(&tmp) }?;
+    let ours = read_back(&mut tmp)?;
     let summary = mcap::Summary::read(&ours)?.unwrap();
 
     let schema = Arc::new(mcap::Schema {

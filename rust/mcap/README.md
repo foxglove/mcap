@@ -10,10 +10,10 @@ A library for reading and writing
   automatically linked to its channel, and that channel linked to its schema.
   Users shouldn't have to manually track channel and schema IDs.
 
-- **Performance:** Writers shouldn't hold large buffers (e.g., the current
-  chunk) in memory. Readers should support memory-mapped files to avoid needless
-  copies and to let the OS do what it does best: loading and caching large files
-  based on how you're actually reading them.
+- **Bounded memory:** Writers shouldn't hold large buffers (e.g., the current
+  chunk) in memory. Readers stream records through the sans-io APIs, so memory
+  scales with the largest record or chunk, not the file; random access goes
+  through the summary with bounded range reads.
 
 - **Resilience:** Like MCAP itself, the library should let you recover every
   valid message from an incomplete file or chunk.

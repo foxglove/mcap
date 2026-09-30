@@ -1853,7 +1853,6 @@ dependencies = [
  "itertools 0.14.0",
  "log",
  "lz4",
- "memmap2",
  "num_cpus",
  "paste",
  "rayon",
