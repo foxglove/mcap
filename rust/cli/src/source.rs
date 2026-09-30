@@ -1064,7 +1064,7 @@ fn single_line_error(err: &anyhow::Error) -> String {
 }
 
 struct DownloadProgress {
-    tty: bool,
+    is_tty: bool,
     total: u64,
     written: u64,
     last_report: Instant,
@@ -1075,7 +1075,7 @@ struct DownloadProgress {
 impl DownloadProgress {
     fn new(total: u64) -> Self {
         Self {
-            tty: std::io::stderr().is_terminal(),
+            is_tty: std::io::stderr().is_terminal(),
             total,
             written: 0,
             last_report: Instant::now(),
@@ -1107,7 +1107,7 @@ impl DownloadProgress {
     }
 
     fn report(&mut self, final_line: bool) {
-        if !self.tty {
+        if !self.is_tty {
             return;
         }
         let _ = self.write_report(&mut std::io::stderr().lock(), final_line);
@@ -1131,7 +1131,7 @@ impl DownloadProgress {
 
 impl Drop for DownloadProgress {
     fn drop(&mut self) {
-        if self.tty && self.written > 0 {
+        if self.is_tty && self.written > 0 {
             self.report(true);
         }
     }
@@ -2356,7 +2356,7 @@ mod tests {
     #[test]
     fn download_progress_notes_break_the_progress_line_once() {
         let mut progress = super::DownloadProgress {
-            tty: true,
+            is_tty: true,
             total: 100,
             written: 8,
             last_report: std::time::Instant::now(),
