@@ -7,13 +7,23 @@ use std::sync::Arc;
 use std::time::Duration;
 
 fn create_test_mcap(n: usize, compression: Option<mcap::Compression>) -> Vec<u8> {
+    create_test_mcap_with_chunk_size(n, compression, None)
+}
+
+fn create_test_mcap_with_chunk_size(
+    n: usize,
+    compression: Option<mcap::Compression>,
+    chunk_size: Option<u64>,
+) -> Vec<u8> {
     let mut buffer = Vec::new();
     {
-        let mut writer = mcap::WriteOptions::new()
+        let mut write_options = mcap::WriteOptions::new()
             .compression(compression)
-            .profile("fooey")
-            .create(Cursor::new(&mut buffer))
-            .unwrap();
+            .profile("fooey");
+        if let Some(chunk_size) = chunk_size {
+            write_options = write_options.chunk_size(Some(chunk_size));
+        }
+        let mut writer = write_options.create(Cursor::new(&mut buffer)).unwrap();
         // Mock message data to align with reader benchmarks in ts
         const MESSAGE_DATA: &[u8] = &[42; 10];
 
@@ -94,9 +104,14 @@ fn get_next_message(
 
 fn bench_read_messages(c: &mut Criterion) {
     const N: usize = 1_000_000;
+    const SMALL_CHUNK_N: usize = 100_000;
     let mcap_data_uncompressed = create_test_mcap(N, None);
     let mcap_data_lz4 = create_test_mcap(N, Some(mcap::Compression::Lz4));
     let mcap_data_zstd = create_test_mcap(N, Some(mcap::Compression::Zstd));
+    // A zero target closes the current chunk after every message. This intentionally amplifies
+    // per-chunk decompression setup cost while keeping the indexed-reader code path unchanged.
+    let mcap_data_zstd_small_chunks =
+        create_test_mcap_with_chunk_size(SMALL_CHUNK_N, Some(mcap::Compression::Zstd), Some(0));
     {
         let mut group = c.benchmark_group("mcap_read_linear");
         group.throughput(criterion::Throughput::Elements(N as u64));
@@ -217,6 +232,32 @@ fn bench_read_messages(c: &mut Criterion) {
                 }
             });
         });
+        group.finish();
+    }
+    {
+        let mut group = c.benchmark_group("mcap_read_indexed_small_chunks");
+        group.throughput(criterion::Throughput::Elements(SMALL_CHUNK_N as u64));
+
+        group.bench_function("IndexedReader_100k_zstd_1msg_chunks", |b| {
+            b.iter(|| {
+                let mut file = std::io::Cursor::new(&mcap_data_zstd_small_chunks[..]);
+                let summary = load_summary(&mut file);
+                let mut reader =
+                    sans_io::IndexedReader::new(&summary).expect("could not build reader");
+                let mut data_buf = Vec::new();
+                while let Some(header) = get_next_message(&mut reader, &mut file, &mut data_buf) {
+                    let message = mcap::Message {
+                        channel: summary.channels.get(&header.channel_id).unwrap().clone(),
+                        sequence: header.sequence,
+                        log_time: header.log_time,
+                        publish_time: header.publish_time,
+                        data: Cow::Borrowed(&data_buf),
+                    };
+                    std::hint::black_box(message);
+                }
+            });
+        });
+
         group.finish();
     }
 }

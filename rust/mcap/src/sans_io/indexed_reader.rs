@@ -106,6 +106,9 @@ pub struct IndexedReader {
     order: ReadOrder,
     // Criteria for what messages from the MCAP should be yielded
     filter: Filter,
+    // Lazily allocated and reused across zstd chunks.
+    #[cfg(feature = "zstd")]
+    zstd_dctx: Option<zstd::zstd_safe::DCtx<'static>>,
     /// If Some(limit), the reader will return an error on any non-chunk record with length > `limit`.
     /// If used in conjunction with `prevalidate_chunk_crcs`, the reader will return an error on any
     /// chunk record where the compressed OR decompressed length are > `limit`.
@@ -232,6 +235,8 @@ impl IndexedReader {
                 end: options.end,
                 channel_ids,
             },
+            #[cfg(feature = "zstd")]
+            zstd_dctx: None,
             record_length_limit: options.record_length_limit,
         })
     }
@@ -346,8 +351,12 @@ impl IndexedReader {
                 // decompress zstd into current slot
                 slot.buf.clear();
                 slot.buf.reserve(uncompressed_size);
-                let n =
-                    zstd::zstd_safe::decompress(&mut slot.buf, compressed_data).map_err(|err| {
+                let dctx = self
+                    .zstd_dctx
+                    .get_or_insert_with(zstd::zstd_safe::DCtx::create);
+                let n = dctx
+                    .decompress(&mut slot.buf, compressed_data)
+                    .map_err(|err| {
                         McapError::DecompressionError(zstd::zstd_safe::get_error_name(err).into())
                     })?;
                 if n != uncompressed_size {
