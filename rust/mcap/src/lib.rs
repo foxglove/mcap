@@ -29,7 +29,8 @@
 //! }
 //! ```
 //!
-//! See [`sans_io::IndexedReader`] for random access through the summary and
+//! For [`Message`]s linked to their [`Channel`] and [`Schema`], see the `mcapcat` example in
+//! the repository. See [`sans_io::IndexedReader`] for random access through the summary and
 //! [`sans_io::SummaryReader`] for the summary alone. The [`read`] readers take a byte slice and
 //! suit data already in memory.
 //!
