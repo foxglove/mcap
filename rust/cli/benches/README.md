@@ -21,7 +21,6 @@ cargo bench -p mcap-cli --bench commands -- merge
 cargo bench -p mcap-cli --bench commands -- indexed
 cargo bench -p mcap-cli --bench commands -- filter/linear
 cargo bench -p mcap-cli --bench commands -- merge/indexed/100KB
-cargo bench -p mcap-cli --bench commands -- du/linear/approximate
 ```
 
 The suites are `merge`, `filter`, `sort`, `compress`, `decompress`, `cat`, `info`, and `du`. `du`
