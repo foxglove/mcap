@@ -136,7 +136,7 @@ impl MessageReader {
 
     /// All channels seen so far, including ones with no messages yet.
     pub fn channels(&self) -> impl Iterator<Item = &Arc<Channel<'static>>> {
-        self.channeler.channels.values()
+        self.channeler.channels()
     }
 }
 
