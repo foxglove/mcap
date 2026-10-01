@@ -406,10 +406,14 @@ class SeekingReader(McapReader):
     def iter_metadata(self) -> Iterator[Metadata]:
         """Iterates through metadata records in the MCAP."""
         summary = self.get_summary()
-        if summary is None:
+        if summary is None or not summary.metadata_indexes:
             # fall back to a non-seeking reader
             self._stream.seek(0, io.SEEK_SET)
-            yield from NonSeekingReader(self._stream).iter_metadata()
+            yield from NonSeekingReader(
+                self._stream,
+                validate_crcs=self._validate_crcs,
+                record_size_limit=self._record_size_limit,
+            ).iter_metadata()
             return
         for metadata_index in summary.metadata_indexes:
             self._stream.seek(metadata_index.offset)
