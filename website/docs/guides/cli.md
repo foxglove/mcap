@@ -344,3 +344,5 @@ $ mcap recover damaged.mcap -o recovered.mcap
 ```
 
 By default (`--compression preserve`) the output keeps the input's compression; pass `--compression zstd|lz4|none` to choose a codec. The exit code reports how recovery went: `0` if every record was recovered, `3` if recovery was lossy (records were discarded or the file was truncated mid-record), and `1` if nothing could be recovered.
+
+Recovery recomputes chunk and attachment CRCs. An incorrect stored CRC alone does not cause data loss.

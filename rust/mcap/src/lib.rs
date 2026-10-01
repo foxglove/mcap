@@ -236,7 +236,7 @@ pub struct Attachment<'a> {
     pub data: Cow<'a, [u8]>,
 }
 
-pub use read::{parse_record, MessageStream, Summary};
+pub use read::{parse_record, parse_record_with_options, MessageStream, ParseOptions, Summary};
 pub use write::{WriteOptions, Writer};
 
 // The following assertions ensure that the MCAP components can be sent between threads.
