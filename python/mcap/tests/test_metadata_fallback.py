@@ -66,7 +66,7 @@ def test_metadata_with_optional_indexes(statistics: bool, indexed: bool, empty: 
     )
 
 
-def test_summaryless_metadata_control():
+def test_metadata_without_summary_control():
     expected = [Metadata("name", {"key": "value"})]
     content = metadata_mcap(expected, summary=False)
     reader = SeekingReader(BytesIO(content))
