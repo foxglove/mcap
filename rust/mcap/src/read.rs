@@ -96,9 +96,44 @@ impl<'a> Iterator for LinearReader<'a> {
     }
 }
 
-/// Given a records' opcode and data, parse into a Record. The resulting Record will contain
-/// borrowed slices from `body`.
+/// Options for parsing an individual record with [`parse_record_with_options`].
+#[derive(Debug, Clone, Copy)]
+pub struct ParseOptions {
+    validate_attachment_crcs: bool,
+}
+
+impl Default for ParseOptions {
+    fn default() -> Self {
+        Self {
+            validate_attachment_crcs: true,
+        }
+    }
+}
+
+impl ParseOptions {
+    /// Validate nonzero attachment CRCs. Enabled by default.
+    ///
+    /// Disable this when recovering attachments whose stored CRC may be incorrect.
+    /// Record lengths and required fields are still checked.
+    pub fn with_validate_attachment_crcs(mut self, validate: bool) -> Self {
+        self.validate_attachment_crcs = validate;
+        self
+    }
+}
+
+/// Given a records' opcode and data, parse into a Record, validating nonzero attachment CRCs.
+/// The resulting Record will contain borrowed slices from `body`.
 pub fn parse_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
+    parse_record_with_options(op, body, &ParseOptions::default())
+}
+
+/// Parse a record with the given options. The resulting Record contains borrowed slices from
+/// `body`, including attachment payloads when CRC validation is disabled.
+pub fn parse_record_with_options<'a>(
+    op: u8,
+    body: &'a [u8],
+    options: &ParseOptions,
+) -> McapResult<records::Record<'a>> {
     macro_rules! record {
         ($b:ident) => {{
             let mut cur = Cursor::new($b);
@@ -159,11 +194,12 @@ pub fn parse_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
             let data_len = c.read_u64::<LE>()?;
             let header_len = c.position() as usize;
 
-            let mut data = &body[header_len..body.len() - 4];
-            if data_len > data.len() as u64 {
+            let mut data = &body[header_len..];
+            let available = data.len().saturating_sub(4);
+            if data_len > available as u64 {
                 return Err(McapError::BadAttachmentLength {
                     header: data_len,
-                    available: data.len() as u64,
+                    available: available as u64,
                 });
             }
             data = &data[..data_len as usize];
@@ -179,7 +215,7 @@ pub fn parse_record(op: u8, body: &[u8]) -> McapResult<records::Record<'_>> {
             //    much sense to have users check it.
             // We still provide the parsed CRC to the caller in case they want to re-serialize the
             // record in another MCAP, and so they know if the record had a non-zero CRC.
-            if crc != 0 {
+            if options.validate_attachment_crcs && crc != 0 {
                 let calculated = crc32(&body[..header_len + data.len()]);
                 if crc != calculated {
                     return Err(McapError::BadAttachmentCrc {
