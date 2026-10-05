@@ -182,16 +182,22 @@ pub(crate) mod test_support {
         buffer
     }
 
+    /// Bytes before a record's body: opcode and length.
+    const RECORD_PREFIX: usize = 1 + 8;
+    /// Fixed-size fields of a message record: channel_id, sequence, log_time, publish_time.
+    const MESSAGE_HEADER: usize = 2 + 4 + 8 + 8;
+
     /// Offsets of every top-level record with `opcode` (start of the opcode byte).
     pub(crate) fn record_offsets(mcap: &[u8], opcode: u8) -> Vec<usize> {
         let mut offsets = Vec::new();
         let mut at = crate::MAGIC.len();
-        while at + 9 <= mcap.len() {
-            let len = u64::from_le_bytes(mcap[at + 1..at + 9].try_into().unwrap()) as usize;
+        while at + RECORD_PREFIX <= mcap.len() {
+            let len =
+                u64::from_le_bytes(mcap[at + 1..at + RECORD_PREFIX].try_into().unwrap()) as usize;
             if mcap[at] == opcode {
                 offsets.push(at);
             }
-            at += 9 + len;
+            at += RECORD_PREFIX + len;
         }
         offsets
     }
@@ -201,7 +207,8 @@ pub(crate) mod test_support {
         let last = *record_offsets(mcap, crate::records::op::MESSAGE)
             .last()
             .expect("a message record");
-        &mcap[..last + 9 + 22 + 5]
+        // Keep the whole header and 5 payload bytes, so the cut lands inside the payload.
+        &mcap[..last + RECORD_PREFIX + MESSAGE_HEADER + 5]
     }
 
     /// The payload the writer used for message `sequence`.
