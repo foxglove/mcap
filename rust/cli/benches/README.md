@@ -23,9 +23,9 @@ cargo bench -p mcap-cli --bench commands -- filter/linear
 cargo bench -p mcap-cli --bench commands -- merge/indexed/100KB
 ```
 
-The suites are `merge`, `filter`, `sort`, `compress`, `decompress`, `cat`, `info`, and `du`. `du`
-runs both `exact` and `--approximate` on indexed inputs; linear inputs run only `exact`, since
-`--approximate` falls back to it without a summary.
+The suites are `merge`, `filter`, `sort`, `compress`, `decompress`, `cat`, `info`, `du`, and
+`du-approximate` (`du --approximate`). `du-approximate` runs only on indexed inputs, since
+without a summary it falls back to the exact scan and would duplicate `du`.
 
 ## Workload controls
 
