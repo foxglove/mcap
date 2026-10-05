@@ -190,6 +190,7 @@ impl SuiteSelection {
             "cat",
             "info",
             "du",
+            "du-approximate",
         ]
         .iter()
         .any(|name| selected(name));
@@ -203,7 +204,7 @@ impl SuiteSelection {
             decompress: !any_suite || selected("decompress"),
             cat: !any_suite || selected("cat"),
             info: !any_suite || selected("info"),
-            du: !any_suite || selected("du"),
+            du: !any_suite || selected("du") || selected("du-approximate"),
             indexed: !any_mode || selected("indexed"),
             linear: !any_mode || selected("linear"),
         }
@@ -446,13 +447,14 @@ fn bench_info(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &
 }
 
 fn bench_du(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
-    let mut group = c.benchmark_group(format!("cli/du/{}", mode.label()));
-    // Without a summary `--approximate` falls back to the exact scan and would duplicate `exact`.
-    let variants: &[(&str, &[&str])] = match mode {
-        InputMode::Indexed => &[("exact", &[]), ("approximate", &["--approximate"])],
-        InputMode::Linear => &[("exact", &[])],
+    // `du --approximate` is its own suite so every id keeps the `cli/<command>/<mode>/<payload>`
+    // shape. Without a summary it falls back to the exact scan and would duplicate `du`.
+    let suites: &[(&str, &[&str])] = match mode {
+        InputMode::Indexed => &[("du", &[]), ("du-approximate", &["--approximate"])],
+        InputMode::Linear => &[("du", &[])],
     };
-    for &(variant, extra_args) in variants {
+    for &(suite, extra_args) in suites {
+        let mut group = c.benchmark_group(format!("cli/{suite}/{}", mode.label()));
         for case in cases {
             let args = || {
                 let mut args = vec![OsString::from("du")];
@@ -461,10 +463,10 @@ fn bench_du(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[I
                 args
             };
             let stdout = run_mcap_stdout(&config.mcap_bin, args());
-            validate_du_output(&stdout, case, variant == "approximate");
+            validate_du_output(&stdout, case, !extra_args.is_empty());
             group.throughput(Throughput::Bytes(config.total_bytes()));
             group.bench_function(
-                BenchmarkId::new(variant, size_label(case.payload_size)),
+                BenchmarkId::from_parameter(size_label(case.payload_size)),
                 |bench| {
                     bench.iter_custom(|iters| {
                         run_measured(iters, |_| run_mcap(&config.mcap_bin, args()))
@@ -472,8 +474,8 @@ fn bench_du(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[I
                 },
             );
         }
+        group.finish();
     }
-    group.finish();
 }
 
 impl BenchConfig {
