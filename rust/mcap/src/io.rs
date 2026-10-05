@@ -9,11 +9,15 @@ use crate::{
     Channel, McapResult, Message,
 };
 
-/// Streams linked [`Message`]s from any [`Read`] source in file order; memory scales with the
-/// largest record or chunk, not the file.
+/// Reads linked [`Message`]s in file order from any [`Read`] source, pulling bytes
+/// incrementally. Memory scales with the largest record or chunk, not the file.
 ///
-/// The streaming counterpart of [`crate::MessageStream`]: same schema/channel validation,
-/// stops at the end of the data section, yields nothing after the first error.
+/// Like [`crate::MessageStream`], which walks a complete in-memory buffer, this applies the
+/// same schema/channel validation, stops at the end of the data section, and yields nothing
+/// after the first error.
+///
+/// Every yielded message owns a copy of its data, whether it came from a chunk or not, so
+/// messages have unbounded lifetimes and can be sent between threads.
 ///
 /// ```no_run
 /// use std::{fs, io::BufReader};
