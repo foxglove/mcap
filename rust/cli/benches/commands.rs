@@ -1,7 +1,8 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Command, ExitStatus, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -400,26 +401,24 @@ fn bench_decompress(c: &mut Criterion, config: &BenchConfig, mode: InputMode, ca
 fn bench_cat(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
     let mut group = c.benchmark_group(format!("cli/cat/{}", mode.label()));
     for case in cases {
+        let args = || {
+            vec![
+                OsString::from("cat"),
+                case.path.as_os_str().to_owned(),
+                OsString::from("--time-format"),
+                OsString::from("nanoseconds"),
+            ]
+        };
+        // cat prints one line per message, millions for the 100B case, so count them from the
+        // pipe instead of buffering stdout.
+        let lines = count_mcap_stdout_lines(&config.mcap_bin, args());
+        validate_cat_line_count(lines, case.message_count, &case.path);
         group.throughput(Throughput::Bytes(config.total_bytes()));
-        group.bench_with_input(
+        group.bench_function(
             BenchmarkId::from_parameter(size_label(case.payload_size)),
-            case,
-            |bench, case| {
+            |bench| {
                 bench.iter_custom(|iters| {
-                    run_measured(iters, |iteration| {
-                        let args = vec![
-                            OsString::from("cat"),
-                            case.path.as_os_str().to_owned(),
-                            OsString::from("--time-format"),
-                            OsString::from("nanoseconds"),
-                        ];
-                        let (duration, stdout) =
-                            run_mcap_capturing(&config.mcap_bin, args, iteration == 0);
-                        if iteration == 0 {
-                            validate_cat_output(&stdout, case.message_count, &case.path);
-                        }
-                        duration
-                    })
+                    run_measured(iters, |_| run_mcap(&config.mcap_bin, args()))
                 });
             },
         );
@@ -430,21 +429,15 @@ fn bench_cat(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[
 fn bench_info(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
     let mut group = c.benchmark_group(format!("cli/info/{}", mode.label()));
     for case in cases {
+        let args = || vec![OsString::from("info"), case.path.as_os_str().to_owned()];
+        let stdout = run_mcap_stdout(&config.mcap_bin, args());
+        validate_info_output(&stdout, case.message_count, &case.path);
         group.throughput(Throughput::Bytes(config.total_bytes()));
-        group.bench_with_input(
+        group.bench_function(
             BenchmarkId::from_parameter(size_label(case.payload_size)),
-            case,
-            |bench, case| {
+            |bench| {
                 bench.iter_custom(|iters| {
-                    run_measured(iters, |iteration| {
-                        let args = vec![OsString::from("info"), case.path.as_os_str().to_owned()];
-                        let (duration, stdout) =
-                            run_mcap_capturing(&config.mcap_bin, args, iteration == 0);
-                        if iteration == 0 {
-                            validate_info_output(&stdout, case.message_count, &case.path);
-                        }
-                        duration
-                    })
+                    run_measured(iters, |_| run_mcap(&config.mcap_bin, args()))
                 });
             },
         );
@@ -461,23 +454,20 @@ fn bench_du(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[I
     };
     for &(variant, extra_args) in variants {
         for case in cases {
+            let args = || {
+                let mut args = vec![OsString::from("du")];
+                args.extend(extra_args.iter().map(OsString::from));
+                args.push(case.path.as_os_str().to_owned());
+                args
+            };
+            let stdout = run_mcap_stdout(&config.mcap_bin, args());
+            validate_du_output(&stdout, case, variant == "approximate");
             group.throughput(Throughput::Bytes(config.total_bytes()));
-            group.bench_with_input(
+            group.bench_function(
                 BenchmarkId::new(variant, size_label(case.payload_size)),
-                case,
-                |bench, case| {
+                |bench| {
                     bench.iter_custom(|iters| {
-                        run_measured(iters, |iteration| {
-                            let mut args = vec![OsString::from("du")];
-                            args.extend(extra_args.iter().map(OsString::from));
-                            args.push(case.path.as_os_str().to_owned());
-                            let (duration, stdout) =
-                                run_mcap_capturing(&config.mcap_bin, args, iteration == 0);
-                            if iteration == 0 {
-                                validate_du_output(&stdout, case, variant == "approximate");
-                            }
-                            duration
-                        })
+                        run_measured(iters, |_| run_mcap(&config.mcap_bin, args()))
                     });
                 },
             );
@@ -715,45 +705,74 @@ where
     total
 }
 
+/// Runs the CLI with stdout discarded and returns its wall-clock duration. Every timed run goes
+/// through here, so draining a pipe is never part of the measured region; the read-only suites
+/// validate their output once, before timing.
 fn run_mcap(bin: &Path, args: Vec<OsString>) -> Duration {
-    run_mcap_capturing(bin, args, false).0
-}
-
-/// Runs the CLI and returns its wall-clock duration and stdout. Without `capture_stdout` the
-/// child's stdout goes to /dev/null so draining a pipe is not timed, and the buffer is empty.
-fn run_mcap_capturing(
-    bin: &Path,
-    args: Vec<OsString>,
-    capture_stdout: bool,
-) -> (Duration, Vec<u8>) {
-    let stdout = if capture_stdout {
-        Stdio::piped()
-    } else {
-        Stdio::null()
-    };
     let start = Instant::now();
     let output = Command::new(bin)
         .args(args)
-        .stdout(stdout)
+        .stdout(Stdio::null())
         .output()
         .expect("run mcap command");
     let duration = start.elapsed();
-    if !output.status.success() {
-        panic!(
-            "mcap command failed with status {:?}\nstdout:\n{}\nstderr:\n{}",
-            output.status.code(),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    (duration, output.stdout)
+    ensure_success(output.status, &output.stderr);
+    duration
 }
 
-fn validate_cat_output(stdout: &[u8], expected_count: usize, input: &Path) {
-    let lines = stdout
-        .split(|byte| *byte == b'\n')
-        .filter(|line| !line.is_empty())
-        .count();
+/// Runs the CLI and returns its stdout, for validating commands that print a few lines.
+fn run_mcap_stdout(bin: &Path, args: Vec<OsString>) -> Vec<u8> {
+    let output = Command::new(bin)
+        .args(args)
+        .output()
+        .expect("run mcap command");
+    ensure_success(output.status, &output.stderr);
+    output.stdout
+}
+
+/// Runs the CLI and counts the non-empty lines it prints, reading stdout through a fixed buffer
+/// so the bench process stays small however much the command prints. stderr is inherited.
+fn count_mcap_stdout_lines(bin: &Path, args: Vec<OsString>) -> usize {
+    let mut child = Command::new(bin)
+        .args(args)
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn mcap command");
+    let mut stdout = child.stdout.take().expect("piped stdout");
+    let mut buffer = [0u8; 64 * 1024];
+    let mut lines = 0;
+    let mut line_has_bytes = false;
+    loop {
+        let read = stdout.read(&mut buffer).expect("read mcap stdout");
+        if read == 0 {
+            break;
+        }
+        for &byte in &buffer[..read] {
+            if byte == b'\n' {
+                lines += usize::from(line_has_bytes);
+                line_has_bytes = false;
+            } else {
+                line_has_bytes = true;
+            }
+        }
+    }
+    lines += usize::from(line_has_bytes);
+    let status = child.wait().expect("wait for mcap command");
+    ensure_success(status, b"(inherited; see above)");
+    lines
+}
+
+fn ensure_success(status: ExitStatus, stderr: &[u8]) {
+    if !status.success() {
+        panic!(
+            "mcap command failed with status {:?}\nstderr:\n{}",
+            status.code(),
+            String::from_utf8_lossy(stderr)
+        );
+    }
+}
+
+fn validate_cat_line_count(lines: usize, expected_count: usize, input: &Path) {
     assert_eq!(
         lines,
         expected_count,
