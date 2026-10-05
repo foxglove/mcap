@@ -6,7 +6,10 @@ use std::process::{Command, ExitStatus, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::measurement::WallTime;
+use criterion::{
+    criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
+};
 
 const DEFAULT_TOTAL_MB: u64 = 250;
 const DEFAULT_MERGE_INPUTS: usize = 4;
@@ -92,6 +95,9 @@ fn bench_commands(c: &mut Criterion) {
         // On an indexed input info reads only the summary, a few kilobytes at any file size, so
         // the run would mostly time process startup. Bench it only where it scans the file.
         let info = suites.info && matches!(mode, InputMode::Linear);
+        // Without a summary `du --approximate` falls back to the exact scan and would duplicate
+        // `du`, so it has no linear benchmarks.
+        let du_approximate = suites.du_approximate && matches!(mode, InputMode::Indexed);
 
         if suites.merge {
             let merge_cases = PAYLOAD_SIZES
@@ -102,7 +108,7 @@ fn bench_commands(c: &mut Criterion) {
             bench_merge(c, &config, mode, &merge_cases);
         }
 
-        if suites.filter || suites.decompress || suites.cat || info || suites.du {
+        if suites.filter || suites.decompress || suites.cat || info || suites.du || du_approximate {
             let input_cases = PAYLOAD_SIZES
                 .iter()
                 .copied()
@@ -123,7 +129,10 @@ fn bench_commands(c: &mut Criterion) {
                 bench_info(c, &config, mode, &input_cases);
             }
             if suites.du {
-                bench_du(c, &config, mode, &input_cases);
+                bench_du(c, &config, mode, &input_cases, false);
+            }
+            if du_approximate {
+                bench_du(c, &config, mode, &input_cases, true);
             }
         }
 
@@ -161,6 +170,7 @@ struct SuiteSelection {
     cat: bool,
     info: bool,
     du: bool,
+    du_approximate: bool,
     indexed: bool,
     linear: bool,
 }
@@ -208,7 +218,9 @@ impl SuiteSelection {
             decompress: !any_suite || selected("decompress"),
             cat: !any_suite || selected("cat"),
             info: !any_suite || selected("info"),
-            du: !any_suite || selected("du") || selected("du-approximate"),
+            du: !any_suite || selected("du"),
+            // Criterion's filter is a regex, so `du` matches the `du-approximate` ids too.
+            du_approximate: !any_suite || selected("du") || selected("du-approximate"),
             indexed: !any_mode || selected("indexed"),
             linear: !any_mode || selected("linear"),
         }
@@ -414,18 +426,17 @@ fn bench_cat(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[
                 OsString::from("nanoseconds"),
             ]
         };
-        // cat prints one line per message, millions for the 100B case, so count them from the
-        // pipe instead of buffering stdout.
-        let lines = count_mcap_stdout_lines(&config.mcap_bin, args());
-        validate_cat_line_count(lines, case.message_count, &case.path);
         group.throughput(Throughput::Bytes(config.total_bytes()));
-        group.bench_function(
+        bench_read_only(
+            &mut group,
             BenchmarkId::from_parameter(size_label(case.payload_size)),
-            |bench| {
-                bench.iter_custom(|iters| {
-                    run_measured(iters, |_| run_mcap(&config.mcap_bin, args()))
-                });
+            || {
+                // cat prints one line per message, millions for the 100B case, so count them
+                // from the pipe instead of buffering stdout.
+                let lines = count_mcap_stdout_lines(&config.mcap_bin, args());
+                validate_cat_line_count(lines, case.message_count, &case.path);
             },
+            || run_mcap(&config.mcap_bin, args()),
         );
     }
     group.finish();
@@ -435,58 +446,76 @@ fn bench_info(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &
     let mut group = c.benchmark_group(format!("cli/info/{}", mode.label()));
     for case in cases {
         let args = || vec![OsString::from("info"), case.path.as_os_str().to_owned()];
-        let stdout = run_mcap_stdout(&config.mcap_bin, args());
-        validate_info_output(&stdout, case.message_count, &case.path);
         group.throughput(Throughput::Bytes(config.total_bytes()));
-        group.bench_function(
+        bench_read_only(
+            &mut group,
             BenchmarkId::from_parameter(size_label(case.payload_size)),
-            |bench| {
-                bench.iter_custom(|iters| {
-                    run_measured(iters, |_| run_mcap(&config.mcap_bin, args()))
-                });
+            || {
+                let stdout = run_mcap_stdout(&config.mcap_bin, args());
+                validate_info_output(&stdout, case.message_count, &case.path);
             },
+            || run_mcap(&config.mcap_bin, args()),
         );
     }
     group.finish();
 }
 
-fn bench_du(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
-    // `du --approximate` is its own suite so every id keeps the `cli/<command>/<mode>/<payload>`
-    // shape. Without a summary it falls back to the exact scan and would duplicate `du`.
-    let suites: &[(&str, &[&str])] = match mode {
-        InputMode::Indexed => &[("du", &[]), ("du-approximate", &["--approximate"])],
-        InputMode::Linear => &[("du", &[])],
-    };
-    for &(suite, extra_args) in suites {
-        let mut group = c.benchmark_group(format!("cli/{suite}/{}", mode.label()));
-        for case in cases {
-            let args = || {
-                let mut args = vec![OsString::from("du")];
-                args.extend(extra_args.iter().map(OsString::from));
-                args.push(case.path.as_os_str().to_owned());
-                args
-            };
-            let stdout = run_mcap_stdout(&config.mcap_bin, args());
-            let approximate = !extra_args.is_empty();
-            validate_du_output(&stdout, case, approximate);
-            // `--approximate` reads the summary and message indexes, not message data, so its
-            // work scales with the message count rather than the file size.
-            group.throughput(if approximate {
-                Throughput::Elements(case.message_count as u64)
-            } else {
-                Throughput::Bytes(config.total_bytes())
-            });
-            group.bench_function(
-                BenchmarkId::from_parameter(size_label(case.payload_size)),
-                |bench| {
-                    bench.iter_custom(|iters| {
-                        run_measured(iters, |_| run_mcap(&config.mcap_bin, args()))
-                    });
-                },
-            );
-        }
-        group.finish();
+/// Benchmarks `du`, or `du --approximate` as the `du-approximate` suite so every id keeps the
+/// `cli/<command>/<mode>/<payload>` shape.
+fn bench_du(
+    c: &mut Criterion,
+    config: &BenchConfig,
+    mode: InputMode,
+    cases: &[InputCase],
+    approximate: bool,
+) {
+    let suite = if approximate { "du-approximate" } else { "du" };
+    let mut group = c.benchmark_group(format!("cli/{suite}/{}", mode.label()));
+    for case in cases {
+        let args = || {
+            let mut args = vec![OsString::from("du")];
+            if approximate {
+                args.push(OsString::from("--approximate"));
+            }
+            args.push(case.path.as_os_str().to_owned());
+            args
+        };
+        // `--approximate` reads the summary and message indexes, not message data, so its work
+        // scales with the message count rather than the file size.
+        group.throughput(if approximate {
+            Throughput::Elements(case.message_count as u64)
+        } else {
+            Throughput::Bytes(config.total_bytes())
+        });
+        bench_read_only(
+            &mut group,
+            BenchmarkId::from_parameter(size_label(case.payload_size)),
+            || {
+                let stdout = run_mcap_stdout(&config.mcap_bin, args());
+                validate_du_output(&stdout, case, approximate);
+            },
+            || run_mcap(&config.mcap_bin, args()),
+        );
     }
+    group.finish();
+}
+
+/// Benchmarks a command whose result is printed rather than written to a file. `validate` runs
+/// once, untimed, the first time Criterion calls the benchmark. Criterion never calls it for an
+/// id its filter excludes, so filtered-out cases skip validation too.
+fn bench_read_only(
+    group: &mut BenchmarkGroup<'_, WallTime>,
+    id: BenchmarkId,
+    validate: impl FnOnce(),
+    mut run_once: impl FnMut() -> Duration,
+) {
+    let mut validate = Some(validate);
+    group.bench_function(id, |bench| {
+        if let Some(validate) = validate.take() {
+            validate();
+        }
+        bench.iter_custom(|iters| run_measured(iters, |_| run_once()));
+    });
 }
 
 impl BenchConfig {
@@ -720,7 +749,7 @@ where
 
 /// Runs the CLI with stdout discarded and returns its wall-clock duration. Every timed run goes
 /// through here, so draining a pipe is never part of the measured region; the read-only suites
-/// validate their output once, before timing.
+/// validate their output in an untimed run first.
 fn run_mcap(bin: &Path, args: Vec<OsString>) -> Duration {
     let start = Instant::now();
     let output = Command::new(bin)
