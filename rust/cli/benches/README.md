@@ -24,8 +24,11 @@ cargo bench -p mcap-cli --bench commands -- merge/indexed/100KB
 ```
 
 The suites are `merge`, `filter`, `sort`, `compress`, `decompress`, `cat`, `info`, `du`, and
-`du-approximate` (`du --approximate`). `du-approximate` runs only on indexed inputs, since
-without a summary it falls back to the exact scan and would duplicate `du`.
+`du-approximate` (`du --approximate`). `info` runs only on linear inputs: on indexed inputs it
+reads just the summary, so the run would mostly time process startup. `du-approximate` runs only
+on indexed inputs, since without a summary it falls back to the exact scan and would duplicate
+`du`. It reads message indexes rather than message data, so it reports throughput in messages
+per second instead of bytes.
 
 ## Workload controls
 

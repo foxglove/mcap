@@ -89,6 +89,10 @@ fn bench_commands(c: &mut Criterion) {
     );
 
     for mode in suites.modes() {
+        // On an indexed input info reads only the summary, a few kilobytes at any file size, so
+        // the run would mostly time process startup. Bench it only where it scans the file.
+        let info = suites.info && matches!(mode, InputMode::Linear);
+
         if suites.merge {
             let merge_cases = PAYLOAD_SIZES
                 .iter()
@@ -98,7 +102,7 @@ fn bench_commands(c: &mut Criterion) {
             bench_merge(c, &config, mode, &merge_cases);
         }
 
-        if suites.filter || suites.decompress || suites.cat || suites.info || suites.du {
+        if suites.filter || suites.decompress || suites.cat || info || suites.du {
             let input_cases = PAYLOAD_SIZES
                 .iter()
                 .copied()
@@ -115,7 +119,7 @@ fn bench_commands(c: &mut Criterion) {
             if suites.cat {
                 bench_cat(c, &config, mode, &input_cases);
             }
-            if suites.info {
+            if info {
                 bench_info(c, &config, mode, &input_cases);
             }
             if suites.du {
@@ -463,8 +467,15 @@ fn bench_du(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[I
                 args
             };
             let stdout = run_mcap_stdout(&config.mcap_bin, args());
-            validate_du_output(&stdout, case, !extra_args.is_empty());
-            group.throughput(Throughput::Bytes(config.total_bytes()));
+            let approximate = !extra_args.is_empty();
+            validate_du_output(&stdout, case, approximate);
+            // `--approximate` reads the summary and message indexes, not message data, so its
+            // work scales with the message count rather than the file size.
+            group.throughput(if approximate {
+                Throughput::Elements(case.message_count as u64)
+            } else {
+                Throughput::Bytes(config.total_bytes())
+            });
             group.bench_function(
                 BenchmarkId::from_parameter(size_label(case.payload_size)),
                 |bench| {
