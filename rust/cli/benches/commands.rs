@@ -827,10 +827,16 @@ fn validate_du_output(stdout: &[u8], case: &InputCase, approximate: bool) {
                     case.path.display()
                 )
             });
-            let max_bytes = want_bytes + want_bytes / 100 + 1_000;
+            // The CLI prints two decimals, so compare against the bounds as it would print them:
+            // a correct count just below a rounding step must not fail the lower bound.
+            let rounded = |bytes: u64| {
+                parse_human_bytes(&human_bytes(bytes)).expect("round-trip human_bytes")
+            };
+            let min_bytes = rounded(want_bytes);
+            let max_bytes = rounded(want_bytes + want_bytes / 100 + 1_000);
             assert!(
-                reported_bytes >= want_bytes && reported_bytes <= max_bytes,
-                "approximate du size {reported} for {topic} is outside [{want_bytes}, {max_bytes}] bytes in {}:\n{stdout}",
+                reported_bytes >= min_bytes && reported_bytes <= max_bytes,
+                "approximate du size {reported} for {topic} is outside [{min_bytes}, {max_bytes}] bytes in {}:\n{stdout}",
                 case.path.display()
             );
         } else {
