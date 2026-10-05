@@ -1,9 +1,9 @@
 //! Read MCAP data from a byte slice already in memory.
 //!
 //! These readers suit data you already hold, such as a chunk, an attachment, or a small file.
-//! For files of any size use the streaming readers in [`crate::sans_io`]:
-//! [`crate::sans_io::LinearReader`] for sequential scans, [`crate::sans_io::IndexedReader`] for
-//! random access through the summary, and [`crate::sans_io::SummaryReader`] for the summary
+//! For files of any size use the streaming readers: [`crate::io::MessageReader`] for linked
+//! messages, [`crate::sans_io::LinearReader`] for raw records, [`crate::sans_io::IndexedReader`]
+//! for random access through the summary, and [`crate::sans_io::SummaryReader`] for the summary
 //! alone. They pull bytes on request, so memory scales with the largest record or chunk, not
 //! the file.
 use std::{
@@ -293,15 +293,32 @@ impl<'a> Iterator for ChunkFlattener<'a> {
     }
 }
 
-/// Parses schemas and channels and wires them together
+/// Links schema and channel records as they are read, with [`MessageStream`]'s checks: schema
+/// ID 0 is invalid, a redefinition must match the first, and a channel's schema must already
+/// have been seen (or be ID 0 for none).
+///
+/// Use this when driving [`crate::sans_io::LinearReader`] yourself;
+/// [`crate::sans_io::MessageReader`] wraps it for the common case.
 #[derive(Debug, Default)]
-pub(crate) struct ChannelAccumulator<'a> {
+pub struct ChannelAccumulator<'a> {
     pub(crate) schemas: HashMap<u16, Arc<Schema<'a>>>,
     pub(crate) channels: HashMap<u16, Arc<Channel<'a>>>,
 }
 
+impl ChannelAccumulator<'static> {
+    /// Starts from a [`Summary`]'s schemas and channels, so chunk records read afterwards are
+    /// checked against them.
+    pub fn from_summary(summary: &Summary) -> Self {
+        Self {
+            schemas: summary.schemas.clone(),
+            channels: summary.channels.clone(),
+        }
+    }
+}
+
 impl<'a> ChannelAccumulator<'a> {
-    pub(crate) fn add_schema(
+    /// Records a schema, rejecting ID 0 and a redefinition that differs from the first.
+    pub fn add_schema(
         &mut self,
         header: records::SchemaHeader,
         data: Cow<'a, [u8]>,
@@ -334,7 +351,8 @@ impl<'a> ChannelAccumulator<'a> {
         }
     }
 
-    pub(crate) fn add_channel(&mut self, chan: records::Channel) -> McapResult<()> {
+    /// Records a channel, linking it to its schema and rejecting a differing redefinition.
+    pub fn add_channel(&mut self, chan: records::Channel) -> McapResult<()> {
         // The schema ID can be 0 for "no schema",
         // Or must reference some previously-read schema.
         let schema = if chan.schema_id == 0 {
@@ -374,7 +392,8 @@ impl<'a> ChannelAccumulator<'a> {
         }
     }
 
-    pub(crate) fn get(&self, chan_id: u16) -> Option<Arc<Channel<'a>>> {
+    /// Gets a channel seen so far by ID.
+    pub fn get(&self, chan_id: u16) -> Option<Arc<Channel<'a>>> {
         self.channels.get(&chan_id).cloned()
     }
 }
@@ -873,4 +892,45 @@ pub fn metadata(mcap: &[u8], index: &records::MetadataIndex) -> McapResult<recor
     }
 
     Ok(m)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sans_io::message_reader::test_support::two_channel_mcap;
+
+    #[test]
+    fn accumulator_seeded_from_summary_checks_chunk_definitions_against_it() {
+        let mcap = two_channel_mcap(true);
+        let summary = Summary::read(&mcap).expect("read").expect("summary");
+        let summary_channel = summary.channels.get(&1).expect("channel 1 in summary");
+
+        let mut accumulator = ChannelAccumulator::from_summary(&summary);
+        assert_eq!(
+            accumulator.get(1).as_deref(),
+            Some(summary_channel.as_ref())
+        );
+
+        // A chunk's repeat of a summary channel is accepted when it matches...
+        let matching = records::Channel {
+            id: summary_channel.id,
+            schema_id: summary_channel.schema.as_ref().map(|s| s.id).unwrap_or(0),
+            topic: summary_channel.topic.clone(),
+            message_encoding: summary_channel.message_encoding.clone(),
+            metadata: summary_channel.metadata.clone(),
+        };
+        accumulator
+            .add_channel(matching.clone())
+            .expect("a matching redefinition is accepted");
+
+        // ...and rejected when it conflicts.
+        let conflicting = records::Channel {
+            topic: "/renamed".to_string(),
+            ..matching
+        };
+        assert!(matches!(
+            accumulator.add_channel(conflicting),
+            Err(McapError::ConflictingChannels(topic)) if topic == "/renamed"
+        ));
+    }
 }
