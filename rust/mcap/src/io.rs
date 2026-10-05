@@ -12,9 +12,9 @@ use crate::{
 /// Reads linked [`Message`]s in file order from any [`Read`] source, pulling bytes
 /// incrementally. Memory scales with the largest record or chunk, not the file.
 ///
-/// Like [`crate::MessageStream`], which walks a complete in-memory buffer, this applies the
-/// same schema/channel validation, stops at the end of the data section, and yields nothing
-/// after the first error.
+/// It applies the same schema/channel validation as [`crate::MessageStream`], which walks a
+/// complete in-memory buffer, and yields nothing after the first error. Unlike `MessageStream`,
+/// it stops at the data end record and does not read or check the summary section.
 ///
 /// Every yielded message owns a copy of its data, whether it came from a chunk or not, so
 /// messages have unbounded lifetimes and can be sent between threads.

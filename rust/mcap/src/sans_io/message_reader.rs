@@ -24,8 +24,10 @@ pub enum MessageReadEvent {
 
 /// Streams linked messages from any source of bytes.
 ///
-/// Like [`crate::MessageStream`], it stops at the end of the data section and yields nothing
-/// after the first error. Messages own their data, so they outlive the reader's buffer.
+/// It applies the same schema/channel validation as [`crate::MessageStream`] and yields nothing
+/// after the first error. Unlike `MessageStream`, it stops at the data end record and does not
+/// read or check the summary section. Messages own their data, so they outlive the reader's
+/// buffer.
 pub struct MessageReader {
     reader: LinearReader,
     channeler: ChannelAccumulator<'static>,
