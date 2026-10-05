@@ -108,7 +108,7 @@ jobs:
       contents: read
       deployments: write
     steps:
-      # need checkout so that cloudflare can detect git commit
+      # Checkout provides wrangler.jsonc and lets Cloudflare detect the git commit.
       - uses: actions/checkout@v7
 
       - uses: actions/download-artifact@v8
