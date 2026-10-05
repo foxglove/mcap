@@ -136,9 +136,7 @@ jobs:
       - name: Deploy
         uses: foxglove/cloudflare-action@v1
         with:
-          type: pages
+          type: workers
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN_MCAP }}
           gitHubToken: ${{ github.token }}
-          projectName: mcap
-          directory: public
