@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -97,7 +97,7 @@ fn bench_commands(c: &mut Criterion) {
             bench_merge(c, &config, mode, &merge_cases);
         }
 
-        if suites.filter || suites.decompress {
+        if suites.filter || suites.decompress || suites.cat || suites.info || suites.du {
             let input_cases = PAYLOAD_SIZES
                 .iter()
                 .copied()
@@ -110,6 +110,15 @@ fn bench_commands(c: &mut Criterion) {
             }
             if suites.decompress {
                 bench_decompress(c, &config, mode, &input_cases);
+            }
+            if suites.cat {
+                bench_cat(c, &config, mode, &input_cases);
+            }
+            if suites.info {
+                bench_info(c, &config, mode, &input_cases);
+            }
+            if suites.du {
+                bench_du(c, &config, mode, &input_cases);
             }
         }
 
@@ -144,27 +153,45 @@ struct SuiteSelection {
     sort: bool,
     compress: bool,
     decompress: bool,
+    cat: bool,
+    info: bool,
+    du: bool,
     indexed: bool,
     linear: bool,
 }
 
 impl SuiteSelection {
     fn from_args() -> Self {
-        // Mirror documented Criterion filters (`-- merge`, `-- indexed`) so filtered runs only
-        // generate inputs for selected suites. This intentionally handles positional filters, not
-        // arbitrary Criterion flag values.
+        // Mirror the documented Criterion filters (`-- merge`, `-- indexed`, `cat|info`, `^cli/du`)
+        // so filtered runs only generate inputs for the selected suites. Positional filters only.
         let filters = std::env::args()
             .skip(1)
             .filter(|arg| !arg.starts_with('-'))
+            .map(|arg| {
+                arg.chars()
+                    .filter(|c| !matches!(c, '(' | ')' | '^' | '$'))
+                    .collect::<String>()
+            })
             .collect::<Vec<_>>();
         let selected = |name: &str| {
-            filters
-                .iter()
-                .any(|filter| filter.split(['/', ':']).any(|component| component == name))
+            filters.iter().any(|filter| {
+                filter
+                    .split(['/', ':', '|'])
+                    .any(|component| component == name)
+            })
         };
-        let any_suite = ["merge", "filter", "sort", "compress", "decompress"]
-            .iter()
-            .any(|name| selected(name));
+        let any_suite = [
+            "merge",
+            "filter",
+            "sort",
+            "compress",
+            "decompress",
+            "cat",
+            "info",
+            "du",
+        ]
+        .iter()
+        .any(|name| selected(name));
         let any_mode = ["indexed", "linear"].iter().any(|name| selected(name));
 
         Self {
@@ -173,6 +200,9 @@ impl SuiteSelection {
             sort: !any_suite || selected("sort"),
             compress: !any_suite || selected("compress"),
             decompress: !any_suite || selected("decompress"),
+            cat: !any_suite || selected("cat"),
+            info: !any_suite || selected("info"),
+            du: !any_suite || selected("du"),
             indexed: !any_mode || selected("indexed"),
             linear: !any_mode || selected("linear"),
         }
@@ -363,6 +393,95 @@ fn bench_decompress(c: &mut Criterion, config: &BenchConfig, mode: InputMode, ca
                 });
             },
         );
+    }
+    group.finish();
+}
+
+fn bench_cat(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
+    let mut group = c.benchmark_group(format!("cli/cat/{}", mode.label()));
+    for case in cases {
+        group.throughput(Throughput::Bytes(config.total_bytes()));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size_label(case.payload_size)),
+            case,
+            |bench, case| {
+                bench.iter_custom(|iters| {
+                    run_measured(iters, |iteration| {
+                        let args = vec![
+                            OsString::from("cat"),
+                            case.path.as_os_str().to_owned(),
+                            OsString::from("--time-format"),
+                            OsString::from("nanoseconds"),
+                        ];
+                        let (duration, stdout) =
+                            run_mcap_capturing(&config.mcap_bin, args, iteration == 0);
+                        if iteration == 0 {
+                            validate_cat_output(&stdout, case.message_count, &case.path);
+                        }
+                        duration
+                    })
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+fn bench_info(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
+    let mut group = c.benchmark_group(format!("cli/info/{}", mode.label()));
+    for case in cases {
+        group.throughput(Throughput::Bytes(config.total_bytes()));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size_label(case.payload_size)),
+            case,
+            |bench, case| {
+                bench.iter_custom(|iters| {
+                    run_measured(iters, |iteration| {
+                        let args = vec![OsString::from("info"), case.path.as_os_str().to_owned()];
+                        let (duration, stdout) =
+                            run_mcap_capturing(&config.mcap_bin, args, iteration == 0);
+                        if iteration == 0 {
+                            validate_info_output(&stdout, case.message_count, &case.path);
+                        }
+                        duration
+                    })
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
+fn bench_du(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
+    let mut group = c.benchmark_group(format!("cli/du/{}", mode.label()));
+    // Without a summary `--approximate` falls back to the exact scan and would duplicate `exact`.
+    let variants: &[(&str, &[&str])] = match mode {
+        InputMode::Indexed => &[("exact", &[]), ("approximate", &["--approximate"])],
+        InputMode::Linear => &[("exact", &[])],
+    };
+    for &(variant, extra_args) in variants {
+        for case in cases {
+            group.throughput(Throughput::Bytes(config.total_bytes()));
+            group.bench_with_input(
+                BenchmarkId::new(variant, size_label(case.payload_size)),
+                case,
+                |bench, case| {
+                    bench.iter_custom(|iters| {
+                        run_measured(iters, |iteration| {
+                            let mut args = vec![OsString::from("du")];
+                            args.extend(extra_args.iter().map(OsString::from));
+                            args.push(case.path.as_os_str().to_owned());
+                            let (duration, stdout) =
+                                run_mcap_capturing(&config.mcap_bin, args, iteration == 0);
+                            if iteration == 0 {
+                                validate_du_output(&stdout, case, variant == "approximate");
+                            }
+                            duration
+                        })
+                    });
+                },
+            );
+        }
     }
     group.finish();
 }
@@ -597,9 +716,25 @@ where
 }
 
 fn run_mcap(bin: &Path, args: Vec<OsString>) -> Duration {
+    run_mcap_capturing(bin, args, false).0
+}
+
+/// Runs the CLI and returns its wall-clock duration and stdout. Without `capture_stdout` the
+/// child's stdout goes to /dev/null so draining a pipe is not timed, and the buffer is empty.
+fn run_mcap_capturing(
+    bin: &Path,
+    args: Vec<OsString>,
+    capture_stdout: bool,
+) -> (Duration, Vec<u8>) {
+    let stdout = if capture_stdout {
+        Stdio::piped()
+    } else {
+        Stdio::null()
+    };
     let start = Instant::now();
     let output = Command::new(bin)
         .args(args)
+        .stdout(stdout)
         .output()
         .expect("run mcap command");
     let duration = start.elapsed();
@@ -611,7 +746,108 @@ fn run_mcap(bin: &Path, args: Vec<OsString>) -> Duration {
             String::from_utf8_lossy(&output.stderr)
         );
     }
-    duration
+    (duration, output.stdout)
+}
+
+fn validate_cat_output(stdout: &[u8], expected_count: usize, input: &Path) {
+    let lines = stdout
+        .split(|byte| *byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .count();
+    assert_eq!(
+        lines,
+        expected_count,
+        "unexpected cat line count for {}",
+        input.display()
+    );
+}
+
+fn validate_info_output(stdout: &[u8], expected_count: usize, input: &Path) {
+    let stdout = String::from_utf8_lossy(stdout);
+    let reported = stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("messages:"))
+        .and_then(|value| value.trim().parse::<usize>().ok());
+    assert_eq!(
+        reported,
+        Some(expected_count),
+        "unexpected info message count for {}:\n{stdout}",
+        input.display()
+    );
+}
+
+fn validate_du_output(stdout: &[u8], case: &InputCase, approximate: bool) {
+    let stdout = String::from_utf8_lossy(stdout);
+    // Topics alternate starting with `/bench/selected`; `/bench/other` needs 2+ messages.
+    let other_count = case.message_count - case.selected_count;
+    let expected = [
+        ("/bench/selected", case.selected_count),
+        ("/bench/other", other_count),
+    ];
+    for (topic, count) in expected {
+        if count == 0 {
+            continue;
+        }
+        let row = stdout
+            .lines()
+            .find(|line| line.starts_with(topic))
+            .unwrap_or_else(|| {
+                panic!(
+                    "du output is missing topic {topic} for {}:\n{stdout}",
+                    case.path.display()
+                )
+            });
+        let reported = row.split('\t').nth(1).map(str::trim).unwrap_or_default();
+        let want_bytes = (count * case.payload_size) as u64;
+        if approximate {
+            // `--approximate` attributes interleaved non-message records to the preceding message,
+            // so accept a small over-count but never an under-count.
+            let reported_bytes = parse_human_bytes(reported).unwrap_or_else(|| {
+                panic!(
+                    "unparsable du size {reported:?} for {topic} in {}",
+                    case.path.display()
+                )
+            });
+            let max_bytes = want_bytes + want_bytes / 100 + 1_000;
+            assert!(
+                reported_bytes >= want_bytes && reported_bytes <= max_bytes,
+                "approximate du size {reported} for {topic} is outside [{want_bytes}, {max_bytes}] bytes in {}:\n{stdout}",
+                case.path.display()
+            );
+        } else {
+            assert_eq!(
+                reported,
+                human_bytes(want_bytes),
+                "unexpected du size for {topic} in {}:\n{stdout}",
+                case.path.display()
+            );
+        }
+    }
+}
+
+const BYTE_PREFIXES: [&str; 6] = ["B", "kB", "MB", "GB", "TB", "PB"];
+
+/// Mirrors the CLI's `render::human_bytes` (SI prefixes, two decimals); the bench cannot import
+/// the binary crate.
+fn human_bytes(num_bytes: u64) -> String {
+    for (index, prefix) in BYTE_PREFIXES.iter().enumerate() {
+        let displayed = num_bytes as f64 / 1000f64.powi(index as i32);
+        let rounded = (displayed * 100.0).round() / 100.0;
+        if rounded < 1000.0 {
+            return format!("{rounded:.2} {prefix}");
+        }
+    }
+    let last = BYTE_PREFIXES.len() - 1;
+    let displayed = num_bytes as f64 / 1000f64.powi(last as i32);
+    format!("{displayed:.2} {}", BYTE_PREFIXES[last])
+}
+
+/// Inverse of [`human_bytes`], to within the two decimals the CLI prints.
+fn parse_human_bytes(text: &str) -> Option<u64> {
+    let (value, prefix) = text.split_once(' ')?;
+    let index = BYTE_PREFIXES.iter().position(|p| *p == prefix)?;
+    let value = value.parse::<f64>().ok()?;
+    Some((value * 1000f64.powi(index as i32)).round() as u64)
 }
 
 fn validate_output(path: &Path, expected_count: usize, require_ordered: bool) {
