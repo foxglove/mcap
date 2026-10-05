@@ -166,6 +166,151 @@ describe("McapStreamReader", () => {
     }).toThrow("Already done reading");
   });
 
+  it("reports input that ends before the footer once end() is called", () => {
+    const reader = new McapStreamReader();
+    const footer = record(Opcode.FOOTER, [
+      ...uint64LE(0n), // summary start
+      ...uint64LE(0n), // summary offset start
+      ...uint32LE(0), // summary crc
+    ]);
+    reader.append(
+      new Uint8Array([
+        ...MCAP_MAGIC,
+        ...record(Opcode.HEADER, [...string("prof"), ...string("lib")]),
+        ...footer.slice(0, 5),
+      ]),
+    );
+    expect(reader.nextRecord()).toEqual({ type: "Header", profile: "prof", library: "lib" });
+    // Without end(), the reader waits for more data.
+    expect(reader.nextRecord()).toBeUndefined();
+    expect(reader.done()).toBe(false);
+
+    reader.end();
+    expect(() => reader.nextRecord()).toThrow(
+      "Input ended before the MCAP Footer record with 5 bytes of an incomplete record remaining [library=lib]",
+    );
+    expect(() => {
+      reader.append(new Uint8Array([42]));
+    }).toThrow("Already ended");
+  });
+
+  it("reports input that ends at a record boundary once end() is called", () => {
+    const reader = new McapStreamReader();
+    reader.append(
+      new Uint8Array([
+        ...MCAP_MAGIC,
+        ...record(Opcode.HEADER, [...string("prof"), ...string("lib")]),
+      ]),
+    );
+    reader.end();
+    expect(reader.nextRecord()).toEqual({ type: "Header", profile: "prof", library: "lib" });
+    expect(() => reader.nextRecord()).toThrow(
+      "Input ended before the MCAP Footer record at a record boundary [library=lib]",
+    );
+  });
+
+  it("reports input that ends before the trailing magic once end() is called", () => {
+    const reader = new McapStreamReader();
+    reader.append(
+      new Uint8Array([
+        ...MCAP_MAGIC,
+        ...record(Opcode.FOOTER, [
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
+        ]),
+        ...MCAP_MAGIC.slice(0, 3),
+      ]),
+    );
+    reader.end();
+    expect(() => reader.nextRecord()).toThrow(
+      "Input ended before the trailing MCAP magic was complete (3 of 8 bytes received) [no header]",
+    );
+  });
+
+  it("reports input that ends before the leading magic once end() is called", () => {
+    const empty = new McapStreamReader();
+    empty.end();
+    expect(() => empty.nextRecord()).toThrow(
+      "Input ended before the leading MCAP magic was complete (0 of 8 bytes received) [no header]",
+    );
+
+    const partial = new McapStreamReader();
+    partial.append(new Uint8Array(MCAP_MAGIC.slice(0, 2)));
+    partial.end();
+    expect(() => partial.nextRecord()).toThrow(
+      "Input ended before the leading MCAP magic was complete (2 of 8 bytes received) [no header]",
+    );
+  });
+
+  it("accepts a fragment that ends on a record boundary when noMagicPrefix is set", () => {
+    const channel = record(Opcode.CHANNEL, [
+      ...uint16LE(1), // channel id
+      ...uint16LE(0), // schema id
+      ...string("myTopic"), // topic
+      ...string("plain/text"), // message encoding
+      ...keyValues(string, string, []), // user data
+    ]);
+    const reader = new McapStreamReader({ noMagicPrefix: true });
+    reader.append(new Uint8Array([...channel, ...channel.slice(0, 4)]));
+    reader.end();
+    expect(reader.nextRecord()).toEqual({
+      type: "Channel",
+      id: 1,
+      schemaId: 0,
+      topic: "myTopic",
+      messageEncoding: "plain/text",
+      metadata: new Map(),
+    });
+    // The fragment stops partway through its second record.
+    expect(() => reader.nextRecord()).toThrow(
+      "Input ended before the MCAP Footer record with 4 bytes of an incomplete record remaining [no header]",
+    );
+
+    const complete = new McapStreamReader({ noMagicPrefix: true });
+    complete.append(new Uint8Array(channel));
+    complete.end();
+    expect(complete.nextRecord()).toEqual(expect.objectContaining({ type: "Channel", id: 1 }));
+    expect(complete.nextRecord()).toBeUndefined();
+    expect(complete.done()).toBe(true);
+
+    // A fragment may also end with the Footer and no trailing magic.
+    const footerOnly = new McapStreamReader({ noMagicPrefix: true });
+    footerOnly.append(
+      new Uint8Array(record(Opcode.FOOTER, [...uint64LE(0n), ...uint64LE(0n), ...uint32LE(0)])),
+    );
+    footerOnly.end();
+    expect(footerOnly.nextRecord()).toEqual(expect.objectContaining({ type: "Footer" }));
+    expect(footerOnly.nextRecord()).toBeUndefined();
+    expect(footerOnly.done()).toBe(true);
+  });
+
+  it("returns the records received before end() and finishes a complete file", () => {
+    const reader = new McapStreamReader();
+    reader.append(
+      new Uint8Array([
+        ...MCAP_MAGIC,
+        ...record(Opcode.HEADER, [...string("prof"), ...string("lib")]),
+        ...record(Opcode.FOOTER, [
+          ...uint64LE(0n), // summary start
+          ...uint64LE(0n), // summary offset start
+          ...uint32LE(0), // summary crc
+        ]),
+        ...MCAP_MAGIC,
+      ]),
+    );
+    reader.end();
+    expect(reader.nextRecord()).toEqual({ type: "Header", profile: "prof", library: "lib" });
+    expect(reader.nextRecord()).toEqual({
+      type: "Footer",
+      summaryStart: 0n,
+      summaryOffsetStart: 0n,
+      summaryCrc: 0,
+    });
+    expect(reader.nextRecord()).toBeUndefined();
+    expect(reader.done()).toBe(true);
+  });
+
   it("rejects extraneous data at end of file", () => {
     const reader = new McapStreamReader();
     reader.append(

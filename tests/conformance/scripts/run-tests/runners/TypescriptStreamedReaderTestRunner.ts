@@ -18,15 +18,13 @@ export default class TypescriptStreamedReaderTestRunner extends StreamedReadTest
     const result = [];
     const reader = new McapStreamReader({ validateCrcs: true });
     reader.append(new Uint8Array(await fs.readFile(filePath)));
+    reader.end();
     let record;
     while ((record = reader.nextRecord())) {
       if (record.type === "MessageIndex") {
         continue;
       }
       result.push(record);
-    }
-    if (!reader.done()) {
-      throw new Error("Reader not done");
     }
 
     return { records: result.map(toSerializableMcapRecord) };
