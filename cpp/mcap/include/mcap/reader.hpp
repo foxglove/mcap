@@ -427,11 +427,23 @@ public:
   /**
    * @brief Returns an iterable view with `begin()` and `end()` methods for
    * iterating all Messages in the MCAP file.
+   * If the reader has not been opened, the returned view is empty and its
+   * `status()` reports `NotOpen`. Problems encountered while iterating are
+   * also recorded on the view, so `status()` can be checked after iteration
+   * to find out whether the read completed without problems. A record that
+   * cannot be read stops the iteration, in either read order; messages after
+   * it are not returned.
    */
   LinearMessageView readMessages();
   /**
    * @brief Returns an iterable view with `begin()` and `end()` methods for
    * iterating all Messages in the MCAP file.
+   * If the reader has not been opened, the returned view is empty and its
+   * `status()` reports `NotOpen`. Problems encountered while iterating are
+   * delivered to `onProblem` and also recorded on the view, so `status()` can
+   * be checked after iteration to find out whether the read completed without
+   * problems. A record that cannot be read stops the iteration, in either read
+   * order; messages after it are not returned.
    *
    * @param onProblem A callback that will be called when a parsing error
    *   occurs. Problems can either be recoverable, indicating some data could
@@ -485,6 +497,18 @@ public:
    * @brief Returns an iterable view with `begin()` and `end()` methods for
    * iterating Messages in the MCAP file.
    * Uses the options from `options` to select the messages that are yielded.
+   * If the reader has not been opened, the returned view is empty and its
+   * `status()` reports `NotOpen`. Problems encountered while iterating are
+   * delivered to `onProblem` and also recorded on the view, so `status()` can
+   * be checked after iteration to find out whether the read completed without
+   * problems. A record that cannot be read stops the iteration, in either read
+   * order; messages after it are not returned.
+   *
+   * @param onProblem A callback that will be called when a parsing error
+   *   occurs. Problems can either be recoverable, indicating some data could
+   *   not be read, or non-recoverable, stopping the iteration.
+   * @param options Options controlling which messages are yielded and in what
+   *   order.
    */
   LinearMessageView readMessages(const ProblemCallback& onProblem,
                                  const ReadMessageOptions& options);
@@ -847,12 +871,28 @@ struct MCAP_PUBLIC LinearMessageView {
   Iterator begin();
   Iterator end();
 
+  /**
+   * @brief The first problem encountered by this view, or Success if there have been none.
+   *
+   * This is `NotOpen` if readMessages() was called on a reader that was not open. Otherwise it
+   * records the first problem encountered while iterating, such as a corrupt record or a message
+   * referencing a missing channel. The same problems are also delivered to the ProblemCallback,
+   * if one was supplied to readMessages(). Check this after iteration finishes to find out
+   * whether every message in the view was read successfully.
+   */
+  const Status& status() const;
+
 private:
+  /// Records `status` as the view status if no problem has been recorded yet, then invokes the
+  /// ProblemCallback.
+  void reportProblem(const Status& status);
+
   McapReader& mcapReader_;
   ByteOffset dataStart_;
   ByteOffset dataEnd_;
   ReadMessageOptions readMessageOptions_;
   const ProblemCallback onProblem_;
+  Status status_;
 };
 
 }  // namespace mcap
