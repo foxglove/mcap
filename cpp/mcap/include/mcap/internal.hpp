@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include <cstring>
+#include <string_view>
 
 // Do not compile on systems with non-8-bit bytes
 static_assert(std::numeric_limits<unsigned char>::digits == 8);
@@ -186,6 +187,20 @@ inline std::string MagicToHex(const std::byte* data) {
   return internal::ToHex(data[0]) + internal::ToHex(data[1]) + internal::ToHex(data[2]) +
          internal::ToHex(data[3]) + internal::ToHex(data[4]) + internal::ToHex(data[5]) +
          internal::ToHex(data[6]) + internal::ToHex(data[7]);
+}
+
+/**
+ * @brief Compares `sizeof(Magic)` bytes at `data` against the MCAP magic bytes.
+ *
+ * @param where Names the location of the bytes in the error message, e.g. "in Header".
+ * @return Success, or MagicMismatch with a message that includes the bytes found.
+ */
+inline Status CheckMagic(const std::byte* data, std::string_view where) {
+  if (std::memcmp(data, Magic, sizeof(Magic)) == 0) {
+    return StatusCode::Success;
+  }
+  const auto msg = StrCat("invalid magic bytes ", where, ": 0x", MagicToHex(data));
+  return Status{StatusCode::MagicMismatch, msg};
 }
 
 }  // namespace internal

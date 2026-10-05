@@ -61,6 +61,32 @@ static void WriteMsg(mcap::McapWriter& writer, mcap::ChannelId channelId, uint32
   requireOk(writer.write(msg));
 }
 
+// Writes a file without chunks or a summary, so the records sit directly in the file:
+// magic, header, schema, channel, message, data end, footer, magic.
+static void WriteFlatFile(Buffer& out) {
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("test");
+  opts.noChunking = true;
+  opts.noSummary = true;
+  writer.open(out, opts);
+  mcap::Schema schema("schema", "schemaEncoding", "ab");
+  writer.addSchema(schema);
+  mcap::Channel channel("topic", "messageEncoding", schema.id);
+  writer.addChannel(channel);
+  std::vector<std::byte> data(100, std::byte(7));
+  WriteMsg(writer, channel.id, 0, 2, 1, data);
+  writer.close();
+}
+
+// Returns the offset of the first top-level record with the given opcode.
+static uint64_t FindRecord(const Buffer& file, mcap::OpCode opcode) {
+  uint64_t offset = sizeof(mcap::Magic);
+  while (file.buffer[offset] != std::byte(opcode)) {
+    offset += 9 + mcap::internal::ParseUint64(&file.buffer[offset + 1]);
+  }
+  return offset;
+}
+
 static void writeExampleFile(Buffer& buffer) {
   mcap::McapWriter writer;
   mcap::McapWriterOptions opts("");
@@ -461,13 +487,16 @@ TEST_CASE("McapReader::byteRange()", "[reader]") {
     writeExampleFile(buffer);
     requireOk(reader.open(buffer));
 
+    // Before the summary is read, the range runs to the end of the file, through the footer and
+    // trailing magic, so that a sequential read checks them.
     auto [startOffset, endOffset] = reader.byteRange(0);
     REQUIRE(startOffset == 25);
-    REQUIRE(endOffset == 316);
+    REQUIRE(endOffset == buffer.size());
+    REQUIRE(endOffset == 353);
 
     auto [startOffset2, endOffset2] = reader.byteRange(0, 0);
     REQUIRE(startOffset2 == 25);
-    REQUIRE(endOffset2 == 316);
+    REQUIRE(endOffset2 == 353);
 
     reader.close();
   }
@@ -1406,5 +1435,234 @@ TEST_CASE("Multiple empty channels and schemas are preserved", "[reader][writer]
     REQUIRE(cmd_vel_channel != channels.end());
 
     reader.close();
+  }
+}
+
+TEST_CASE("Linear reads check the trailing magic", "[reader]") {
+  Buffer buffer;
+  {
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+    opts.compression = mcap::Compression::None;
+    writer.open(buffer, opts);
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    WriteMsg(writer, channel.id, 0, 2, 1, data);
+    writer.close();
+  }
+
+  // Reads every message in file order, collecting the problems reported along the way.
+  const auto readAll = [](Buffer& source, std::vector<mcap::Status>& problems) {
+    mcap::McapReader reader;
+    requireOk(reader.open(source));
+    size_t count = 0;
+    const auto onProblem = [&](const mcap::Status& status) {
+      problems.push_back(status);
+    };
+    for (const auto& msgView : reader.readMessages(onProblem)) {
+      (void)msgView;
+      ++count;
+    }
+    return count;
+  };
+
+  SECTION("an intact file reports nothing") {
+    std::vector<mcap::Status> problems;
+    REQUIRE(readAll(buffer, problems) == 1);
+    REQUIRE(problems.empty());
+  }
+
+  SECTION("wrong trailing magic is reported after the last message") {
+    buffer.buffer.back() = std::byte(0);
+    std::vector<mcap::Status> problems;
+    REQUIRE(readAll(buffer, problems) == 1);
+    REQUIRE(problems.size() == 1);
+    REQUIRE(problems[0].code == mcap::StatusCode::MagicMismatch);
+  }
+
+  SECTION("a file cut off in its footer is reported once, after the last message") {
+    buffer.buffer.resize(buffer.buffer.size() - 20);
+    std::vector<mcap::Status> problems;
+    REQUIRE(readAll(buffer, problems) == 1);
+    REQUIRE(problems.size() == 1);
+    REQUIRE(problems[0].code == mcap::StatusCode::InvalidRecord);
+  }
+
+  SECTION("bytes after the trailing magic are reported after the last message") {
+    buffer.buffer.push_back(std::byte(0));
+    std::vector<mcap::Status> problems;
+    REQUIRE(readAll(buffer, problems) == 1);
+    REQUIRE(problems.size() == 1);
+    REQUIRE(problems[0].code == mcap::StatusCode::InvalidFile);
+  }
+
+  SECTION("a file with no data section and wrong trailing magic is reported") {
+    Buffer headerOnly;
+    {
+      mcap::McapWriter writer;
+      mcap::McapWriterOptions opts("test");
+      opts.noSummary = true;
+      writer.open(headerOnly, opts);
+      writer.close();
+    }
+    // Drop the Data End record that follows the header, leaving the reader nothing to iterate.
+    const auto headerEnd = sizeof(mcap::Magic) + 9 +
+                           mcap::internal::ParseUint64(&headerOnly.buffer[sizeof(mcap::Magic) + 1]);
+    REQUIRE(headerOnly.buffer[headerEnd] == std::byte(mcap::OpCode::DataEnd));
+    headerOnly.buffer.erase(headerOnly.buffer.begin() + headerEnd,
+                            headerOnly.buffer.begin() + headerEnd + 9 + 4);
+    headerOnly.buffer.back() = std::byte(0);
+    std::vector<mcap::Status> problems;
+    REQUIRE(readAll(headerOnly, problems) == 0);
+    REQUIRE(problems.size() == 1);
+    REQUIRE(problems[0].code == mcap::StatusCode::MagicMismatch);
+  }
+
+  SECTION("a read narrowed by the chunk index does not look at the end of the file") {
+    // The summary is recovered by the fallback scan, so the caller has opted into a damaged file
+    // and the read, like an indexed read, says nothing about its end.
+    buffer.buffer.resize(buffer.buffer.size() - 20);
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    requireOk(reader.readSummary(mcap::ReadSummaryMethod::AllowFallbackScan));
+    std::vector<mcap::Status> problems;
+    const auto onProblem = [&](const mcap::Status& status) {
+      problems.push_back(status);
+    };
+    const auto countMessages = [&](mcap::Timestamp startTime, mcap::Timestamp endTime) {
+      size_t count = 0;
+      for (const auto& msgView : reader.readMessages(onProblem, startTime, endTime)) {
+        (void)msgView;
+        ++count;
+      }
+      return count;
+    };
+    // The only message is at log time 2.
+    REQUIRE(countMessages(0, 10) == 1);
+    REQUIRE(countMessages(10, 20) == 0);
+    REQUIRE(problems.empty());
+  }
+
+  SECTION("a file cut off inside a record is reported once") {
+    Buffer flat;
+    WriteFlatFile(flat);
+    flat.buffer.resize(FindRecord(flat, mcap::OpCode::Message) + 60);
+    std::vector<mcap::Status> problems;
+    REQUIRE(readAll(flat, problems) == 0);
+    REQUIRE(problems.size() == 1);
+    REQUIRE(problems[0].code == mcap::StatusCode::InvalidRecord);
+  }
+
+  SECTION("a file cut off at a record boundary is reported after the last message") {
+    Buffer flat;
+    WriteFlatFile(flat);
+    flat.buffer.resize(FindRecord(flat, mcap::OpCode::DataEnd));
+    std::vector<mcap::Status> problems;
+    REQUIRE(readAll(flat, problems) == 1);
+    REQUIRE(problems.size() == 1);
+    REQUIRE(problems[0].code == mcap::StatusCode::InvalidFile);
+    REQUIRE(problems[0].message.find("without a Footer record") != std::string::npos);
+  }
+}
+
+TEST_CASE("TypedRecordReader::endOfInput", "[reader]") {
+  Buffer flat;
+  WriteFlatFile(flat);
+
+  // Reads every record in `source`, counting messages, and returns the final status.
+  const auto readAll = [](Buffer& source, mcap::TypedRecordReader::EndOfInput endOfInput,
+                          size_t& messages) {
+    mcap::TypedRecordReader reader{source, 0};
+    reader.endOfInput = endOfInput;
+    reader.onMessage = [&](const mcap::Message&, mcap::ByteOffset,
+                           std::optional<mcap::ByteOffset>) {
+      ++messages;
+    };
+    while (reader.next()) {
+      if (!reader.status().ok()) {
+        break;
+      }
+    }
+    return reader.status();
+  };
+
+  SECTION("a fragment of records") {
+    // The records between the header and the Data End, with no Footer or magic after them.
+    Buffer fragment;
+    const auto begin = flat.buffer.begin();
+    fragment.buffer.assign(begin + FindRecord(flat, mcap::OpCode::Schema),
+                           begin + FindRecord(flat, mcap::OpCode::DataEnd));
+
+    SECTION("is reported by default") {
+      size_t messages = 0;
+      const auto status = readAll(fragment, mcap::TypedRecordReader::EndOfInput::Default, messages);
+      REQUIRE(messages == 1);
+      REQUIRE(status.code == mcap::StatusCode::InvalidFile);
+      REQUIRE(status.message.find("without a Footer record") != std::string::npos);
+    }
+
+    SECTION("is accepted with AnyRecordBoundary") {
+      size_t messages = 0;
+      const auto status =
+        readAll(fragment, mcap::TypedRecordReader::EndOfInput::AnyRecordBoundary, messages);
+      REQUIRE(messages == 1);
+      REQUIRE(status.ok());
+    }
+  }
+
+  SECTION("FooterAndMagic checks a range narrower than the input") {
+    // Reads [8, end) with FooterAndMagic and returns the final status.
+    const auto readRange = [&](uint64_t end) {
+      mcap::TypedRecordReader reader{flat, sizeof(mcap::Magic), end};
+      reader.endOfInput = mcap::TypedRecordReader::EndOfInput::FooterAndMagic;
+      while (reader.next() && reader.status().ok()) {
+      }
+      return reader.status();
+    };
+    const uint64_t fileEnd = flat.buffer.size();
+    flat.buffer.push_back(std::byte(0));  // a byte after the file, outside the range
+
+    SECTION("a range ending with the magic is accepted") {
+      REQUIRE(readRange(fileEnd).ok());
+    }
+
+    SECTION("a range ending inside the magic is reported") {
+      const auto status = readRange(fileEnd - 1);
+      REQUIRE(status.code == mcap::StatusCode::MagicMismatch);
+      REQUIRE(status.message.find("7 bytes after the Footer record") != std::string::npos);
+    }
+
+    SECTION("a range continuing past the magic is reported") {
+      const auto status = readRange(fileEnd + 1);
+      REQUIRE(status.code == mcap::StatusCode::InvalidFile);
+      REQUIRE(status.message.find("1 bytes after the trailing magic bytes") != std::string::npos);
+    }
+  }
+
+  SECTION("a whole file with wrong trailing magic") {
+    flat.buffer.back() = std::byte(0);
+    // Reading from offset 8 skips the leading magic, as callers of this reader do.
+    const auto readFile = [&](mcap::TypedRecordReader::EndOfInput endOfInput) {
+      mcap::TypedRecordReader reader{flat, sizeof(mcap::Magic)};
+      reader.endOfInput = endOfInput;
+      while (reader.next()) {
+        if (!reader.status().ok()) {
+          break;
+        }
+      }
+      return reader.status();
+    };
+
+    SECTION("is reported by default") {
+      REQUIRE(readFile(mcap::TypedRecordReader::EndOfInput::Default).code ==
+              mcap::StatusCode::MagicMismatch);
+    }
+
+    SECTION("is accepted with AnyRecordBoundary") {
+      REQUIRE(readFile(mcap::TypedRecordReader::EndOfInput::AnyRecordBoundary).ok());
+    }
   }
 }

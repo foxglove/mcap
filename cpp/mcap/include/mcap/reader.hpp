@@ -356,7 +356,11 @@ public:
    *
    * @param onProblem A callback that will be called when a parsing error
    *   occurs. Problems can either be recoverable, indicating some data could
-   *   not be read, or non-recoverable, stopping the iteration.
+   *   not be read, or non-recoverable, stopping the iteration. A file order
+   *   read made before the summary has been read runs to the end of the
+   *   input, through the Footer record and the trailing magic bytes, and
+   *   reports a problem if the input ends before them or they are wrong, so
+   *   a truncated file is reported after its last message.
    * @param startTime Optional start time in nanoseconds. Messages before this
    *   time will not be returned.
    * @param endTime Optional end time in nanoseconds. Messages equal to or after
@@ -464,6 +468,11 @@ public:
 
   static Status ReadRecord(IReadable& reader, uint64_t offset, Record* record);
   static Status ReadFooter(IReadable& reader, uint64_t offset, Footer* footer);
+  /**
+   * @brief Checks that the trailing magic bytes are at `offset`, which should be the end of the
+   * Footer record, and that nothing follows them before `endOffset`.
+   */
+  static Status CheckTrailingMagic(IReadable& reader, uint64_t offset, uint64_t endOffset);
 
   static Status ParseHeader(const Record& record, Header* header);
   static Status ParseFooter(const Record& record, Footer* footer);
@@ -570,9 +579,34 @@ private:
 
 /**
  * @brief A mid-level interface for parsing and validating MCAP records from a
- * data source.
+ * data source. See `endOfInput` for what it expects at the end of its range.
  */
 struct MCAP_PUBLIC TypedRecordReader {
+  /**
+   * @brief What the reader expects at the end of its range.
+   */
+  enum class EndOfInput {
+    /**
+     * `FooterAndMagic` when the range runs to the end of the input, as it does
+     * with the default `endOffset`, and `AnyRecordBoundary` otherwise.
+     */
+    Default,
+    /**
+     * A whole file: the range must end with a Footer record followed by the
+     * trailing magic bytes, and nothing after them. Otherwise `status()`
+     * reports `MagicMismatch` for missing or wrong magic bytes, or
+     * `InvalidFile` for bytes after them or a range that ends at a record
+     * boundary without a Footer.
+     */
+    FooterAndMagic,
+    /**
+     * A fragment of a file: the range may end at any record boundary, and
+     * the trailing magic bytes are not expected.
+     */
+    AnyRecordBoundary,
+  };
+  EndOfInput endOfInput = EndOfInput::Default;
+
   std::function<void(const Header&, ByteOffset)> onHeader;
   std::function<void(const Footer&, ByteOffset)> onFooter;
   std::function<void(const SchemaPtr, ByteOffset, std::optional<ByteOffset>)> onSchema;
@@ -606,10 +640,14 @@ struct MCAP_PUBLIC TypedRecordReader {
   const Status& status() const;
 
 private:
+  IReadable* dataSource_;
   RecordReader reader_;
   TypedChunkReader chunkReader_;
   Status status_;
   bool parsingChunk_;
+  bool readsToEndOfInput_;
+
+  bool expectsFooterAndMagic() const;
 };
 
 /**
