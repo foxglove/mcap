@@ -183,12 +183,130 @@ func TestCustomDecompressor(t *testing.T) {
 }
 
 func TestReturnsEOFOnSuccessiveCalls(t *testing.T) {
-	lexer, err := NewLexer(bytes.NewReader(file()))
+	lexer, err := NewLexer(bytes.NewReader(file(footer())))
 	require.NoError(t, err)
+	tokenType, _, err := lexer.Next(nil)
+	require.NoError(t, err)
+	require.Equal(t, TokenFooter, tokenType)
 	_, _, err = lexer.Next(nil)
 	require.ErrorIs(t, err, io.EOF)
 	_, _, err = lexer.Next(nil)
 	require.ErrorIs(t, err, io.EOF)
+}
+
+func TestEndOfInput(t *testing.T) {
+	expectTokens := func(t *testing.T, lexer *Lexer, expected ...TokenType) {
+		t.Helper()
+		for _, want := range expected {
+			tokenType, _, err := lexer.Next(nil)
+			require.NoError(t, err)
+			require.Equal(t, want, tokenType)
+		}
+	}
+	t.Run("missing trailing magic after the footer", func(t *testing.T) {
+		lexer, err := NewLexer(bytes.NewReader(flatten(Magic, header(), footer())))
+		require.NoError(t, err)
+		expectTokens(t, lexer, TokenHeader, TokenFooter)
+		_, _, err = lexer.Next(nil)
+		require.ErrorIs(t, err, &ErrBadMagic{})
+		require.EqualError(t, err, "Missing magic at end of file")
+	})
+	t.Run("wrong trailing magic", func(t *testing.T) {
+		lexer, err := NewLexer(bytes.NewReader(flatten(Magic, header(), footer(), []byte{1, 2, 3, 4, 5, 6, 7, 8})))
+		require.NoError(t, err)
+		expectTokens(t, lexer, TokenHeader, TokenFooter)
+		_, _, err = lexer.Next(nil)
+		require.ErrorIs(t, err, &ErrBadMagic{})
+		require.EqualError(t, err, "Invalid magic at end of file, found: [1 2 3 4 5 6 7 8]")
+	})
+	t.Run("partial trailing magic", func(t *testing.T) {
+		lexer, err := NewLexer(bytes.NewReader(flatten(Magic, header(), footer(), Magic[:3])))
+		require.NoError(t, err)
+		expectTokens(t, lexer, TokenHeader, TokenFooter)
+		_, _, err = lexer.Next(nil)
+		require.ErrorIs(t, err, &ErrBadMagic{})
+		require.EqualError(t, err, "Invalid magic at end of file, found: [137 77 67]")
+	})
+	t.Run("ends at a record boundary before the footer", func(t *testing.T) {
+		lexer, err := NewLexer(bytes.NewReader(flatten(Magic, header())))
+		require.NoError(t, err)
+		expectTokens(t, lexer, TokenHeader)
+		_, _, err = lexer.Next(nil)
+		require.ErrorIs(t, err, ErrTruncatedFile)
+		require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+		require.NotErrorIs(t, err, io.EOF)
+	})
+	t.Run("trailing magic without a footer", func(t *testing.T) {
+		lexer, err := NewLexer(bytes.NewReader(flatten(Magic, header(), Magic)))
+		require.NoError(t, err)
+		expectTokens(t, lexer, TokenHeader)
+		_, _, err = lexer.Next(nil)
+		require.ErrorIs(t, err, ErrTruncatedFile)
+	})
+	t.Run("skip magic accepts trailing magic without a footer", func(t *testing.T) {
+		lexer, err := NewLexer(bytes.NewReader(flatten(header(), Magic)), &LexerOptions{SkipMagic: true})
+		require.NoError(t, err)
+		expectTokens(t, lexer, TokenHeader)
+		_, _, err = lexer.Next(nil)
+		require.ErrorIs(t, err, io.EOF)
+	})
+	t.Run("ends inside a record", func(t *testing.T) {
+		lexer, err := NewLexer(bytes.NewReader(flatten(Magic, header(), []byte{byte(OpMessage), 1, 2})))
+		require.NoError(t, err)
+		expectTokens(t, lexer, TokenHeader)
+		_, _, err = lexer.Next(nil)
+		var truncated *ErrTruncatedRecord
+		require.ErrorAs(t, err, &truncated)
+	})
+	t.Run("ends after a record header with none of its payload", func(t *testing.T) {
+		lexer, err := NewLexer(bytes.NewReader(flatten(Magic, header(), []byte{byte(OpMessage), 5, 0, 0, 0, 0, 0, 0, 0})))
+		require.NoError(t, err)
+		expectTokens(t, lexer, TokenHeader)
+		_, _, err = lexer.Next(nil)
+		var truncated *ErrTruncatedRecord
+		require.ErrorAs(t, err, &truncated)
+		require.EqualError(t, err,
+			"MCAP truncated in message (0x5) record content with expected length 5, data ended after 0 bytes")
+		require.NotErrorIs(t, err, io.EOF)
+	})
+	t.Run("bytes after the trailing magic", func(t *testing.T) {
+		lexer, err := NewLexer(bytes.NewReader(flatten(Magic, header(), footer(), Magic, []byte{'\n'})))
+		require.NoError(t, err)
+		expectTokens(t, lexer, TokenHeader, TokenFooter)
+		_, _, err = lexer.Next(nil)
+		require.ErrorIs(t, err, ErrBytesAfterMagic)
+	})
+	t.Run("a second file after the trailing magic", func(t *testing.T) {
+		single := flatten(Magic, header(), footer(), Magic)
+		lexer, err := NewLexer(bytes.NewReader(flatten(single, single)))
+		require.NoError(t, err)
+		expectTokens(t, lexer, TokenHeader, TokenFooter)
+		_, _, err = lexer.Next(nil)
+		require.ErrorIs(t, err, ErrBytesAfterMagic)
+	})
+	t.Run("partial record header at the end of a chunk", func(t *testing.T) {
+		for _, compression := range []CompressionFormat{CompressionNone, CompressionLZ4, CompressionZSTD} {
+			t.Run(string(compression), func(t *testing.T) {
+				badChunk := chunk(t, compression, false, channelInfo(), message(), []byte{byte(OpMessage), 1, 2})
+				lexer, err := NewLexer(bytes.NewReader(file(header(), badChunk, footer())))
+				require.NoError(t, err)
+				expectTokens(t, lexer, TokenHeader, TokenChannel, TokenMessage)
+				_, _, err = lexer.Next(nil)
+				var truncated *ErrTruncatedRecord
+				require.ErrorAs(t, err, &truncated)
+				require.EqualError(t, err, "MCAP truncated in record length field after message opcode (5), received 3 bytes")
+			})
+		}
+	})
+	t.Run("skip magic accepts input without trailing magic", func(t *testing.T) {
+		lexer, err := NewLexer(bytes.NewReader(flatten(header(), footer())), &LexerOptions{SkipMagic: true})
+		require.NoError(t, err)
+		expectTokens(t, lexer, TokenHeader, TokenFooter)
+		_, _, err = lexer.Next(nil)
+		require.ErrorIs(t, err, io.EOF)
+		_, _, err = lexer.Next(nil)
+		require.ErrorIs(t, err, io.EOF)
+	})
 }
 
 func TestLexChunkedFile(t *testing.T) {
