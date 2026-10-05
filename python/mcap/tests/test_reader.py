@@ -390,3 +390,146 @@ def test_custom_record():
     )
     records = [r for r in stream_reader.records]
     assert len(records) == 10
+
+
+def _write_ordering_mcap(
+    filepath: Path,
+    messages: list[Tuple[str, int]],
+    chunk_size: int = 256,
+    index_types: IndexType = IndexType.ALL,
+):
+    """Write one message per (topic, log_time) pair, in the order given."""
+    with open(filepath, "wb") as f:
+        writer = Writer(f, chunk_size=chunk_size, index_types=index_types)
+        writer.start()
+        channels: dict[str, int] = {}
+        for sequence, (topic, log_time) in enumerate(messages):
+            if topic not in channels:
+                channels[topic] = writer.register_channel(topic, "json", 0)
+            writer.add_message(
+                channels[topic],
+                log_time=log_time,
+                data=str(sequence).encode("utf8"),
+                publish_time=log_time,
+                sequence=sequence,
+            )
+        writer.finish()
+
+
+def _read(filepath: Path, **kwargs: Any) -> list[Tuple[str, int, int]]:
+    with open(filepath, "rb") as f:
+        return [
+            (channel.topic, message.log_time, message.sequence)
+            for _, channel, message in SeekingReader(f).iter_messages(**kwargs)
+        ]
+
+
+def test_log_time_order_is_global_across_channels(tmpdir: Path):
+    """messages come out in log time order across every channel, not per channel."""
+    filepath = Path(tmpdir) / "interleaved.mcap"
+    # Three channels each running at a different rate, written out of log time order
+    # within each chunk, with timestamps that tie both within and across channels.
+    messages = [(f"/topic{i % 3}", ((i * 37) % 50) * 10 + (i % 3)) for i in range(500)]
+    _write_ordering_mcap(filepath, messages)
+
+    forward = _read(filepath)
+    assert len(forward) == len(messages)
+    log_times = [log_time for _, log_time, _ in forward]
+    assert log_times == sorted(log_times)
+    # Every channel is represented, so this is not accidentally a per-channel order.
+    assert len({topic for topic, _, _ in forward}) == 3
+    assert sorted(forward) == sorted(
+        (topic, log_time, sequence)
+        for sequence, (topic, log_time) in enumerate(messages)
+    )
+
+    # Ordering is total, so reversing it is exactly the reverse iteration order.
+    assert _read(filepath, reverse=True) == list(reversed(forward))
+
+
+def test_log_time_order_with_filters(tmpdir: Path):
+    """topic and time filters do not disturb the ordering."""
+    filepath = Path(tmpdir) / "filtered.mcap"
+    messages = [(f"/topic{i % 3}", ((i * 17) % 40) * 10) for i in range(400)]
+    _write_ordering_mcap(filepath, messages)
+
+    filtered = _read(filepath, topics=["/topic1"], start_time=100, end_time=300)
+    assert filtered  # the filter is not vacuous
+    assert all(topic == "/topic1" for topic, _, _ in filtered)
+    assert all(100 <= log_time < 300 for _, log_time, _ in filtered)
+    assert [log_time for _, log_time, _ in filtered] == sorted(
+        log_time for _, log_time, _ in filtered
+    )
+    assert _read(
+        filepath, topics=["/topic1"], start_time=100, end_time=300, reverse=True
+    ) == list(reversed(filtered))
+
+
+def test_reverse_order_with_back_to_back_chunks(tmpdir: Path):
+    """reverse ordering holds when chunks sit directly against each other.
+
+    Without message indexes a chunk starts at the byte its predecessor ends on. In
+    reverse a chunk index is ordered on that end offset, so it lands on exactly the
+    same offset as the messages of the following chunk. Where the log times tie as
+    well, the chunk index and those messages agree on every ordering component.
+    """
+    filepath = Path(tmpdir) / "back_to_back.mcap"
+    # One log time throughout, so ordering rests entirely on file position.
+    messages = [(f"/topic{i % 2}", 777) for i in range(200)]
+    _write_ordering_mcap(filepath, messages, chunk_size=64, index_types=IndexType.CHUNK)
+
+    with open(filepath, "rb") as f:
+        summary = SeekingReader(f).get_summary()
+    assert summary is not None
+    chunk_indexes = summary.chunk_indexes
+    assert len(chunk_indexes) > 1
+    assert all(
+        before.chunk_start_offset + before.chunk_length == after.chunk_start_offset
+        for before, after in zip(chunk_indexes, chunk_indexes[1:])
+    ), "test needs chunks written with no message index between them"
+
+    forward = _read(filepath)
+    assert [sequence for _, _, sequence in forward] == list(range(200))
+    assert _read(filepath, reverse=True) == list(reversed(forward))
+
+
+class CountingBytesIO(BytesIO):
+    """A BytesIO that records how many bytes have been read out of it."""
+
+    def __init__(self, data: bytes):
+        super().__init__(data)
+        self.bytes_read = 0
+
+    def read(self, size: Union[int, None] = -1) -> bytes:
+        data = super().read(size)
+        self.bytes_read += len(data)
+        return data
+
+
+def test_file_order_yields_before_reading_every_chunk(tmpdir: Path):
+    """in file order a chunk's messages come out as soon as that chunk is read.
+
+    Holding them instead means the first message costs a read of the whole file,
+    and every message in the file is resident by the time it arrives.
+    """
+    filepath = Path(tmpdir) / "many_chunks.mcap"
+    _write_ordering_mcap(
+        filepath, [(f"/topic{i % 2}", i * 10) for i in range(2000)], chunk_size=512
+    )
+    raw = filepath.read_bytes()
+
+    with open(filepath, "rb") as f:
+        summary = SeekingReader(f).get_summary()
+    assert summary is not None
+    assert len(summary.chunk_indexes) > 10
+
+    def bytes_read(take_all: bool) -> int:
+        stream = CountingBytesIO(raw)
+        messages = SeekingReader(stream).iter_messages(log_time_order=False)
+        if take_all:
+            assert len(list(messages)) == 2000
+        else:
+            next(messages)
+        return stream.bytes_read
+
+    assert bytes_read(take_all=False) < bytes_read(take_all=True)
