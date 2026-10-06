@@ -1,7 +1,6 @@
 use std::borrow::Cow;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::io::{self, IsTerminal as _, Write as _};
-use std::sync::Arc;
 
 use anyhow::{bail, Context as _, Result};
 use log::warn;
@@ -215,22 +214,22 @@ fn cat_indexed(
     }
 
     let needs_in_chunk_definitions = needs_in_chunk_definitions(&summary);
-    let mut schemas = summary.schemas.clone();
-    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
-    let mut channels = summary.channels.clone();
+    let mut channels = mcap::read::ChannelAccumulator::from_summary(&summary);
     // When channels/schemas are defined only inside chunks (not repeated in the summary), collect
     // their definitions from every chunk up front. Collecting lazily per requested chunk would miss
     // a definition that lives in a chunk skipped by a topic or time filter (e.g. a channel defined
     // in an early chunk but referenced by messages in a later one).
     if needs_in_chunk_definitions {
+        let mut definitions = parse::ChunkDefinitions::new(&mut channels);
         for chunk_index in &summary.chunk_indexes {
-            parse::collect_chunk_definitions_from_mcap(
-                mcap,
-                chunk_index,
-                &mut schemas,
-                &mut channel_defs,
-            )?;
+            definitions.collect_from_mcap(mcap, chunk_index)?;
         }
+        if matches!(opts.mode, OutputMode::Csv) {
+            out.csv
+                .seen_topics
+                .extend(definitions.topics().map(str::to_string));
+        }
+        definitions.finish()?;
     }
 
     let included_topics: BTreeSet<String> = summary
@@ -273,8 +272,11 @@ fn cat_indexed(
                 reader.insert_chunk_record_data(offset, &mcap[start..end])?;
             }
             mcap::sans_io::IndexedReadEvent::Message { header, data } => {
-                let channel =
-                    resolve_channel(header.channel_id, &schemas, &channel_defs, &mut channels)?;
+                let channel = parse::message_channel(
+                    channels.get(header.channel_id),
+                    header.channel_id,
+                    header.sequence,
+                )?;
                 if !opts.include_topic(&channel.topic) {
                     continue;
                 }
@@ -316,7 +318,8 @@ fn cat_remote_indexed(
             summary
                 .channels
                 .values()
-                .map(|channel| channel.topic.clone()),
+                .map(|channel| channel.topic.clone())
+                .chain(remote.omitted_channels().values().cloned()),
         );
     }
     if summary.chunk_indexes.is_empty() {
@@ -340,10 +343,20 @@ fn cat_remote_indexed(
             source::remote_scan_opt_in_suffix()
         );
     }
-    let needs_in_chunk_definitions = needs_in_chunk_definitions(summary);
-    let mut schemas = summary.schemas.clone();
-    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
-    let mut channels = summary.channels.clone();
+    // The parsed summary may have omitted channels it could not define; chunks define those. Read
+    // them only when an omitted channel's messages could be output. With a topic filter that misses
+    // them, reader-level filtering keeps them out, so treat them as defined and let the planned
+    // chunks suffice.
+    let omitted_channels = remote.omitted_channels();
+    let needs_in_chunk_definitions = if omitted_channels
+        .values()
+        .any(|topic| opts.include_topic(topic))
+    {
+        true
+    } else {
+        needs_in_chunk_definitions_beyond(summary, omitted_channels)
+    };
+    let mut channels = mcap::read::ChannelAccumulator::from_summary(summary);
 
     let included_topics: BTreeSet<String> = summary
         .channels
@@ -393,6 +406,7 @@ fn cat_remote_indexed(
     // time filter. The remote-scan gate above already required opt-in to reach here.
     let mut chunk_data_cache: HashMap<u64, Vec<u8>> = HashMap::new();
     if needs_in_chunk_definitions && !planned_chunks.is_empty() {
+        let mut definitions = parse::ChunkDefinitions::new(&mut channels);
         for chunk_index in &summary.chunk_indexes {
             let chunk_len = usize::try_from(chunk_index.chunk_length).with_context(|| {
                 format!(
@@ -401,11 +415,7 @@ fn cat_remote_indexed(
                 )
             })?;
             let chunk = remote.read_range(chunk_index.chunk_start_offset, chunk_len)?;
-            parse::collect_chunk_definitions_from_record_bytes(
-                &chunk,
-                &mut schemas,
-                &mut channel_defs,
-            )?;
+            definitions.collect_from_record_bytes(&chunk)?;
             let data_offset = chunk_index.compressed_data_offset()?;
             let compressed_start = usize::try_from(data_offset - chunk_index.chunk_start_offset)
                 .with_context(|| {
@@ -417,6 +427,12 @@ fn cat_remote_indexed(
                 .to_vec();
             chunk_data_cache.insert(data_offset, compressed);
         }
+        if matches!(opts.mode, OutputMode::Csv) {
+            out.csv
+                .seen_topics
+                .extend(definitions.topics().map(str::to_string));
+        }
+        definitions.finish()?;
     }
 
     let mut indexed_opts =
@@ -451,8 +467,11 @@ fn cat_remote_indexed(
                 }
             }
             mcap::sans_io::IndexedReadEvent::Message { header, data } => {
-                let channel =
-                    resolve_channel(header.channel_id, &schemas, &channel_defs, &mut channels)?;
+                let channel = parse::message_channel(
+                    channels.get(header.channel_id),
+                    header.channel_id,
+                    header.sequence,
+                )?;
                 if !opts.include_topic(&channel.topic) {
                     continue;
                 }
@@ -479,39 +498,35 @@ fn cat_remote_indexed(
 /// reader-level topic filtering -- which keys on `summary.channels` only -- and filter per message
 /// instead, otherwise a chunk-local channel matching a `--topics` filter would be silently dropped.
 ///
-/// Note: a file mixing summary channels with chunk-local ones can't be produced by the standard
-/// writer (its `repeat_channels`/`repeat_schemas` options are all-or-nothing). The mixed + `--topics`
-/// path this guards is only possible when chunk indexes include message-index channel IDs, so it is
-/// defensive against partial-repetition files from other tools and isn't covered by an
-/// `mcap::Writer`-based regression test.
+/// The standard writer repeats all channels or none, but a summary that repeats channels without
+/// their schemas (`repeat_schemas(false)`) reaches the remote path with those channels omitted by
+/// `parse::parse_summary_section`, so the mixed case is a standard layout there; the remote caller
+/// also consults `RemoteMcap::omitted_channels`, which sees that case even without message indexes
+/// (see `remote_cat_resolves_schema_omitted_from_summary`). Files from other tools may also repeat
+/// definitions partially.
 fn needs_in_chunk_definitions(summary: &mcap::Summary) -> bool {
-    if !summary.chunk_indexes.is_empty() && summary.channels.is_empty() {
+    needs_in_chunk_definitions_beyond(summary, &BTreeMap::new())
+}
+
+/// [`needs_in_chunk_definitions`] with the channels in `defined_elsewhere` (by id) counted as
+/// defined: channels the caller knows about but has kept out of `summary.channels`, and whose
+/// messages cannot reach the output, so only other chunk-local channels force the definition pass.
+fn needs_in_chunk_definitions_beyond(
+    summary: &mcap::Summary,
+    defined_elsewhere: &BTreeMap<u16, String>,
+) -> bool {
+    if !summary.chunk_indexes.is_empty()
+        && summary.channels.is_empty()
+        && defined_elsewhere.is_empty()
+    {
         return true;
     }
     summary.chunk_indexes.iter().any(|chunk| {
-        chunk
-            .message_index_offsets
-            .keys()
-            .any(|channel_id| !summary.channels.contains_key(channel_id))
+        chunk.message_index_offsets.keys().any(|channel_id| {
+            !summary.channels.contains_key(channel_id)
+                && !defined_elsewhere.contains_key(channel_id)
+        })
     })
-}
-
-fn resolve_channel(
-    channel_id: u16,
-    schemas: &HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &HashMap<u16, mcap::records::Channel>,
-    channels: &mut HashMap<u16, Arc<mcap::Channel<'static>>>,
-) -> Result<Arc<mcap::Channel<'static>>> {
-    if let Some(channel) = channels.get(&channel_id) {
-        return Ok(channel.clone());
-    }
-
-    let channel_def = channel_defs
-        .get(&channel_id)
-        .ok_or_else(|| anyhow::anyhow!("unknown channel {channel_id}"))?;
-    let channel = build_channel(channel_def, schemas)?;
-    channels.insert(channel_id, channel.clone());
-    Ok(channel)
 }
 
 // Keep this planner conservative: it intentionally mirrors IndexedReader chunk filtering as an
@@ -570,9 +585,7 @@ fn cat_linear(
     // The reader descends into chunks, emitting their inner records directly.
     let mut reader = mcap::sans_io::LinearReader::new();
     let mut remaining = mcap;
-    let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
-    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
-    let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+    let mut channels = mcap::read::ChannelAccumulator::default();
 
     while let Some(event) = reader.next_event() {
         match event? {
@@ -584,15 +597,7 @@ fn cat_linear(
             }
             mcap::sans_io::LinearReadEvent::Record { data, opcode } => {
                 let record = mcap::parse_record(opcode, data)?;
-                if handle_linear_record(
-                    sink,
-                    record,
-                    opts,
-                    &mut schemas,
-                    &mut channel_defs,
-                    &mut channels,
-                    out,
-                )? {
+                if handle_linear_record(sink, record, opts, &mut channels, out)? {
                     return Ok(true);
                 }
             }
@@ -609,9 +614,7 @@ fn cat_streaming(
     csv_state: &mut CsvState,
 ) -> Result<bool> {
     let mut reader = mcap::sans_io::LinearReader::new();
-    let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
-    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
-    let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+    let mut channels = mcap::read::ChannelAccumulator::default();
     let mut json_transcoders = JsonTranscoders::default();
     let mut out = MessageWriter {
         csv: csv_state,
@@ -628,15 +631,7 @@ fn cat_streaming(
             }
             mcap::sans_io::LinearReadEvent::Record { data, opcode } => {
                 let record = mcap::parse_record(opcode, data)?;
-                if handle_linear_record(
-                    sink,
-                    record,
-                    opts,
-                    &mut schemas,
-                    &mut channel_defs,
-                    &mut channels,
-                    &mut out,
-                )? {
+                if handle_linear_record(sink, record, opts, &mut channels, &mut out)? {
                     return Ok(true);
                 }
             }
@@ -650,37 +645,33 @@ fn handle_linear_record(
     sink: &mut OutputSink<impl std::io::Write>,
     record: mcap::records::Record<'_>,
     opts: &CatOptions,
-    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &mut HashMap<u16, mcap::records::Channel>,
-    channels: &mut HashMap<u16, Arc<mcap::Channel<'static>>>,
+    channels: &mut mcap::read::ChannelAccumulator<'static>,
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<bool> {
     match record {
         mcap::records::Record::Schema { header, data } => {
-            let schema = Arc::new(mcap::Schema {
-                id: header.id,
-                name: header.name,
-                encoding: header.encoding,
-                data: Cow::Owned(data.into_owned()),
-            });
-            schemas.insert(schema.id, schema);
+            channels
+                .add_schema(header, Cow::Owned(data.into_owned()))
+                .context(parse::INVALID_DEFINITION_HINT)?;
         }
         mcap::records::Record::Channel(channel) => {
             if matches!(opts.mode, OutputMode::Csv) {
                 out.csv.seen_topics.insert(channel.topic.clone());
             }
-            if channel.schema_id == 0 || schemas.contains_key(&channel.schema_id) {
-                let resolved = build_channel(&channel, schemas)?;
-                channels.insert(channel.id, resolved);
-            }
-            channel_defs.insert(channel.id, channel);
+            channels
+                .add_channel(channel)
+                .context(parse::INVALID_DEFINITION_HINT)?;
         }
         mcap::records::Record::Message { header, data } => {
             if !opts.include_time(header.log_time) {
                 return Ok(false);
             }
 
-            let channel = resolve_channel(header.channel_id, schemas, channel_defs, channels)?;
+            let channel = parse::message_channel(
+                channels.get(header.channel_id),
+                header.channel_id,
+                header.sequence,
+            )?;
 
             if !opts.include_topic(&channel.topic) {
                 return Ok(false);
@@ -699,31 +690,6 @@ fn handle_linear_record(
     }
 
     Ok(false)
-}
-
-fn build_channel(
-    channel: &mcap::records::Channel,
-    schemas: &HashMap<u16, Arc<mcap::Schema<'static>>>,
-) -> Result<Arc<mcap::Channel<'static>>> {
-    let schema = if channel.schema_id == 0 {
-        None
-    } else {
-        Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
-            anyhow::anyhow!(
-                "encountered channel with topic {} with unknown schema ID {}",
-                channel.topic,
-                channel.schema_id
-            )
-        })?)
-    };
-
-    Ok(Arc::new(mcap::Channel {
-        id: channel.id,
-        topic: channel.topic.clone(),
-        schema,
-        message_encoding: channel.message_encoding.clone(),
-        metadata: channel.metadata.clone(),
-    }))
 }
 
 struct CatMessage<'a, 'schema, 'data> {
@@ -1495,7 +1461,7 @@ mod tests {
         io::{Cursor, Read, Write},
         net::TcpListener,
         path::Path,
-        sync::Arc,
+        sync::{Arc, Mutex},
         thread,
     };
 
@@ -1788,8 +1754,18 @@ mod tests {
     }
 
     fn serve_http(body: &'static [u8]) -> String {
+        serve_http_recording(body).0
+    }
+
+    /// Inclusive byte ranges a test server has served, in request order.
+    type ServedRanges = Arc<Mutex<Vec<(usize, usize)>>>;
+
+    /// Serves `body` over HTTP with range support, recording every served range.
+    fn serve_http_recording(body: &'static [u8]) -> (String, ServedRanges) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind test server");
         let addr = listener.local_addr().expect("test server addr");
+        let served_ranges = Arc::new(Mutex::new(Vec::new()));
+        let recorder = Arc::clone(&served_ranges);
         thread::spawn(move || {
             for stream in listener.incoming().take(64) {
                 let mut stream = stream.expect("accept test connection");
@@ -1825,6 +1801,7 @@ mod tests {
                 if let Some((start, end)) = requested_range {
                     let end = end.min(body.len().saturating_sub(1));
                     let start = start.min(end);
+                    recorder.lock().expect("ranges lock").push((start, end));
                     let content = &body[start..=end];
                     let response = format!(
                         "HTTP/1.1 206 Partial Content\r\nContent-Length: {}\r\nContent-Range: bytes {start}-{end}/{}\r\nAccept-Ranges: bytes\r\nConnection: close\r\n\r\n",
@@ -1847,7 +1824,7 @@ mod tests {
                 }
             }
         });
-        format!("http://{addr}/demo.mcap")
+        (format!("http://{addr}/demo.mcap"), served_ranges)
     }
 
     fn build_single_topic_json_mcap(topic: &str, messages: &[(u32, u64, &[u8])]) -> Vec<u8> {
@@ -1992,6 +1969,307 @@ mod tests {
         let output = String::from_utf8(out).expect("valid utf8 output");
         let lines: Vec<&str> = output.lines().collect();
         assert_eq!(lines.as_slice(), NO_MESSAGE_INDEX_LOG_TIME_LINES);
+    }
+
+    /// A summary that repeats the channel but not its schema; the schema is defined only inside
+    /// the chunk.
+    fn build_chunked_mcap_without_repeated_schema() -> Vec<u8> {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .repeat_schemas(false)
+                .repeat_channels(true)
+                .create(Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer.add_schema("Example", "json", b"x").expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 10,
+                        publish_time: 10,
+                    },
+                    &[1],
+                )
+                .expect("write message");
+            writer.finish().expect("finish writer");
+        }
+        buffer
+    }
+
+    /// Like [`build_chunked_mcap_without_repeated_schema`], plus a schemaless channel so the
+    /// summary is non-empty, and without message indexes (and optionally statistics) so nothing
+    /// in the summary's indexes reveals the omitted channel.
+    fn build_chunked_mcap_without_repeated_schema_or_message_indexes(
+        emit_statistics: bool,
+    ) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .repeat_schemas(false)
+                .repeat_channels(true)
+                .emit_message_indexes(false)
+                .emit_statistics(emit_statistics)
+                .create(Cursor::new(&mut buffer))
+                .expect("writer");
+            let plain_id = writer
+                .add_channel(0, "/plain", "json", &BTreeMap::new())
+                .expect("schemaless channel");
+            let schema_id = writer.add_schema("Example", "json", b"x").expect("schema");
+            let demo_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            for (channel_id, log_time, payload) in [(plain_id, 10u64, 1u8), (demo_id, 20, 2)] {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id,
+                            sequence: 1,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        &[payload],
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish writer");
+        }
+        buffer
+    }
+
+    /// Two chunks: the first holds the definitions and a message on a schemaless channel, the
+    /// second a message on a channel whose schema the summary does not repeat.
+    fn build_two_chunk_mcap_without_repeated_schema() -> Vec<u8> {
+        let mut buffer = Vec::new();
+        {
+            // Definitions plus the first 200-byte message exceed the chunk target, so the second
+            // message lands in its own chunk (see `build_multi_chunk_chunk_local_mcap`).
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(150))
+                .repeat_schemas(false)
+                .repeat_channels(true)
+                .create(Cursor::new(&mut buffer))
+                .expect("writer");
+            let plain_id = writer
+                .add_channel(0, "/plain", "json", &BTreeMap::new())
+                .expect("schemaless channel");
+            let schema_id = writer.add_schema("Example", "json", b"x").expect("schema");
+            let demo_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            for (channel_id, log_time, fill) in [(plain_id, 10u64, 1u8), (demo_id, 20, 2)] {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id,
+                            sequence: 1,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        &[fill; 200],
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish writer");
+        }
+        buffer
+    }
+
+    /// Chunk start offsets of a file whose summary the crate reader rejects (omitted schema).
+    fn chunk_start_offsets(body: &[u8]) -> Vec<usize> {
+        let footer = mcap::read::footer(body).expect("footer");
+        let footer_start = body.len() - crate::parse::FOOTER_RECORD_AND_END_MAGIC_LEN;
+        crate::parse::parse_summary_section(&body[footer.summary_start as usize..footer_start])
+            .expect("summary")
+            .summary
+            .chunk_indexes
+            .iter()
+            .map(|chunk| chunk.chunk_start_offset as usize)
+            .collect()
+    }
+
+    #[test]
+    fn remote_cat_topic_filter_excluding_omitted_channel_reads_only_planned_chunks() {
+        let body: &'static [u8] =
+            Box::leak(build_two_chunk_mcap_without_repeated_schema().into_boxed_slice());
+        let chunk_starts = chunk_start_offsets(body);
+        assert_eq!(chunk_starts.len(), 2, "expected two chunks");
+        let demo_chunk_start = chunk_starts[1];
+
+        let run = |topics: &[&str]| {
+            let (url, served_ranges) = serve_http_recording(body);
+            let opts = CatOptions {
+                topics: topics.iter().map(|topic| topic.to_string()).collect(),
+                ..CatOptions::default()
+            };
+            let (broken_pipe, out) = capture_plain(|sink| {
+                super::cat_file(
+                    sink,
+                    Path::new(&url),
+                    &opts,
+                    crate::source::SourceOptions::new(true),
+                    &mut CsvState::default(),
+                )
+            })
+            .expect("remote cat should succeed");
+            assert!(!broken_pipe);
+            let lines: Vec<String> = String::from_utf8(out)
+                .expect("utf8 output")
+                .lines()
+                .map(str::to_string)
+                .collect();
+            let served = served_ranges.lock().expect("ranges lock").clone();
+            (lines, served)
+        };
+        // The definition pass reads a chunk record from its start; the indexed read starts at
+        // the compressed data instead, so a range starting at the chunk start identifies the pass.
+        let fetched_demo_chunk_for_definitions =
+            |served: &[(usize, usize)]| served.iter().any(|(start, _)| *start == demo_chunk_start);
+
+        // A filter that misses the omitted channel reads only the planned chunk.
+        let (lines, served) = run(&["/plain"]);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(
+            lines[0].starts_with("0.000000010 /plain [no schema]"),
+            "{lines:?}"
+        );
+        assert!(!fetched_demo_chunk_for_definitions(&served), "{served:?}");
+
+        // A filter that selects it runs the pass and resolves the schema (positive control for
+        // the range assertion above).
+        let (lines, served) = run(&["/demo"]);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(
+            lines[0].starts_with("0.000000020 /demo [Example]"),
+            "{lines:?}"
+        );
+        assert!(fetched_demo_chunk_for_definitions(&served), "{served:?}");
+    }
+
+    #[test]
+    fn remote_cat_topic_filter_excluding_omitted_channel_without_message_indexes() {
+        // Without message indexes the reader decodes whole chunks, so the filter must drop the
+        // omitted channel's messages after decoding rather than failing to resolve them.
+        let body: &'static [u8] = Box::leak(
+            build_chunked_mcap_without_repeated_schema_or_message_indexes(true).into_boxed_slice(),
+        );
+        let url = serve_http(body);
+        let opts = CatOptions {
+            topics: vec!["/plain".to_string()],
+            ..CatOptions::default()
+        };
+        let (broken_pipe, out) = capture_plain(|sink| {
+            super::cat_file(
+                sink,
+                Path::new(&url),
+                &opts,
+                crate::source::SourceOptions::new(true),
+                &mut CsvState::default(),
+            )
+        })
+        .expect("remote cat should filter out the omitted channel");
+        assert!(!broken_pipe);
+        let output = String::from_utf8(out).expect("cat output should be utf8");
+        assert_eq!(
+            output.lines().collect::<Vec<_>>(),
+            ["0.000000010 /plain [no schema] [1]"]
+        );
+    }
+
+    #[test]
+    fn remote_cat_resolves_schema_omitted_from_summary_without_message_indexes() {
+        remote_cat_resolves_schema_omitted_from_summary_without_indexes(true);
+    }
+
+    #[test]
+    fn remote_cat_resolves_schema_omitted_from_summary_without_message_indexes_or_statistics() {
+        remote_cat_resolves_schema_omitted_from_summary_without_indexes(false);
+    }
+
+    fn remote_cat_resolves_schema_omitted_from_summary_without_indexes(emit_statistics: bool) {
+        // With no message indexes, nothing in the summary's indexes shows that the parsed summary
+        // is missing a channel; the omitted-topics signal must still run the definition pass.
+        let body: &'static [u8] = Box::leak(
+            build_chunked_mcap_without_repeated_schema_or_message_indexes(emit_statistics)
+                .into_boxed_slice(),
+        );
+        let url = serve_http(body);
+        let (broken_pipe, out) = capture_plain(|sink| {
+            super::cat_file(
+                sink,
+                Path::new(&url),
+                &CatOptions::default(),
+                crate::source::SourceOptions::new(true),
+                &mut CsvState::default(),
+            )
+        })
+        .expect("remote cat should resolve the schema from the chunk");
+        assert!(!broken_pipe);
+        let output = String::from_utf8(out).expect("cat output should be utf8");
+        assert_eq!(
+            output.lines().collect::<Vec<_>>(),
+            [
+                "0.000000010 /plain [no schema] [1]",
+                "0.000000020 /demo [Example] [2]",
+            ]
+        );
+    }
+
+    #[test]
+    fn remote_cat_csv_sees_topic_of_channel_omitted_from_summary() {
+        // A time filter that excludes every message must still leave the topic "seen", so the
+        // run ends with the no-messages warning rather than the topic-not-found error.
+        let body: &'static [u8] =
+            Box::leak(build_chunked_mcap_without_repeated_schema().into_boxed_slice());
+        let url = serve_http(body);
+        let opts = CatOptions {
+            topics: vec!["/demo".to_string()],
+            start: 30,
+            mode: OutputMode::Csv,
+            ..CatOptions::default()
+        };
+        let mut csv_state = CsvState::default();
+        let (broken_pipe, out) = capture_csv(|sink| {
+            super::cat_file(
+                sink,
+                Path::new(&url),
+                &opts,
+                crate::source::SourceOptions::new(true),
+                &mut csv_state,
+            )
+        })
+        .expect("remote csv cat should succeed with no rows");
+        assert!(!broken_pipe);
+        assert!(out.is_empty(), "no message is in range");
+        assert!(csv_state.header.is_none());
+        assert!(csv_state.seen_topics.contains("/demo"));
+    }
+
+    #[test]
+    fn remote_cat_resolves_schema_omitted_from_summary() {
+        // The remote summary parser leaves the channel out, so the indexed path must collect the
+        // in-chunk definitions and print the message with its schema rather than failing on a
+        // conflicting or schemaless channel.
+        let body: &'static [u8] =
+            Box::leak(build_chunked_mcap_without_repeated_schema().into_boxed_slice());
+        let url = serve_http(body);
+        let (broken_pipe, out) = capture_plain(|sink| {
+            super::cat_file(
+                sink,
+                Path::new(&url),
+                &CatOptions::default(),
+                crate::source::SourceOptions::new(true),
+                &mut CsvState::default(),
+            )
+        })
+        .expect("remote cat should resolve the schema from the chunk");
+        assert!(!broken_pipe);
+        let output = String::from_utf8(out).expect("cat output should be utf8");
+        assert_eq!(output.trim_end(), "0.000000010 /demo [Example] [1]");
     }
 
     #[test]
