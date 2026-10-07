@@ -2,7 +2,7 @@
 //! writes a new one, choosing an indexed or linear read path, applying record selection, and
 //! placing records in the standard layout. Multi-input merges go through [`super::merge`] instead.
 use std::borrow::Cow;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 use std::io::{Seek, Write};
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ use anyhow::{bail, Context, Result};
 use super::common;
 use super::options::{include_topic, resolve_options, ResolvedOptions, RewriteOptions};
 use crate::cli::MessageOrder;
-use crate::source;
+use crate::{parse, source};
 
 pub(crate) fn run(args: RewriteOptions, source_options: source::SourceOptions) -> Result<()> {
     let opts = resolve_options(&args)?;
@@ -172,13 +172,11 @@ fn filter_indexed<W: Write + Seek>(
                 )
             });
             for message in pre_start_messages {
-                let channel = summary
-                    .channels
-                    .get(&message.channel_id)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!("message references unknown channel {}", message.channel_id)
-                    })?
-                    .clone();
+                let channel = parse::message_channel(
+                    summary.channels.get(&message.channel_id).cloned(),
+                    message.channel_id,
+                    message.sequence,
+                )?;
                 if fold_seeds_into_groups {
                     pre_start_buffered.push(BufferedMessage {
                         channel,
@@ -236,12 +234,14 @@ fn filter_indexed<W: Write + Seek>(
                     common::service_chunk_request(&mut reader, input, offset, length)?;
                 }
                 mcap::sans_io::IndexedReadEvent::Message { header, data } => {
-                    let channel = summary.channels.get(&header.channel_id).ok_or_else(|| {
-                        anyhow::anyhow!("message references unknown channel {}", header.channel_id)
-                    })?;
+                    let channel = parse::message_channel(
+                        summary.channels.get(&header.channel_id).cloned(),
+                        header.channel_id,
+                        header.sequence,
+                    )?;
                     if buffer_for_ordering {
                         buffered_messages.push(BufferedMessage {
-                            channel: channel.clone(),
+                            channel,
                             sequence: header.sequence,
                             log_time: header.log_time,
                             publish_time: header.publish_time,
@@ -249,7 +249,7 @@ fn filter_indexed<W: Write + Seek>(
                         });
                     } else {
                         writer.write(&mcap::Message {
-                            channel: channel.clone(),
+                            channel,
                             sequence: header.sequence,
                             log_time: header.log_time,
                             publish_time: header.publish_time,
@@ -357,9 +357,7 @@ fn filter_linear<W: Write + Seek>(
         })?;
     }
 
-    let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
-    let mut channel_defs = HashMap::<u16, mcap::records::Channel>::new();
-    let mut channels = HashMap::<u16, Arc<mcap::Channel<'static>>>::new();
+    let mut channels = mcap::read::ChannelAccumulator::default();
     // Collected during the message pass (borrowing from `input`, no copy) and written last.
     let mut pending_attachments = Vec::<mcap::Attachment>::new();
     // Messages buffered for the sorted path. This holds the whole selected message set in memory,
@@ -368,37 +366,28 @@ fn filter_linear<W: Write + Seek>(
 
     for record in mcap::read::ChunkFlattener::new(input)? {
         match record? {
+            // ChunkFlattener hands out owned records, so this moves the bytes rather than copying
+            // them.
             mcap::records::Record::Schema { header, data } => {
-                let schema = Arc::new(mcap::Schema {
-                    id: header.id,
-                    name: header.name,
-                    encoding: header.encoding,
-                    data: Cow::Owned(data.into_owned()),
-                });
-                schemas.insert(schema.id, schema);
+                channels
+                    .add_schema(header, Cow::Owned(data.into_owned()))
+                    .context(parse::INVALID_DEFINITION_HINT)?;
             }
             mcap::records::Record::Channel(channel) => {
-                if channel.schema_id == 0 || schemas.contains_key(&channel.schema_id) {
-                    let resolved = build_channel(&channel, &schemas)?;
-                    channels.insert(channel.id, resolved);
-                }
-                channel_defs.insert(channel.id, channel);
+                channels
+                    .add_channel(channel)
+                    .context(parse::INVALID_DEFINITION_HINT)?;
             }
             mcap::records::Record::Message { header, data } => {
                 if header.log_time < opts.start || header.log_time >= opts.end {
                     continue;
                 }
 
-                let channel = if let Some(channel) = channels.get(&header.channel_id) {
-                    channel.clone()
-                } else {
-                    let Some(channel_def) = channel_defs.get(&header.channel_id) else {
-                        bail!("message references unknown channel {}", header.channel_id);
-                    };
-                    let resolved = build_channel(channel_def, &schemas)?;
-                    channels.insert(header.channel_id, resolved.clone());
-                    resolved
-                };
+                let channel = parse::message_channel(
+                    channels.get(header.channel_id),
+                    header.channel_id,
+                    header.sequence,
+                )?;
 
                 if !include_topic(&channel.topic, opts) {
                     continue;
@@ -452,33 +441,6 @@ fn filter_linear<W: Write + Seek>(
     }
 
     Ok(())
-}
-
-/// Resolves a channel record against the known schemas into an owned [`mcap::Channel`]. Used by the
-/// linear path to rebuild channels as it flattens the data section.
-fn build_channel(
-    channel: &mcap::records::Channel,
-    schemas: &HashMap<u16, Arc<mcap::Schema<'static>>>,
-) -> Result<Arc<mcap::Channel<'static>>> {
-    let schema = if channel.schema_id == 0 {
-        None
-    } else {
-        Some(schemas.get(&channel.schema_id).cloned().ok_or_else(|| {
-            anyhow::anyhow!(
-                "encountered channel with topic {} with unknown schema ID {}",
-                channel.topic,
-                channel.schema_id
-            )
-        })?)
-    };
-
-    Ok(Arc::new(mcap::Channel {
-        id: channel.id,
-        topic: channel.topic.clone(),
-        schema,
-        message_encoding: channel.message_encoding.clone(),
-        metadata: channel.metadata.clone(),
-    }))
 }
 
 #[cfg(test)]

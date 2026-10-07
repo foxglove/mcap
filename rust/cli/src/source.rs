@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::io::{IsTerminal as _, SeekFrom, Write};
 use std::path::Path;
 use std::sync::Arc;
@@ -136,11 +137,18 @@ impl MaterializedInput {
 pub struct RemoteMcap {
     reader: RemoteRangeReader,
     summary: mcap::Summary,
+    omitted_channels: BTreeMap<u16, String>,
 }
 
 impl RemoteMcap {
     pub fn summary(&self) -> &mcap::Summary {
         &self.summary
+    }
+
+    /// Channels the summary named but could not define, by id (see
+    /// [`parse::ParsedSummary::omitted_channels`]).
+    pub fn omitted_channels(&self) -> &BTreeMap<u16, String> {
+        &self.omitted_channels
     }
 
     pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
@@ -435,7 +443,7 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
         }
         return Ok(None);
     };
-    let Some(summary) = read_summary_from_remote(&mut reader, options)
+    let Some(parsed) = read_summary_from_remote(&mut reader, options)
         .map_err(|err| remote_read_error(path, err))?
     else {
         if !options.allow_remote_scan {
@@ -447,7 +455,11 @@ pub fn try_open_remote_mcap(path: &Path, options: SourceOptions) -> Result<Optio
         }
         return Ok(None);
     };
-    Ok(Some(RemoteMcap { reader, summary }))
+    Ok(Some(RemoteMcap {
+        reader,
+        summary: parsed.summary,
+        omitted_channels: parsed.omitted_channels,
+    }))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1533,7 +1545,7 @@ fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()
 fn read_summary_from_remote(
     reader: &mut RemoteRangeReader,
     options: SourceOptions,
-) -> Result<Option<mcap::Summary>> {
+) -> Result<Option<parse::ParsedSummary>> {
     let Some(summary_bytes) = read_summary_bytes_from_remote(reader, options)? else {
         return Ok(None);
     };
@@ -3170,7 +3182,7 @@ mod tests {
         let summary = super::read_summary_from_remote(&mut reader, super::SourceOptions::default())
             .expect("summary read")
             .expect("summary should be present");
-        assert!(summary.channels.contains_key(&channel_id));
+        assert!(summary.summary.channels.contains_key(&channel_id));
     }
 
     #[test]
@@ -3194,7 +3206,7 @@ mod tests {
         let summary = super::read_summary_from_remote(&mut reader, super::SourceOptions::default())
             .expect("summary read with back-fill")
             .expect("summary should be present");
-        assert!(summary.channels.contains_key(&channel_id));
+        assert!(summary.summary.channels.contains_key(&channel_id));
     }
 
     #[test]

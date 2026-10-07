@@ -344,9 +344,19 @@ fn increment_map_count(counts: &mut BTreeMap<u16, u64>, channel_id: u16) -> Resu
     Ok(())
 }
 
+/// A summary parsed from its raw section, plus the topics it names but cannot represent.
+pub(crate) struct ParsedSummary {
+    pub(crate) summary: mcap::Summary,
+    /// Channels the summary repeated without their schema, by id. They are left out of
+    /// `summary.channels` so the in-chunk definitions define them, but they still name real
+    /// topics (CSV export reports a topic with no messages in range differently from one that
+    /// does not exist), and their ids let a reader tell them from chunk-local channels.
+    pub(crate) omitted_channels: BTreeMap<u16, String>,
+}
+
 // TODO: keep this in sync with mcap::sans_io::SummaryReader and mcap::read::ChannelAccumulator.
 // A future mcap crate range-summary API should replace this CLI-local parser.
-pub(crate) fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
+pub(crate) fn parse_summary_section(summary: &[u8]) -> Result<ParsedSummary> {
     let mut out = mcap::Summary::default();
     let mut schemas = HashMap::<u16, Arc<mcap::Schema<'static>>>::new();
     let mut channel_defs = HashMap::<u16, records::Channel>::new();
@@ -400,28 +410,38 @@ pub(crate) fn parse_summary_section(summary: &[u8]) -> Result<mcap::Summary> {
             _ => {}
         }
     }
-    out.channels = channel_defs
-        .into_iter()
-        .map(|(id, channel)| {
-            let schema = if channel.schema_id == 0 {
-                None
-            } else {
-                schemas.get(&channel.schema_id).cloned()
-            };
-            (
-                id,
-                Arc::new(mcap::Channel {
-                    id: channel.id,
-                    topic: channel.topic,
-                    schema,
-                    message_encoding: channel.message_encoding,
-                    metadata: channel.metadata,
-                }),
-            )
-        })
-        .collect();
+    // A summary may repeat a channel without its schema (defined only inside a chunk). Omit such a
+    // channel rather than inventing a schemaless one: a channel missing from the summary makes
+    // readers collect the in-chunk definitions, which link it. Keep its topic, which is still real.
+    let mut omitted_channels = BTreeMap::new();
+    for channel in channel_defs.into_values() {
+        let schema = if channel.schema_id == 0 {
+            None
+        } else {
+            match schemas.get(&channel.schema_id) {
+                Some(schema) => Some(schema.clone()),
+                None => {
+                    omitted_channels.insert(channel.id, channel.topic);
+                    continue;
+                }
+            }
+        };
+        out.channels.insert(
+            channel.id,
+            Arc::new(mcap::Channel {
+                id: channel.id,
+                topic: channel.topic,
+                schema,
+                message_encoding: channel.message_encoding,
+                metadata: channel.metadata,
+            }),
+        );
+    }
     out.schemas = schemas;
-    Ok(out)
+    Ok(ParsedSummary {
+        summary: out,
+        omitted_channels,
+    })
 }
 
 // TODO: keep these exact-record parsers in sync with mcap::read::metadata and
@@ -457,82 +477,128 @@ pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'
     Ok(attachment)
 }
 
-pub(crate) fn collect_chunk_definitions_from_mcap(
-    mcap: &[u8],
-    index: &records::ChunkIndex,
-    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &mut HashMap<u16, records::Channel>,
-) -> Result<()> {
-    let start = usize::try_from(index.chunk_start_offset).with_context(|| {
-        format!(
-            "chunk offset out of range for this platform: {}",
-            index.chunk_start_offset
-        )
-    })?;
-    let length = usize::try_from(index.chunk_length).with_context(|| {
-        format!(
-            "chunk length out of range for this platform: {}",
-            index.chunk_length
-        )
-    })?;
-    let end = start.checked_add(length).ok_or_else(|| {
-        anyhow::anyhow!("chunk read overflow at offset {}", index.chunk_start_offset)
-    })?;
-    let chunk = mcap.get(start..end).ok_or_else(|| {
-        anyhow::anyhow!(
-            "chunk read out of bounds at offset {} length {}",
-            index.chunk_start_offset,
-            length
-        )
-    })?;
-    collect_chunk_definitions_from_record_bytes(chunk, schemas, channel_defs)
+/// Context for errors from linking schema and channel records. The crate's errors name the record
+/// but not what to do about it.
+pub(crate) const INVALID_DEFINITION_HINT: &str = "invalid schema or channel record; `mcap doctor` \
+    lists them and `mcap recover` writes a copy without them";
+
+/// Turns a message's channel lookup into the channel, reporting a missing one with the crate's
+/// `UnknownChannel` error so cat's and filter's read paths describe the condition the same way.
+pub(crate) fn message_channel<'a>(
+    channel: Option<Arc<mcap::Channel<'a>>>,
+    channel_id: u16,
+    sequence: u32,
+) -> Result<Arc<mcap::Channel<'a>>> {
+    channel.ok_or_else(|| mcap::McapError::UnknownChannel(sequence, channel_id).into())
 }
 
-pub(crate) fn collect_chunk_definitions_from_record_bytes(
-    chunk: &[u8],
-    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &mut HashMap<u16, records::Channel>,
-) -> Result<()> {
-    if chunk.len() < 9 || chunk[0] != records::op::CHUNK {
-        return Err(mcap::McapError::BadIndex.into());
-    }
-    let body_len = usize::try_from(u64::from_le_bytes(chunk[1..9].try_into()?))
-        .context("chunk body length out of range for this platform")?;
-    if chunk.len() != 9 + body_len {
-        return Err(mcap::McapError::BadIndex.into());
-    }
-
-    let (header, data) = match mcap::parse_record(records::op::CHUNK, &chunk[9..])? {
-        Record::Chunk { header, data } => (header, data),
-        _ => return Err(mcap::McapError::BadIndex.into()),
-    };
-
-    for record in mcap::read::ChunkReader::new(header, data.as_ref())? {
-        collect_definition_record(record?, schemas, channel_defs);
-    }
-    Ok(())
+/// Collects the schema and channel definitions stored inside chunks, for a summary that does not
+/// repeat them. Schemas are recorded as each chunk is read, but channels are linked only by
+/// [`Self::finish`], after every chunk: chunk indexes need not be listed in data order, so a
+/// channel's schema may sit in a chunk listed later.
+pub(crate) struct ChunkDefinitions<'c> {
+    channels: &'c mut mcap::read::ChannelAccumulator<'static>,
+    /// Keyed by id so a writer that repeats its channels in every chunk holds each once.
+    pending_channels: BTreeMap<u16, records::Channel>,
 }
 
-fn collect_definition_record(
-    record: Record<'_>,
-    schemas: &mut HashMap<u16, Arc<mcap::Schema<'static>>>,
-    channel_defs: &mut HashMap<u16, records::Channel>,
-) {
-    match record {
-        Record::Schema { header, data } => {
-            schemas.entry(header.id).or_insert_with(|| {
-                Arc::new(mcap::Schema {
-                    id: header.id,
-                    name: header.name,
-                    encoding: header.encoding,
-                    data: Cow::Owned(data.into_owned()),
-                })
-            });
+impl<'c> ChunkDefinitions<'c> {
+    pub(crate) fn new(channels: &'c mut mcap::read::ChannelAccumulator<'static>) -> Self {
+        Self {
+            channels,
+            pending_channels: BTreeMap::new(),
         }
-        Record::Channel(channel) => {
-            channel_defs.entry(channel.id).or_insert(channel);
+    }
+
+    /// Collects from the chunk that `index` locates within an in-memory file.
+    pub(crate) fn collect_from_mcap(
+        &mut self,
+        mcap: &[u8],
+        index: &records::ChunkIndex,
+    ) -> Result<()> {
+        let start = usize::try_from(index.chunk_start_offset).with_context(|| {
+            format!(
+                "chunk offset out of range for this platform: {}",
+                index.chunk_start_offset
+            )
+        })?;
+        let length = usize::try_from(index.chunk_length).with_context(|| {
+            format!(
+                "chunk length out of range for this platform: {}",
+                index.chunk_length
+            )
+        })?;
+        let end = start.checked_add(length).ok_or_else(|| {
+            anyhow::anyhow!("chunk read overflow at offset {}", index.chunk_start_offset)
+        })?;
+        let chunk = mcap.get(start..end).ok_or_else(|| {
+            anyhow::anyhow!(
+                "chunk read out of bounds at offset {} length {}",
+                index.chunk_start_offset,
+                length
+            )
+        })?;
+        self.collect_from_record_bytes(chunk)
+    }
+
+    /// Collects from one complete chunk record (opcode, length, and body).
+    pub(crate) fn collect_from_record_bytes(&mut self, chunk: &[u8]) -> Result<()> {
+        if chunk.len() < 9 || chunk[0] != records::op::CHUNK {
+            return Err(mcap::McapError::BadIndex.into());
         }
-        _ => {}
+        let body_len = usize::try_from(u64::from_le_bytes(chunk[1..9].try_into()?))
+            .context("chunk body length out of range for this platform")?;
+        if chunk.len() != 9 + body_len {
+            return Err(mcap::McapError::BadIndex.into());
+        }
+
+        let (header, data) = match mcap::parse_record(records::op::CHUNK, &chunk[9..])? {
+            Record::Chunk { header, data } => (header, data),
+            _ => return Err(mcap::McapError::BadIndex.into()),
+        };
+
+        for record in mcap::read::ChunkReader::new(header, data.as_ref())? {
+            match record? {
+                // ChunkReader hands out owned records, so this moves the bytes rather than
+                // copying them.
+                Record::Schema { header, data } => {
+                    self.channels
+                        .add_schema(header, Cow::Owned(data.into_owned()))
+                        .context(INVALID_DEFINITION_HINT)?;
+                }
+                // A chunk's repeat must match the first copy, as the accumulator requires.
+                Record::Channel(channel) => match self.pending_channels.entry(channel.id) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(channel);
+                    }
+                    std::collections::btree_map::Entry::Occupied(entry) => {
+                        if entry.get() != &channel {
+                            return Err(mcap::McapError::ConflictingChannels(channel.topic))
+                                .context(INVALID_DEFINITION_HINT);
+                        }
+                    }
+                },
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Topics of the channels collected so far, available before [`Self::finish`] links them.
+    pub(crate) fn topics(&self) -> impl Iterator<Item = &str> {
+        self.pending_channels
+            .values()
+            .map(|channel| channel.topic.as_str())
+    }
+
+    /// Links every collected channel against the schemas seen in all chunks.
+    pub(crate) fn finish(self) -> Result<()> {
+        for channel in self.pending_channels.into_values() {
+            self.channels
+                .add_channel(channel)
+                .context(INVALID_DEFINITION_HINT)?;
+        }
+        Ok(())
     }
 }
 
@@ -544,8 +610,120 @@ mod tests {
     use super::{
         collect_attachment_indexes_linear, collect_metadata_indexes_linear, parse_mcap,
         parse_mcap_from_summary, parse_mcap_with_scan_fallback, parse_summary_section,
+        ChunkDefinitions,
     };
     use mcap::records;
+
+    fn record(opcode: u8, body: &[u8]) -> Vec<u8> {
+        let mut out = vec![opcode];
+        out.extend_from_slice(&(body.len() as u64).to_le_bytes());
+        out.extend_from_slice(body);
+        out
+    }
+
+    fn push_string(out: &mut Vec<u8>, value: &str) {
+        out.extend_from_slice(&(value.len() as u32).to_le_bytes());
+        out.extend_from_slice(value.as_bytes());
+    }
+
+    fn schema_record(id: u16, name: &str, data: &[u8]) -> Vec<u8> {
+        let mut body = id.to_le_bytes().to_vec();
+        push_string(&mut body, name);
+        push_string(&mut body, "jsonschema");
+        body.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        body.extend_from_slice(data);
+        record(records::op::SCHEMA, &body)
+    }
+
+    fn channel_record(id: u16, schema_id: u16, topic: &str) -> Vec<u8> {
+        let mut body = id.to_le_bytes().to_vec();
+        body.extend_from_slice(&schema_id.to_le_bytes());
+        push_string(&mut body, topic);
+        push_string(&mut body, "json");
+        body.extend_from_slice(&0u32.to_le_bytes()); // empty metadata map
+        record(records::op::CHANNEL, &body)
+    }
+
+    /// An uncompressed chunk record holding `records`. A zero CRC skips validation.
+    fn chunk_record(records: &[u8]) -> Vec<u8> {
+        let mut body = Vec::new();
+        body.extend_from_slice(&0u64.to_le_bytes()); // message_start_time
+        body.extend_from_slice(&0u64.to_le_bytes()); // message_end_time
+        body.extend_from_slice(&(records.len() as u64).to_le_bytes()); // uncompressed_size
+        body.extend_from_slice(&0u32.to_le_bytes()); // uncompressed_crc
+        push_string(&mut body, ""); // compression
+        body.extend_from_slice(&(records.len() as u64).to_le_bytes()); // compressed_size
+        body.extend_from_slice(records);
+        record(records::op::CHUNK, &body)
+    }
+
+    #[test]
+    fn chunk_definitions_link_channels_after_every_chunk() {
+        // The chunk listed first holds only the channel; its schema is in the chunk listed second.
+        let channel_chunk = chunk_record(&channel_record(1, 7, "/demo"));
+        let schema_chunk = chunk_record(&schema_record(7, "Example", b"{}"));
+
+        let mut channels = mcap::read::ChannelAccumulator::default();
+        let mut definitions = ChunkDefinitions::new(&mut channels);
+        definitions
+            .collect_from_record_bytes(&channel_chunk)
+            .expect("a channel before its schema is deferred, not rejected");
+        definitions
+            .collect_from_record_bytes(&schema_chunk)
+            .expect("schema-only chunk");
+        definitions
+            .finish()
+            .expect("the channel links to the schema seen later");
+
+        let channel = channels.get(1).expect("channel 1 is defined");
+        assert_eq!(channel.topic, "/demo");
+        assert_eq!(
+            channel.schema.as_ref().map(|schema| schema.name.as_str()),
+            Some("Example")
+        );
+    }
+
+    #[test]
+    fn chunk_definitions_hold_a_repeated_channel_once_and_reject_a_differing_repeat() {
+        let mut definitions_chunk = schema_record(7, "Example", b"{}");
+        definitions_chunk.extend(channel_record(1, 7, "/demo"));
+        let first_chunk = chunk_record(&definitions_chunk);
+        let repeat_chunk = chunk_record(&channel_record(1, 7, "/demo"));
+        let renamed_chunk = chunk_record(&channel_record(1, 7, "/renamed"));
+
+        let mut channels = mcap::read::ChannelAccumulator::default();
+        let mut definitions = ChunkDefinitions::new(&mut channels);
+        definitions
+            .collect_from_record_bytes(&first_chunk)
+            .expect("first chunk");
+        definitions
+            .collect_from_record_bytes(&repeat_chunk)
+            .expect("an identical repeat is accepted");
+        assert_eq!(definitions.topics().collect::<Vec<_>>(), ["/demo"]);
+        let err = definitions
+            .collect_from_record_bytes(&renamed_chunk)
+            .expect_err("a differing repeat is rejected");
+        assert!(matches!(
+            err.downcast_ref::<mcap::McapError>(),
+            Some(mcap::McapError::ConflictingChannels(topic)) if topic == "/renamed"
+        ));
+    }
+
+    #[test]
+    fn chunk_definitions_reject_channel_whose_schema_is_in_no_chunk() {
+        let channel_chunk = chunk_record(&channel_record(1, 7, "/demo"));
+
+        let mut channels = mcap::read::ChannelAccumulator::default();
+        let mut definitions = ChunkDefinitions::new(&mut channels);
+        definitions
+            .collect_from_record_bytes(&channel_chunk)
+            .expect("collection defers linking");
+        let err = definitions.finish().expect_err("schema 7 never appears");
+        assert!(matches!(
+            err.downcast_ref::<mcap::McapError>(),
+            Some(mcap::McapError::UnknownSchema(topic, 7)) if topic == "/demo"
+        ));
+    }
 
     fn write_unindexed_attachment_and_metadata(emit_summary_records: bool) -> Vec<u8> {
         let mut buffer = Vec::new();
@@ -831,7 +1009,7 @@ mod tests {
     }
 
     #[test]
-    fn parse_summary_section_accepts_channel_with_missing_schema() {
+    fn parse_summary_section_omits_channel_with_missing_schema() {
         let mut buffer = Vec::new();
         let (schema_id, channel_id) = {
             let mut writer = mcap::WriteOptions::new()
@@ -862,15 +1040,21 @@ mod tests {
 
         let footer = mcap::read::footer(&buffer).expect("footer");
         let footer_start = buffer.len() - super::FOOTER_RECORD_AND_END_MAGIC_LEN;
-        let summary = parse_summary_section(&buffer[footer.summary_start as usize..footer_start])
+        let parsed = parse_summary_section(&buffer[footer.summary_start as usize..footer_start])
             .expect("summary should parse without repeated schema");
-        let channel = summary
-            .channels
-            .get(&channel_id)
-            .expect("channel should be preserved");
-        assert_eq!(channel.id, channel_id);
-        assert!(channel.schema.is_none());
+        // The channel's schema lives only inside the chunk, so the channel is left for the
+        // in-chunk definition pass instead of being reported with no schema; its topic survives.
+        let summary = &parsed.summary;
+        assert!(!summary.channels.contains_key(&channel_id));
         assert!(!summary.schemas.contains_key(&schema_id));
+        assert!(summary
+            .chunk_indexes
+            .iter()
+            .any(|chunk| chunk.message_index_offsets.contains_key(&channel_id)));
+        assert_eq!(
+            parsed.omitted_channels,
+            BTreeMap::from([(channel_id, "/demo".to_string())])
+        );
     }
 
     #[test]
