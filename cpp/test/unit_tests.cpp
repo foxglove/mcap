@@ -6,7 +6,10 @@
 
 #include <array>
 #include <cstdio>
+#include <filesystem>
 #include <numeric>
+#include <random>
+#include <string>
 #include <vector>
 
 #if defined _WIN32 || defined __CYGWIN__
@@ -503,6 +506,231 @@ TEST_CASE("McapReader::byteRange()", "[reader]") {
     REQUIRE(endOffset5 == 0);
 
     reader.close();
+  }
+}
+
+TEST_CASE("LinearMessageView::status()", "[reader]") {
+  // Writes an uncompressed file containing `messageCount` messages on a single channel.
+  const auto writeFile = [](Buffer& buffer, size_t messageCount, bool noChunking) {
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+    opts.compression = mcap::Compression::None;
+    opts.noChunking = noChunking;
+    writer.open(buffer, opts);
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+    for (size_t i = 0; i < messageCount; ++i) {
+      WriteMsg(writer, channel.id, uint32_t(i), i + 3, i + 3, std::vector<std::byte>(8));
+    }
+    writer.close();
+  };
+
+  // Overwrites the length of the first record in the data section with a value that runs past
+  // the end of the file.
+  const auto corruptFirstDataRecord = [](mcap::McapReader& reader, Buffer& buffer) {
+    const auto [dataStart, dataEnd] = reader.byteRange(0);
+    (void)dataEnd;
+    for (size_t i = 1; i <= 8; ++i) {
+      buffer.buffer[dataStart + i] = std::byte(0xff);
+    }
+  };
+
+  const auto countMessages = [](mcap::LinearMessageView& view) {
+    size_t messageCount = 0;
+    for (const auto& msgView : view) {
+      (void)msgView;
+      ++messageCount;
+    }
+    return messageCount;
+  };
+
+  SECTION("Not open, no-callback overload") {
+    mcap::McapReader reader;
+    auto view = reader.readMessages();
+    REQUIRE(view.status().code == mcap::StatusCode::NotOpen);
+    REQUIRE(view.begin() == view.end());
+  }
+
+  SECTION("Not open, callback overload") {
+    std::optional<mcap::Status> reported;
+    const auto onProblem = [&reported](const mcap::Status& status) {
+      reported = status;
+    };
+    mcap::McapReader reader;
+    auto view = reader.readMessages(onProblem);
+    REQUIRE(reported.has_value());
+    REQUIRE(reported->code == mcap::StatusCode::NotOpen);
+    REQUIRE(view.status().code == mcap::StatusCode::NotOpen);
+    REQUIRE(view.begin() == view.end());
+  }
+
+  SECTION("Not open, options overload") {
+    std::optional<mcap::Status> reported;
+    const auto onProblem = [&reported](const mcap::Status& status) {
+      reported = status;
+    };
+    mcap::McapReader reader;
+    mcap::ReadMessageOptions options;
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::LogTimeOrder;
+    auto view = reader.readMessages(onProblem, options);
+    REQUIRE(reported.has_value());
+    REQUIRE(reported->code == mcap::StatusCode::NotOpen);
+    REQUIRE(view.status().code == mcap::StatusCode::NotOpen);
+    REQUIRE(view.begin() == view.end());
+  }
+
+  SECTION("Not open after a failed re-open") {
+    Buffer good;
+    writeFile(good, 1, false);
+    mcap::McapReader reader;
+    requireOk(reader.open(good));
+
+    // Large enough to pass the size check, but with the wrong magic bytes.
+    Buffer bad;
+    bad.buffer.resize(64);
+    REQUIRE(reader.open(bad).code == mcap::StatusCode::MagicMismatch);
+    REQUIRE(reader.dataSource() == nullptr);
+
+    std::optional<mcap::Status> reported;
+    const auto onProblem = [&reported](const mcap::Status& status) {
+      reported = status;
+    };
+    auto view = reader.readMessages(onProblem);
+    REQUIRE(reported.has_value());
+    REQUIRE(reported->code == mcap::StatusCode::NotOpen);
+    REQUIRE(view.status().code == mcap::StatusCode::NotOpen);
+    REQUIRE(view.begin() == view.end());
+  }
+
+  SECTION("Not open after a failed re-open by filename") {
+    Buffer buffer;
+    writeFile(buffer, 1, false);
+    // Use a random suffix so concurrent test runs on one machine do not collide.
+    const auto suffix = std::to_string(std::random_device{}());
+    const auto tempDir = std::filesystem::temp_directory_path();
+    const auto goodPath =
+      (tempDir / ("mcap_linear_message_view_status_good_" + suffix + ".mcap")).string();
+    const auto missingPath =
+      (tempDir / ("mcap_linear_message_view_status_missing_" + suffix + ".mcap")).string();
+
+    // Remove both files when the section ends, including when a REQUIRE fails.
+    struct RemoveOnExit {
+      std::vector<std::string> paths;
+      ~RemoveOnExit() {
+        for (const auto& path : paths) {
+          std::error_code ec;
+          std::filesystem::remove(path, ec);
+        }
+      }
+    } cleanup{{goodPath, missingPath}};
+    {
+      std::FILE* file = std::fopen(goodPath.c_str(), "wb");
+      REQUIRE(file != nullptr);
+      REQUIRE(std::fwrite(buffer.buffer.data(), 1, buffer.buffer.size(), file) ==
+              buffer.buffer.size());
+      REQUIRE(std::fclose(file) == 0);
+    }
+
+    mcap::McapReader reader;
+    requireOk(reader.open(goodPath));
+    REQUIRE(reader.open(missingPath).code == mcap::StatusCode::OpenFailed);
+    REQUIRE(reader.dataSource() == nullptr);
+
+    std::optional<mcap::Status> reported;
+    const auto onProblem = [&reported](const mcap::Status& status) {
+      reported = status;
+    };
+    auto view = reader.readMessages(onProblem);
+    REQUIRE(reported.has_value());
+    REQUIRE(reported->code == mcap::StatusCode::NotOpen);
+    REQUIRE(view.status().code == mcap::StatusCode::NotOpen);
+    REQUIRE(view.begin() == view.end());
+
+    reader.close();
+  }
+
+  SECTION("Successful read") {
+    Buffer buffer;
+    writeFile(buffer, 1, false);
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    auto view = reader.readMessages();
+    REQUIRE(view.status().ok());
+    REQUIRE(countMessages(view) == 1);
+    REQUIRE(view.status().ok());
+  }
+
+  SECTION("Corrupt record, no-callback overload") {
+    Buffer buffer;
+    writeFile(buffer, 1, false);
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    corruptFirstDataRecord(reader, buffer);
+
+    auto view = reader.readMessages();
+    REQUIRE(view.status().ok());
+    REQUIRE(countMessages(view) == 0);
+    REQUIRE(view.status().code == mcap::StatusCode::InvalidRecord);
+  }
+
+  SECTION("Corrupt record, options overload") {
+    Buffer buffer;
+    writeFile(buffer, 1, false);
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    corruptFirstDataRecord(reader, buffer);
+
+    std::vector<mcap::Status> reported;
+    const auto onProblem = [&reported](const mcap::Status& status) {
+      reported.push_back(status);
+    };
+    // LogTimeOrder reads through the IndexedMessageReader rather than the TypedRecordReader.
+    mcap::ReadMessageOptions options;
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::LogTimeOrder;
+    auto view = reader.readMessages(onProblem, options);
+    REQUIRE(view.status().ok());
+    REQUIRE(countMessages(view) == 0);
+    REQUIRE(!reported.empty());
+    REQUIRE(view.status().code == mcap::StatusCode::InvalidRecord);
+    REQUIRE(view.status().code == reported[0].code);
+    REQUIRE(view.status().message == reported[0].message);
+  }
+
+  SECTION("Missing channel, view keeps the first problem") {
+    Buffer buffer;
+    writeFile(buffer, 2, true);
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+
+    // Point both Message records at a channel that does not exist.
+    const auto [dataStart, dataEnd] = reader.byteRange(0);
+    mcap::RecordReader recordReader(buffer, dataStart, dataEnd);
+    size_t corrupted = 0;
+    while (const auto record = recordReader.next()) {
+      if (record->opcode == mcap::OpCode::Message) {
+        // channel_id is the first field of the Message record payload.
+        const auto offset = recordReader.curRecordOffset();
+        buffer.buffer[offset + 9] = std::byte(0x63);
+        buffer.buffer[offset + 10] = std::byte(0x00);
+        ++corrupted;
+      }
+    }
+    REQUIRE(corrupted == 2);
+
+    std::vector<mcap::Status> reported;
+    const auto onProblem = [&reported](const mcap::Status& status) {
+      reported.push_back(status);
+    };
+    auto view = reader.readMessages(onProblem);
+    REQUIRE(countMessages(view) == 0);
+    REQUIRE(reported.size() == 2);
+    REQUIRE(reported[0].code == mcap::StatusCode::InvalidChannelId);
+    REQUIRE(reported[1].code == mcap::StatusCode::InvalidChannelId);
+    REQUIRE(reported[0].message != reported[1].message);
+    REQUIRE(view.status().code == mcap::StatusCode::InvalidChannelId);
+    REQUIRE(view.status().message == reported[0].message);
   }
 }
 

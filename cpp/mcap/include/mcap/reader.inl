@@ -351,10 +351,9 @@ Status McapReader::open(IReadable& reader) {
 }
 
 Status McapReader::open(std::string_view filename) {
-  if (file_) {
-    std::fclose(file_);
-    file_ = nullptr;
-  }
+  // Fully close any previous file first, so that a failed fopen() leaves the reader closed
+  // rather than pointing at a FILE* that has already been closed.
+  close();
   file_ = std::fopen(filename.data(), "rb");
   if (!file_) {
     const auto msg = internal::StrCat("failed to open \"", filename, "\"");
@@ -382,6 +381,9 @@ void McapReader::close() {
 }
 
 void McapReader::reset_() {
+  // Clear the data source as well, so that a failed re-open leaves the reader fully closed
+  // rather than pointing at the previous file with the rest of the state reset.
+  input_ = nullptr;
   header_ = std::nullopt;
   footer_ = std::nullopt;
   statistics_ = std::nullopt;
@@ -602,9 +604,8 @@ LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem, Tim
 
 LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem,
                                            const ReadMessageOptions& options) {
-  // Check that open() has been successfully called
-  if (!dataSource() || dataStart_ == 0) {
-    onProblem(StatusCode::NotOpen);
+  // Check that open() has been successfully called. The empty view reports NotOpen itself.
+  if (!dataSource()) {
     return LinearMessageView{*this, onProblem};
   }
 
@@ -1628,7 +1629,11 @@ LinearMessageView::LinearMessageView(McapReader& mcapReader, const ProblemCallba
     : mcapReader_(mcapReader)
     , dataStart_(0)
     , dataEnd_(0)
-    , onProblem_(onProblem) {}
+    , onProblem_(onProblem) {
+  if (!mcapReader_.dataSource()) {
+    reportProblem(StatusCode::NotOpen);
+  }
+}
 
 LinearMessageView::LinearMessageView(McapReader& mcapReader, ByteOffset dataStart,
                                      ByteOffset dataEnd, Timestamp startTime, Timestamp endTime,
@@ -1647,6 +1652,17 @@ LinearMessageView::LinearMessageView(McapReader& mcapReader, const ReadMessageOp
     , dataEnd_(dataEnd)
     , readMessageOptions_(options)
     , onProblem_(onProblem) {}
+
+const Status& LinearMessageView::status() const {
+  return status_;
+}
+
+void LinearMessageView::reportProblem(const Status& status) {
+  if (status_.ok()) {
+    status_ = status;
+  }
+  onProblem_(status);
+}
 
 LinearMessageView::Iterator LinearMessageView::begin() {
   if (dataStart_ == dataEnd_ || !mcapReader_.dataSource()) {
@@ -1714,7 +1730,7 @@ void LinearMessageView::Iterator::Impl::onMessage(const Message& message, Record
   }
   auto maybeChannel = view_.mcapReader_.channel(message.channelId);
   if (!maybeChannel) {
-    view_.onProblem_(
+    view_.reportProblem(
       Status{StatusCode::InvalidChannelId,
              internal::StrCat("message at log_time ", message.logTime, " (seq ", message.sequence,
                               ") references missing channel id ", message.channelId)});
@@ -1731,7 +1747,7 @@ void LinearMessageView::Iterator::Impl::onMessage(const Message& message, Record
   if (channel.schemaId != 0) {
     maybeSchema = view_.mcapReader_.schema(channel.schemaId);
     if (!maybeSchema) {
-      view_.onProblem_(
+      view_.reportProblem(
         Status{StatusCode::InvalidSchemaId,
                internal::StrCat("channel ", channel.id, " (", channel.topic,
                                 ") references missing schema id ", channel.schemaId)});
@@ -1754,7 +1770,7 @@ void LinearMessageView::Iterator::Impl::increment() {
       // Surface any problem that may have occurred while reading
       auto& status = recordReader_->status();
       if (!status.ok()) {
-        view_.onProblem_(status);
+        view_.reportProblem(status);
       }
 
       if (!found) {
@@ -1767,10 +1783,10 @@ void LinearMessageView::Iterator::Impl::increment() {
       // Iterate through records until curMessageView_ gets filled with a value.
       if (!indexedMessageReader_->next()) {
         // No message was found on last iteration - if this was because of an error,
-        // alert with onProblem_.
+        // record it on the view and alert with onProblem_.
         auto status = indexedMessageReader_->status();
         if (!status.ok()) {
-          view_.onProblem_(status);
+          view_.reportProblem(status);
         }
         indexedMessageReader_ = std::nullopt;
         return;
@@ -1985,6 +2001,12 @@ bool IndexedMessageReader::next() {
                                               OpCodeString(record->opcode)));
             return false;
         }
+      }
+      // The loop above ends both when the range is exhausted and when a record could not be
+      // read, so surface any read error before moving on to the next job.
+      status_ = recordReader_.status();
+      if (!status_.ok()) {
+        return false;
       }
     } else if (std::holds_alternative<internal::ReadMessageJob>(nextItem)) {
       // Read the message out of the already-decompressed chunk.
