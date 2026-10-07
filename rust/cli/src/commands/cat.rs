@@ -651,7 +651,7 @@ fn handle_linear_record(
     match record {
         mcap::records::Record::Schema { header, data } => {
             channels
-                .add_schema(header, Cow::Owned(data.into_owned()))
+                .add_schema_from_slice(header, &data)
                 .context(parse::INVALID_DEFINITION_HINT)?;
         }
         mcap::records::Record::Channel(channel) => {

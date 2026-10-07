@@ -8,7 +8,10 @@
 //! the file.
 use std::{
     borrow::Cow,
-    collections::{hash_map::Entry, BTreeMap, HashMap},
+    collections::{
+        hash_map::{Entry, VacantEntry},
+        BTreeMap, HashMap,
+    },
     fmt,
     io::Cursor,
     sync::Arc,
@@ -323,6 +326,43 @@ impl<'a> ChannelAccumulator<'a> {
         header: records::SchemaHeader,
         data: Cow<'a, [u8]>,
     ) -> McapResult<()> {
+        if let Some(slot) = self.new_schema_slot(&header, &data)? {
+            slot.insert(Arc::new(Schema {
+                id: header.id,
+                name: header.name,
+                encoding: header.encoding,
+                data,
+            }));
+        }
+        Ok(())
+    }
+
+    /// Like [`Self::add_schema`] for bytes borrowed from a reader's buffer: copies them only
+    /// when the schema is new, so a repeated schema record costs a comparison, not an
+    /// allocation. For bytes that are already owned, [`Self::add_schema`] moves them instead.
+    pub fn add_schema_from_slice(
+        &mut self,
+        header: records::SchemaHeader,
+        data: &[u8],
+    ) -> McapResult<()> {
+        if let Some(slot) = self.new_schema_slot(&header, data)? {
+            slot.insert(Arc::new(Schema {
+                id: header.id,
+                name: header.name,
+                encoding: header.encoding,
+                data: Cow::Owned(data.to_vec()),
+            }));
+        }
+        Ok(())
+    }
+
+    /// The slot for a schema not seen before, or `None` when an identical one is already
+    /// recorded. Rejects ID 0 and a redefinition that differs from the first.
+    fn new_schema_slot(
+        &mut self,
+        header: &records::SchemaHeader,
+        data: &[u8],
+    ) -> McapResult<Option<VacantEntry<'_, u16, Arc<Schema<'a>>>>> {
         if header.id == 0 {
             return Err(McapError::InvalidSchemaId);
         }
@@ -332,22 +372,14 @@ impl<'a> ChannelAccumulator<'a> {
                 let schema = entry.get();
                 if schema.name == header.name
                     && schema.encoding == header.encoding
-                    && schema.data == data
+                    && schema.data.as_ref() == data
                 {
-                    Ok(())
+                    Ok(None)
                 } else {
-                    Err(McapError::ConflictingSchemas(header.name))
+                    Err(McapError::ConflictingSchemas(header.name.clone()))
                 }
             }
-            Entry::Vacant(entry) => {
-                entry.insert(Arc::new(Schema {
-                    id: header.id,
-                    name: header.name.clone(),
-                    encoding: header.encoding,
-                    data,
-                }));
-                Ok(())
-            }
+            Entry::Vacant(entry) => Ok(Some(entry)),
         }
     }
 
@@ -932,5 +964,40 @@ mod tests {
             accumulator.add_channel(conflicting),
             Err(McapError::ConflictingChannels(topic)) if topic == "/renamed"
         ));
+    }
+
+    #[test]
+    fn add_schema_from_slice_copies_only_new_schemas() {
+        let header = |id: u16| records::SchemaHeader {
+            id,
+            name: "Example".to_string(),
+            encoding: "json".to_string(),
+        };
+        let mut accumulator = ChannelAccumulator::default();
+
+        assert!(matches!(
+            accumulator.add_schema_from_slice(header(0), b"x"),
+            Err(McapError::InvalidSchemaId)
+        ));
+
+        accumulator
+            .add_schema_from_slice(header(1), b"x")
+            .expect("first definition is recorded");
+        let first = accumulator.schemas.get(&1).cloned().expect("schema 1");
+        assert_eq!(first.data.as_ref(), b"x");
+
+        // A matching repeat keeps the original (no copy, no replacement)...
+        accumulator
+            .add_schema_from_slice(header(1), b"x")
+            .expect("a matching redefinition is accepted");
+        let repeated = accumulator.schemas.get(&1).expect("schema 1");
+        assert!(Arc::ptr_eq(&first, repeated));
+
+        // ...and a differing one is rejected.
+        assert!(matches!(
+            accumulator.add_schema_from_slice(header(1), b"y"),
+            Err(McapError::ConflictingSchemas(name)) if name == "Example"
+        ));
+        assert_eq!(accumulator.schemas.len(), 1);
     }
 }

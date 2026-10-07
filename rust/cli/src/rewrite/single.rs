@@ -366,6 +366,8 @@ fn filter_linear<W: Write + Seek>(
 
     for record in mcap::read::ChunkFlattener::new(input)? {
         match record? {
+            // ChunkFlattener hands out owned records, so this moves the bytes rather than copying
+            // them.
             mcap::records::Record::Schema { header, data } => {
                 channels
                     .add_schema(header, Cow::Owned(data.into_owned()))
