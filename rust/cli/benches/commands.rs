@@ -1,11 +1,15 @@
 use std::borrow::Cow;
 use std::ffi::OsString;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitStatus, Stdio};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::measurement::WallTime;
+use criterion::{
+    criterion_group, criterion_main, BenchmarkGroup, BenchmarkId, Criterion, Throughput,
+};
 
 const DEFAULT_TOTAL_MB: u64 = 250;
 const DEFAULT_MERGE_INPUTS: usize = 4;
@@ -88,6 +92,13 @@ fn bench_commands(c: &mut Criterion) {
     );
 
     for mode in suites.modes() {
+        // On an indexed input info reads only the summary, a few kilobytes at any file size, so
+        // the run would mostly time process startup. Bench it only where it scans the file.
+        let info = suites.info && matches!(mode, InputMode::Linear);
+        // Without a summary `du --approximate` falls back to the exact scan and would duplicate
+        // `du`, so it has no linear benchmarks.
+        let du_approximate = suites.du_approximate && matches!(mode, InputMode::Indexed);
+
         if suites.merge {
             let merge_cases = PAYLOAD_SIZES
                 .iter()
@@ -97,7 +108,7 @@ fn bench_commands(c: &mut Criterion) {
             bench_merge(c, &config, mode, &merge_cases);
         }
 
-        if suites.filter || suites.decompress {
+        if suites.filter || suites.decompress || suites.cat || info || suites.du || du_approximate {
             let input_cases = PAYLOAD_SIZES
                 .iter()
                 .copied()
@@ -110,6 +121,18 @@ fn bench_commands(c: &mut Criterion) {
             }
             if suites.decompress {
                 bench_decompress(c, &config, mode, &input_cases);
+            }
+            if suites.cat {
+                bench_cat(c, &config, mode, &input_cases);
+            }
+            if info {
+                bench_info(c, &config, mode, &input_cases);
+            }
+            if suites.du {
+                bench_du(c, &config, mode, &input_cases, false);
+            }
+            if du_approximate {
+                bench_du(c, &config, mode, &input_cases, true);
             }
         }
 
@@ -144,27 +167,47 @@ struct SuiteSelection {
     sort: bool,
     compress: bool,
     decompress: bool,
+    cat: bool,
+    info: bool,
+    du: bool,
+    du_approximate: bool,
     indexed: bool,
     linear: bool,
 }
 
 impl SuiteSelection {
     fn from_args() -> Self {
-        // Mirror documented Criterion filters (`-- merge`, `-- indexed`) so filtered runs only
-        // generate inputs for selected suites. This intentionally handles positional filters, not
-        // arbitrary Criterion flag values.
+        // Mirror the documented Criterion filters (`-- merge`, `-- indexed`, `cat|info`, `^cli/du`)
+        // so filtered runs only generate inputs for the selected suites. Positional filters only.
         let filters = std::env::args()
             .skip(1)
             .filter(|arg| !arg.starts_with('-'))
+            .map(|arg| {
+                arg.chars()
+                    .filter(|c| !matches!(c, '(' | ')' | '^' | '$'))
+                    .collect::<String>()
+            })
             .collect::<Vec<_>>();
         let selected = |name: &str| {
-            filters
-                .iter()
-                .any(|filter| filter.split(['/', ':']).any(|component| component == name))
+            filters.iter().any(|filter| {
+                filter
+                    .split(['/', ':', '|'])
+                    .any(|component| component == name)
+            })
         };
-        let any_suite = ["merge", "filter", "sort", "compress", "decompress"]
-            .iter()
-            .any(|name| selected(name));
+        let any_suite = [
+            "merge",
+            "filter",
+            "sort",
+            "compress",
+            "decompress",
+            "cat",
+            "info",
+            "du",
+            "du-approximate",
+        ]
+        .iter()
+        .any(|name| selected(name));
         let any_mode = ["indexed", "linear"].iter().any(|name| selected(name));
 
         Self {
@@ -173,6 +216,11 @@ impl SuiteSelection {
             sort: !any_suite || selected("sort"),
             compress: !any_suite || selected("compress"),
             decompress: !any_suite || selected("decompress"),
+            cat: !any_suite || selected("cat"),
+            info: !any_suite || selected("info"),
+            du: !any_suite || selected("du"),
+            // Criterion's filter is a regex, so `du` matches the `du-approximate` ids too.
+            du_approximate: !any_suite || selected("du") || selected("du-approximate"),
             indexed: !any_mode || selected("indexed"),
             linear: !any_mode || selected("linear"),
         }
@@ -365,6 +413,109 @@ fn bench_decompress(c: &mut Criterion, config: &BenchConfig, mode: InputMode, ca
         );
     }
     group.finish();
+}
+
+fn bench_cat(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
+    let mut group = c.benchmark_group(format!("cli/cat/{}", mode.label()));
+    for case in cases {
+        let args = || {
+            vec![
+                OsString::from("cat"),
+                case.path.as_os_str().to_owned(),
+                OsString::from("--time-format"),
+                OsString::from("nanoseconds"),
+            ]
+        };
+        group.throughput(Throughput::Bytes(config.total_bytes()));
+        bench_read_only(
+            &mut group,
+            BenchmarkId::from_parameter(size_label(case.payload_size)),
+            || {
+                // cat prints one line per message, millions for the 100B case, so count them
+                // from the pipe instead of buffering stdout.
+                let lines = count_mcap_stdout_lines(&config.mcap_bin, args());
+                validate_cat_line_count(lines, case.message_count, &case.path);
+            },
+            || run_mcap(&config.mcap_bin, args()),
+        );
+    }
+    group.finish();
+}
+
+fn bench_info(c: &mut Criterion, config: &BenchConfig, mode: InputMode, cases: &[InputCase]) {
+    let mut group = c.benchmark_group(format!("cli/info/{}", mode.label()));
+    for case in cases {
+        let args = || vec![OsString::from("info"), case.path.as_os_str().to_owned()];
+        group.throughput(Throughput::Bytes(config.total_bytes()));
+        bench_read_only(
+            &mut group,
+            BenchmarkId::from_parameter(size_label(case.payload_size)),
+            || {
+                let stdout = run_mcap_stdout(&config.mcap_bin, args());
+                validate_info_output(&stdout, case.message_count, &case.path);
+            },
+            || run_mcap(&config.mcap_bin, args()),
+        );
+    }
+    group.finish();
+}
+
+/// Benchmarks `du`, or `du --approximate` as the `du-approximate` suite so every id keeps the
+/// `cli/<command>/<mode>/<payload>` shape.
+fn bench_du(
+    c: &mut Criterion,
+    config: &BenchConfig,
+    mode: InputMode,
+    cases: &[InputCase],
+    approximate: bool,
+) {
+    let suite = if approximate { "du-approximate" } else { "du" };
+    let mut group = c.benchmark_group(format!("cli/{suite}/{}", mode.label()));
+    for case in cases {
+        let args = || {
+            let mut args = vec![OsString::from("du")];
+            if approximate {
+                args.push(OsString::from("--approximate"));
+            }
+            args.push(case.path.as_os_str().to_owned());
+            args
+        };
+        // `--approximate` reads the summary and message indexes, not message data, so its work
+        // scales with the message count rather than the file size.
+        group.throughput(if approximate {
+            Throughput::Elements(case.message_count as u64)
+        } else {
+            Throughput::Bytes(config.total_bytes())
+        });
+        bench_read_only(
+            &mut group,
+            BenchmarkId::from_parameter(size_label(case.payload_size)),
+            || {
+                let stdout = run_mcap_stdout(&config.mcap_bin, args());
+                validate_du_output(&stdout, case, approximate);
+            },
+            || run_mcap(&config.mcap_bin, args()),
+        );
+    }
+    group.finish();
+}
+
+/// Benchmarks a command whose result is printed rather than written to a file. `validate` runs
+/// once, untimed, the first time Criterion calls the benchmark. Criterion never calls it for an
+/// id its filter excludes, so filtered-out cases skip validation too.
+fn bench_read_only(
+    group: &mut BenchmarkGroup<'_, WallTime>,
+    id: BenchmarkId,
+    validate: impl FnOnce(),
+    mut run_once: impl FnMut() -> Duration,
+) {
+    let mut validate = Some(validate);
+    group.bench_function(id, |bench| {
+        if let Some(validate) = validate.take() {
+            validate();
+        }
+        bench.iter_custom(|iters| run_measured(iters, |_| run_once()));
+    });
 }
 
 impl BenchConfig {
@@ -596,22 +747,174 @@ where
     total
 }
 
+/// Runs the CLI with stdout discarded and returns its wall-clock duration. Every timed run goes
+/// through here, so draining a pipe is never part of the measured region; the read-only suites
+/// validate their output in an untimed run first.
 fn run_mcap(bin: &Path, args: Vec<OsString>) -> Duration {
     let start = Instant::now();
     let output = Command::new(bin)
         .args(args)
+        .stdout(Stdio::null())
         .output()
         .expect("run mcap command");
     let duration = start.elapsed();
-    if !output.status.success() {
+    ensure_success(output.status, &output.stderr);
+    duration
+}
+
+/// Runs the CLI and returns its stdout, for validating commands that print a few lines.
+fn run_mcap_stdout(bin: &Path, args: Vec<OsString>) -> Vec<u8> {
+    let output = Command::new(bin)
+        .args(args)
+        .output()
+        .expect("run mcap command");
+    ensure_success(output.status, &output.stderr);
+    output.stdout
+}
+
+/// Runs the CLI and counts the non-empty lines it prints, reading stdout through a fixed buffer
+/// so the bench process stays small however much the command prints. stderr is inherited.
+fn count_mcap_stdout_lines(bin: &Path, args: Vec<OsString>) -> usize {
+    let mut child = Command::new(bin)
+        .args(args)
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn mcap command");
+    let mut stdout = child.stdout.take().expect("piped stdout");
+    let mut buffer = [0u8; 64 * 1024];
+    let mut lines = 0;
+    let mut line_has_bytes = false;
+    loop {
+        let read = stdout.read(&mut buffer).expect("read mcap stdout");
+        if read == 0 {
+            break;
+        }
+        for &byte in &buffer[..read] {
+            if byte == b'\n' {
+                lines += usize::from(line_has_bytes);
+                line_has_bytes = false;
+            } else {
+                line_has_bytes = true;
+            }
+        }
+    }
+    lines += usize::from(line_has_bytes);
+    let status = child.wait().expect("wait for mcap command");
+    ensure_success(status, b"(inherited; see above)");
+    lines
+}
+
+fn ensure_success(status: ExitStatus, stderr: &[u8]) {
+    if !status.success() {
         panic!(
-            "mcap command failed with status {:?}\nstdout:\n{}\nstderr:\n{}",
-            output.status.code(),
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
+            "mcap command failed with status {:?}\nstderr:\n{}",
+            status.code(),
+            String::from_utf8_lossy(stderr)
         );
     }
-    duration
+}
+
+fn validate_cat_line_count(lines: usize, expected_count: usize, input: &Path) {
+    assert_eq!(
+        lines,
+        expected_count,
+        "unexpected cat line count for {}",
+        input.display()
+    );
+}
+
+fn validate_info_output(stdout: &[u8], expected_count: usize, input: &Path) {
+    let stdout = String::from_utf8_lossy(stdout);
+    let reported = stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("messages:"))
+        .and_then(|value| value.trim().parse::<usize>().ok());
+    assert_eq!(
+        reported,
+        Some(expected_count),
+        "unexpected info message count for {}:\n{stdout}",
+        input.display()
+    );
+}
+
+fn validate_du_output(stdout: &[u8], case: &InputCase, approximate: bool) {
+    let stdout = String::from_utf8_lossy(stdout);
+    // Topics alternate starting with `/bench/selected`; `/bench/other` needs 2+ messages.
+    let other_count = case.message_count - case.selected_count;
+    let expected = [
+        ("/bench/selected", case.selected_count),
+        ("/bench/other", other_count),
+    ];
+    for (topic, count) in expected {
+        if count == 0 {
+            continue;
+        }
+        let row = stdout
+            .lines()
+            .find(|line| line.starts_with(topic))
+            .unwrap_or_else(|| {
+                panic!(
+                    "du output is missing topic {topic} for {}:\n{stdout}",
+                    case.path.display()
+                )
+            });
+        let reported = row.split('\t').nth(1).map(str::trim).unwrap_or_default();
+        let want_bytes = (count * case.payload_size) as u64;
+        if approximate {
+            // `--approximate` attributes interleaved non-message records to the preceding message,
+            // so accept a small over-count but never an under-count.
+            let reported_bytes = parse_human_bytes(reported).unwrap_or_else(|| {
+                panic!(
+                    "unparsable du size {reported:?} for {topic} in {}",
+                    case.path.display()
+                )
+            });
+            // The CLI prints two decimals, so compare against the bounds as it would print them:
+            // a correct count just below a rounding step must not fail the lower bound.
+            let rounded = |bytes: u64| {
+                parse_human_bytes(&human_bytes(bytes)).expect("round-trip human_bytes")
+            };
+            let min_bytes = rounded(want_bytes);
+            let max_bytes = rounded(want_bytes + want_bytes / 100 + 1_000);
+            assert!(
+                reported_bytes >= min_bytes && reported_bytes <= max_bytes,
+                "approximate du size {reported} for {topic} is outside [{min_bytes}, {max_bytes}] bytes in {}:\n{stdout}",
+                case.path.display()
+            );
+        } else {
+            assert_eq!(
+                reported,
+                human_bytes(want_bytes),
+                "unexpected du size for {topic} in {}:\n{stdout}",
+                case.path.display()
+            );
+        }
+    }
+}
+
+const BYTE_PREFIXES: [&str; 6] = ["B", "kB", "MB", "GB", "TB", "PB"];
+
+/// Mirrors the CLI's `render::human_bytes` (SI prefixes, two decimals); the bench cannot import
+/// the binary crate.
+fn human_bytes(num_bytes: u64) -> String {
+    for (index, prefix) in BYTE_PREFIXES.iter().enumerate() {
+        let displayed = num_bytes as f64 / 1000f64.powi(index as i32);
+        let rounded = (displayed * 100.0).round() / 100.0;
+        if rounded < 1000.0 {
+            return format!("{rounded:.2} {prefix}");
+        }
+    }
+    let last = BYTE_PREFIXES.len() - 1;
+    let displayed = num_bytes as f64 / 1000f64.powi(last as i32);
+    format!("{displayed:.2} {}", BYTE_PREFIXES[last])
+}
+
+/// Inverse of [`human_bytes`], to within the two decimals the CLI prints.
+fn parse_human_bytes(text: &str) -> Option<u64> {
+    let (value, prefix) = text.split_once(' ')?;
+    let index = BYTE_PREFIXES.iter().position(|p| *p == prefix)?;
+    let value = value.parse::<f64>().ok()?;
+    Some((value * 1000f64.powi(index as i32)).round() as u64)
 }
 
 fn validate_output(path: &Path, expected_count: usize, require_ordered: bool) {
