@@ -1,10 +1,12 @@
 from array import array
 from io import BytesIO
 
+import pytest
 from mcap_ros2.decoder import DecoderFactory
 from mcap_ros2.writer import Writer as Ros2Writer
 
-from mcap.reader import make_reader
+from mcap.reader import NonSeekingReader, make_reader
+from mcap.writer import CompressionType
 
 
 def read_ros2_messages(stream: BytesIO):
@@ -200,3 +202,71 @@ def test_write_array_field_named_items():
     output.seek(0)
     for msg in read_ros2_messages(output):
         assert list(msg.decoded_message.items) == [10, 20, 30]
+
+
+@pytest.mark.parametrize("compression", [CompressionType.NONE, CompressionType.ZSTD])
+@pytest.mark.parametrize(
+    "second_name,second_definition,second_value",
+    [
+        ("test_msgs/OtherData", "string data", "new message type"),
+        ("test_msgs/TestData", "string data", "new definition"),
+        ("test_msgs/TestData", "int32 data", 20),
+    ],
+)
+def test_write_multiple_schemas_on_same_topic(
+    compression, second_name, second_definition, second_value
+):
+    output = BytesIO()
+    ros_writer = Ros2Writer(output, chunk_size=1, compression=compression)
+    first_schema = ros_writer.register_msgdef("test_msgs/TestData", "int32 data")
+    ros_writer.write_message("/test", first_schema, {"data": 10}, log_time=0)
+    second_schema = ros_writer.register_msgdef(second_name, second_definition)
+    ros_writer.write_message("/test", second_schema, {"data": second_value}, log_time=1)
+    ros_writer.write_message("/test", first_schema, {"data": 30}, log_time=2)
+    ros_writer.finish()
+
+    expected_schemas = [first_schema, second_schema, first_schema]
+    expected_values = [10, second_value, 30]
+    for reader in (
+        make_reader(BytesIO(output.getvalue()), decoder_factories=[DecoderFactory()]),
+        NonSeekingReader(
+            BytesIO(output.getvalue()), decoder_factories=[DecoderFactory()]
+        ),
+    ):
+        messages = list(reader.iter_decoded_messages())
+        assert len(messages) == 3
+        for index, (message, schema, value) in enumerate(
+            zip(messages, expected_schemas, expected_values)
+        ):
+            assert message.channel.topic == "/test"
+            assert message.channel.schema_id == schema.id
+            assert message.schema == schema
+            assert message.decoded_message.data == value
+            assert message.message.log_time == message.message.publish_time == index
+        assert messages[0].channel.id == messages[2].channel.id
+        assert (messages[0].channel.id == messages[1].channel.id) == (
+            first_schema.id == second_schema.id
+        )
+
+    summary = make_reader(BytesIO(output.getvalue())).get_summary()
+    assert summary is not None
+    assert len(summary.channels) == len({first_schema.id, second_schema.id})
+
+
+def test_write_same_schema_on_multiple_topics_reuses_each_channel():
+    output = BytesIO()
+    ros_writer = Ros2Writer(output)
+    schema = ros_writer.register_msgdef("test_msgs/TestData", "int32 data")
+    topics = ["/first", "/second", "/first", "/second"]
+    for index, topic in enumerate(topics):
+        ros_writer.write_message(topic, schema, {"data": index}, log_time=index)
+    ros_writer.finish()
+
+    output.seek(0)
+    messages = list(read_ros2_messages(output))
+    assert [message.channel.topic for message in messages] == topics
+    assert [message.decoded_message.data for message in messages] == [0, 1, 2, 3]
+    assert all(message.schema == schema for message in messages)
+    assert messages[0].channel.id == messages[2].channel.id
+    assert messages[1].channel.id == messages[3].channel.id
+    assert messages[0].channel.id != messages[1].channel.id
