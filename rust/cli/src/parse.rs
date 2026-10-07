@@ -559,6 +559,8 @@ impl<'c> ChunkDefinitions<'c> {
 
         for record in mcap::read::ChunkReader::new(header, data.as_ref())? {
             match record? {
+                // ChunkReader hands out owned records, so this moves the bytes rather than
+                // copying them.
                 Record::Schema { header, data } => {
                     self.channels
                         .add_schema(header, Cow::Owned(data.into_owned()))
