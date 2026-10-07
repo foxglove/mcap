@@ -317,10 +317,8 @@ Status McapReader::open(IReadable& reader) {
   }
 
   // Check the header magic bytes
-  if (std::memcmp(data, Magic, sizeof(Magic)) != 0) {
-    const auto msg =
-      internal::StrCat("invalid magic bytes in Header: 0x", internal::MagicToHex(data));
-    return Status{StatusCode::MagicMismatch, msg};
+  if (auto status = internal::CheckMagic(data, "in Header"); !status.ok()) {
+    return status;
   }
 
   // Read the Header record
@@ -614,7 +612,12 @@ LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem,
 
 std::pair<ByteOffset, ByteOffset> McapReader::byteRange(Timestamp startTime,
                                                         Timestamp endTime) const {
-  if (!parsedSummary_ || chunkRanges_.empty()) {
+  if (!parsedSummary_) {
+    // Nothing has validated the end of the file yet, so read to the end of the input, through the
+    // Footer record and the trailing magic bytes, as a streamed read does.
+    return {dataStart_, input_->size()};
+  }
+  if (chunkRanges_.empty()) {
     return {dataStart_, dataEnd_};
   }
 
@@ -719,6 +722,27 @@ Status McapReader::ReadRecord(IReadable& reader, uint64_t offset, Record* record
   return StatusCode::Success;
 }
 
+Status McapReader::CheckTrailingMagic(IReadable& reader, uint64_t offset, uint64_t endOffset) {
+  if (endOffset < offset + sizeof(Magic)) {
+    const auto msg = internal::StrCat("missing magic bytes at end of file: input ends ",
+                                      endOffset - offset, " bytes after the Footer record");
+    return Status{StatusCode::MagicMismatch, msg};
+  }
+  std::byte* data = nullptr;
+  if (reader.read(&data, offset, sizeof(Magic)) != sizeof(Magic)) {
+    return StatusCode::ReadFailed;
+  }
+  if (auto status = internal::CheckMagic(data, "at end of file"); !status.ok()) {
+    return status;
+  }
+  if (endOffset != offset + sizeof(Magic)) {
+    const auto msg = internal::StrCat(endOffset - offset - sizeof(Magic),
+                                      " bytes after the trailing magic bytes");
+    return Status{StatusCode::InvalidFile, msg};
+  }
+  return StatusCode::Success;
+}
+
 Status McapReader::ReadFooter(IReadable& reader, uint64_t offset, Footer* footer) {
   std::byte* data;
   uint64_t bytesRead = reader.read(&data, offset, internal::FooterLength);
@@ -727,11 +751,9 @@ Status McapReader::ReadFooter(IReadable& reader, uint64_t offset, Footer* footer
   }
 
   // Check the footer magic bytes
-  if (std::memcmp(data + internal::FooterLength - sizeof(Magic), Magic, sizeof(Magic)) != 0) {
-    const auto msg =
-      internal::StrCat("invalid magic bytes in Footer: 0x",
-                       internal::MagicToHex(data + internal::FooterLength - sizeof(Magic)));
-    return Status{StatusCode::MagicMismatch, msg};
+  const std::byte* magic = data + internal::FooterLength - sizeof(Magic);
+  if (auto status = internal::CheckMagic(magic, "in Footer"); !status.ok()) {
+    return status;
   }
 
   if (OpCode(data[0]) != OpCode::Footer) {
@@ -1404,9 +1426,11 @@ const Status& TypedChunkReader::status() const {
 
 TypedRecordReader::TypedRecordReader(IReadable& dataSource, ByteOffset startOffset,
                                      ByteOffset endOffset)
-    : reader_(dataSource, startOffset, std::min(endOffset, dataSource.size()))
+    : dataSource_(&dataSource)
+    , reader_(dataSource, startOffset, std::min(endOffset, dataSource.size()))
     , status_(StatusCode::Success)
-    , parsingChunk_(false) {
+    , parsingChunk_(false)
+    , readsToEndOfInput_(endOffset >= dataSource.size()) {
   chunkReader_.onSchema = [&](const SchemaPtr schema, ByteOffset chunkOffset) {
     if (onSchema) {
       onSchema(schema, reader_.curRecordOffset(), chunkOffset);
@@ -1445,6 +1469,14 @@ bool TypedRecordReader::next() {
   const auto maybeRecord = reader_.next();
   status_ = reader_.status();
   if (!maybeRecord.has_value()) {
+    // reader_ sets its offset to EndOffset once it has read the Footer or failed, so any other
+    // way of running out of input means the input ended at a record boundary without a Footer.
+    if (status_.ok() && expectsFooterAndMagic() && reader_.offset != EndOffset) {
+      const auto msg =
+        internal::StrCat("input ends at offset ", reader_.offset, " without a Footer record");
+      status_ = Status{StatusCode::InvalidFile, msg};
+      reader_.offset = EndOffset;
+    }
     return false;
   }
   const Record& record = maybeRecord.value();
@@ -1465,6 +1497,10 @@ bool TypedRecordReader::next() {
         if (status_ = McapReader::ParseFooter(record, &footer); status_.ok()) {
           onFooter(footer, reader_.curRecordOffset());
         }
+      }
+      if (status_.ok() && expectsFooterAndMagic()) {
+        // The Footer is the last record: the trailing magic bytes must follow it and end the range.
+        status_ = McapReader::CheckTrailingMagic(*dataSource_, reader_.offset, reader_.endOffset);
       }
       reader_.offset = EndOffset;
       break;
@@ -1612,6 +1648,18 @@ bool TypedRecordReader::next() {
   }
 
   return true;
+}
+
+bool TypedRecordReader::expectsFooterAndMagic() const {
+  switch (endOfInput) {
+    case EndOfInput::FooterAndMagic:
+      return true;
+    case EndOfInput::AnyRecordBoundary:
+      return false;
+    case EndOfInput::Default:
+    default:
+      return readsToEndOfInput_;
+  }
 }
 
 ByteOffset TypedRecordReader::offset() const {

@@ -134,6 +134,14 @@ type Lexer struct {
 	maxDecompressedChunkSize int
 	attachmentCallback       func(*AttachmentReader) error
 	decompressors            map[CompressionFormat]ResettableReader
+
+	// skipMagic also accepts input that ends without the trailing magic bytes.
+	skipMagic bool
+	// afterFooter is set while the last token returned was the footer, so the next bytes must be
+	// the trailing magic.
+	afterFooter bool
+	// atEnd is set once the trailing magic has been read, so further calls keep returning io.EOF.
+	atEnd bool
 }
 
 // Next returns the next token from the lexer as a byte array. The result will
@@ -142,6 +150,9 @@ type Lexer struct {
 // the result.
 func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 	for {
+		if l.afterFooter {
+			return TokenError, nil, l.readTrailingMagic()
+		}
 		readLength, err := io.ReadFull(l.reader, l.buf[:9])
 		if err != nil {
 			unexpectedEOF := errors.Is(err, io.ErrUnexpectedEOF)
@@ -149,18 +160,18 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			if l.inChunk && (eof || unexpectedEOF) {
 				l.inChunk = false
 				l.reader = l.basereader
+				if unexpectedEOF {
+					// The chunk's records ended partway through a record header.
+					return TokenError, nil, &ErrTruncatedRecord{opcode: OpCode(l.buf[0]), actualLen: readLength}
+				}
 				continue
 			}
-			if unexpectedEOF {
-				if readLength == len(Magic) && bytes.Equal(Magic, l.buf[:len(Magic)]) {
-					return TokenError, nil, io.EOF
-				}
-				// unexpectedEOF indicates at least one byte was read
-				opcode := OpCode(l.buf[0])
-				return TokenError, nil, &ErrTruncatedRecord{opcode: opcode, actualLen: readLength}
+			if eof || unexpectedEOF {
+				return TokenError, nil, l.endOfInput(l.buf[:readLength])
 			}
 			return TokenError, nil, err
 		}
+		l.atEnd = false
 		opcode := OpCode(l.buf[0])
 		recordLen := binary.LittleEndian.Uint64(l.buf[1:9])
 		if l.maxRecordSize > 0 && recordLen > uint64(l.maxRecordSize) {
@@ -225,7 +236,9 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 
 		record := p[:recordLen]
 		readLength, err = io.ReadFull(l.reader, record)
-		if errors.Is(err, io.ErrUnexpectedEOF) {
+		// ReadFull reports io.EOF rather than io.ErrUnexpectedEOF when none of the record's bytes
+		// were available, which is just as much a truncation.
+		if errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
 			return TokenError, nil, &ErrTruncatedRecord{
 				opcode:      opcode,
 				actualLen:   readLength,
@@ -248,6 +261,7 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 		case OpChannel:
 			return TokenChannel, record, nil
 		case OpFooter:
+			l.afterFooter = true
 			return TokenFooter, record, nil
 		case OpAttachmentIndex:
 			return TokenAttachmentIndex, record, nil
@@ -271,6 +285,58 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			continue // skip unrecognized opcodes
 		}
 	}
+}
+
+// readTrailingMagic reads the bytes after the footer. The footer is the last record, so these
+// bytes must be the trailing magic, followed by the end of the input.
+func (l *Lexer) readTrailingMagic() error {
+	readLength, err := io.ReadFull(l.reader, l.buf[:len(Magic)])
+	if err != nil {
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return l.endOfInput(l.buf[:readLength])
+		}
+		return err
+	}
+	if !bytes.Equal(Magic, l.buf[:len(Magic)]) {
+		return &ErrBadMagic{location: magicLocationEnd, actual: append([]byte(nil), l.buf[:len(Magic)]...)}
+	}
+	// Nothing may follow the trailing magic.
+	extra, err := io.ReadFull(l.reader, l.buf[:1])
+	if extra > 0 {
+		return ErrBytesAfterMagic
+	}
+	if err != nil && !errors.Is(err, io.EOF) {
+		return err
+	}
+	l.atEnd = true
+	return io.EOF
+}
+
+// endOfInput classifies the end of the input, where tail holds the bytes left after the last
+// record. The only clean end is the trailing magic right after the footer, which
+// readTrailingMagic handles: input that stops anywhere else is reported as truncated, unless
+// SkipMagic was set.
+func (l *Lexer) endOfInput(tail []byte) error {
+	if l.atEnd {
+		return io.EOF
+	}
+	if len(tail) == len(Magic) && bytes.Equal(Magic, tail) {
+		if l.skipMagic {
+			return io.EOF
+		}
+		// The trailing magic bytes are present, but the Footer record is not.
+		return ErrTruncatedFile
+	}
+	if l.skipMagic && len(tail) == 0 {
+		return io.EOF
+	}
+	if l.afterFooter {
+		return &ErrBadMagic{location: magicLocationEnd, actual: append([]byte(nil), tail...)}
+	}
+	if len(tail) == 0 {
+		return ErrTruncatedFile
+	}
+	return &ErrTruncatedRecord{opcode: OpCode(tail[0]), actualLen: len(tail)}
 }
 
 // Close the lexer.
@@ -458,7 +524,10 @@ func loadChunk(l *Lexer, recordLen uint64) error {
 
 // LexerOptions holds options for the lexer.
 type LexerOptions struct {
-	// SkipMagic instructs the lexer not to perform validation of the leading magic bytes.
+	// SkipMagic instructs the lexer not to validate the leading magic bytes, and to treat the end
+	// of its input as a clean end (io.EOF) even without trailing magic bytes, e.g. when lexing a
+	// slice of a file. Without it, input that ends before the trailing magic yields
+	// ErrTruncatedFile, ErrTruncatedRecord, or ErrBadMagic.
 	SkipMagic bool
 	// ValidateChunkCRC instructs the lexer to validate CRC checksums for
 	// chunks.
@@ -515,6 +584,7 @@ func NewLexer(r io.Reader, opts ...*LexerOptions) (*Lexer, error) {
 		basereader:               r,
 		reader:                   r,
 		buf:                      make([]byte, 32),
+		skipMagic:                skipMagic,
 		validateChunkCRCs:        validateChunkCRCs,
 		computeAttachmentCRCs:    computeAttachmentCRCs,
 		emitChunks:               emitChunks,
