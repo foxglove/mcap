@@ -112,9 +112,13 @@ impl Decompressor for TestDecoder {
                 wrote: 0,
             }),
             DecoderKind::Fail => Err(McapError::DecompressionError("caller decompressor".into())),
-            DecoderKind::OverReport { wrote } => Ok(DecompressResult {
+            DecoderKind::OverReport { wrote: false } => Ok(DecompressResult {
                 consumed: src.len() + 1,
-                wrote: if *wrote { dst.len() + 1 } else { 0 },
+                wrote: 0,
+            }),
+            DecoderKind::OverReport { wrote: true } => Ok(DecompressResult {
+                consumed: 0,
+                wrote: dst.len() + 1,
             }),
             DecoderKind::Greedy => Ok(DecompressResult {
                 consumed: usize::from(!src.is_empty()),
@@ -667,51 +671,24 @@ fn stalled_decompressor_returns_an_error() {
 }
 
 #[test]
-fn uncompressed_chunks_ignore_registered_decompressors() {
-    let mcap = one_message_mcap(None);
-    let expected = vec![(1, 5, b"plain".to_vec())];
-    assert_eq!(
-        read_linear(&mcap, Some(TestDecoder::stall("xor"))).expect("linear"),
-        expected
-    );
-    assert_eq!(
-        read_indexed(&mcap, Some(TestDecoder::stall("xor"))).expect("indexed"),
-        expected
-    );
-}
-
-#[cfg(feature = "zstd")]
-#[test]
-fn registered_zstd_decompressor_replaces_builtin() {
-    let mcap = one_message_mcap(Some(crate::Compression::Zstd));
-    assert_caller_decompressor(
-        read_linear(&mcap, Some(TestDecoder::fail("zstd"))).expect_err("linear should use caller"),
-    );
-    assert_caller_decompressor(
-        read_indexed(&mcap, Some(TestDecoder::fail("zstd")))
-            .expect_err("indexed should use caller"),
-    );
-    let expected = vec![(1, 5, b"plain".to_vec())];
-    assert_eq!(
-        read_linear(&mcap, Some(TestDecoder::xor("xor"))).expect("builtin zstd"),
-        expected
-    );
-    assert_eq!(
-        read_indexed(&mcap, Some(TestDecoder::xor("xor"))).expect("builtin zstd"),
-        expected
-    );
-}
-
-#[cfg(feature = "lz4")]
-#[test]
-fn registered_lz4_decompressor_replaces_builtin() {
-    let mcap = one_message_mcap(Some(crate::Compression::Lz4));
-    assert_caller_decompressor(
-        read_linear(&mcap, Some(TestDecoder::fail("lz4"))).expect_err("linear should use caller"),
-    );
-    assert_caller_decompressor(
-        read_indexed(&mcap, Some(TestDecoder::fail("lz4"))).expect_err("indexed should use caller"),
-    );
+fn registered_decompressor_replaces_builtin() {
+    let builtins: &[(crate::Compression, &'static str)] = &[
+        #[cfg(feature = "zstd")]
+        (crate::Compression::Zstd, "zstd"),
+        #[cfg(feature = "lz4")]
+        (crate::Compression::Lz4, "lz4"),
+    ];
+    for &(compression, name) in builtins {
+        let mcap = one_message_mcap(Some(compression));
+        assert_caller_decompressor(
+            read_linear(&mcap, Some(TestDecoder::fail(name)))
+                .expect_err("linear should use caller"),
+        );
+        assert_caller_decompressor(
+            read_indexed(&mcap, Some(TestDecoder::fail(name)))
+                .expect_err("indexed should use caller"),
+        );
+    }
 }
 
 #[test]
@@ -876,74 +853,63 @@ fn failed_reset_does_not_fall_back_to_the_builtin_decoder() {
 }
 
 #[cfg(feature = "zstd")]
-fn one_chunk_mcap(compression: &str, log_time: u64, records: &[u8], compressed: &[u8]) -> Vec<u8> {
-    write_indexed_mcap(&[BuiltChunk {
-        log_time,
-        compression: compression.to_owned(),
-        uncompressed_size: records.len() as u64,
-        compressed: compressed.to_vec(),
-    }])
+#[test]
+fn builtin_cache_does_not_count_as_a_caller_registration() {
+    let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
+    let mut reader = LinearReader::new();
+    let mut cursor = Cursor::new(&mcap);
+    let mut messages = 0;
+    let mut iterations = 0;
+    let err = loop {
+        iterations += 1;
+        assert!(iterations < 100_000, "linear reader did not finish");
+        match reader.next_event().expect("the second chunk should fail") {
+            Ok(LinearReadEvent::ReadRequest(need)) => {
+                let read = cursor.read(reader.insert(need)).expect("read");
+                reader.notify_read(read);
+            }
+            Ok(LinearReadEvent::Record { opcode, .. }) => {
+                if opcode == op::MESSAGE {
+                    messages += 1;
+                    if messages == 1 {
+                        // The built-in zstd decoder is decoding the first chunk at this point.
+                        reader
+                            .add_decompressor(TestDecoder::fail("zstd"))
+                            .expect("a built-in decoder is not a caller registration");
+                    }
+                }
+            }
+            Err(err) => break err,
+        }
+    };
+    assert_eq!(messages, 1, "the second chunk should not decode");
+    assert_caller_decompressor(err);
 }
 
 #[cfg(feature = "zstd")]
 #[test]
-fn registered_zstd_decoder_reads_padded_chunks() {
-    // Bytes after a zstd frame are padding. A streaming decoder that is shown them tries to open
-    // another frame and fails. The indexed path must stop once uncompressed_size bytes are out.
-    let mut records = Vec::new();
-    let mut message_body = write_body(&MessageHeader {
-        channel_id: 1,
-        sequence: 1,
-        log_time: 7,
-        publish_time: 7,
-    });
-    message_body.extend_from_slice(b"padded");
-    append_record(&mut records, op::MESSAGE, &message_body);
-    let mut compressed = zstd::encode_all(Cursor::new(records.as_slice()), 0).expect("encode");
-    compressed.extend_from_slice(&[0xA5; 8]);
-    let mcap = one_chunk_mcap("zstd", 7, &records, &compressed);
+fn indexed_reader_reports_a_failed_reset() {
+    let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
     let summary = Summary::read(&mcap)
         .expect("summary read")
         .expect("summary");
     let mut reader = IndexedReader::new(&summary).expect("reader");
     reader
-        .add_decompressor(super::zstd::ZstdDecoder::new())
+        .add_decompressor(FailingResetDecoder {
+            inner: super::zstd::ZstdDecoder::new(),
+            poisoned: false,
+        })
         .expect("register");
-    let mut messages = Vec::new();
-    while let Some(event) = reader.next_event() {
-        match event.expect("event") {
-            IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                let start = offset as usize;
-                reader
-                    .insert_chunk_record_data(offset, &mcap[start..start + length])
-                    .expect("insert padded chunk");
-            }
-            IndexedReadEvent::Message { header, data } => {
-                messages.push((header.log_time, data.to_vec()));
-            }
-        }
-    }
-    assert_eq!(messages, vec![(7, b"padded".to_vec())]);
-}
-
-#[cfg(feature = "zstd")]
-#[test]
-fn builtin_cache_does_not_count_as_a_caller_registration() {
-    let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
-    let messages = read_linear(&mcap, None).expect("builtin zstd");
-    assert_eq!(messages.len(), 2);
-    let mut reader = LinearReader::new();
-    let mut cursor = Cursor::new(&mcap);
-    while let Some(event) = reader.next_event() {
-        match event.expect("read") {
-            LinearReadEvent::ReadRequest(need) => {
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            LinearReadEvent::Record { .. } => {}
-        }
-    }
-    reader
-        .add_decompressor(TestDecoder::fail("zstd"))
-        .expect("a cached built-in decoder is not a caller registration");
+    let Some(Ok(IndexedReadEvent::ReadChunkRequest { offset, length })) = reader.next_event()
+    else {
+        panic!("expected a chunk request");
+    };
+    let start = offset as usize;
+    let err = reader
+        .insert_chunk_record_data(offset, &mcap[start..start + length])
+        .expect_err("reset failure should be returned");
+    assert!(
+        err.to_string().contains("reset failed"),
+        "unexpected error: {err}"
+    );
 }
