@@ -513,6 +513,7 @@ fn one_message_mcap(compression: Option<crate::Compression>) -> Vec<u8> {
     writer.into_inner().into_inner()
 }
 
+#[cfg(feature = "zstd")]
 fn two_chunk_mcap(compression: Option<crate::Compression>) -> Vec<u8> {
     let mut writer = crate::WriteOptions::new()
         .compression(compression)
