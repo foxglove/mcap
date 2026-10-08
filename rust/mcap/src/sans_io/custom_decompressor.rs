@@ -13,15 +13,12 @@ use crate::{parse_record, McapError, McapResult, Summary, MAGIC};
 const XOR: u8 = 0x5A;
 
 enum DecoderKind {
-    /// Length-prefixed XOR. After the payload, an optional `0xFF` footer must be consumed before
-    /// [`Decompressor::reset`]. Further bytes are padding and are not consumed. `remaining ==
-    /// Some(0)` with no footer pending means the frame is finished.
+    /// Length-prefixed XOR. Once the payload is finished, another `decompress` call is an error so
+    /// tests can tell that padding after the frame was fed to the decoder. `reset` starts a new frame.
     Xor {
         remaining: Option<usize>,
         len_buf: [u8; 4],
         len_filled: usize,
-        require_footer: bool,
-        need_footer: bool,
     },
     Stall,
     Fail,
@@ -40,22 +37,12 @@ struct TestDecoder {
 
 impl TestDecoder {
     fn xor(name: &'static str) -> Self {
-        Self::xor_inner(name, false)
-    }
-
-    fn xor_with_footer(name: &'static str) -> Self {
-        Self::xor_inner(name, true)
-    }
-
-    fn xor_inner(name: &'static str, require_footer: bool) -> Self {
         Self {
             name,
             kind: DecoderKind::Xor {
                 remaining: None,
                 len_buf: [0; 4],
                 len_filled: 0,
-                require_footer,
-                need_footer: false,
             },
         }
     }
@@ -113,17 +100,7 @@ impl Decompressor for TestDecoder {
                 remaining,
                 len_buf,
                 len_filled,
-                require_footer,
-                need_footer,
-            } => xor_decompress(
-                remaining,
-                len_buf,
-                len_filled,
-                *require_footer,
-                need_footer,
-                src,
-                dst,
-            ),
+            } => xor_decompress(remaining, len_buf, len_filled, src, dst),
         }
     }
 
@@ -131,15 +108,9 @@ impl Decompressor for TestDecoder {
         if let DecoderKind::Xor {
             remaining,
             len_filled,
-            need_footer,
             ..
         } = &mut self.kind
         {
-            if *need_footer {
-                return Err(McapError::DecompressionError(
-                    "frame footer was not consumed".into(),
-                ));
-            }
             *remaining = None;
             *len_filled = 0;
         }
@@ -155,28 +126,9 @@ fn xor_decompress(
     remaining: &mut Option<usize>,
     len_buf: &mut [u8; 4],
     len_filled: &mut usize,
-    require_footer: bool,
-    need_footer: &mut bool,
     src: &[u8],
     dst: &mut [u8],
 ) -> McapResult<DecompressResult> {
-    if *need_footer {
-        if src.is_empty() {
-            return Ok(DecompressResult {
-                consumed: 0,
-                wrote: 0,
-            });
-        }
-        if src[0] != 0xFF {
-            return Err(McapError::DecompressionError("bad frame footer".into()));
-        }
-        *need_footer = false;
-        *remaining = Some(0);
-        return Ok(DecompressResult {
-            consumed: 1,
-            wrote: 0,
-        });
-    }
     if src.is_empty() {
         return Ok(DecompressResult {
             consumed: 0,
@@ -184,12 +136,11 @@ fn xor_decompress(
         });
     }
     match *remaining {
-        // Frame is finished. Leftover bytes are padding; a later chunk has to reset() first or
-        // this stays finished and the reader observes no progress.
-        Some(0) => Ok(DecompressResult {
-            consumed: 0,
-            wrote: 0,
-        }),
+        // The frame is finished. Padding after it must not be passed back in; a later chunk has
+        // to reset() before this decoder will start another frame.
+        Some(0) => Err(McapError::DecompressionError(
+            "padding was fed to a finished frame".into(),
+        )),
         Some(left) => {
             if dst.is_empty() {
                 return Ok(DecompressResult {
@@ -202,9 +153,6 @@ fn xor_decompress(
                 *out = input ^ XOR;
             }
             *remaining = Some(left - take);
-            if left == take && require_footer {
-                *need_footer = true;
-            }
             Ok(DecompressResult {
                 consumed: take,
                 wrote: take,
@@ -247,8 +195,6 @@ struct ChunkSpec {
     log_time: u64,
     payload: &'static [u8],
     trailing: usize,
-    /// When true, a `0xFF` footer sits between the XOR payload and any trailing padding.
-    footer: bool,
     /// Overrides the uncompressed size declared in the chunk header and chunk index.
     declared_uncompressed: Option<u64>,
 }
@@ -259,7 +205,6 @@ impl ChunkSpec {
             log_time,
             payload,
             trailing,
-            footer: false,
             declared_uncompressed: None,
         }
     }
@@ -289,12 +234,9 @@ fn xor_mcap(chunks: &[ChunkSpec]) -> Vec<u8> {
         message_body.extend_from_slice(chunk.payload);
         let mut records = Vec::new();
         append_record(&mut records, op::MESSAGE, &message_body);
-        let mut compressed = Vec::with_capacity(4 + records.len() + chunk.trailing + 1);
+        let mut compressed = Vec::with_capacity(4 + records.len() + chunk.trailing);
         compressed.extend_from_slice(&(records.len() as u32).to_le_bytes());
         compressed.extend(records.iter().map(|byte| byte ^ XOR));
-        if chunk.footer {
-            compressed.push(0xFF);
-        }
         compressed.extend(std::iter::repeat_n(0xA5u8, chunk.trailing));
         let uncompressed_size = chunk.declared_uncompressed.unwrap_or(records.len() as u64);
 
@@ -607,20 +549,6 @@ fn over_reported_buffer_lengths_are_errors() {
 }
 
 #[test]
-fn indexed_reader_feeds_frame_footer_then_leaves_padding() {
-    let mut chunks = sample_chunks();
-    for chunk in &mut chunks {
-        chunk.footer = true;
-    }
-    let mcap = xor_mcap(&chunks);
-    let expected = vec![(1, 10, b"one".to_vec()), (1, 20, b"two".to_vec())];
-    assert_eq!(
-        read_indexed(&mcap, Some(TestDecoder::xor_with_footer("xor"))).expect("indexed footer"),
-        expected
-    );
-}
-
-#[test]
 fn greedy_output_past_the_declared_size_is_an_error() {
     let mut chunks = vec![ChunkSpec::new(10, b"one", 0)];
     chunks[0].declared_uncompressed = Some(4);
@@ -636,17 +564,12 @@ fn greedy_output_past_the_declared_size_is_an_error() {
         }
         other => panic!("expected a decompression error, got {other}"),
     }
-    let indexed = read_indexed(&mcap, Some(TestDecoder::greedy("xor")))
-        .expect_err("indexed should reject output past the uncompressed size");
-    match indexed {
-        McapError::DecompressionError(message) => {
-            assert!(
-                message.contains("produced more than 4 bytes"),
-                "unexpected error: {message}"
-            );
-        }
-        other => panic!("expected a decompression error, got {other}"),
-    }
+    // The output buffer is capped at the declared size, so the extra bytes the decoder would
+    // have written never land. The 4-byte buffer is not a valid record.
+    assert!(matches!(
+        read_indexed(&mcap, Some(TestDecoder::greedy("xor"))),
+        Err(McapError::UnexpectedEoc)
+    ));
 }
 
 fn two_chunk_mcap(compression: Option<crate::Compression>) -> Vec<u8> {
@@ -762,6 +685,118 @@ fn failed_reset_does_not_fall_back_to_the_builtin_decoder() {
         "the built-in decoder ran after reset failed: {errors:?}"
     );
     assert_eq!(messages, 1, "the second chunk should not decode");
+}
+
+#[cfg(feature = "zstd")]
+fn one_chunk_mcap(compression: &str, log_time: u64, records: &[u8], compressed: &[u8]) -> Vec<u8> {
+    let mut file = Vec::new();
+    file.extend_from_slice(MAGIC);
+    append_record(
+        &mut file,
+        op::HEADER,
+        &write_body(&Header {
+            profile: String::new(),
+            library: "test".into(),
+        }),
+    );
+    let mut chunk_body = write_body(&ChunkHeader {
+        message_start_time: log_time,
+        message_end_time: log_time,
+        uncompressed_size: records.len() as u64,
+        uncompressed_crc: 0,
+        compression: compression.to_owned(),
+        compressed_size: compressed.len() as u64,
+    });
+    chunk_body.extend_from_slice(compressed);
+    let chunk_start = file.len() as u64;
+    append_record(&mut file, op::CHUNK, &chunk_body);
+    let chunk_length = file.len() as u64 - chunk_start;
+    append_record(
+        &mut file,
+        op::DATA_END,
+        &write_body(&DataEnd {
+            data_section_crc: 0,
+        }),
+    );
+    let summary_start = file.len() as u64;
+    append_record(
+        &mut file,
+        op::CHANNEL,
+        &write_body(&Channel {
+            id: 1,
+            schema_id: 0,
+            topic: "topic".into(),
+            message_encoding: "raw".into(),
+            metadata: BTreeMap::new(),
+        }),
+    );
+    append_record(
+        &mut file,
+        op::CHUNK_INDEX,
+        &write_body(&ChunkIndex {
+            message_start_time: log_time,
+            message_end_time: log_time,
+            chunk_start_offset: chunk_start,
+            chunk_length,
+            message_index_offsets: BTreeMap::new(),
+            message_index_length: 0,
+            compression: compression.to_owned(),
+            compressed_size: compressed.len() as u64,
+            uncompressed_size: records.len() as u64,
+        }),
+    );
+    append_record(
+        &mut file,
+        op::FOOTER,
+        &write_body(&Footer {
+            summary_start,
+            summary_offset_start: 0,
+            summary_crc: 0,
+        }),
+    );
+    file.extend_from_slice(MAGIC);
+    file
+}
+
+#[cfg(feature = "zstd")]
+#[test]
+fn registered_zstd_decoder_reads_padded_chunks() {
+    // Bytes after a zstd frame are padding. A streaming decoder that is shown them tries to open
+    // another frame and fails. The indexed path must stop once uncompressed_size bytes are out.
+    let mut records = Vec::new();
+    let mut message_body = write_body(&MessageHeader {
+        channel_id: 1,
+        sequence: 1,
+        log_time: 7,
+        publish_time: 7,
+    });
+    message_body.extend_from_slice(b"padded");
+    append_record(&mut records, op::MESSAGE, &message_body);
+    let mut compressed = zstd::encode_all(Cursor::new(records.as_slice()), 0).expect("encode");
+    compressed.extend_from_slice(&[0xA5; 8]);
+    let mcap = one_chunk_mcap("zstd", 7, &records, &compressed);
+    let summary = Summary::read(&mcap)
+        .expect("summary read")
+        .expect("summary");
+    let mut reader = IndexedReader::new(&summary).expect("reader");
+    reader
+        .add_decompressor(super::zstd::ZstdDecoder::new())
+        .expect("register");
+    let mut messages = Vec::new();
+    while let Some(event) = reader.next_event() {
+        match event.expect("event") {
+            IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                let start = offset as usize;
+                reader
+                    .insert_chunk_record_data(offset, &mcap[start..start + length])
+                    .expect("insert padded chunk");
+            }
+            IndexedReadEvent::Message { header, data } => {
+                messages.push((header.log_time, data.to_vec()));
+            }
+        }
+    }
+    assert_eq!(messages, vec![(7, b"padded".to_vec())]);
 }
 
 #[cfg(feature = "zstd")]

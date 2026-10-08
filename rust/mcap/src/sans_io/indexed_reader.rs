@@ -486,14 +486,12 @@ impl CallerDecompressors {
 // and `Box<dyn Decompressor>` is `Send`, so IndexedReader stays `Sync`.
 unsafe impl Sync for CallerDecompressors {}
 
-/// Drives a streaming [`Decompressor`] until the declared uncompressed bytes are written, then
-/// feeds any trailing compressed bytes the decoder still accepts.
+/// Drives a streaming [`Decompressor`] until `uncompressed_size` bytes have been written.
 ///
-/// The whole compressed chunk is already in memory. Output stops at `uncompressed_size`. Further
-/// input is offered so a frame footer or checksum after the last decoded byte still reaches the
-/// decoder. Input the decoder will not consume is left unread (chunk padding). Extra output past
-/// `uncompressed_size` is an error. [`Decompressor::reset`] runs afterward so the same instance
-/// can decode the next chunk.
+/// The whole compressed chunk is already in memory. Bytes left over after that are not passed to
+/// the decoder: lz4 and zstd treat them as the start of another frame, and both the built-in
+/// indexed lz4 path and [`LinearReader`](super::linear_reader::LinearReader) leave that padding
+/// unread. [`Decompressor::reset`] runs afterward so the same instance can decode the next chunk.
 fn decompress_registered(
     decompressor: &mut dyn Decompressor,
     src: &[u8],
@@ -521,27 +519,6 @@ fn decompress_registered(
             }
             input_pos += res.consumed;
             output_pos += res.wrote;
-        }
-        // Offer the rest of the compressed chunk. A frame footer is input, not output. Padding
-        // the decoder refuses (no progress) stays unread.
-        let mut scratch = [0u8; 64];
-        while input_pos < src.len() {
-            let input = &src[input_pos..];
-            let res = check_decompress_result(
-                decompressor.decompress(input, &mut scratch)?,
-                input.len(),
-                scratch.len(),
-            )?;
-            if res.wrote > 0 {
-                return Err(McapError::DecompressionError(format!(
-                    "decompression produced more than {uncompressed_size} bytes"
-                )));
-            }
-            if res.consumed == 0 {
-                // The decoder will not take the remaining bytes. They are padding.
-                break;
-            }
-            input_pos += res.consumed;
         }
         Ok(())
     })();
