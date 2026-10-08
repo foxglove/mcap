@@ -115,7 +115,7 @@ pub struct IndexedReader {
     // Criteria for what messages from the MCAP should be yielded
     filter: Filter,
     // Caller-supplied decompressors, keyed by chunk compression string.
-    decompressors: HashMap<String, Box<dyn Decompressor>>,
+    decompressors: CallerDecompressors,
     // Lazily allocated and reused across zstd chunks.
     #[cfg(feature = "zstd")]
     zstd_dctx: Option<zstd::zstd_safe::DCtx<'static>>,
@@ -245,7 +245,7 @@ impl IndexedReader {
                 end: options.end,
                 channel_ids,
             },
-            decompressors: HashMap::new(),
+            decompressors: CallerDecompressors::new(),
             #[cfg(feature = "zstd")]
             zstd_dctx: None,
             record_length_limit: options.record_length_limit,
@@ -271,7 +271,7 @@ impl IndexedReader {
         &mut self,
         decompressor: impl Decompressor + 'static,
     ) -> McapResult<()> {
-        register_decompressor(&mut self.decompressors, decompressor)
+        register_decompressor(&mut self.decompressors.0, decompressor)
     }
 
     /// Returns the next event from the reader. Call this repeatedly and act on the resulting
@@ -378,7 +378,7 @@ impl IndexedReader {
             // overwriting every byte.
             slot.buf.clear();
             slot.buf.extend_from_slice(compressed_data);
-        } else if let Some(decompressor) = self.decompressors.get_mut(compression) {
+        } else if let Some(decompressor) = self.decompressors.0.get_mut(compression) {
             decompress_registered(
                 decompressor.as_mut(),
                 compressed_data,
@@ -471,12 +471,29 @@ impl IndexedReader {
     }
 }
 
-/// Drives a streaming [`Decompressor`] until `uncompressed_size` bytes have been written.
+/// Caller decompressors are `Send` but not `Sync`. IndexedReader only reaches this map through
+/// `&mut self`, so a shared `&IndexedReader` cannot observe it.
+struct CallerDecompressors(HashMap<String, Box<dyn Decompressor>>);
+
+impl CallerDecompressors {
+    fn new() -> Self {
+        Self(HashMap::new())
+    }
+}
+
+// SAFETY: the map is private to IndexedReader and every read or write of it happens through
+// `&mut IndexedReader`. Sharing `&IndexedReader` across threads cannot access the decompressors,
+// and `Box<dyn Decompressor>` is `Send`, so IndexedReader stays `Sync`.
+unsafe impl Sync for CallerDecompressors {}
+
+/// Drives a streaming [`Decompressor`] until the declared uncompressed bytes are written, then
+/// feeds any trailing compressed bytes the decoder still accepts.
 ///
-/// The whole compressed chunk is already in memory. `next_read_size` is a hint for streaming
-/// readers; this path passes the remaining input on each call and stops once the declared
-/// uncompressed length is produced. Trailing compressed bytes are left unread. [`Decompressor::reset`]
-/// runs afterward so the same instance can decode the next chunk.
+/// The whole compressed chunk is already in memory. Output stops at `uncompressed_size`. Further
+/// input is offered so a frame footer or checksum after the last decoded byte still reaches the
+/// decoder. Input the decoder will not consume is left unread (chunk padding). Extra output past
+/// `uncompressed_size` is an error. [`Decompressor::reset`] runs afterward so the same instance
+/// can decode the next chunk.
 fn decompress_registered(
     decompressor: &mut dyn Decompressor,
     src: &[u8],
@@ -504,6 +521,27 @@ fn decompress_registered(
             }
             input_pos += res.consumed;
             output_pos += res.wrote;
+        }
+        // Offer the rest of the compressed chunk. A frame footer is input, not output. Padding
+        // the decoder refuses (no progress) stays unread.
+        let mut scratch = [0u8; 64];
+        while input_pos < src.len() {
+            let input = &src[input_pos..];
+            let res = check_decompress_result(
+                decompressor.decompress(input, &mut scratch)?,
+                input.len(),
+                scratch.len(),
+            )?;
+            if res.wrote > 0 {
+                return Err(McapError::DecompressionError(format!(
+                    "decompression produced more than {uncompressed_size} bytes"
+                )));
+            }
+            if res.consumed == 0 {
+                // The decoder will not take the remaining bytes. They are padding.
+                break;
+            }
+            input_pos += res.consumed;
         }
         Ok(())
     })();

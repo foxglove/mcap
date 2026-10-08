@@ -239,6 +239,7 @@ mod assertions {
     assert_impl_all!(Writer<Cursor<Vec<u8>>>: Send);
     assert_impl_all!(MessageStream: Send);
     assert_impl_all!(sans_io::LinearReader: Send);
+    assert_impl_all!(sans_io::IndexedReader: Send, Sync);
     #[cfg(feature = "tokio")]
     assert_impl_all!(tokio::linear_reader::LinearReader<Cursor<Vec<u8>>>: Send);
 }
