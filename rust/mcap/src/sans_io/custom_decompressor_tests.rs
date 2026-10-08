@@ -237,6 +237,37 @@ fn xor_decompress(
     }
 }
 
+#[cfg(feature = "zstd")]
+struct FailingResetDecoder {
+    inner: super::zstd::ZstdDecoder,
+    poisoned: bool,
+}
+
+#[cfg(feature = "zstd")]
+impl Decompressor for FailingResetDecoder {
+    fn next_read_size(&self) -> usize {
+        self.inner.next_read_size()
+    }
+
+    fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult> {
+        if self.poisoned {
+            return Err(McapError::DecompressionError(
+                "reused after failed reset".into(),
+            ));
+        }
+        self.inner.decompress(src, dst)
+    }
+
+    fn reset(&mut self) -> McapResult<()> {
+        self.poisoned = true;
+        Err(McapError::DecompressionError("reset failed".into()))
+    }
+
+    fn name(&self) -> &'static str {
+        "zstd"
+    }
+}
+
 fn append_record(buf: &mut Vec<u8>, opcode: u8, body: &[u8]) {
     buf.push(opcode);
     buf.extend_from_slice(&(body.len() as u64).to_le_bytes());
@@ -478,6 +509,38 @@ fn one_message_mcap(compression: Option<crate::Compression>) -> Vec<u8> {
             data: std::borrow::Cow::Borrowed(b"plain"),
         })
         .expect("write");
+    writer.finish().expect("finish");
+    writer.into_inner().into_inner()
+}
+
+fn two_chunk_mcap(compression: Option<crate::Compression>) -> Vec<u8> {
+    let mut writer = crate::WriteOptions::new()
+        .compression(compression)
+        .chunk_size(None)
+        .create(Cursor::new(Vec::new()))
+        .expect("writer");
+    let channel = std::sync::Arc::new(crate::Channel {
+        id: 1,
+        topic: "topic".into(),
+        schema: None,
+        message_encoding: "raw".into(),
+        metadata: BTreeMap::new(),
+    });
+    for (i, payload) in [b"aaa".as_slice(), b"bbb".as_slice()]
+        .into_iter()
+        .enumerate()
+    {
+        writer
+            .write(&crate::Message {
+                channel: channel.clone(),
+                sequence: i as u32,
+                log_time: i as u64,
+                publish_time: i as u64,
+                data: std::borrow::Cow::Borrowed(payload),
+            })
+            .expect("write");
+        writer.flush().expect("flush");
+    }
     writer.finish().expect("finish");
     writer.into_inner().into_inner()
 }
@@ -735,69 +798,6 @@ fn greedy_output_past_the_declared_size_is_an_error() {
         read_indexed(&mcap, Some(TestDecoder::greedy("xor"))),
         Err(McapError::UnexpectedEoc)
     ));
-}
-
-fn two_chunk_mcap(compression: Option<crate::Compression>) -> Vec<u8> {
-    let mut writer = crate::WriteOptions::new()
-        .compression(compression)
-        .chunk_size(None)
-        .create(Cursor::new(Vec::new()))
-        .expect("writer");
-    let channel = std::sync::Arc::new(crate::Channel {
-        id: 1,
-        topic: "topic".into(),
-        schema: None,
-        message_encoding: "raw".into(),
-        metadata: BTreeMap::new(),
-    });
-    for (i, payload) in [b"aaa".as_slice(), b"bbb".as_slice()]
-        .into_iter()
-        .enumerate()
-    {
-        writer
-            .write(&crate::Message {
-                channel: channel.clone(),
-                sequence: i as u32,
-                log_time: i as u64,
-                publish_time: i as u64,
-                data: std::borrow::Cow::Borrowed(payload),
-            })
-            .expect("write");
-        writer.flush().expect("flush");
-    }
-    writer.finish().expect("finish");
-    writer.into_inner().into_inner()
-}
-
-#[cfg(feature = "zstd")]
-struct FailingResetDecoder {
-    inner: super::zstd::ZstdDecoder,
-    poisoned: bool,
-}
-
-#[cfg(feature = "zstd")]
-impl Decompressor for FailingResetDecoder {
-    fn next_read_size(&self) -> usize {
-        self.inner.next_read_size()
-    }
-
-    fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult> {
-        if self.poisoned {
-            return Err(McapError::DecompressionError(
-                "reused after failed reset".into(),
-            ));
-        }
-        self.inner.decompress(src, dst)
-    }
-
-    fn reset(&mut self) -> McapResult<()> {
-        self.poisoned = true;
-        Err(McapError::DecompressionError("reset failed".into()))
-    }
-
-    fn name(&self) -> &'static str {
-        "zstd"
-    }
 }
 
 #[cfg(feature = "zstd")]

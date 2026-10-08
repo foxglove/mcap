@@ -360,6 +360,31 @@ impl LinearReader {
         }
     }
 
+    /// Constructs a linear reader that will iterate through all records in a chunk.
+    pub(crate) fn for_chunk(header: ChunkHeader) -> McapResult<Self> {
+        let mut result = Self::new_with_options(
+            LinearReaderOptions::default()
+                .with_skip_end_magic(true)
+                .with_skip_start_magic(true)
+                .with_validate_chunk_crcs(true),
+        );
+        result.currently_reading = ChunkRecord;
+        result.chunk_state = Some(ChunkState {
+            decompressor: get_decompressor(
+                &mut HashMap::new(),
+                &mut HashMap::new(),
+                &header.compression,
+            )?,
+            crc: header.uncompressed_crc,
+            uncompressed_data_hasher: Some(crc32fast::Hasher::new()),
+            uncompressed_len: header.uncompressed_size,
+            compressed_remaining: header.compressed_size,
+            uncompressed_remaining: header.uncompressed_size,
+            padding_after_compressed_data: 0,
+        });
+        Ok(result)
+    }
+
     /// Registers a decompressor for chunks whose `compression` field equals
     /// [`Decompressor::name`](super::decompressor::Decompressor::name).
     ///
@@ -396,31 +421,6 @@ impl LinearReader {
         // A caller registration wins over a built-in already cached under this name.
         self.builtin_decompressors.remove(&name);
         Ok(())
-    }
-
-    /// Constructs a linear reader that will iterate through all records in a chunk.
-    pub(crate) fn for_chunk(header: ChunkHeader) -> McapResult<Self> {
-        let mut result = Self::new_with_options(
-            LinearReaderOptions::default()
-                .with_skip_end_magic(true)
-                .with_skip_start_magic(true)
-                .with_validate_chunk_crcs(true),
-        );
-        result.currently_reading = ChunkRecord;
-        result.chunk_state = Some(ChunkState {
-            decompressor: get_decompressor(
-                &mut HashMap::new(),
-                &mut HashMap::new(),
-                &header.compression,
-            )?,
-            crc: header.uncompressed_crc,
-            uncompressed_data_hasher: Some(crc32fast::Hasher::new()),
-            uncompressed_len: header.uncompressed_size,
-            compressed_remaining: header.compressed_size,
-            uncompressed_remaining: header.uncompressed_size,
-            padding_after_compressed_data: 0,
-        });
-        Ok(result)
     }
 
     /// Get a mutable slice to write new MCAP data into. Call [`Self::notify_read`] afterwards with

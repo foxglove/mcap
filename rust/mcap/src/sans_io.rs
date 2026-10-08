@@ -10,9 +10,6 @@ pub use linear_reader::{LinearReadEvent, LinearReader, LinearReaderOptions};
 pub use message_reader::{MessageReadEvent, MessageReader};
 pub use summary_reader::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};
 
-#[cfg(test)]
-mod custom_decompressor_tests;
-
 #[cfg(feature = "lz4")]
 mod lz4;
 
@@ -27,3 +24,6 @@ pub(crate) fn check_len(len: u64, limit: Option<usize>) -> Option<usize> {
         _ => Some(len_as_usize),
     }
 }
+
+#[cfg(test)]
+mod custom_decompressor_tests;

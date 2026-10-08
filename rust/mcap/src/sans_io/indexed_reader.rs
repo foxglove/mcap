@@ -486,47 +486,6 @@ impl IndexedReader {
     }
 }
 
-/// Drives a streaming [`Decompressor`] until `uncompressed_size` bytes have been written.
-///
-/// The whole compressed chunk is already in memory. Bytes left over after that are not passed to
-/// the decoder: lz4 and zstd treat them as the start of another frame, and both the built-in
-/// indexed lz4 path and [`LinearReader`](super::linear_reader::LinearReader) leave that padding
-/// unread. [`Decompressor::reset`] runs afterward so the same instance can decode the next chunk.
-fn decompress_registered(
-    decompressor: &mut dyn Decompressor,
-    src: &[u8],
-    dst: &mut Vec<u8>,
-    uncompressed_size: usize,
-) -> McapResult<()> {
-    dst.clear();
-    dst.resize(uncompressed_size, 0);
-    let mut input_pos = 0;
-    let mut output_pos = 0;
-    let decompressed = (|| {
-        while output_pos < uncompressed_size {
-            let input = &src[input_pos..];
-            let output = &mut dst[output_pos..uncompressed_size];
-            let output_len = output.len();
-            let res = check_decompress_result(
-                decompressor.decompress(input, output)?,
-                input.len(),
-                output_len,
-            )?;
-            // The compressed chunk is already buffered, so a call that makes no progress cannot
-            // be satisfied by reading more input.
-            if res.consumed == 0 && res.wrote == 0 {
-                return Err(no_progress_error());
-            }
-            input_pos += res.consumed;
-            output_pos += res.wrote;
-        }
-        Ok(())
-    })();
-    // Prefer the decompression error when reset also fails, so a short read is not reported as a
-    // reset failure.
-    decompressed.and(decompressor.reset())
-}
-
 struct Filter {
     // inclusive log time range start
     start: Option<u64>,
@@ -606,6 +565,47 @@ impl IndexedReaderOptions {
 
 /// Insert indexes into `message_indexes` for every message in this chunk that matches the filter
 /// criteria.
+/// Drives a streaming [`Decompressor`] until `uncompressed_size` bytes have been written.
+///
+/// The whole compressed chunk is already in memory. Bytes left over after that are not passed to
+/// the decoder: lz4 and zstd treat them as the start of another frame, and both the built-in
+/// indexed lz4 path and [`LinearReader`](super::linear_reader::LinearReader) leave that padding
+/// unread. [`Decompressor::reset`] runs afterward so the same instance can decode the next chunk.
+fn decompress_registered(
+    decompressor: &mut dyn Decompressor,
+    src: &[u8],
+    dst: &mut Vec<u8>,
+    uncompressed_size: usize,
+) -> McapResult<()> {
+    dst.clear();
+    dst.resize(uncompressed_size, 0);
+    let mut input_pos = 0;
+    let mut output_pos = 0;
+    let decompressed = (|| {
+        while output_pos < uncompressed_size {
+            let input = &src[input_pos..];
+            let output = &mut dst[output_pos..uncompressed_size];
+            let output_len = output.len();
+            let res = check_decompress_result(
+                decompressor.decompress(input, output)?,
+                input.len(),
+                output_len,
+            )?;
+            // The compressed chunk is already buffered, so a call that makes no progress cannot
+            // be satisfied by reading more input.
+            if res.consumed == 0 && res.wrote == 0 {
+                return Err(no_progress_error());
+            }
+            input_pos += res.consumed;
+            output_pos += res.wrote;
+        }
+        Ok(())
+    })();
+    // Prefer the decompression error when reset also fails, so a short read is not reported as a
+    // reset failure.
+    decompressed.and(decompressor.reset())
+}
+
 fn index_messages(
     chunk_slot_idx: usize,
     chunk_slots: &[ChunkSlot],
