@@ -13,12 +13,12 @@ pub struct DecompressResult {
 
 /// A streaming decompressor for one chunk compression string.
 ///
-/// [`LinearReader::add_decompressor`](crate::sans_io::LinearReader::add_decompressor) and
-/// [`IndexedReader::add_decompressor`](crate::sans_io::IndexedReader::add_decompressor) are the
-/// readers that store an instance under [`Decompressor::name`]. Other readers, including
-/// [`MessageStream`](crate::MessageStream) and [`ChunkReader`](crate::read::ChunkReader), do not.
-/// The name is matched against the chunk `compression` field. Those two readers keep one instance
-/// per name and call [`Decompressor::reset`] after each chunk.
+/// [`LinearReader`](crate::sans_io::LinearReader) and [`IndexedReader`](crate::sans_io::IndexedReader)
+/// accept an instance through `add_decompressor` and store it under [`Decompressor::name`]. That
+/// name is matched against the chunk `compression` field. These readers keep one instance per name
+/// and call [`Decompressor::reset`] after each chunk. Other readers, including
+/// [`MessageStream`](crate::MessageStream) and [`ChunkReader`](crate::read::ChunkReader), do not
+/// accept a decompressor.
 pub trait Decompressor: Send {
     /// Returns the recommended size of input to pass into `decompress()`.
     fn next_read_size(&self) -> usize;
