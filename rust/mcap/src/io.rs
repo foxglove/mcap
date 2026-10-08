@@ -5,7 +5,10 @@ use std::{
 };
 
 use crate::{
-    sans_io::{LinearReaderOptions, MessageReadEvent, MessageReader as SansIoReader},
+    sans_io::{
+        decompressor::Decompressor, LinearReaderOptions, MessageReadEvent,
+        MessageReader as SansIoReader,
+    },
     Channel, McapResult, Message,
 };
 
@@ -54,6 +57,17 @@ impl<R: Read> MessageReader<R> {
             reader: SansIoReader::new_with_options(options),
             done: false,
         }
+    }
+
+    /// Registers a chunk decompressor on the inner [`crate::sans_io::MessageReader`].
+    ///
+    /// See [`crate::sans_io::LinearReader::add_decompressor`] for which names are accepted and
+    /// when to call it.
+    pub fn add_decompressor(
+        &mut self,
+        decompressor: impl Decompressor + 'static,
+    ) -> McapResult<()> {
+        self.reader.add_decompressor(decompressor)
     }
 
     /// Gets a channel seen so far by ID.

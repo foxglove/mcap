@@ -1,7 +1,7 @@
 use tokio::io::{AsyncRead, AsyncReadExt};
 
 pub use crate::sans_io::linear_reader::LinearReaderOptions;
-use crate::sans_io::{LinearReadEvent, LinearReader as SansIoReader};
+use crate::sans_io::{decompressor::Decompressor, LinearReadEvent, LinearReader as SansIoReader};
 use crate::McapResult;
 
 /// Reads an MCAP file record-by-record, writing the raw record data into a caller-provided Vec.
@@ -39,6 +39,17 @@ where
             reader: SansIoReader::new_with_options(options.clone()),
             source,
         }
+    }
+
+    /// Registers a chunk decompressor on the inner [`crate::sans_io::LinearReader`].
+    ///
+    /// See [`crate::sans_io::LinearReader::add_decompressor`] for which names are accepted and
+    /// when to call it.
+    pub fn add_decompressor(
+        &mut self,
+        decompressor: impl Decompressor + 'static,
+    ) -> McapResult<()> {
+        self.reader.add_decompressor(decompressor)
     }
 
     pub fn into_inner(self) -> McapResult<R> {

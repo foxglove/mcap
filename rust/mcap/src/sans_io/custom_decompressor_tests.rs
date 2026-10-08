@@ -288,6 +288,18 @@ fn write_indexed_mcap(chunks: &[BuiltChunk]) -> Vec<u8> {
         }),
     );
 
+    append_record(
+        &mut file,
+        op::CHANNEL,
+        &write_body(&Channel {
+            id: 1,
+            schema_id: 0,
+            topic: "topic".into(),
+            message_encoding: "raw".into(),
+            metadata: BTreeMap::new(),
+        }),
+    );
+
     let mut indexes = Vec::new();
     for chunk in chunks {
         let mut chunk_body = write_body(&ChunkHeader {
@@ -531,6 +543,64 @@ fn custom_compression_round_trips_through_both_readers() {
         read_indexed(&mcap, Some(TestDecoder::xor("xor"))).expect("indexed"),
         expected
     );
+}
+
+#[test]
+fn streaming_message_readers_forward_the_decompressor() {
+    let mcap = xor_mcap(&sample_chunks());
+    let expected = vec![(10, b"one".to_vec()), (20, b"two".to_vec())];
+
+    let mut sans_io = crate::sans_io::MessageReader::new();
+    sans_io
+        .add_decompressor(TestDecoder::xor("xor"))
+        .expect("sans-io register");
+    let mut cursor = Cursor::new(mcap.as_slice());
+    let mut sans_io_messages = Vec::new();
+    let mut iterations = 0;
+    while let Some(event) = sans_io.next_event() {
+        iterations += 1;
+        assert!(iterations < 100_000, "message reader did not finish");
+        match event.expect("sans-io message") {
+            crate::sans_io::MessageReadEvent::ReadRequest(need) => {
+                let read = cursor.read(sans_io.insert(need)).expect("read");
+                sans_io.notify_read(read);
+            }
+            crate::sans_io::MessageReadEvent::Message(message) => {
+                sans_io_messages.push((message.log_time, message.data.into_owned()));
+            }
+        }
+    }
+    assert_eq!(sans_io_messages, expected);
+
+    let mut blocking = crate::io::MessageReader::new(Cursor::new(mcap));
+    blocking
+        .add_decompressor(TestDecoder::xor("xor"))
+        .expect("io register");
+    let blocking_messages = blocking
+        .map(|message| {
+            let message = message.expect("io message");
+            (message.log_time, message.data.into_owned())
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(blocking_messages, expected);
+}
+
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn tokio_linear_reader_forwards_the_decompressor() {
+    let mcap = xor_mcap(&sample_chunks());
+    let mut reader = crate::tokio::LinearReader::new(Cursor::new(mcap));
+    reader
+        .add_decompressor(TestDecoder::xor("xor"))
+        .expect("tokio register");
+    let mut buf = Vec::new();
+    let mut messages = 0;
+    while let Some(opcode) = reader.next_record(&mut buf).await {
+        if opcode.expect("record") == op::MESSAGE {
+            messages += 1;
+        }
+    }
+    assert_eq!(messages, 2);
 }
 
 #[test]

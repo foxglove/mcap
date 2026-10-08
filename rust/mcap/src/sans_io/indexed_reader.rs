@@ -268,9 +268,9 @@ impl IndexedReader {
     /// Chunk slots may retain decompressed bytes from several chunks at once; decompression itself
     /// runs to completion inside [`IndexedReader::insert_chunk_record_data`](Self::insert_chunk_record_data).
     ///
-    /// [`MessageStream`](crate::MessageStream), [`ChunkReader`](crate::read::ChunkReader), and the
-    /// `io` and `tokio` adapters do not accept a decompressor. Use this reader, or
-    /// [`LinearReader`](super::linear_reader::LinearReader), to supply one.
+    /// [`MessageStream`](crate::MessageStream) and [`ChunkReader`](crate::read::ChunkReader) do not
+    /// accept a decompressor. The streaming message readers forward to
+    /// [`LinearReader`](super::linear_reader::LinearReader) instead.
     ///
     /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
     /// [`McapError::DuplicateDecompressor`] when that name is already registered.

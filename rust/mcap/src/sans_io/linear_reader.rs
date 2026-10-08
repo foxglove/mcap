@@ -371,9 +371,10 @@ impl LinearReader {
     ///
     /// The reader keeps one instance per name and calls [`Decompressor::reset`] after each chunk.
     ///
-    /// [`MessageStream`](crate::MessageStream), [`ChunkReader`](crate::read::ChunkReader), and the
-    /// `io` and `tokio` adapters do not accept a decompressor. Use this reader, or
-    /// [`IndexedReader`](super::indexed_reader::IndexedReader), to supply one.
+    /// [`MessageReader`](super::message_reader::MessageReader),
+    /// [`io::MessageReader`](crate::io::MessageReader), and, with the `tokio` feature,
+    /// `tokio::LinearReader` forward to this method.
+    /// [`MessageStream`](crate::MessageStream) and [`ChunkReader`](crate::read::ChunkReader) do not.
     ///
     /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
     /// [`McapError::DuplicateDecompressor`] when that name is already registered, including when
