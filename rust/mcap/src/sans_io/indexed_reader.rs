@@ -2,10 +2,18 @@ use binrw::BinRead;
 
 use crate::{
     records::{op, ChunkIndex, MessageHeader},
-    sans_io::check_len,
+    sans_io::{
+        check_len,
+        decompressor::{
+            check_decompress_result, no_progress_error, register_decompressor, Decompressor,
+        },
+    },
     McapError, McapResult,
 };
-use std::{cmp::Reverse, collections::BTreeSet};
+use std::{
+    cmp::Reverse,
+    collections::{BTreeSet, HashMap},
+};
 
 #[derive(Clone, Copy)]
 struct MessageIndex {
@@ -106,6 +114,8 @@ pub struct IndexedReader {
     order: ReadOrder,
     // Criteria for what messages from the MCAP should be yielded
     filter: Filter,
+    // Caller-supplied decompressors, keyed by chunk compression string.
+    decompressors: HashMap<String, Box<dyn Decompressor>>,
     // Lazily allocated and reused across zstd chunks.
     #[cfg(feature = "zstd")]
     zstd_dctx: Option<zstd::zstd_safe::DCtx<'static>>,
@@ -235,10 +245,33 @@ impl IndexedReader {
                 end: options.end,
                 channel_ids,
             },
+            decompressors: HashMap::new(),
             #[cfg(feature = "zstd")]
             zstd_dctx: None,
             record_length_limit: options.record_length_limit,
         })
+    }
+
+    /// Registers a decompressor for chunks whose `compression` field equals
+    /// [`Decompressor::name`](super::decompressor::Decompressor::name).
+    ///
+    /// Call this before reading. A registered decompressor is used for that compression string,
+    /// including `"lz4"` and `"zstd"`, whether or not the matching crate feature is enabled. Any
+    /// other non-empty name selects a caller-supplied format. When no decompressor is registered,
+    /// `"lz4"` and `"zstd"` still use the built-in decoders if those features are on, and any other
+    /// non-empty name returns [`McapError::UnsupportedCompression`].
+    ///
+    /// The reader keeps one instance per name and calls [`Decompressor::reset`] after each chunk.
+    /// Chunk slots may retain decompressed bytes from several chunks at once; decompression itself
+    /// runs to completion inside [`IndexedReader::insert_chunk_record_data`](Self::insert_chunk_record_data).
+    ///
+    /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
+    /// [`McapError::DuplicateDecompressor`] when that name is already registered.
+    pub fn add_decompressor(
+        &mut self,
+        decompressor: impl Decompressor + 'static,
+    ) -> McapResult<()> {
+        register_decompressor(&mut self.decompressors, decompressor)
     }
 
     /// Returns the next event from the reader. Call this repeatedly and act on the resulting
@@ -332,47 +365,58 @@ impl IndexedReader {
         let slot_idx = find_or_make_chunk_slot(&mut self.chunk_slots, offset);
 
         let slot = &mut self.chunk_slots[slot_idx];
-        match chunk_index.compression.as_str() {
-            "" => {
-                if compressed_data.len() != uncompressed_size {
-                    return Err(McapError::DecompressionError(format!(
-                        "uncompressed chunk size mismatch: expected {uncompressed_size}, got {}",
-                        compressed_data.len()
-                    )));
+        let compression = chunk_index.compression.as_str();
+        if compression.is_empty() {
+            if compressed_data.len() != uncompressed_size {
+                return Err(McapError::DecompressionError(format!(
+                    "uncompressed chunk size mismatch: expected {uncompressed_size}, got {}",
+                    compressed_data.len()
+                )));
+            }
+            // The length is already known to equal uncompressed_size, so copy the data in
+            // directly rather than resize()-ing (which zero-fills the buffer first) and then
+            // overwriting every byte.
+            slot.buf.clear();
+            slot.buf.extend_from_slice(compressed_data);
+        } else if let Some(decompressor) = self.decompressors.get_mut(compression) {
+            decompress_registered(
+                decompressor.as_mut(),
+                compressed_data,
+                &mut slot.buf,
+                uncompressed_size,
+            )?;
+        } else {
+            match compression {
+                #[cfg(feature = "zstd")]
+                "zstd" => {
+                    // decompress zstd into current slot
+                    slot.buf.clear();
+                    slot.buf.reserve(uncompressed_size);
+                    let dctx = self
+                        .zstd_dctx
+                        .get_or_insert_with(zstd::zstd_safe::DCtx::create);
+                    let n = dctx
+                        .decompress(&mut slot.buf, compressed_data)
+                        .map_err(|err| {
+                            McapError::DecompressionError(
+                                zstd::zstd_safe::get_error_name(err).into(),
+                            )
+                        })?;
+                    if n != uncompressed_size {
+                        return Err(McapError::DecompressionError(format!(
+                            "zstd decompression error: expected {uncompressed_size}, got {n}"
+                        )));
+                    }
                 }
-                // The length is already known to equal uncompressed_size, so copy the data in
-                // directly rather than resize()-ing (which zero-fills the buffer first) and then
-                // overwriting every byte.
-                slot.buf.clear();
-                slot.buf.extend_from_slice(compressed_data);
-            }
-            #[cfg(feature = "zstd")]
-            "zstd" => {
-                // decompress zstd into current slot
-                slot.buf.clear();
-                slot.buf.reserve(uncompressed_size);
-                let dctx = self
-                    .zstd_dctx
-                    .get_or_insert_with(zstd::zstd_safe::DCtx::create);
-                let n = dctx
-                    .decompress(&mut slot.buf, compressed_data)
-                    .map_err(|err| {
-                        McapError::DecompressionError(zstd::zstd_safe::get_error_name(err).into())
-                    })?;
-                if n != uncompressed_size {
-                    return Err(McapError::DecompressionError(format!(
-                        "zstd decompression error: expected {uncompressed_size}, got {n}"
-                    )));
+                #[cfg(feature = "lz4")]
+                "lz4" => {
+                    slot.buf.resize(uncompressed_size, 0);
+                    use std::io::Read;
+                    let mut decoder = lz4::Decoder::new(std::io::Cursor::new(compressed_data))?;
+                    decoder.read_exact(&mut slot.buf[..])?;
                 }
+                other => return Err(McapError::UnsupportedCompression(other.into())),
             }
-            #[cfg(feature = "lz4")]
-            "lz4" => {
-                slot.buf.resize(uncompressed_size, 0);
-                use std::io::Read;
-                let mut decoder = lz4::Decoder::new(std::io::Cursor::new(compressed_data))?;
-                decoder.read_exact(&mut slot.buf[..])?;
-            }
-            other => return Err(McapError::UnsupportedCompression(other.into())),
         }
         // index the current chunk slot
         // before starting, check if all existing message indexes have been exhausted and clear them
@@ -425,6 +469,47 @@ impl IndexedReader {
             ReadOrder::ReverseLogTime => chunk_index.message_end_time > message_index.log_time,
         }
     }
+}
+
+/// Drives a streaming [`Decompressor`] until `uncompressed_size` bytes have been written.
+///
+/// The whole compressed chunk is already in memory. `next_read_size` is a hint for streaming
+/// readers; this path passes the remaining input on each call and stops once the declared
+/// uncompressed length is produced. Trailing compressed bytes are left unread. [`Decompressor::reset`]
+/// runs afterward so the same instance can decode the next chunk.
+fn decompress_registered(
+    decompressor: &mut dyn Decompressor,
+    src: &[u8],
+    dst: &mut Vec<u8>,
+    uncompressed_size: usize,
+) -> McapResult<()> {
+    dst.clear();
+    dst.resize(uncompressed_size, 0);
+    let mut input_pos = 0;
+    let mut output_pos = 0;
+    let decompressed = (|| {
+        while output_pos < uncompressed_size {
+            let input = &src[input_pos..];
+            let output = &mut dst[output_pos..uncompressed_size];
+            let output_len = output.len();
+            let res = check_decompress_result(
+                decompressor.decompress(input, output)?,
+                input.len(),
+                output_len,
+            )?;
+            // The compressed chunk is already buffered, so a call that makes no progress cannot
+            // be satisfied by reading more input.
+            if res.consumed == 0 && res.wrote == 0 {
+                return Err(no_progress_error());
+            }
+            input_pos += res.consumed;
+            output_pos += res.wrote;
+        }
+        Ok(())
+    })();
+    // Prefer the decompression error when reset also fails, so a short read is not reported as a
+    // reset failure.
+    decompressed.and(decompressor.reset())
 }
 
 struct Filter {

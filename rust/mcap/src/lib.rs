@@ -128,6 +128,10 @@ pub enum McapError {
     UnknownSchema(String, u16),
     #[error("Unsupported compression format `{0}`")]
     UnsupportedCompression(String),
+    #[error("decompressor name must be non-empty")]
+    EmptyDecompressorName,
+    #[error("decompressor `{0}` is already registered")]
+    DuplicateDecompressor(String),
     #[error("Error during decompression: `{0}`")]
     DecompressionError(String),
     #[error("chunk size option exceeds usize max: `{0}`")]

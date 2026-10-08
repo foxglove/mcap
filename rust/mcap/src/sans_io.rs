@@ -10,6 +10,9 @@ pub use linear_reader::{LinearReadEvent, LinearReader, LinearReaderOptions};
 pub use message_reader::{MessageReadEvent, MessageReader};
 pub use summary_reader::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};
 
+#[cfg(test)]
+mod custom_decompressor;
+
 #[cfg(feature = "lz4")]
 mod lz4;
 

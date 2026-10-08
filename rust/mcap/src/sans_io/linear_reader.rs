@@ -2,7 +2,9 @@
 //! This can be used to read MCAP data from any source of bytes.
 use std::collections::HashMap;
 
-use super::decompressor::Decompressor;
+use super::decompressor::{
+    check_decompress_result, no_progress_error, register_decompressor, Decompressor,
+};
 use crate::{
     records::{op, ChunkHeader},
     sans_io::check_len,
@@ -346,6 +348,26 @@ impl LinearReader {
             decompressors: Default::default(),
             at_eof: false,
         }
+    }
+
+    /// Registers a decompressor for chunks whose `compression` field equals
+    /// [`Decompressor::name`](super::decompressor::Decompressor::name).
+    ///
+    /// Call this before reading. A registered decompressor is used for that compression string,
+    /// including `"lz4"` and `"zstd"`, whether or not the matching crate feature is enabled. Any
+    /// other non-empty name selects a caller-supplied format. When no decompressor is registered,
+    /// `"lz4"` and `"zstd"` still use the built-in decoders if those features are on, and any other
+    /// non-empty name returns [`McapError::UnsupportedCompression`].
+    ///
+    /// The reader keeps one instance per name and calls [`Decompressor::reset`] after each chunk.
+    ///
+    /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
+    /// [`McapError::DuplicateDecompressor`] when that name is already registered.
+    pub fn add_decompressor(
+        &mut self,
+        decompressor: impl Decompressor + 'static,
+    ) -> McapResult<()> {
+        register_decompressor(&mut self.decompressors, decompressor)
     }
 
     /// Constructs a linear reader that will iterate through all records in a chunk.
@@ -826,6 +848,11 @@ fn get_decompressor(
     decompressors: &mut HashMap<String, Box<dyn Decompressor>>,
     name: &str,
 ) -> McapResult<Option<Box<dyn Decompressor>>> {
+    // An empty compression string means the chunk records are stored uncompressed. Check it
+    // before the map so a decompressor cannot register itself for that case.
+    if name.is_empty() {
+        return Ok(None);
+    }
     if let Some(decompressor) = decompressors.remove(name) {
         return Ok(Some(decompressor));
     }
@@ -834,7 +861,6 @@ fn get_decompressor(
         "zstd" => Ok(Some(Box::new(zstd::ZstdDecoder::new()))),
         #[cfg(feature = "lz4")]
         "lz4" => Ok(Some(Box::new(lz4::Lz4Decoder::new()?))),
-        "" => Ok(None),
         _ => Err(McapError::UnsupportedCompression(name.into())),
     }
 }
@@ -872,7 +898,26 @@ fn decompress_inner(
         }
         let src_len = have.min(clamp_to_usize(*compressed_remaining));
         let src = &src_buf.unread()[..src_len];
-        let res = decompressor.decompress(src, dst)?;
+        let dst_len = dst.len();
+        let res = check_decompress_result(decompressor.decompress(src, dst)?, src_len, dst_len)?;
+        if res.consumed == 0 && res.wrote == 0 {
+            // zstd reports this, and raises next_read_size, when the buffer does not yet hold the
+            // next frame header. Asking for that input is progress. It is a stall only when the
+            // decompressor already had as many bytes as it requested.
+            let retry_need = decompressor
+                .next_read_size()
+                .min(clamp_to_usize(*compressed_remaining));
+            if retry_need <= have {
+                return Err(no_progress_error());
+            }
+            continue;
+        }
+        if res.wrote as u64 > *uncompressed_remaining {
+            return Err(McapError::DecompressionError(format!(
+                "decompressor wrote {} bytes with only {} uncompressed bytes remaining",
+                res.wrote, *uncompressed_remaining
+            )));
+        }
         src_buf.mark_read(res.consumed);
         dest_buf.mark_written(res.wrote);
         *compressed_remaining -= res.consumed as u64;
