@@ -13,6 +13,7 @@ use crate::{
 use std::{
     cmp::Reverse,
     collections::{BTreeSet, HashMap},
+    sync::Mutex,
 };
 
 #[derive(Clone, Copy)]
@@ -115,7 +116,9 @@ pub struct IndexedReader {
     // Criteria for what messages from the MCAP should be yielded
     filter: Filter,
     // Caller-supplied decompressors, keyed by chunk compression string.
-    decompressors: CallerDecompressors,
+    // `Mutex` makes `IndexedReader` `Sync` (`Box<dyn Decompressor>` is only `Send`).
+    // Every access uses `get_mut`, which does not lock.
+    decompressors: Mutex<HashMap<String, Box<dyn Decompressor>>>,
     // Lazily allocated and reused across zstd chunks.
     #[cfg(feature = "zstd")]
     zstd_dctx: Option<zstd::zstd_safe::DCtx<'static>>,
@@ -245,7 +248,7 @@ impl IndexedReader {
                 end: options.end,
                 channel_ids,
             },
-            decompressors: CallerDecompressors::new(),
+            decompressors: Mutex::new(HashMap::new()),
             #[cfg(feature = "zstd")]
             zstd_dctx: None,
             record_length_limit: options.record_length_limit,
@@ -265,13 +268,21 @@ impl IndexedReader {
     /// Chunk slots may retain decompressed bytes from several chunks at once; decompression itself
     /// runs to completion inside [`IndexedReader::insert_chunk_record_data`](Self::insert_chunk_record_data).
     ///
+    /// [`MessageStream`](crate::MessageStream), [`ChunkReader`](crate::read::ChunkReader), and the
+    /// `io` and `tokio` adapters do not accept a decompressor. Use this reader, or
+    /// [`LinearReader`](super::linear_reader::LinearReader), to supply one.
+    ///
     /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
     /// [`McapError::DuplicateDecompressor`] when that name is already registered.
     pub fn add_decompressor(
         &mut self,
         decompressor: impl Decompressor + 'static,
     ) -> McapResult<()> {
-        register_decompressor(&mut self.decompressors.0, decompressor)
+        let decompressors = self
+            .decompressors
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        register_decompressor(decompressors, decompressor)
     }
 
     /// Returns the next event from the reader. Call this repeatedly and act on the resulting
@@ -364,6 +375,10 @@ impl IndexedReader {
         let uncompressed_size = chunk_index.uncompressed_size as usize;
         let slot_idx = find_or_make_chunk_slot(&mut self.chunk_slots, offset);
 
+        let decompressors = self
+            .decompressors
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let slot = &mut self.chunk_slots[slot_idx];
         let compression = chunk_index.compression.as_str();
         if compression.is_empty() {
@@ -378,7 +393,7 @@ impl IndexedReader {
             // overwriting every byte.
             slot.buf.clear();
             slot.buf.extend_from_slice(compressed_data);
-        } else if let Some(decompressor) = self.decompressors.0.get_mut(compression) {
+        } else if let Some(decompressor) = decompressors.get_mut(compression) {
             decompress_registered(
                 decompressor.as_mut(),
                 compressed_data,
@@ -470,21 +485,6 @@ impl IndexedReader {
         }
     }
 }
-
-/// Caller decompressors are `Send` but not `Sync`. IndexedReader only reaches this map through
-/// `&mut self`, so a shared `&IndexedReader` cannot observe it.
-struct CallerDecompressors(HashMap<String, Box<dyn Decompressor>>);
-
-impl CallerDecompressors {
-    fn new() -> Self {
-        Self(HashMap::new())
-    }
-}
-
-// SAFETY: the map is private to IndexedReader and every read or write of it happens through
-// `&mut IndexedReader`. Sharing `&IndexedReader` across threads cannot access the decompressors,
-// and `Box<dyn Decompressor>` is `Send`, so IndexedReader stays `Sync`.
-unsafe impl Sync for CallerDecompressors {}
 
 /// Drives a streaming [`Decompressor`] until `uncompressed_size` bytes have been written.
 ///

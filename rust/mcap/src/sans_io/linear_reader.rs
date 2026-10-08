@@ -371,13 +371,26 @@ impl LinearReader {
     ///
     /// The reader keeps one instance per name and calls [`Decompressor::reset`] after each chunk.
     ///
+    /// [`MessageStream`](crate::MessageStream), [`ChunkReader`](crate::read::ChunkReader), and the
+    /// `io` and `tokio` adapters do not accept a decompressor. Use this reader, or
+    /// [`IndexedReader`](super::indexed_reader::IndexedReader), to supply one.
+    ///
     /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
-    /// [`McapError::DuplicateDecompressor`] when that name is already registered.
+    /// [`McapError::DuplicateDecompressor`] when that name is already registered, including when
+    /// that caller-supplied decoder is in use for the chunk currently being read.
     pub fn add_decompressor(
         &mut self,
         decompressor: impl Decompressor + 'static,
     ) -> McapResult<()> {
         let name = decompressor.name().to_owned();
+        let in_use = self
+            .chunk_state
+            .as_ref()
+            .and_then(|state| state.decompressor.as_ref())
+            .is_some_and(|active| active.from_caller && active.decompressor.name() == name);
+        if in_use {
+            return Err(McapError::DuplicateDecompressor(name));
+        }
         register_decompressor(&mut self.decompressors, decompressor)?;
         // A caller registration wins over a built-in already cached under this name.
         self.builtin_decompressors.remove(&name);

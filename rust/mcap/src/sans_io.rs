@@ -11,7 +11,7 @@ pub use message_reader::{MessageReadEvent, MessageReader};
 pub use summary_reader::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};
 
 #[cfg(test)]
-mod custom_decompressor;
+mod custom_decompressor_tests;
 
 #[cfg(feature = "lz4")]
 mod lz4;

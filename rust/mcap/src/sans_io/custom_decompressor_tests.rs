@@ -28,6 +28,14 @@ enum DecoderKind {
     },
     /// Fills the entire output buffer on every call.
     Greedy,
+    /// Returns no progress once, then raises `next_read_size` so the reader must fetch more input.
+    NeedMore {
+        probed: bool,
+        want: usize,
+        remaining: Option<usize>,
+        len_buf: [u8; 4],
+        len_filled: usize,
+    },
 }
 
 struct TestDecoder {
@@ -61,6 +69,19 @@ impl TestDecoder {
         }
     }
 
+    fn need_more(name: &'static str) -> Self {
+        Self {
+            name,
+            kind: DecoderKind::NeedMore {
+                probed: false,
+                want: 1,
+                remaining: None,
+                len_buf: [0; 4],
+                len_filled: 0,
+            },
+        }
+    }
+
     fn stall(name: &'static str) -> Self {
         Self {
             name,
@@ -78,7 +99,10 @@ impl TestDecoder {
 
 impl Decompressor for TestDecoder {
     fn next_read_size(&self) -> usize {
-        1
+        match &self.kind {
+            DecoderKind::NeedMore { want, .. } => *want,
+            _ => 1,
+        }
     }
 
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult> {
@@ -101,18 +125,52 @@ impl Decompressor for TestDecoder {
                 len_buf,
                 len_filled,
             } => xor_decompress(remaining, len_buf, len_filled, src, dst),
+            DecoderKind::NeedMore {
+                probed,
+                want,
+                remaining,
+                len_buf,
+                len_filled,
+            } => {
+                if !*probed {
+                    *probed = true;
+                    *want = src.len().saturating_add(32);
+                    return Ok(DecompressResult {
+                        consumed: 0,
+                        wrote: 0,
+                    });
+                }
+                xor_decompress(remaining, len_buf, len_filled, src, dst)
+            }
         }
     }
 
     fn reset(&mut self) -> McapResult<()> {
-        if let DecoderKind::Xor {
-            remaining,
-            len_filled,
-            ..
-        } = &mut self.kind
-        {
-            *remaining = None;
-            *len_filled = 0;
+        match &mut self.kind {
+            DecoderKind::Xor {
+                remaining,
+                len_filled,
+                ..
+            } => {
+                *remaining = None;
+                *len_filled = 0;
+            }
+            DecoderKind::NeedMore {
+                probed,
+                want,
+                remaining,
+                len_filled,
+                ..
+            } => {
+                *probed = false;
+                *want = 1;
+                *remaining = None;
+                *len_filled = 0;
+            }
+            DecoderKind::Stall
+            | DecoderKind::Fail
+            | DecoderKind::OverReport { .. }
+            | DecoderKind::Greedy => {}
         }
         Ok(())
     }
@@ -210,8 +268,15 @@ impl ChunkSpec {
     }
 }
 
-/// Builds an indexed MCAP whose chunks use the `"xor"` compression string.
-fn xor_mcap(chunks: &[ChunkSpec]) -> Vec<u8> {
+struct BuiltChunk {
+    log_time: u64,
+    compression: String,
+    uncompressed_size: u64,
+    compressed: Vec<u8>,
+}
+
+/// Builds an indexed MCAP from chunks that are already compressed.
+fn write_indexed_mcap(chunks: &[BuiltChunk]) -> Vec<u8> {
     let mut file = Vec::new();
     file.extend_from_slice(MAGIC);
     append_record(
@@ -225,30 +290,15 @@ fn xor_mcap(chunks: &[ChunkSpec]) -> Vec<u8> {
 
     let mut indexes = Vec::new();
     for chunk in chunks {
-        let mut message_body = write_body(&MessageHeader {
-            channel_id: 1,
-            sequence: 1,
-            log_time: chunk.log_time,
-            publish_time: chunk.log_time,
-        });
-        message_body.extend_from_slice(chunk.payload);
-        let mut records = Vec::new();
-        append_record(&mut records, op::MESSAGE, &message_body);
-        let mut compressed = Vec::with_capacity(4 + records.len() + chunk.trailing);
-        compressed.extend_from_slice(&(records.len() as u32).to_le_bytes());
-        compressed.extend(records.iter().map(|byte| byte ^ XOR));
-        compressed.extend(std::iter::repeat_n(0xA5u8, chunk.trailing));
-        let uncompressed_size = chunk.declared_uncompressed.unwrap_or(records.len() as u64);
-
         let mut chunk_body = write_body(&ChunkHeader {
             message_start_time: chunk.log_time,
             message_end_time: chunk.log_time,
-            uncompressed_size,
+            uncompressed_size: chunk.uncompressed_size,
             uncompressed_crc: 0,
-            compression: "xor".into(),
-            compressed_size: compressed.len() as u64,
+            compression: chunk.compression.clone(),
+            compressed_size: chunk.compressed.len() as u64,
         });
-        chunk_body.extend_from_slice(&compressed);
+        chunk_body.extend_from_slice(&chunk.compressed);
         let chunk_start = file.len() as u64;
         append_record(&mut file, op::CHUNK, &chunk_body);
         indexes.push(ChunkIndex {
@@ -258,9 +308,9 @@ fn xor_mcap(chunks: &[ChunkSpec]) -> Vec<u8> {
             chunk_length: file.len() as u64 - chunk_start,
             message_index_offsets: BTreeMap::new(),
             message_index_length: 0,
-            compression: "xor".into(),
-            compressed_size: compressed.len() as u64,
-            uncompressed_size,
+            compression: chunk.compression.clone(),
+            compressed_size: chunk.compressed.len() as u64,
+            uncompressed_size: chunk.uncompressed_size,
         });
     }
 
@@ -297,6 +347,35 @@ fn xor_mcap(chunks: &[ChunkSpec]) -> Vec<u8> {
     );
     file.extend_from_slice(MAGIC);
     file
+}
+
+/// Builds an indexed MCAP whose chunks use the `"xor"` compression string.
+fn xor_mcap(chunks: &[ChunkSpec]) -> Vec<u8> {
+    let built = chunks
+        .iter()
+        .map(|chunk| {
+            let mut message_body = write_body(&MessageHeader {
+                channel_id: 1,
+                sequence: 1,
+                log_time: chunk.log_time,
+                publish_time: chunk.log_time,
+            });
+            message_body.extend_from_slice(chunk.payload);
+            let mut records = Vec::new();
+            append_record(&mut records, op::MESSAGE, &message_body);
+            let mut compressed = Vec::with_capacity(4 + records.len() + chunk.trailing);
+            compressed.extend_from_slice(&(records.len() as u32).to_le_bytes());
+            compressed.extend(records.iter().map(|byte| byte ^ XOR));
+            compressed.extend(std::iter::repeat_n(0xA5u8, chunk.trailing));
+            BuiltChunk {
+                log_time: chunk.log_time,
+                compression: "xor".into(),
+                uncompressed_size: chunk.declared_uncompressed.unwrap_or(records.len() as u64),
+                compressed,
+            }
+        })
+        .collect::<Vec<_>>();
+    write_indexed_mcap(&built)
 }
 
 fn sample_chunks() -> Vec<ChunkSpec> {
@@ -362,7 +441,7 @@ fn read_indexed(
     Ok(messages)
 }
 
-fn uncompressed_mcap(compression: Option<crate::Compression>) -> Vec<u8> {
+fn one_message_mcap(compression: Option<crate::Compression>) -> Vec<u8> {
     let mut writer = crate::WriteOptions::new()
         .compression(compression)
         .chunk_size(None)
@@ -468,6 +547,45 @@ fn custom_compression_without_registration_is_unsupported() {
 }
 
 #[test]
+fn short_read_asks_for_more_input_instead_of_stalling() {
+    let mcap = xor_mcap(&sample_chunks());
+    let expected = vec![(1, 10, b"one".to_vec()), (1, 20, b"two".to_vec())];
+    assert_eq!(
+        read_linear(&mcap, Some(TestDecoder::need_more("xor"))).expect("linear read-more"),
+        expected
+    );
+}
+
+#[test]
+fn add_decompressor_rejects_a_name_held_by_the_open_chunk() {
+    let mcap = xor_mcap(&sample_chunks());
+    let mut reader = LinearReader::new();
+    reader
+        .add_decompressor(TestDecoder::xor("xor"))
+        .expect("register");
+    let mut cursor = Cursor::new(mcap.as_slice());
+    let mut saw_message = false;
+    while let Some(event) = reader.next_event() {
+        match event.expect("read") {
+            LinearReadEvent::ReadRequest(need) => {
+                let read = cursor.read(reader.insert(need)).expect("read");
+                reader.notify_read(read);
+            }
+            LinearReadEvent::Record { opcode, .. } if opcode == op::MESSAGE => {
+                saw_message = true;
+                break;
+            }
+            LinearReadEvent::Record { .. } => {}
+        }
+    }
+    assert!(saw_message, "expected to be inside a chunk");
+    assert!(matches!(
+        reader.add_decompressor(TestDecoder::xor("xor")),
+        Err(McapError::DuplicateDecompressor(name)) if name == "xor"
+    ));
+}
+
+#[test]
 fn stalled_decompressor_returns_an_error() {
     let mcap = xor_mcap(&sample_chunks());
     assert_no_progress(
@@ -480,7 +598,7 @@ fn stalled_decompressor_returns_an_error() {
 
 #[test]
 fn uncompressed_chunks_ignore_registered_decompressors() {
-    let mcap = uncompressed_mcap(None);
+    let mcap = one_message_mcap(None);
     let expected = vec![(1, 5, b"plain".to_vec())];
     assert_eq!(
         read_linear(&mcap, Some(TestDecoder::stall("xor"))).expect("linear"),
@@ -495,7 +613,7 @@ fn uncompressed_chunks_ignore_registered_decompressors() {
 #[cfg(feature = "zstd")]
 #[test]
 fn registered_zstd_decompressor_replaces_builtin() {
-    let mcap = uncompressed_mcap(Some(crate::Compression::Zstd));
+    let mcap = one_message_mcap(Some(crate::Compression::Zstd));
     assert_caller_decompressor(
         read_linear(&mcap, Some(TestDecoder::fail("zstd"))).expect_err("linear should use caller"),
     );
@@ -517,7 +635,7 @@ fn registered_zstd_decompressor_replaces_builtin() {
 #[cfg(feature = "lz4")]
 #[test]
 fn registered_lz4_decompressor_replaces_builtin() {
-    let mcap = uncompressed_mcap(Some(crate::Compression::Lz4));
+    let mcap = one_message_mcap(Some(crate::Compression::Lz4));
     assert_caller_decompressor(
         read_linear(&mcap, Some(TestDecoder::fail("lz4"))).expect_err("linear should use caller"),
     );
@@ -689,73 +807,12 @@ fn failed_reset_does_not_fall_back_to_the_builtin_decoder() {
 
 #[cfg(feature = "zstd")]
 fn one_chunk_mcap(compression: &str, log_time: u64, records: &[u8], compressed: &[u8]) -> Vec<u8> {
-    let mut file = Vec::new();
-    file.extend_from_slice(MAGIC);
-    append_record(
-        &mut file,
-        op::HEADER,
-        &write_body(&Header {
-            profile: String::new(),
-            library: "test".into(),
-        }),
-    );
-    let mut chunk_body = write_body(&ChunkHeader {
-        message_start_time: log_time,
-        message_end_time: log_time,
-        uncompressed_size: records.len() as u64,
-        uncompressed_crc: 0,
+    write_indexed_mcap(&[BuiltChunk {
+        log_time,
         compression: compression.to_owned(),
-        compressed_size: compressed.len() as u64,
-    });
-    chunk_body.extend_from_slice(compressed);
-    let chunk_start = file.len() as u64;
-    append_record(&mut file, op::CHUNK, &chunk_body);
-    let chunk_length = file.len() as u64 - chunk_start;
-    append_record(
-        &mut file,
-        op::DATA_END,
-        &write_body(&DataEnd {
-            data_section_crc: 0,
-        }),
-    );
-    let summary_start = file.len() as u64;
-    append_record(
-        &mut file,
-        op::CHANNEL,
-        &write_body(&Channel {
-            id: 1,
-            schema_id: 0,
-            topic: "topic".into(),
-            message_encoding: "raw".into(),
-            metadata: BTreeMap::new(),
-        }),
-    );
-    append_record(
-        &mut file,
-        op::CHUNK_INDEX,
-        &write_body(&ChunkIndex {
-            message_start_time: log_time,
-            message_end_time: log_time,
-            chunk_start_offset: chunk_start,
-            chunk_length,
-            message_index_offsets: BTreeMap::new(),
-            message_index_length: 0,
-            compression: compression.to_owned(),
-            compressed_size: compressed.len() as u64,
-            uncompressed_size: records.len() as u64,
-        }),
-    );
-    append_record(
-        &mut file,
-        op::FOOTER,
-        &write_body(&Footer {
-            summary_start,
-            summary_offset_start: 0,
-            summary_crc: 0,
-        }),
-    );
-    file.extend_from_slice(MAGIC);
-    file
+        uncompressed_size: records.len() as u64,
+        compressed: compressed.to_vec(),
+    }])
 }
 
 #[cfg(feature = "zstd")]
