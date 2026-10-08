@@ -3,12 +3,123 @@ mod common;
 use common::*;
 use mcap::records::AttachmentHeader;
 
-use std::{borrow::Cow, io::BufWriter};
+use std::{borrow::Cow, io::BufWriter, io::Cursor};
 
 use anyhow::Result;
 use tempfile::tempfile;
 
 const DEFAULT_LIBRARY_LENGTH: u64 = mcap::LIBRARY_IDENTIFIER.len() as u64;
+
+fn attachment_body(data: &[u8]) -> Vec<u8> {
+    let mut writer = mcap::Writer::new(Cursor::new(Vec::new())).expect("writer");
+    writer
+        .attach(&mcap::Attachment {
+            log_time: 20,
+            create_time: 10,
+            name: "tiny".into(),
+            media_type: "application/octet-stream".into(),
+            data: Cow::Borrowed(data),
+        })
+        .expect("attachment");
+    writer.finish().expect("finish");
+    let input = writer.into_inner().into_inner();
+    let index = mcap::Summary::read(&input)
+        .expect("summary")
+        .expect("summary present")
+        .attachment_indexes
+        .remove(0);
+    input[index.offset as usize + 9..(index.offset + index.length) as usize].to_vec()
+}
+
+#[test]
+fn parse_record_rejects_truncated_attachment() {
+    let options = mcap::ParseOptions::default().with_validate_attachment_crcs(false);
+    for data in [&[][..], &[1, 2, 3][..]] {
+        let body = attachment_body(data);
+        for length in 0..body.len() {
+            assert!(mcap::parse_record(mcap::records::op::ATTACHMENT, &body[..length]).is_err());
+            assert!(mcap::parse_record_with_options(
+                mcap::records::op::ATTACHMENT,
+                &body[..length],
+                &options,
+            )
+            .is_err());
+        }
+    }
+}
+
+#[test]
+fn attachment_crc_validation_options() {
+    let mut body = attachment_body(&[1, 2, 3]);
+    let end = body.len();
+    body[end - 4] ^= 0xFF;
+    let saved_crc = u32::from_le_bytes(body[end - 4..].try_into().expect("CRC"));
+    for options in [
+        mcap::ParseOptions::default(),
+        mcap::ParseOptions::default().with_validate_attachment_crcs(true),
+    ] {
+        assert!(matches!(
+            mcap::parse_record_with_options(mcap::records::op::ATTACHMENT, &body, &options),
+            Err(mcap::McapError::BadAttachmentCrc { .. })
+        ));
+    }
+    assert!(matches!(
+        mcap::parse_record(mcap::records::op::ATTACHMENT, &body),
+        Err(mcap::McapError::BadAttachmentCrc { .. })
+    ));
+
+    let options = mcap::ParseOptions::default().with_validate_attachment_crcs(false);
+    match mcap::parse_record_with_options(mcap::records::op::ATTACHMENT, &body, &options)
+        .expect("CRC validation disabled")
+    {
+        mcap::records::Record::Attachment { header, data, crc } => {
+            assert_eq!(header.log_time, 20);
+            assert_eq!(header.create_time, 10);
+            assert_eq!(header.name, "tiny");
+            assert_eq!(header.media_type, "application/octet-stream");
+            assert_eq!(crc, saved_crc);
+            assert!(matches!(data, Cow::Borrowed(_)));
+            assert_eq!(data.as_ref(), [1, 2, 3]);
+            assert_eq!(data.as_ptr(), body[end - 7..end - 4].as_ptr());
+        }
+        _ => panic!("expected attachment"),
+    }
+}
+
+#[test]
+fn attachment_crc_options_accept_valid_and_zero_crcs() {
+    let mut body = attachment_body(&[1, 2, 3]);
+    let end = body.len();
+    for zero_crc in [false, true] {
+        if zero_crc {
+            body[end - 4..].fill(0);
+        }
+        assert!(mcap::parse_record(mcap::records::op::ATTACHMENT, &body).is_ok());
+        for validate in [false, true] {
+            let options = mcap::ParseOptions::default().with_validate_attachment_crcs(validate);
+            assert!(mcap::parse_record_with_options(
+                mcap::records::op::ATTACHMENT,
+                &body,
+                &options
+            )
+            .is_ok());
+        }
+    }
+}
+
+#[test]
+fn attachment_crc_options_reject_invalid_data_length() {
+    let mut body = attachment_body(&[1, 2, 3]);
+    let data_length_offset = body.len() - 4 - 3 - 8;
+    body[data_length_offset..data_length_offset + 8].copy_from_slice(&u64::MAX.to_le_bytes());
+    for validate in [false, true] {
+        let options = mcap::ParseOptions::default().with_validate_attachment_crcs(validate);
+        assert!(matches!(
+            mcap::parse_record_with_options(mcap::records::op::ATTACHMENT, &body, &options),
+            Err(mcap::McapError::BadAttachmentLength { .. })
+        ));
+    }
+}
 
 #[test]
 fn smoke() -> Result<()> {

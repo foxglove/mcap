@@ -292,6 +292,8 @@ fn recover_records<R: Read, W: Write + Seek>(
             .with_validate_chunk_crcs(false)
             .with_record_length_limit(RECOVER_RECORD_LENGTH_LIMIT),
     );
+    // The writer recomputes attachment CRCs from the recovered header and payload.
+    let parse_options = mcap::ParseOptions::default().with_validate_attachment_crcs(false);
 
     let mut sink = Some(sink);
     let mut writer = None;
@@ -324,7 +326,7 @@ fn recover_records<R: Read, W: Write + Seek>(
             }
             Ok(LinearReadEvent::Record { opcode, data }) => {
                 saw_any_record = true;
-                let record = match mcap::parse_record(opcode, data) {
+                let record = match mcap::parse_record_with_options(opcode, data, &parse_options) {
                     Ok(record) => record,
                     Err(err) => {
                         warn!("failed to parse record opcode 0x{opcode:02x}: {err:#}; skipping");
@@ -889,6 +891,132 @@ mod tests {
             offset = end;
         }
         None
+    }
+
+    fn attachment_input() -> (Vec<u8>, mcap::records::AttachmentIndex) {
+        let mut writer = mcap::Writer::new(Cursor::new(Vec::new())).expect("writer");
+        writer
+            .attach(&mcap::Attachment {
+                log_time: 20,
+                create_time: 10,
+                name: "tiny".into(),
+                media_type: "application/octet-stream".into(),
+                data: Cow::Borrowed(&[1, 2, 3]),
+            })
+            .expect("attachment");
+        writer.finish().expect("finish");
+        let input = writer.into_inner().into_inner();
+        let index = mcap::Summary::read(&input)
+            .expect("summary")
+            .expect("summary present")
+            .attachment_indexes
+            .remove(0);
+        (input, index)
+    }
+
+    #[test]
+    fn recovers_attachment_with_invalid_crc() {
+        let (mut input, index) = attachment_input();
+        let start = index.offset as usize + OPCODE_LEN_SIZE;
+        let end = (index.offset + index.length) as usize;
+        let expected = match mcap::parse_record(op::ATTACHMENT, &input[start..end])
+            .expect("valid attachment")
+            .into_owned()
+        {
+            Record::Attachment { header, data, crc } => (header, data, crc),
+            _ => panic!("expected attachment"),
+        };
+        input[end - 4] ^= 0xFF;
+        assert!(matches!(
+            mcap::parse_record(op::ATTACHMENT, &input[start..end]),
+            Err(mcap::McapError::BadAttachmentCrc { .. })
+        ));
+
+        let (output, stats) = recover_to_vec(&input, "preserve");
+        let attachments: Vec<_> = mcap::read::LinearReader::new(&output)
+            .expect("linear reader")
+            .map(|record| record.expect("strict output parse"))
+            .filter_map(|record| match record {
+                Record::Attachment { header, data, crc } => Some((header, data, crc)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(attachments, [expected]);
+        assert_eq!(stats.attachments.recovered, 1);
+        assert_eq!(stats.attachments.discarded, 0);
+        assert!(!stats.is_lossy());
+    }
+
+    #[test]
+    fn recovers_valid_and_zero_crc_attachments() {
+        for zero_crc in [false, true] {
+            let (mut input, index) = attachment_input();
+            let expected = mcap::read::attachment(&input, &index).expect("attachment");
+            let expected = mcap::Attachment {
+                data: Cow::Owned(expected.data.into_owned()),
+                ..expected
+            };
+            if zero_crc {
+                let end = (index.offset + index.length) as usize;
+                input[end - 4..end].fill(0);
+            }
+            let (output, stats) = recover_to_vec(&input, "preserve");
+            let summary = mcap::Summary::read(&output)
+                .expect("summary")
+                .expect("summary present");
+            assert_eq!(summary.attachment_indexes.len(), 1);
+            assert_eq!(
+                mcap::read::attachment(&output, &summary.attachment_indexes[0])
+                    .expect("strict attachment parse"),
+                expected
+            );
+            let end = (summary.attachment_indexes[0].offset + summary.attachment_indexes[0].length)
+                as usize;
+            let crc = u32::from_le_bytes(output[end - 4..end].try_into().expect("CRC"));
+            assert_ne!(crc, 0);
+            assert_eq!(stats.attachments.recovered, 1);
+            assert_eq!(stats.attachments.discarded, 0);
+            assert!(!stats.is_lossy());
+        }
+    }
+
+    #[test]
+    fn discards_attachment_with_invalid_data_length() {
+        let (mut input, index) = attachment_input();
+        let end = (index.offset + index.length) as usize;
+        let data_length_offset = end - 4 - 3 - 8;
+        input[data_length_offset..data_length_offset + 8].copy_from_slice(&u64::MAX.to_le_bytes());
+        let (output, stats) = recover_to_vec(&input, "preserve");
+        assert_eq!(count_output_records(&output), (0, 0, 0));
+        assert_eq!(stats.attachments.recovered, 0);
+        assert_eq!(stats.attachments.discarded, 1);
+        assert!(!stats.truncated);
+        assert!(stats.is_lossy());
+    }
+
+    #[test]
+    fn truncated_attachment_is_lossy() {
+        let (mut input, index) = attachment_input();
+        input.truncate((index.offset + index.length) as usize - 1);
+        let (output, stats) = recover_to_vec(&input, "preserve");
+        assert_eq!(count_output_records(&output), (0, 0, 0));
+        assert_eq!(stats.attachments.recovered, 0);
+        assert!(stats.truncated);
+        assert!(stats.is_lossy());
+    }
+
+    #[test]
+    fn attachment_record_length_limit_is_lossy() {
+        let (mut input, index) = attachment_input();
+        let offset = index.offset as usize;
+        input[offset + 1..offset + OPCODE_LEN_SIZE]
+            .copy_from_slice(&(super::RECOVER_RECORD_LENGTH_LIMIT as u64 + 1).to_le_bytes());
+        input.truncate(offset + OPCODE_LEN_SIZE);
+        let (output, stats) = recover_to_vec(&input, "preserve");
+        assert_eq!(count_output_records(&output), (0, 0, 0));
+        assert_eq!(stats.attachments.recovered, 0);
+        assert!(stats.truncated);
+        assert!(stats.is_lossy());
     }
 
     #[test]
