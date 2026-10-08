@@ -10,7 +10,7 @@ use crate::records::{
 };
 use crate::{parse_record, McapError, McapResult, Summary, MAGIC};
 
-const XOR: u8 = 0x5A;
+const XOR_KEY: u8 = 0x5A;
 
 enum DecoderKind {
     /// Length-prefixed XOR. Once the payload is finished, another `decompress` call is an error so
@@ -208,7 +208,7 @@ fn xor_decompress(
             }
             let take = src.len().min(dst.len()).min(left);
             for (out, input) in dst.iter_mut().zip(src.iter()).take(take) {
-                *out = input ^ XOR;
+                *out = input ^ XOR_KEY;
             }
             *remaining = Some(left - take);
             Ok(DecompressResult {
@@ -377,7 +377,7 @@ fn xor_mcap(chunks: &[ChunkSpec]) -> Vec<u8> {
             append_record(&mut records, op::MESSAGE, &message_body);
             let mut compressed = Vec::with_capacity(4 + records.len() + chunk.trailing);
             compressed.extend_from_slice(&(records.len() as u32).to_le_bytes());
-            compressed.extend(records.iter().map(|byte| byte ^ XOR));
+            compressed.extend(records.iter().map(|byte| byte ^ XOR_KEY));
             compressed.extend(std::iter::repeat_n(0xA5u8, chunk.trailing));
             BuiltChunk {
                 log_time: chunk.log_time,
@@ -793,13 +793,13 @@ fn two_chunk_mcap(compression: Option<crate::Compression>) -> Vec<u8> {
 }
 
 #[cfg(feature = "zstd")]
-struct ResetFails {
+struct FailingResetDecoder {
     inner: super::zstd::ZstdDecoder,
     poisoned: bool,
 }
 
 #[cfg(feature = "zstd")]
-impl Decompressor for ResetFails {
+impl Decompressor for FailingResetDecoder {
     fn next_read_size(&self) -> usize {
         self.inner.next_read_size()
     }
@@ -829,7 +829,7 @@ fn failed_reset_does_not_fall_back_to_the_builtin_decoder() {
     let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
     let mut reader = LinearReader::new();
     reader
-        .add_decompressor(ResetFails {
+        .add_decompressor(FailingResetDecoder {
             inner: super::zstd::ZstdDecoder::new(),
             poisoned: false,
         })

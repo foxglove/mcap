@@ -882,7 +882,7 @@ fn clamp_to_usize(len: u64) -> usize {
 }
 
 fn get_decompressor(
-    callers: &mut HashMap<String, Box<dyn Decompressor>>,
+    registered: &mut HashMap<String, Box<dyn Decompressor>>,
     builtins: &mut HashMap<String, Box<dyn Decompressor>>,
     name: &str,
 ) -> McapResult<Option<ActiveDecompressor>> {
@@ -891,7 +891,7 @@ fn get_decompressor(
     if name.is_empty() {
         return Ok(None);
     }
-    if let Some(decompressor) = callers.remove(name) {
+    if let Some(decompressor) = registered.remove(name) {
         return Ok(Some(ActiveDecompressor {
             decompressor,
             from_caller: true,
@@ -919,7 +919,7 @@ fn get_decompressor(
 }
 
 fn recycle_decompressor(
-    callers: &mut HashMap<String, Box<dyn Decompressor>>,
+    registered: &mut HashMap<String, Box<dyn Decompressor>>,
     builtins: &mut HashMap<String, Box<dyn Decompressor>>,
     mut active: ActiveDecompressor,
 ) -> McapResult<()> {
@@ -928,8 +928,8 @@ fn recycle_decompressor(
     let reset_result = active.decompressor.reset();
     let name = active.decompressor.name().to_owned();
     if active.from_caller {
-        callers.entry(name).or_insert(active.decompressor);
-    } else if !callers.contains_key(&name) {
+        registered.entry(name).or_insert(active.decompressor);
+    } else if !registered.contains_key(&name) {
         builtins.entry(name).or_insert(active.decompressor);
     }
     reset_result
