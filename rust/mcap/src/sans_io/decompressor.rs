@@ -11,32 +11,32 @@ pub struct DecompressResult {
     pub wrote: usize,
 }
 
-/// A streaming decompressor for one chunk compression string.
+/// A streaming decompressor for one chunk compression format.
 ///
-/// [`LinearReader`](crate::sans_io::LinearReader) and [`IndexedReader`](crate::sans_io::IndexedReader)
-/// accept an instance through `add_decompressor` and store it under [`Decompressor::name`]. That
-/// name is matched against the chunk `compression` field. These readers keep one instance per name
-/// and call [`Decompressor::reset`] after each chunk.
+/// Register an instance with `add_decompressor` on
+/// [`LinearReader`](crate::sans_io::LinearReader) or [`IndexedReader`](crate::sans_io::IndexedReader).
 /// [`MessageReader`](crate::sans_io::MessageReader), [`io::MessageReader`](crate::io::MessageReader),
-/// and, with the `tokio` feature, `tokio::LinearReader` forward to the
-/// [`LinearReader`](crate::sans_io::LinearReader) they own.
+/// and, with the `tokio` feature, `tokio::LinearReader` forward to their inner `LinearReader`.
+/// The reader uses it for chunks whose `compression` field equals [`Decompressor::name`], keeps
+/// one instance per name, and calls [`Decompressor::reset`] after each chunk.
+///
 /// [`MessageStream`](crate::MessageStream) and [`ChunkReader`](crate::read::ChunkReader) do not
-/// accept a decompressor.
+/// accept custom decompressors.
 pub trait Decompressor: Send {
     /// Returns the recommended size of input to pass into `decompress()`.
     fn next_read_size(&self) -> usize;
     /// Decompresses up to `dst.len()` bytes, consuming up to `src.len()` bytes from `src`.
     ///
-    /// `consumed` and `wrote` must not exceed the buffer lengths. Returning no progress asks the
-    /// reader for another call; [`Decompressor::next_read_size`] should grow when more input is
-    /// required. A reader that already supplied that much input treats the call as a stall.
+    /// `consumed` and `wrote` must not exceed the buffer lengths. Returning zero for both means
+    /// more input is needed; the reader treats this as an error unless
+    /// [`Decompressor::next_read_size`] now returns more than `src.len()` and more compressed
+    /// input remains in the chunk.
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult>;
-    /// Returns this decompressor to a fresh frame so it can decode another chunk.
+    /// Resets internal state so this instance can decode the next chunk.
     fn reset(&mut self) -> McapResult<()>;
     /// The chunk `compression` string this decompressor handles.
     ///
-    /// An empty string is rejected at registration. In a chunk record, `""` means the records are
-    /// stored uncompressed.
+    /// Must be non-empty: `""` marks an uncompressed chunk, and `add_decompressor` rejects it.
     fn name(&self) -> &'static str;
 }
 

@@ -43,7 +43,7 @@ use CurrentlyReading::*;
 
 struct ActiveDecompressor {
     decompressor: Box<dyn Decompressor>,
-    // False when this instance was constructed or cached as a built-in lz4/zstd decoder.
+    // True if registered through `add_decompressor`, false for a built-in lz4/zstd decoder.
     from_caller: bool,
 }
 
@@ -386,24 +386,17 @@ impl LinearReader {
     }
 
     /// Registers a decompressor for chunks whose `compression` field equals
-    /// [`Decompressor::name`](super::decompressor::Decompressor::name).
+    /// [`Decompressor::name`].
     ///
-    /// Call this before reading. A registered decompressor is used for that compression string,
-    /// including `"lz4"` and `"zstd"`, whether or not the matching crate feature is enabled. Any
-    /// other non-empty name selects a caller-supplied format. When no decompressor is registered,
-    /// `"lz4"` and `"zstd"` still use the built-in decoders if those features are on, and any other
-    /// non-empty name returns [`McapError::UnsupportedCompression`].
-    ///
-    /// The reader keeps one instance per name and calls [`Decompressor::reset`] after each chunk.
-    ///
-    /// [`MessageReader`](super::message_reader::MessageReader),
-    /// [`io::MessageReader`](crate::io::MessageReader), and, with the `tokio` feature,
-    /// `tokio::LinearReader` forward to this method.
-    /// [`MessageStream`](crate::MessageStream) and [`ChunkReader`](crate::read::ChunkReader) do not.
+    /// Call this before reading. A registered decompressor takes precedence over the built-in
+    /// `"lz4"` and `"zstd"` decoders and works whether or not those crate features are enabled.
+    /// Without a registration, `"lz4"` and `"zstd"` chunks use the built-in decoders when their
+    /// features are enabled, and any other non-empty compression string returns
+    /// [`McapError::UnsupportedCompression`].
     ///
     /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
-    /// [`McapError::DuplicateDecompressor`] when that name is already registered, including when
-    /// that caller-supplied decoder is in use for the chunk currently being read.
+    /// [`McapError::DuplicateDecompressor`] when that name is already registered, including while
+    /// the registered decompressor is decoding the current chunk.
     pub fn add_decompressor(
         &mut self,
         decompressor: impl Decompressor + 'static,
@@ -418,7 +411,7 @@ impl LinearReader {
             return Err(McapError::DuplicateDecompressor(name));
         }
         register_decompressor(&mut self.decompressors, decompressor)?;
-        // A caller registration wins over a built-in already cached under this name.
+        // A cached built-in decoder for this name will no longer be used.
         self.builtin_decompressors.remove(&name);
         Ok(())
     }
@@ -886,8 +879,7 @@ fn get_decompressor(
     builtins: &mut HashMap<String, Box<dyn Decompressor>>,
     name: &str,
 ) -> McapResult<Option<ActiveDecompressor>> {
-    // An empty compression string means the chunk records are stored uncompressed. Check it
-    // before the maps so a decompressor cannot register itself for that case.
+    // An empty compression string means the chunk is uncompressed.
     if name.is_empty() {
         return Ok(None);
     }
@@ -971,9 +963,8 @@ fn decompress_inner(
         let dst_len = dst.len();
         let res = check_decompress_result(decompressor.decompress(src, dst)?, src_len, dst_len)?;
         if res.consumed == 0 && res.wrote == 0 {
-            // zstd reports this, and raises next_read_size, when the buffer does not yet hold the
-            // next frame header. Asking for that input is progress. It is a stall only when the
-            // decompressor already had as many bytes as it requested.
+            // No progress means the decompressor wants more input. Read more if next_read_size now
+            // asks for more than is buffered; otherwise it is a stall.
             let retry_need = decompressor
                 .next_read_size()
                 .min(clamp_to_usize(*compressed_remaining));

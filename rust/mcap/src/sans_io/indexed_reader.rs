@@ -256,21 +256,17 @@ impl IndexedReader {
     }
 
     /// Registers a decompressor for chunks whose `compression` field equals
-    /// [`Decompressor::name`](super::decompressor::Decompressor::name).
+    /// [`Decompressor::name`].
     ///
-    /// Call this before reading. A registered decompressor is used for that compression string,
-    /// including `"lz4"` and `"zstd"`, whether or not the matching crate feature is enabled. Any
-    /// other non-empty name selects a caller-supplied format. When no decompressor is registered,
-    /// `"lz4"` and `"zstd"` still use the built-in decoders if those features are on, and any other
-    /// non-empty name returns [`McapError::UnsupportedCompression`].
+    /// Call this before reading. A registered decompressor takes precedence over the built-in
+    /// `"lz4"` and `"zstd"` decoders and works whether or not those crate features are enabled.
+    /// Without a registration, `"lz4"` and `"zstd"` chunks use the built-in decoders when their
+    /// features are enabled, and any other non-empty compression string returns
+    /// [`McapError::UnsupportedCompression`].
     ///
-    /// The reader keeps one instance per name and calls [`Decompressor::reset`] after each chunk.
-    /// Chunk slots may retain decompressed bytes from several chunks at once; decompression itself
-    /// runs to completion inside [`IndexedReader::insert_chunk_record_data`](Self::insert_chunk_record_data).
-    ///
-    /// [`MessageStream`](crate::MessageStream) and [`ChunkReader`](crate::read::ChunkReader) do not
-    /// accept a decompressor. The streaming message readers forward to
-    /// [`LinearReader`](super::linear_reader::LinearReader) instead.
+    /// Each chunk is fully decompressed inside
+    /// [`insert_chunk_record_data`](Self::insert_chunk_record_data), so one instance per name is
+    /// enough even when several decompressed chunks are buffered at once.
     ///
     /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
     /// [`McapError::DuplicateDecompressor`] when that name is already registered.
@@ -563,14 +559,13 @@ impl IndexedReaderOptions {
     }
 }
 
-/// Insert indexes into `message_indexes` for every message in this chunk that matches the filter
-/// criteria.
-/// Drives a streaming [`Decompressor`] until `uncompressed_size` bytes have been written.
+/// Drives a streaming [`Decompressor`] until `uncompressed_size` bytes have been written, then
+/// resets it, even on error.
 ///
-/// The whole compressed chunk is already in memory. Bytes left over after that are not passed to
-/// the decoder: lz4 and zstd treat them as the start of another frame, and both the built-in
-/// indexed lz4 path and [`LinearReader`](super::linear_reader::LinearReader) leave that padding
-/// unread. [`Decompressor::reset`] runs afterward so the same instance can decode the next chunk.
+/// Stops calling the decompressor once the output is full, so compressed bytes after the end of
+/// the frame are left unread, as the built-in lz4 path and
+/// [`LinearReader`](super::linear_reader::LinearReader) do. lz4 and zstd decoders would otherwise
+/// treat that padding as the start of another frame.
 fn decompress_registered(
     decompressor: &mut dyn Decompressor,
     src: &[u8],
@@ -601,11 +596,12 @@ fn decompress_registered(
         }
         Ok(())
     })();
-    // Prefer the decompression error when reset also fails, so a short read is not reported as a
-    // reset failure.
+    // A decompression error takes precedence over a reset error.
     decompressed.and(decompressor.reset())
 }
 
+/// Insert indexes into `message_indexes` for every message in this chunk that matches the filter
+/// criteria.
 fn index_messages(
     chunk_slot_idx: usize,
     chunk_slots: &[ChunkSlot],
