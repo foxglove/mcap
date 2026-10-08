@@ -562,10 +562,10 @@ impl IndexedReaderOptions {
 /// Drives a streaming [`Decompressor`] until `uncompressed_size` bytes have been written, then
 /// resets it, even on error.
 ///
-/// Stops calling the decompressor once the output is full, so compressed bytes after the end of
-/// the frame are left unread, as the built-in lz4 path and
-/// [`LinearReader`](super::linear_reader::LinearReader) do. lz4 and zstd decoders would otherwise
-/// treat that padding as the start of another frame.
+/// Stops calling the decompressor once the output is full, as the built-in lz4 path and
+/// [`LinearReader`](super::linear_reader::LinearReader) do, so compressed bytes left at that point,
+/// such as padding after the last frame, are ignored. lz4 and zstd decoders would otherwise treat
+/// that padding as the start of another frame.
 fn decompress_registered(
     decompressor: &mut dyn Decompressor,
     src: &[u8],

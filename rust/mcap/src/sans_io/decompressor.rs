@@ -21,11 +21,16 @@ pub struct DecompressResult {
 /// one instance per name, and calls [`Decompressor::reset`] after each chunk.
 ///
 /// [`MessageStream`](crate::MessageStream) and [`ChunkReader`](crate::read::ChunkReader) do not
-/// accept custom decompressors.
+/// accept custom decompressors. For bytes already in memory, use
+/// [`io::MessageReader`](crate::io::MessageReader) over a [`std::io::Cursor`] instead.
 pub trait Decompressor: Send {
     /// Returns the recommended size of input to pass into `decompress()`.
     fn next_read_size(&self) -> usize;
     /// Decompresses up to `dst.len()` bytes, consuming up to `src.len()` bytes from `src`.
+    ///
+    /// A chunk may contain several frames, including skippable ones, so keep decoding across frame
+    /// boundaries. The reader stops calling this once the chunk's declared uncompressed size has
+    /// been written.
     ///
     /// `consumed` and `wrote` must not exceed the buffer lengths. Returning zero for both means
     /// more input is needed; the reader treats this as an error unless

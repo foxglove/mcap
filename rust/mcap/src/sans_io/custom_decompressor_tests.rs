@@ -755,6 +755,88 @@ fn registered_decompressor_replaces_builtin() {
     }
 }
 
+#[cfg(feature = "zstd")]
+#[test]
+fn registered_decompressor_reads_multi_frame_chunks() {
+    let mut message_body = write_body(&MessageHeader {
+        channel_id: 1,
+        sequence: 1,
+        log_time: 7,
+        publish_time: 7,
+    });
+    message_body.extend_from_slice(b"multi-frame payload");
+    let mut records = Vec::new();
+    append_record(&mut records, op::MESSAGE, &message_body);
+    let (head, tail) = records.split_at(records.len() / 2);
+    let encode = |bytes: &[u8]| zstd::encode_all(Cursor::new(bytes), 0).expect("encode");
+    // A zstd skippable frame: magic number, content length, then that many bytes.
+    let mut skippable = 0x184D_2A50u32.to_le_bytes().to_vec();
+    skippable.extend_from_slice(&4u32.to_le_bytes());
+    skippable.extend_from_slice(&[1, 2, 3, 4]);
+    let cases = [
+        ("concatenated frames", [encode(head), encode(tail)].concat()),
+        (
+            "skippable frame then data frame",
+            [skippable, encode(&records)].concat(),
+        ),
+    ];
+
+    for (label, compressed) in cases {
+        let mcap = write_indexed_mcap(&[BuiltChunk {
+            log_time: 7,
+            compression: "zstd".into(),
+            uncompressed_size: records.len() as u64,
+            compressed,
+        }]);
+
+        // One-byte reads make the linear reader cross frame boundaries between reads.
+        for read_size in [usize::MAX, 1] {
+            let mut reader = LinearReader::new();
+            reader
+                .add_decompressor(super::zstd::ZstdDecoder::new())
+                .expect("register");
+            let mut cursor = Cursor::new(mcap.as_slice());
+            let mut messages = 0;
+            while let Some(event) = reader.next_event() {
+                match event.unwrap_or_else(|err| panic!("{label}, linear: {err}")) {
+                    LinearReadEvent::ReadRequest(need) => {
+                        let read = cursor
+                            .read(reader.insert(need.min(read_size)))
+                            .expect("read");
+                        reader.notify_read(read);
+                    }
+                    LinearReadEvent::Record { opcode, .. } if opcode == op::MESSAGE => {
+                        messages += 1;
+                    }
+                    LinearReadEvent::Record { .. } => {}
+                }
+            }
+            assert_eq!(messages, 1, "{label}, linear, read size {read_size}");
+        }
+
+        let summary = Summary::read(&mcap)
+            .expect("summary read")
+            .expect("summary");
+        let mut reader = IndexedReader::new(&summary).expect("reader");
+        reader
+            .add_decompressor(super::zstd::ZstdDecoder::new())
+            .expect("register");
+        let mut messages = 0;
+        while let Some(event) = reader.next_event() {
+            match event.unwrap_or_else(|err| panic!("{label}, indexed: {err}")) {
+                IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                    let start = offset as usize;
+                    reader
+                        .insert_chunk_record_data(offset, &mcap[start..start + length])
+                        .unwrap_or_else(|err| panic!("{label}, indexed: {err}"));
+                }
+                IndexedReadEvent::Message { .. } => messages += 1,
+            }
+        }
+        assert_eq!(messages, 1, "{label}, indexed");
+    }
+}
+
 #[test]
 fn over_reported_buffer_lengths_are_errors() {
     let mcap = xor_mcap(&sample_chunks());

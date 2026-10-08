@@ -491,6 +491,10 @@ impl<'a> Iterator for RawMessageStream<'a> {
 ///
 /// This stops at the end of the data section and does not read the summary.
 ///
+/// Only the built-in lz4 and zstd decompressors are supported. For a custom
+/// [`Decompressor`](crate::sans_io::decompressor::Decompressor), use
+/// [`io::MessageReader`](crate::io::MessageReader) over a [`std::io::Cursor`] instead.
+///
 /// Because tying the lifetime of each message to the underlying MCAP memory map
 /// makes it very difficult to send between threads or use in async land,
 /// and because we assume _most_ MCAP files have _most_ messages in compressed chunks,
