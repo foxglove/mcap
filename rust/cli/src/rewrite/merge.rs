@@ -71,8 +71,8 @@ struct MaterializedInputMessages {
 }
 
 enum MergeMessageStream<'a> {
-    // IndexedReader carries chunk buffers and decompressor state, so this variant is boxed to
-    // keep the enum small.
+    // Boxed because IndexedReader's inline state, including its decompressor map, is far larger
+    // than the other variant.
     Indexed(Box<IndexedInputMessageReader<'a>>),
     Materialized(MaterializedInputMessages),
 }

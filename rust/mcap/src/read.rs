@@ -8,9 +8,10 @@
 //! the file.
 //!
 //! The readers in this module, including [`Summary::stream_chunk`], use only the built-in
-//! decompressors. To register a custom
-//! [`Decompressor`](crate::sans_io::decompressor::Decompressor), use one of the streaming readers;
-//! for bytes already in memory, wrap them in a [`std::io::Cursor`].
+//! decompressors. For a custom [`Decompressor`](crate::sans_io::decompressor::Decompressor), use
+//! [`crate::sans_io::LinearReader`], [`crate::sans_io::IndexedReader`], or
+//! [`crate::io::MessageReader`], which reads bytes already in memory through a
+//! [`std::io::Cursor`].
 use std::{
     borrow::Cow,
     collections::{hash_map::Entry, BTreeMap, HashMap},

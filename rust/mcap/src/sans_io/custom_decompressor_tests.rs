@@ -21,8 +21,8 @@ struct XorFrame {
 }
 
 enum DecoderKind {
-    /// Length-prefixed XOR. Once the payload is finished, another `decompress` call is an error so
-    /// tests can tell that padding after the frame was fed to the decoder. `reset` starts a new frame.
+    /// Length-prefixed XOR. Once the payload is finished, passing more input is an error so tests
+    /// can tell that padding after the frame was fed to the decoder. `reset` starts a new frame.
     Xor(XorFrame),
     /// Like `Xor`, but makes no progress until the whole frame is in `src`.
     WholeFrame {
@@ -205,8 +205,6 @@ fn xor_decompress(
         });
     }
     match frame.remaining {
-        // The frame is finished. Padding after it must not be passed back in; a later chunk has
-        // to reset() before this decoder will start another frame.
         Some(0) => Err(McapError::DecompressionError(
             "padding was fed to a finished frame".into(),
         )),
@@ -447,7 +445,7 @@ fn build_xor_mcap(chunks: &[ChunkSpec], corrupt_crc: bool) -> Vec<u8> {
     write_indexed_mcap(&built)
 }
 
-/// Byte offset of a chunk record's length field, and the end of its body.
+/// Byte offset of the first chunk record's length field, and the end of its body.
 fn chunk_record_span(mcap: &[u8]) -> (usize, usize) {
     let mut offset = MAGIC.len();
     while offset + 9 <= mcap.len() {

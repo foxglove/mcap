@@ -24,7 +24,7 @@ pub struct DecompressResult {
 /// `reset` is not called before the first chunk, so the instance must be ready to decode when it
 /// is registered.
 ///
-/// [`MessageStream`](crate::MessageStream) and [`ChunkReader`](crate::read::ChunkReader) do not
+/// The readers in [`crate::read`], including [`MessageStream`](crate::MessageStream), do not
 /// accept custom decompressors. For bytes already in memory, use
 /// [`io::MessageReader`](crate::io::MessageReader) over a [`std::io::Cursor`] instead.
 pub trait Decompressor: Send {
@@ -69,9 +69,9 @@ pub trait Decompressor: Send {
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult>;
     /// Resets internal state so this instance can decode another chunk.
     ///
-    /// Not called before the first chunk. Register an instance that is already ready to decode.
-    /// On [`LinearReader`](crate::sans_io::LinearReader), a bad chunk CRC is returned instead of a
-    /// reset error when both fail. The instance is still kept for the next chunk.
+    /// If this fails, the reader returns the error and keeps the instance for the next chunk. A bad
+    /// chunk CRC on [`LinearReader`](crate::sans_io::LinearReader), or a decompression error on
+    /// [`IndexedReader`](crate::sans_io::IndexedReader), is returned instead when both occur.
     fn reset(&mut self) -> McapResult<()>;
     /// The chunk `compression` string this decompressor handles.
     ///

@@ -389,11 +389,11 @@ impl LinearReader {
     /// Registers a decompressor for chunks whose `compression` field equals
     /// [`Decompressor::name`].
     ///
-    /// Call this before reading. A registered decompressor takes precedence over the built-in
-    /// `"lz4"` and `"zstd"` decoders and works whether or not those crate features are enabled.
-    /// Without a registration, `"lz4"` and `"zstd"` chunks use the built-in decoders when their
-    /// features are enabled, and any other non-empty compression string returns
-    /// [`McapError::UnsupportedCompression`].
+    /// Call this before reading the chunks it should decode. A registered decompressor takes
+    /// precedence over the built-in `"lz4"` and `"zstd"` decoders and works whether or not those
+    /// crate features are enabled. Without a registration, `"lz4"` and `"zstd"` chunks use the
+    /// built-in decoders when their features are enabled, and any other non-empty compression
+    /// string returns [`McapError::UnsupportedCompression`].
     ///
     /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
     /// [`McapError::DuplicateDecompressor`] when that name is already registered, including while
@@ -961,7 +961,7 @@ fn recycle_decompressor(
 /// Compressed bytes to request when a decompressor's `next_read_size()` is 0.
 const DEFAULT_COMPRESSED_READ_SIZE: usize = 64 * 1024;
 
-// decompresses up to `n` bytes from `from` into `to`. Repeatedly calls `decompress` until
+// decompresses up to `n` bytes from `src_buf` into `dest_buf`. Repeatedly calls `decompress` until
 // either the input is exhausted or enough data has been written. Returns None if all required
 // data has been decompressed, or Some(need) if more bytes need to be read from the input.
 //
@@ -1001,9 +1001,9 @@ fn decompress_inner(
             return Err(McapError::UnexpectedEoc);
         }
         // A hint of 0 means "any amount". Do not call decompress with an empty buffer while the
-        // chunk still has compressed bytes, or a frame boundary (where lz4 and zstd report 0)
-        // looks like a stall. Checked after the output is known to have room, so a full output
-        // buffer does not trigger an extra read.
+        // chunk still has compressed bytes, or a frame boundary (where the built-in lz4 and zstd
+        // decoders hint 0) looks like a stall. Checked after the output is known to have room, so
+        // a full output buffer does not trigger an extra read.
         if have == 0 && remaining > 0 {
             return Ok(Some(
                 DEFAULT_COMPRESSED_READ_SIZE

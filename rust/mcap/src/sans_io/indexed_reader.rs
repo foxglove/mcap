@@ -258,11 +258,11 @@ impl IndexedReader {
     /// Registers a decompressor for chunks whose `compression` field equals
     /// [`Decompressor::name`].
     ///
-    /// Call this before reading. A registered decompressor takes precedence over the built-in
-    /// `"lz4"` and `"zstd"` decoders and works whether or not those crate features are enabled.
-    /// Without a registration, `"lz4"` and `"zstd"` chunks use the built-in decoders when their
-    /// features are enabled, and any other non-empty compression string returns
-    /// [`McapError::UnsupportedCompression`].
+    /// Call this before reading the chunks it should decode. A registered decompressor takes
+    /// precedence over the built-in `"lz4"` and `"zstd"` decoders and works whether or not those
+    /// crate features are enabled. Without a registration, `"lz4"` and `"zstd"` chunks use the
+    /// built-in decoders when their features are enabled, and any other non-empty compression
+    /// string returns [`McapError::UnsupportedCompression`].
     ///
     /// Each chunk is fully decompressed inside
     /// [`insert_chunk_record_data`](Self::insert_chunk_record_data), so one instance per name is
@@ -562,10 +562,8 @@ impl IndexedReaderOptions {
 /// Drives a streaming [`Decompressor`] until `uncompressed_size` bytes have been written, then
 /// resets it, even on error.
 ///
-/// Stops calling the decompressor once the output is full, as the built-in lz4 path and
-/// [`LinearReader`](super::linear_reader::LinearReader) do, so compressed bytes left at that point,
-/// such as padding after the last frame, are ignored. lz4 and zstd decoders would otherwise treat
-/// that padding as the start of another frame.
+/// Compressed bytes left once the output is full, such as padding after the last frame, are never
+/// passed to the decompressor, which could read them as the start of another frame.
 fn decompress_registered(
     decompressor: &mut dyn Decompressor,
     src: &[u8],
