@@ -16,15 +16,18 @@ pub struct DecompressResult {
 /// A streaming decompressor for one MCAP chunk compression format.
 ///
 /// [`name`](Self::name) is the chunk `compression` string this decompressor handles. Register an
-/// instance with a reader's `add_decompressor` before that reader reaches a chunk with the name.
+/// instance before the reader reaches a chunk with that name.
+/// [`LinearReader`](crate::sans_io::LinearReader),
+/// [`IndexedReader`](crate::sans_io::IndexedReader), and the readers that wrap `LinearReader`
+/// accept one. The readers in [`crate::read`] do not.
 /// One instance is kept per name. [`reset`](Self::reset) is called after each chunk, and not
 /// before the first, so the instance must be ready to decode when it is registered.
 pub trait Decompressor: Send {
     /// How many compressed bytes should be available in `src` on the next
     /// [`decompress`](Self::decompress) call.
     ///
-    /// Return 0 when any amount of input is acceptable. Otherwise return how many bytes must be
-    /// buffered before progress is possible. A caller may pass fewer bytes than this asks for.
+    /// Return 0 when any amount of input is acceptable. Otherwise return how many bytes to buffer
+    /// before the next call, not a minimum. A caller may pass fewer bytes than this asks for.
     fn next_read_size(&self) -> usize;
     /// Decompresses bytes from `src` into `dst`.
     ///

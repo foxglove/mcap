@@ -482,13 +482,14 @@ struct LinearScan {
     errors: Vec<McapError>,
 }
 
-/// Drives `reader` over `mcap`, supplying at most `max_read` bytes per read, and stops at the first error.
+/// Drives `reader` over `mcap`, supplying at most `max_read` bytes per read, and stops at the
+/// first error.
 fn drive_linear(mcap: &[u8], reader: &mut LinearReader, max_read: usize) -> LinearScan {
     drive_linear_with(mcap, reader, max_read, |_| true, |_| false)
 }
 
-/// Like [`drive_linear`]. `on_message` ends the scan when it returns true. `stop_on_error` ends
-/// the scan when it returns true for an error.
+/// Like [`drive_linear`]. `stop_on_error` ends the scan when it returns true for an error.
+/// `on_message` ends the scan when it returns true after a message.
 fn drive_linear_with(
     mcap: &[u8],
     reader: &mut LinearReader,
@@ -1039,16 +1040,17 @@ fn no_progress_buffers_more_input_until_the_frame_fits() {
 #[test]
 fn zero_read_size_reads_compressed_data_in_blocks() {
     let mcap = xor_mcap(&[ChunkSpec::new(10, &[7; 4096], 0)]);
-    let (requests, result) = linear_read_requests(
-        &mcap,
-        TestDecoder::xor("xor").with_read_size(0),
-        LinearReaderOptions::default(),
-    );
-    result.expect("read");
+    let mut reader = LinearReader::new();
+    reader
+        .add_decompressor(TestDecoder::xor("xor").with_read_size(0))
+        .expect("register");
+    let scan = drive_linear(&mcap, &mut reader, usize::MAX);
+    assert!(scan.errors.is_empty(), "{:?}", scan.errors);
+    assert_eq!(scan.messages, vec![(1, 10, vec![7; 4096])]);
     assert!(
-        requests.len() < 20,
+        scan.requests.len() < 20,
         "a hint of 0 should not read one byte per call: {} requests",
-        requests.len()
+        scan.requests.len()
     );
 }
 

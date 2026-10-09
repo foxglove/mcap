@@ -266,7 +266,9 @@ impl IndexedReader {
     ///
     /// Each chunk is fully decompressed inside
     /// [`insert_chunk_record_data`](Self::insert_chunk_record_data), so one instance per name is
-    /// enough even when several decompressed chunks are buffered at once.
+    /// enough even when several decompressed chunks are buffered at once. The chunk is already in
+    /// memory, so [`Decompressor::next_read_size`] is not used. A `decompress` call that makes no
+    /// progress is an error.
     ///
     /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
     /// [`McapError::DuplicateDecompressor`] when that name is already registered.

@@ -395,6 +395,13 @@ impl LinearReader {
     /// built-in decoders when their features are enabled, and any other non-empty compression
     /// string returns [`McapError::UnsupportedCompression`].
     ///
+    /// Before each `decompress` call, this reader buffers [`Decompressor::next_read_size`] bytes,
+    /// or up to 64 KiB when that returns 0. A small hint produces small reads. After a call that
+    /// makes no progress, it buffers at least twice as much input, or the hint if that is larger.
+    /// It returns [`McapError::ChunkTooLarge`] when the buffer reaches
+    /// [`record_length_limit`](LinearReaderOptions::record_length_limit), and a decompression
+    /// error when every remaining compressed byte is already buffered.
+    ///
     /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
     /// [`McapError::DuplicateDecompressor`] when that name is already registered, including while
     /// the registered decompressor is decoding the current chunk.
