@@ -461,6 +461,19 @@ fn chunk_record_span(mcap: &[u8]) -> (usize, usize) {
     panic!("file has no chunk record");
 }
 
+/// Byte length of the first chunk's header, up to and including `compressed_size`.
+fn chunk_header_len(mcap: &[u8]) -> usize {
+    let (len_at, _) = chunk_record_span(mcap);
+    // start time, end time, uncompressed size, uncompressed CRC
+    let compression_len_at = len_at + 8 + 28;
+    let compression_len = u32::from_le_bytes(
+        mcap[compression_len_at..compression_len_at + 4]
+            .try_into()
+            .unwrap(),
+    );
+    32 + compression_len as usize + 8
+}
+
 fn sample_chunks() -> Vec<ChunkSpec> {
     vec![ChunkSpec::new(10, b"one", 0), ChunkSpec::new(20, b"two", 3)]
 }
@@ -503,6 +516,33 @@ fn read_linear_with_options(
         }
     }
     Ok(messages)
+}
+
+/// Reads `mcap` with `decompressor`, returning every `ReadRequest` size and the final result.
+fn linear_read_requests(
+    mcap: &[u8],
+    decompressor: TestDecoder,
+    options: LinearReaderOptions,
+) -> (Vec<usize>, McapResult<()>) {
+    let mut reader = LinearReader::new_with_options(options);
+    reader.add_decompressor(decompressor).expect("register");
+    let mut cursor = Cursor::new(mcap);
+    let mut requests = Vec::new();
+    let mut iterations = 0;
+    while let Some(event) = reader.next_event() {
+        iterations += 1;
+        assert!(iterations < 100_000, "linear reader did not finish");
+        match event {
+            Ok(LinearReadEvent::ReadRequest(need)) => {
+                requests.push(need);
+                let read = cursor.read(reader.insert(need)).expect("read");
+                reader.notify_read(read);
+            }
+            Ok(LinearReadEvent::Record { .. }) => {}
+            Err(err) => return (requests, Err(err)),
+        }
+    }
+    (requests, Ok(()))
 }
 
 fn read_indexed(
@@ -644,6 +684,88 @@ fn add_decompressor_rejects_empty_and_duplicate_names() {
 }
 
 #[test]
+fn add_decompressor_rejects_a_name_held_by_the_open_chunk() {
+    let mcap = xor_mcap(&sample_chunks());
+    let mut reader = LinearReader::new();
+    reader
+        .add_decompressor(TestDecoder::xor("xor"))
+        .expect("register");
+    let mut cursor = Cursor::new(mcap.as_slice());
+    let mut saw_message = false;
+    while let Some(event) = reader.next_event() {
+        match event.expect("read") {
+            LinearReadEvent::ReadRequest(need) => {
+                let read = cursor.read(reader.insert(need)).expect("read");
+                reader.notify_read(read);
+            }
+            LinearReadEvent::Record { opcode, .. } if opcode == op::MESSAGE => {
+                saw_message = true;
+                break;
+            }
+            LinearReadEvent::Record { .. } => {}
+        }
+    }
+    assert!(saw_message, "expected to be inside a chunk");
+    assert!(matches!(
+        reader.add_decompressor(TestDecoder::xor("xor")),
+        Err(McapError::DuplicateDecompressor(name)) if name == "xor"
+    ));
+}
+
+#[test]
+fn chunk_header_error_keeps_the_registered_decompressor() {
+    let mut mcap = xor_mcap(&[ChunkSpec::new(10, b"one", 0)]);
+    let (len_at, _) = chunk_record_span(&mcap);
+    let len = u64::from_le_bytes(mcap[len_at..len_at + 8].try_into().unwrap());
+    mcap[len_at..len_at + 8].copy_from_slice(&(len + 10_000).to_le_bytes());
+
+    let mut reader = LinearReader::new_with_options(
+        LinearReaderOptions::default().with_record_length_limit(128),
+    );
+    reader
+        .add_decompressor(TestDecoder::xor("xor"))
+        .expect("register");
+    let mut cursor = Cursor::new(mcap.as_slice());
+    let mut iterations = 0;
+    let err = loop {
+        iterations += 1;
+        assert!(iterations < 100_000, "linear reader did not finish");
+        match reader.next_event().expect("header length is known") {
+            Ok(LinearReadEvent::ReadRequest(need)) => {
+                let read = cursor.read(reader.insert(need)).expect("read");
+                reader.notify_read(read);
+            }
+            Ok(LinearReadEvent::Record { .. }) => {}
+            Err(err) => break err,
+        }
+    };
+    assert!(
+        matches!(err, McapError::ChunkTooLarge(_)),
+        "unexpected error: {err}"
+    );
+    assert!(
+        matches!(
+            reader.add_decompressor(TestDecoder::xor("xor")),
+            Err(McapError::DuplicateDecompressor(name)) if name == "xor"
+        ),
+        "the header error dropped the registered decompressor"
+    );
+}
+
+#[test]
+fn custom_compression_without_registration_is_unsupported() {
+    let mcap = xor_mcap(&sample_chunks());
+    assert!(matches!(
+        read_linear(&mcap, None),
+        Err(McapError::UnsupportedCompression(name)) if name == "xor"
+    ));
+    assert!(matches!(
+        read_indexed(&mcap, None),
+        Err(McapError::UnsupportedCompression(name)) if name == "xor"
+    ));
+}
+
+#[test]
 fn custom_compression_round_trips_through_both_readers() {
     let mcap = xor_mcap(&sample_chunks());
     let expected = vec![(1, 10, b"one".to_vec()), (1, 20, b"two".to_vec())];
@@ -716,88 +838,6 @@ async fn tokio_linear_reader_forwards_the_decompressor() {
 }
 
 #[test]
-fn custom_compression_without_registration_is_unsupported() {
-    let mcap = xor_mcap(&sample_chunks());
-    assert!(matches!(
-        read_linear(&mcap, None),
-        Err(McapError::UnsupportedCompression(name)) if name == "xor"
-    ));
-    assert!(matches!(
-        read_indexed(&mcap, None),
-        Err(McapError::UnsupportedCompression(name)) if name == "xor"
-    ));
-}
-
-#[test]
-fn no_progress_buffers_more_input_until_the_frame_fits() {
-    let expected = vec![(1, 10, b"one".to_vec()), (1, 20, b"two".to_vec())];
-    for decoder in [TestDecoder::whole_frame, TestDecoder::whole_frame_with_hint] {
-        assert_eq!(
-            read_linear(&xor_mcap(&sample_chunks()), Some(decoder("xor"))).expect("linear"),
-            expected
-        );
-    }
-
-    let mcap = xor_mcap(&[ChunkSpec::new(10, &[7; 4096], 0)]);
-    let request_count = |decoder| {
-        let (requests, result) =
-            linear_read_requests(&mcap, decoder, LinearReaderOptions::default());
-        result.expect("read");
-        requests.len()
-    };
-    let doubled = request_count(TestDecoder::whole_frame("xor"));
-    let hinted = request_count(TestDecoder::whole_frame_with_hint("xor"));
-    assert!(
-        doubled < 40,
-        "no progress should grow the buffer, not add one byte per call: {doubled} requests"
-    );
-    assert!(
-        hinted < doubled,
-        "a raised next_read_size should be fetched at once: {hinted} vs {doubled} requests"
-    );
-}
-
-#[test]
-fn add_decompressor_rejects_a_name_held_by_the_open_chunk() {
-    let mcap = xor_mcap(&sample_chunks());
-    let mut reader = LinearReader::new();
-    reader
-        .add_decompressor(TestDecoder::xor("xor"))
-        .expect("register");
-    let mut cursor = Cursor::new(mcap.as_slice());
-    let mut saw_message = false;
-    while let Some(event) = reader.next_event() {
-        match event.expect("read") {
-            LinearReadEvent::ReadRequest(need) => {
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            LinearReadEvent::Record { opcode, .. } if opcode == op::MESSAGE => {
-                saw_message = true;
-                break;
-            }
-            LinearReadEvent::Record { .. } => {}
-        }
-    }
-    assert!(saw_message, "expected to be inside a chunk");
-    assert!(matches!(
-        reader.add_decompressor(TestDecoder::xor("xor")),
-        Err(McapError::DuplicateDecompressor(name)) if name == "xor"
-    ));
-}
-
-#[test]
-fn stalled_decompressor_returns_an_error() {
-    let mcap = xor_mcap(&sample_chunks());
-    assert_no_progress(
-        read_linear(&mcap, Some(TestDecoder::stall("xor"))).expect_err("linear should stall"),
-    );
-    assert_no_progress(
-        read_indexed(&mcap, Some(TestDecoder::stall("xor"))).expect_err("indexed should stall"),
-    );
-}
-
-#[test]
 fn registered_decompressor_replaces_builtin() {
     let builtins: &[(crate::Compression, &'static str)] = &[
         #[cfg(feature = "zstd")]
@@ -816,6 +856,40 @@ fn registered_decompressor_replaces_builtin() {
                 .expect_err("indexed should use caller"),
         );
     }
+}
+
+#[cfg(feature = "zstd")]
+#[test]
+fn builtin_cache_does_not_count_as_a_caller_registration() {
+    let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
+    let mut reader = LinearReader::new();
+    let mut cursor = Cursor::new(&mcap);
+    let mut messages = 0;
+    let mut iterations = 0;
+    let err = loop {
+        iterations += 1;
+        assert!(iterations < 100_000, "linear reader did not finish");
+        match reader.next_event().expect("the second chunk should fail") {
+            Ok(LinearReadEvent::ReadRequest(need)) => {
+                let read = cursor.read(reader.insert(need)).expect("read");
+                reader.notify_read(read);
+            }
+            Ok(LinearReadEvent::Record { opcode, .. }) => {
+                if opcode == op::MESSAGE {
+                    messages += 1;
+                    if messages == 1 {
+                        // The built-in zstd decoder is decoding the first chunk at this point.
+                        reader
+                            .add_decompressor(TestDecoder::fail("zstd"))
+                            .expect("a built-in decoder is not a caller registration");
+                    }
+                }
+            }
+            Err(err) => break err,
+        }
+    };
+    assert_eq!(messages, 1, "the second chunk should not decode");
+    assert_caller_decompressor_ran(err);
 }
 
 #[cfg(feature = "zstd")]
@@ -947,104 +1021,52 @@ fn greedy_output_past_the_declared_size_is_an_error() {
     ));
 }
 
-#[cfg(feature = "zstd")]
 #[test]
-fn failed_reset_does_not_fall_back_to_the_builtin_decoder() {
-    let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
-    let mut reader = LinearReader::new();
-    reader
-        .add_decompressor(FailingResetDecoder {
-            inner: super::zstd::ZstdDecoder::new(),
-            poisoned: false,
-        })
-        .expect("register");
-    let mut cursor = Cursor::new(&mcap);
-    let mut errors = Vec::new();
-    let mut messages = 0;
-    let mut iterations = 0;
-    while let Some(event) = reader.next_event() {
-        iterations += 1;
-        assert!(iterations < 100_000, "linear reader did not finish");
-        match event {
-            Ok(LinearReadEvent::ReadRequest(need)) => {
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            Ok(LinearReadEvent::Record { opcode, .. }) => {
-                if opcode == op::MESSAGE {
-                    messages += 1;
-                }
-            }
-            Err(err) => {
-                errors.push(err.to_string());
-                if errors
-                    .iter()
-                    .any(|err| err.contains("reused after failed reset"))
-                {
-                    break;
-                }
-            }
-        }
-    }
-    assert!(
-        errors.iter().any(|err| err.contains("reset failed")),
-        "errors: {errors:?}"
-    );
-    assert!(
-        errors
-            .iter()
-            .any(|err| err.contains("reused after failed reset")),
-        "the built-in decoder ran after reset failed: {errors:?}"
-    );
-    assert_eq!(messages, 1, "the second chunk should not decode");
-}
-
-#[cfg(feature = "zstd")]
-#[test]
-fn builtin_cache_does_not_count_as_a_caller_registration() {
-    let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
-    let mut reader = LinearReader::new();
-    let mut cursor = Cursor::new(&mcap);
-    let mut messages = 0;
-    let mut iterations = 0;
-    let err = loop {
-        iterations += 1;
-        assert!(iterations < 100_000, "linear reader did not finish");
-        match reader.next_event().expect("the second chunk should fail") {
-            Ok(LinearReadEvent::ReadRequest(need)) => {
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            Ok(LinearReadEvent::Record { opcode, .. }) => {
-                if opcode == op::MESSAGE {
-                    messages += 1;
-                    if messages == 1 {
-                        // The built-in zstd decoder is decoding the first chunk at this point.
-                        reader
-                            .add_decompressor(TestDecoder::fail("zstd"))
-                            .expect("a built-in decoder is not a caller registration");
-                    }
-                }
-            }
-            Err(err) => break err,
-        }
-    };
-    assert_eq!(messages, 1, "the second chunk should not decode");
-    assert_caller_decompressor_ran(err);
-}
-
-#[test]
-fn indexed_reader_reports_a_failed_reset() {
+fn stalled_decompressor_returns_an_error() {
     let mcap = xor_mcap(&sample_chunks());
-    let err = read_indexed(&mcap, Some(TestDecoder::xor("xor").with_failing_reset()))
-        .expect_err("reset failure should be returned");
-    assert!(
-        err.to_string().contains("reset failed"),
-        "unexpected error: {err}"
+    assert_no_progress(
+        read_linear(&mcap, Some(TestDecoder::stall("xor"))).expect_err("linear should stall"),
     );
-    assert_caller_decompressor_ran(
-        read_indexed(&mcap, Some(TestDecoder::fail("xor").with_failing_reset()))
-            .expect_err("a decompression error should win over the reset error"),
+    assert_no_progress(
+        read_indexed(&mcap, Some(TestDecoder::stall("xor"))).expect_err("indexed should stall"),
+    );
+}
+
+#[test]
+fn zero_read_size_stall_errors_after_the_chunk_is_buffered() {
+    let mcap = xor_mcap(&sample_chunks());
+    assert_no_progress(
+        read_linear(&mcap, Some(TestDecoder::stall("xor").with_read_size(0)))
+            .expect_err("a hint of 0 must not loop forever"),
+    );
+}
+
+#[test]
+fn no_progress_buffers_more_input_until_the_frame_fits() {
+    let expected = vec![(1, 10, b"one".to_vec()), (1, 20, b"two".to_vec())];
+    for decoder in [TestDecoder::whole_frame, TestDecoder::whole_frame_with_hint] {
+        assert_eq!(
+            read_linear(&xor_mcap(&sample_chunks()), Some(decoder("xor"))).expect("linear"),
+            expected
+        );
+    }
+
+    let mcap = xor_mcap(&[ChunkSpec::new(10, &[7; 4096], 0)]);
+    let request_count = |decoder| {
+        let (requests, result) =
+            linear_read_requests(&mcap, decoder, LinearReaderOptions::default());
+        result.expect("read");
+        requests.len()
+    };
+    let doubled = request_count(TestDecoder::whole_frame("xor"));
+    let hinted = request_count(TestDecoder::whole_frame_with_hint("xor"));
+    assert!(
+        doubled < 40,
+        "no progress should grow the buffer, not add one byte per call: {doubled} requests"
+    );
+    assert!(
+        hinted < doubled,
+        "a raised next_read_size should be fetched at once: {hinted} vs {doubled} requests"
     );
 }
 
@@ -1056,33 +1078,6 @@ fn zero_read_size_still_decompresses_the_chunk() {
         read_linear(&mcap, Some(TestDecoder::xor("xor").with_read_size(0))).expect("linear"),
         expected
     );
-}
-
-/// Reads `mcap` with `decompressor`, returning every `ReadRequest` size and the final result.
-fn linear_read_requests(
-    mcap: &[u8],
-    decompressor: TestDecoder,
-    options: LinearReaderOptions,
-) -> (Vec<usize>, McapResult<()>) {
-    let mut reader = LinearReader::new_with_options(options);
-    reader.add_decompressor(decompressor).expect("register");
-    let mut cursor = Cursor::new(mcap);
-    let mut requests = Vec::new();
-    let mut iterations = 0;
-    while let Some(event) = reader.next_event() {
-        iterations += 1;
-        assert!(iterations < 100_000, "linear reader did not finish");
-        match event {
-            Ok(LinearReadEvent::ReadRequest(need)) => {
-                requests.push(need);
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            Ok(LinearReadEvent::Record { .. }) => {}
-            Err(err) => return (requests, Err(err)),
-        }
-    }
-    (requests, Ok(()))
 }
 
 #[test]
@@ -1164,25 +1159,70 @@ fn builtin_zstd_reads_with_a_small_record_length_limit() {
     assert_eq!(messages.len(), 2);
 }
 
-/// Byte length of the first chunk's header, up to and including `compressed_size`.
-fn chunk_header_len(mcap: &[u8]) -> usize {
-    let (len_at, _) = chunk_record_span(mcap);
-    // start time, end time, uncompressed size, uncompressed CRC
-    let compression_len_at = len_at + 8 + 28;
-    let compression_len = u32::from_le_bytes(
-        mcap[compression_len_at..compression_len_at + 4]
-            .try_into()
-            .unwrap(),
+#[cfg(feature = "zstd")]
+#[test]
+fn failed_reset_does_not_fall_back_to_the_builtin_decoder() {
+    let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
+    let mut reader = LinearReader::new();
+    reader
+        .add_decompressor(FailingResetDecoder {
+            inner: super::zstd::ZstdDecoder::new(),
+            poisoned: false,
+        })
+        .expect("register");
+    let mut cursor = Cursor::new(&mcap);
+    let mut errors = Vec::new();
+    let mut messages = 0;
+    let mut iterations = 0;
+    while let Some(event) = reader.next_event() {
+        iterations += 1;
+        assert!(iterations < 100_000, "linear reader did not finish");
+        match event {
+            Ok(LinearReadEvent::ReadRequest(need)) => {
+                let read = cursor.read(reader.insert(need)).expect("read");
+                reader.notify_read(read);
+            }
+            Ok(LinearReadEvent::Record { opcode, .. }) => {
+                if opcode == op::MESSAGE {
+                    messages += 1;
+                }
+            }
+            Err(err) => {
+                errors.push(err.to_string());
+                if errors
+                    .iter()
+                    .any(|err| err.contains("reused after failed reset"))
+                {
+                    break;
+                }
+            }
+        }
+    }
+    assert!(
+        errors.iter().any(|err| err.contains("reset failed")),
+        "errors: {errors:?}"
     );
-    32 + compression_len as usize + 8
+    assert!(
+        errors
+            .iter()
+            .any(|err| err.contains("reused after failed reset")),
+        "the built-in decoder ran after reset failed: {errors:?}"
+    );
+    assert_eq!(messages, 1, "the second chunk should not decode");
 }
 
 #[test]
-fn zero_read_size_stall_errors_after_the_chunk_is_buffered() {
+fn indexed_reader_reports_a_failed_reset() {
     let mcap = xor_mcap(&sample_chunks());
-    assert_no_progress(
-        read_linear(&mcap, Some(TestDecoder::stall("xor").with_read_size(0)))
-            .expect_err("a hint of 0 must not loop forever"),
+    let err = read_indexed(&mcap, Some(TestDecoder::xor("xor").with_failing_reset()))
+        .expect_err("reset failure should be returned");
+    assert!(
+        err.to_string().contains("reset failed"),
+        "unexpected error: {err}"
+    );
+    assert_caller_decompressor_ran(
+        read_indexed(&mcap, Some(TestDecoder::fail("xor").with_failing_reset()))
+            .expect_err("a decompression error should win over the reset error"),
     );
 }
 
@@ -1284,45 +1324,5 @@ fn chunk_reader_checks_an_uncompressed_chunk_crc() {
     assert!(
         matches!(result, Err(McapError::BadChunkCrc { .. })),
         "a bad uncompressed chunk CRC must be rejected, got {result:?}"
-    );
-}
-
-#[test]
-fn chunk_header_error_keeps_the_registered_decompressor() {
-    let mut mcap = xor_mcap(&[ChunkSpec::new(10, b"one", 0)]);
-    let (len_at, _) = chunk_record_span(&mcap);
-    let len = u64::from_le_bytes(mcap[len_at..len_at + 8].try_into().unwrap());
-    mcap[len_at..len_at + 8].copy_from_slice(&(len + 10_000).to_le_bytes());
-
-    let mut reader = LinearReader::new_with_options(
-        LinearReaderOptions::default().with_record_length_limit(128),
-    );
-    reader
-        .add_decompressor(TestDecoder::xor("xor"))
-        .expect("register");
-    let mut cursor = Cursor::new(mcap.as_slice());
-    let mut iterations = 0;
-    let err = loop {
-        iterations += 1;
-        assert!(iterations < 100_000, "linear reader did not finish");
-        match reader.next_event().expect("header length is known") {
-            Ok(LinearReadEvent::ReadRequest(need)) => {
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            Ok(LinearReadEvent::Record { .. }) => {}
-            Err(err) => break err,
-        }
-    };
-    assert!(
-        matches!(err, McapError::ChunkTooLarge(_)),
-        "unexpected error: {err}"
-    );
-    assert!(
-        matches!(
-            reader.add_decompressor(TestDecoder::xor("xor")),
-            Err(McapError::DuplicateDecompressor(name)) if name == "xor"
-        ),
-        "the header error dropped the registered decompressor"
     );
 }
