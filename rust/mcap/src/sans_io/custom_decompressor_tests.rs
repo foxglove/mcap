@@ -476,6 +476,72 @@ fn sample_chunks() -> Vec<ChunkSpec> {
     vec![ChunkSpec::new(10, b"one", 0), ChunkSpec::new(20, b"two", 3)]
 }
 
+struct LinearScan {
+    requests: Vec<usize>,
+    messages: Vec<(u16, u64, Vec<u8>)>,
+    errors: Vec<McapError>,
+}
+
+/// Drives `reader` over `mcap`, supplying at most `max_read` bytes per read, and stops at the first error.
+fn drive_linear(mcap: &[u8], reader: &mut LinearReader, max_read: usize) -> LinearScan {
+    drive_linear_with(mcap, reader, max_read, |_| true, |_| false)
+}
+
+/// Like [`drive_linear`]. `on_message` ends the scan when it returns true. `stop_on_error` ends
+/// the scan when it returns true for an error.
+fn drive_linear_with(
+    mcap: &[u8],
+    reader: &mut LinearReader,
+    max_read: usize,
+    mut stop_on_error: impl FnMut(&McapError) -> bool,
+    mut on_message: impl FnMut(&mut LinearReader) -> bool,
+) -> LinearScan {
+    let mut cursor = Cursor::new(mcap);
+    let mut scan = LinearScan {
+        requests: Vec::new(),
+        messages: Vec::new(),
+        errors: Vec::new(),
+    };
+    let mut iterations = 0;
+    loop {
+        iterations += 1;
+        assert!(iterations < 100_000, "linear reader did not finish");
+        let saw_message = match reader.next_event() {
+            None => break,
+            Some(Ok(LinearReadEvent::ReadRequest(need))) => {
+                scan.requests.push(need);
+                let read = cursor
+                    .read(reader.insert(need.min(max_read)))
+                    .expect("read");
+                reader.notify_read(read);
+                false
+            }
+            Some(Ok(LinearReadEvent::Record { opcode, data })) if opcode == op::MESSAGE => {
+                let Record::Message { header, data } = parse_record(opcode, data).expect("message")
+                else {
+                    panic!("opcode was MESSAGE");
+                };
+                scan.messages
+                    .push((header.channel_id, header.log_time, data.into_owned()));
+                true
+            }
+            Some(Ok(LinearReadEvent::Record { .. })) => false,
+            Some(Err(err)) => {
+                let stop = stop_on_error(&err);
+                scan.errors.push(err);
+                if stop {
+                    break;
+                }
+                false
+            }
+        };
+        if saw_message && on_message(reader) {
+            break;
+        }
+    }
+    scan
+}
+
 fn read_linear(
     mcap: &[u8],
     decompressor: Option<TestDecoder>,
@@ -492,28 +558,11 @@ fn read_linear_with_options(
     if let Some(decompressor) = decompressor {
         reader.add_decompressor(decompressor)?;
     }
-    let mut cursor = Cursor::new(mcap);
-    let mut messages = Vec::new();
-    let mut iterations = 0;
-    while let Some(event) = reader.next_event() {
-        iterations += 1;
-        assert!(iterations < 100_000, "linear reader did not finish");
-        match event? {
-            LinearReadEvent::ReadRequest(need) => {
-                let read = cursor.read(reader.insert(need))?;
-                reader.notify_read(read);
-            }
-            LinearReadEvent::Record { opcode, data } => {
-                if opcode == op::MESSAGE {
-                    let Record::Message { header, data } = parse_record(opcode, data)? else {
-                        panic!("opcode was MESSAGE");
-                    };
-                    messages.push((header.channel_id, header.log_time, data.into_owned()));
-                }
-            }
-        }
+    let scan = drive_linear(mcap, &mut reader, usize::MAX);
+    match scan.errors.into_iter().next() {
+        Some(err) => Err(err),
+        None => Ok(scan.messages),
     }
-    Ok(messages)
 }
 
 /// Reads `mcap` with `decompressor`, returning every `ReadRequest` size and the final result.
@@ -524,28 +573,17 @@ fn linear_read_requests(
 ) -> (Vec<usize>, McapResult<()>) {
     let mut reader = LinearReader::new_with_options(options);
     reader.add_decompressor(decompressor).expect("register");
-    let mut cursor = Cursor::new(mcap);
-    let mut requests = Vec::new();
-    let mut iterations = 0;
-    while let Some(event) = reader.next_event() {
-        iterations += 1;
-        assert!(iterations < 100_000, "linear reader did not finish");
-        match event {
-            Ok(LinearReadEvent::ReadRequest(need)) => {
-                requests.push(need);
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            Ok(LinearReadEvent::Record { .. }) => {}
-            Err(err) => return (requests, Err(err)),
-        }
-    }
-    (requests, Ok(()))
+    let scan = drive_linear(mcap, &mut reader, usize::MAX);
+    let result = match scan.errors.into_iter().next() {
+        Some(err) => Err(err),
+        None => Ok(()),
+    };
+    (scan.requests, result)
 }
 
-fn read_indexed(
+fn read_indexed<D: Decompressor + 'static>(
     mcap: &[u8],
-    decompressor: Option<TestDecoder>,
+    decompressor: Option<D>,
 ) -> McapResult<Vec<(u16, u64, Vec<u8>)>> {
     let summary = Summary::read(mcap)?.expect("file should contain a summary");
     let mut reader = IndexedReader::new(&summary)?;
@@ -688,22 +726,13 @@ fn add_decompressor_rejects_a_name_held_by_the_open_chunk() {
     reader
         .add_decompressor(TestDecoder::xor("xor"))
         .expect("register");
-    let mut cursor = Cursor::new(mcap.as_slice());
-    let mut saw_message = false;
-    while let Some(event) = reader.next_event() {
-        match event.expect("read") {
-            LinearReadEvent::ReadRequest(need) => {
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            LinearReadEvent::Record { opcode, .. } if opcode == op::MESSAGE => {
-                saw_message = true;
-                break;
-            }
-            LinearReadEvent::Record { .. } => {}
-        }
-    }
-    assert!(saw_message, "expected to be inside a chunk");
+    let scan = drive_linear_with(&mcap, &mut reader, usize::MAX, |_| true, |_| true);
+    assert!(
+        scan.errors.is_empty(),
+        "stopped before a message: {:?}",
+        scan.errors
+    );
+    assert_eq!(scan.messages.len(), 1, "expected to be inside a chunk");
     assert!(matches!(
         reader.add_decompressor(TestDecoder::xor("xor")),
         Err(McapError::DuplicateDecompressor(name)) if name == "xor"
@@ -723,23 +752,11 @@ fn chunk_header_error_keeps_the_registered_decompressor() {
     reader
         .add_decompressor(TestDecoder::xor("xor"))
         .expect("register");
-    let mut cursor = Cursor::new(mcap.as_slice());
-    let mut iterations = 0;
-    let err = loop {
-        iterations += 1;
-        assert!(iterations < 100_000, "linear reader did not finish");
-        match reader.next_event().expect("header length is known") {
-            Ok(LinearReadEvent::ReadRequest(need)) => {
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            Ok(LinearReadEvent::Record { .. }) => {}
-            Err(err) => break err,
-        }
-    };
+    let scan = drive_linear(&mcap, &mut reader, usize::MAX);
     assert!(
-        matches!(err, McapError::ChunkTooLarge(_)),
-        "unexpected error: {err}"
+        matches!(scan.errors.first(), Some(McapError::ChunkTooLarge(_))),
+        "unexpected error: {:?}",
+        scan.errors
     );
     assert!(
         matches!(
@@ -758,7 +775,7 @@ fn custom_compression_without_registration_is_unsupported() {
         Err(McapError::UnsupportedCompression(name)) if name == "xor"
     ));
     assert!(matches!(
-        read_indexed(&mcap, None),
+        read_indexed(&mcap, None::<TestDecoder>),
         Err(McapError::UnsupportedCompression(name)) if name == "xor"
     ));
 }
@@ -778,43 +795,20 @@ fn custom_compression_round_trips_through_both_readers() {
 }
 
 #[test]
-fn streaming_message_readers_forward_the_decompressor() {
+fn io_message_reader_forwards_the_decompressor() {
+    // io::MessageReader forwards to sans_io::MessageReader, so this covers both.
     let mcap = xor_mcap(&sample_chunks());
-    let expected = vec![(10, b"one".to_vec()), (20, b"two".to_vec())];
-
-    let mut sans_io = crate::sans_io::MessageReader::new();
-    sans_io
+    let mut reader = crate::io::MessageReader::new(Cursor::new(mcap));
+    reader
         .add_decompressor(TestDecoder::xor("xor"))
-        .expect("sans-io register");
-    let mut cursor = Cursor::new(mcap.as_slice());
-    let mut sans_io_messages = Vec::new();
-    let mut iterations = 0;
-    while let Some(event) = sans_io.next_event() {
-        iterations += 1;
-        assert!(iterations < 100_000, "message reader did not finish");
-        match event.expect("sans-io message") {
-            crate::sans_io::MessageReadEvent::ReadRequest(need) => {
-                let read = cursor.read(sans_io.insert(need)).expect("read");
-                sans_io.notify_read(read);
-            }
-            crate::sans_io::MessageReadEvent::Message(message) => {
-                sans_io_messages.push((message.log_time, message.data.into_owned()));
-            }
-        }
-    }
-    assert_eq!(sans_io_messages, expected);
-
-    let mut blocking = crate::io::MessageReader::new(Cursor::new(mcap));
-    blocking
-        .add_decompressor(TestDecoder::xor("xor"))
-        .expect("io register");
-    let blocking_messages = blocking
+        .expect("register");
+    let messages = reader
         .map(|message| {
-            let message = message.expect("io message");
+            let message = message.expect("message");
             (message.log_time, message.data.into_owned())
         })
         .collect::<Vec<_>>();
-    assert_eq!(blocking_messages, expected);
+    assert_eq!(messages, vec![(10, b"one".to_vec()), (20, b"two".to_vec())]);
 }
 
 #[cfg(feature = "tokio")]
@@ -861,32 +855,29 @@ fn registered_decompressor_replaces_builtin() {
 fn builtin_cache_does_not_count_as_a_caller_registration() {
     let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
     let mut reader = LinearReader::new();
-    let mut cursor = Cursor::new(&mcap);
-    let mut messages = 0;
-    let mut iterations = 0;
-    let err = loop {
-        iterations += 1;
-        assert!(iterations < 100_000, "linear reader did not finish");
-        match reader.next_event().expect("the second chunk should fail") {
-            Ok(LinearReadEvent::ReadRequest(need)) => {
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
+    let mut registered = false;
+    let scan = drive_linear_with(
+        &mcap,
+        &mut reader,
+        usize::MAX,
+        |_| true,
+        |reader| {
+            if !registered {
+                registered = true;
+                // The built-in zstd decoder is decoding the first chunk at this point.
+                reader
+                    .add_decompressor(TestDecoder::fail("zstd"))
+                    .expect("a built-in decoder is not a caller registration");
             }
-            Ok(LinearReadEvent::Record { opcode, .. }) => {
-                if opcode == op::MESSAGE {
-                    messages += 1;
-                    if messages == 1 {
-                        // The built-in zstd decoder is decoding the first chunk at this point.
-                        reader
-                            .add_decompressor(TestDecoder::fail("zstd"))
-                            .expect("a built-in decoder is not a caller registration");
-                    }
-                }
-            }
-            Err(err) => break err,
-        }
-    };
-    assert_eq!(messages, 1, "the second chunk should not decode");
+            false
+        },
+    );
+    assert_eq!(scan.messages.len(), 1, "the second chunk should not decode");
+    let err = scan
+        .errors
+        .into_iter()
+        .next()
+        .expect("the second chunk should fail");
     assert_caller_decompressor_ran(err);
 }
 
@@ -931,45 +922,22 @@ fn registered_decompressor_reads_multi_frame_chunks() {
             reader
                 .add_decompressor(super::zstd::ZstdDecoder::new())
                 .expect("register");
-            let mut cursor = Cursor::new(mcap.as_slice());
-            let mut messages = 0;
-            while let Some(event) = reader.next_event() {
-                match event.unwrap_or_else(|err| panic!("{label}, linear: {err}")) {
-                    LinearReadEvent::ReadRequest(need) => {
-                        let read = cursor
-                            .read(reader.insert(need.min(read_size)))
-                            .expect("read");
-                        reader.notify_read(read);
-                    }
-                    LinearReadEvent::Record { opcode, .. } if opcode == op::MESSAGE => {
-                        messages += 1;
-                    }
-                    LinearReadEvent::Record { .. } => {}
-                }
-            }
-            assert_eq!(messages, 1, "{label}, linear, read size {read_size}");
+            let scan = drive_linear(&mcap, &mut reader, read_size);
+            assert!(
+                scan.errors.is_empty(),
+                "{label}, linear, read size {read_size}: {:?}",
+                scan.errors
+            );
+            assert_eq!(
+                scan.messages.len(),
+                1,
+                "{label}, linear, read size {read_size}"
+            );
         }
 
-        let summary = Summary::read(&mcap)
-            .expect("summary read")
-            .expect("summary");
-        let mut reader = IndexedReader::new(&summary).expect("reader");
-        reader
-            .add_decompressor(super::zstd::ZstdDecoder::new())
-            .expect("register");
-        let mut messages = 0;
-        while let Some(event) = reader.next_event() {
-            match event.unwrap_or_else(|err| panic!("{label}, indexed: {err}")) {
-                IndexedReadEvent::ReadChunkRequest { offset, length } => {
-                    let start = offset as usize;
-                    reader
-                        .insert_chunk_record_data(offset, &mcap[start..start + length])
-                        .unwrap_or_else(|err| panic!("{label}, indexed: {err}"));
-                }
-                IndexedReadEvent::Message { .. } => messages += 1,
-            }
-        }
-        assert_eq!(messages, 1, "{label}, indexed");
+        let messages = read_indexed(&mcap, Some(super::zstd::ZstdDecoder::new()))
+            .unwrap_or_else(|err| panic!("{label}, indexed: {err}"));
+        assert_eq!(messages.len(), 1, "{label}, indexed");
     }
 }
 
@@ -1065,16 +1033,6 @@ fn no_progress_buffers_more_input_until_the_frame_fits() {
     assert!(
         hinted < doubled,
         "a raised next_read_size should be fetched at once: {hinted} vs {doubled} requests"
-    );
-}
-
-#[test]
-fn zero_read_size_still_decompresses_the_chunk() {
-    let mcap = xor_mcap(&sample_chunks());
-    let expected = vec![(1, 10, b"one".to_vec()), (1, 20, b"two".to_vec())];
-    assert_eq!(
-        read_linear(&mcap, Some(TestDecoder::xor("xor").with_read_size(0))).expect("linear"),
-        expected
     );
 }
 
@@ -1188,21 +1146,14 @@ fn builtin_zstd_reads_with_a_small_record_length_limit() {
     let mut reader = LinearReader::new_with_options(
         LinearReaderOptions::default().with_record_length_limit(limit),
     );
-    let mut cursor = Cursor::new(mcap.as_slice());
-    let mut messages = 0;
-    let mut largest_request = 0;
-    while let Some(event) = reader.next_event() {
-        match event.expect("a small limit only bounds buffering") {
-            LinearReadEvent::ReadRequest(need) => {
-                largest_request = largest_request.max(need);
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            LinearReadEvent::Record { opcode, .. } if opcode == op::MESSAGE => messages += 1,
-            LinearReadEvent::Record { .. } => {}
-        }
-    }
-    assert_eq!(messages, 10);
+    let scan = drive_linear(&mcap, &mut reader, usize::MAX);
+    assert!(
+        scan.errors.is_empty(),
+        "a small limit only bounds buffering: {:?}",
+        scan.errors
+    );
+    assert_eq!(scan.messages.len(), 10);
+    let largest_request = scan.requests.iter().copied().max().unwrap_or(0);
     assert!(
         largest_request <= limit,
         "requested {largest_request} bytes with a {limit}-byte limit"
@@ -1220,34 +1171,14 @@ fn failed_reset_does_not_fall_back_to_the_builtin_decoder() {
             poisoned: false,
         })
         .expect("register");
-    let mut cursor = Cursor::new(&mcap);
-    let mut errors = Vec::new();
-    let mut messages = 0;
-    let mut iterations = 0;
-    while let Some(event) = reader.next_event() {
-        iterations += 1;
-        assert!(iterations < 100_000, "linear reader did not finish");
-        match event {
-            Ok(LinearReadEvent::ReadRequest(need)) => {
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            Ok(LinearReadEvent::Record { opcode, .. }) => {
-                if opcode == op::MESSAGE {
-                    messages += 1;
-                }
-            }
-            Err(err) => {
-                errors.push(err.to_string());
-                if errors
-                    .iter()
-                    .any(|err| err.contains("reused after failed reset"))
-                {
-                    break;
-                }
-            }
-        }
-    }
+    let scan = drive_linear_with(
+        &mcap,
+        &mut reader,
+        usize::MAX,
+        |err| err.to_string().contains("reused after failed reset"),
+        |_| false,
+    );
+    let errors: Vec<_> = scan.errors.iter().map(ToString::to_string).collect();
     assert!(
         errors.iter().any(|err| err.contains("reset failed")),
         "errors: {errors:?}"
@@ -1258,7 +1189,7 @@ fn failed_reset_does_not_fall_back_to_the_builtin_decoder() {
             .any(|err| err.contains("reused after failed reset")),
         "the built-in decoder ran after reset failed: {errors:?}"
     );
-    assert_eq!(messages, 1, "the second chunk should not decode");
+    assert_eq!(scan.messages.len(), 1, "the second chunk should not decode");
 }
 
 #[test]
@@ -1316,35 +1247,18 @@ fn bad_chunk_crc_is_reported_when_reset_fails() {
     reader
         .add_decompressor(TestDecoder::xor("xor").with_failing_reset())
         .expect("register");
-    let mut cursor = Cursor::new(mcap.as_slice());
-    let mut messages = 0;
-    let mut errors = Vec::new();
-    let mut iterations = 0;
-    while let Some(event) = reader.next_event() {
-        iterations += 1;
-        assert!(iterations < 100_000, "linear reader did not finish");
-        match event {
-            Ok(LinearReadEvent::ReadRequest(need)) => {
-                let read = cursor.read(reader.insert(need)).expect("read");
-                reader.notify_read(read);
-            }
-            Ok(LinearReadEvent::Record { opcode, .. }) => {
-                if opcode == op::MESSAGE {
-                    messages += 1;
-                }
-            }
-            Err(err) => errors.push(err),
-        }
-    }
-    assert_eq!(messages, 1);
+    let scan = drive_linear_with(&mcap, &mut reader, usize::MAX, |_| false, |_| false);
+    assert_eq!(scan.messages.len(), 1);
     assert!(
-        matches!(errors.first(), Some(McapError::BadChunkCrc { .. })),
-        "a failed reset must not hide the chunk CRC: {errors:?}"
+        matches!(scan.errors.first(), Some(McapError::BadChunkCrc { .. })),
+        "a failed reset must not hide the chunk CRC: {:?}",
+        scan.errors
     );
     assert_eq!(
-        errors.len(),
+        scan.errors.len(),
         1,
-        "reading should finish after the CRC error: {errors:?}"
+        "reading should finish after the CRC error: {:?}",
+        scan.errors
     );
 }
 
