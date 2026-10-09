@@ -389,6 +389,11 @@ impl LinearReader {
         self.file_data.mark_written(written);
     }
 
+    /// Whether the record most recently yielded came from inside a chunk.
+    pub(crate) fn in_chunk(&self) -> bool {
+        self.chunk_state.is_some()
+    }
+
     /// Yields the next event the caller should take to progress through the file.
     pub fn next_event(&mut self) -> Option<McapResult<LinearReadEvent<'_>>> {
         if self.at_eof {

@@ -366,7 +366,12 @@ fn filter_linear<W: Write + Seek>(
     // so the summaryless ordered path is not memory-bounded.
     let mut buffered_messages = Vec::<BufferedMessage>::new();
 
-    for record in mcap::read::ChunkFlattener::new(input)? {
+    // Keep checking chunk CRCs: a corrupt input must fail, not be rewritten with a valid CRC.
+    let records = mcap::read::ChunkFlattener::new_with_options(
+        input,
+        mcap::read::Options::ValidateChunkCrcs.into(),
+    )?;
+    for record in records {
         match record? {
             mcap::records::Record::Schema { header, data } => {
                 let schema = Arc::new(mcap::Schema {
@@ -488,7 +493,7 @@ mod tests {
 
     use regex::Regex;
 
-    use super::{filter_to_writer, MessageOrder, ResolvedOptions};
+    use super::{common, filter_to_writer, MessageOrder, ResolvedOptions};
     use crate::cli::CommonRewriteArgs;
 
     /// Builds rewrite options from the shared CLI args, exercising the engine defaults (CRC on,
@@ -620,6 +625,61 @@ mod tests {
             writer.finish().expect("finish");
         }
         output.into_inner()
+    }
+
+    /// A chunked, uncompressed, summaryless input: it takes the linear path, and a byte inside a
+    /// chunk can be flipped without breaking decompression.
+    fn write_uncompressed_chunked_summaryless_input() -> Vec<u8> {
+        let mut output = Cursor::new(Vec::new());
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .use_chunks(true)
+                .compression(None)
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .create(&mut output)
+                .expect("writer");
+            let channel = writer
+                .add_channel(0, "camera_a", "json", &BTreeMap::new())
+                .expect("channel");
+            for i in 0..10 {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id: channel,
+                            sequence: i,
+                            log_time: i as u64,
+                            publish_time: i as u64,
+                        },
+                        b"payload",
+                    )
+                    .expect("write");
+            }
+            writer.finish().expect("finish");
+        }
+        output.into_inner()
+    }
+
+    #[test]
+    fn linear_filtering_rejects_a_corrupt_chunk() {
+        // A rewrite must fail on a chunk whose CRC does not match, rather than decode it and
+        // write it back out with a fresh, valid CRC.
+        let mut input = write_uncompressed_chunked_summaryless_input();
+        common::corrupt_first_chunk_message(&mut input);
+        let err = filter_to_writer(
+            &input,
+            &mut Cursor::new(Vec::new()),
+            &include_all_options(),
+            false,
+        )
+        .expect_err("a corrupt chunk must fail the rewrite");
+        assert!(
+            err.chain().any(|cause| matches!(
+                cause.downcast_ref::<mcap::McapError>(),
+                Some(mcap::McapError::BadChunkCrc { .. })
+            )),
+            "{err:?}"
+        );
     }
 
     fn run_filter(input: &[u8], opts: &ResolvedOptions) -> Vec<u8> {
