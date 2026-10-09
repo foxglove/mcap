@@ -1121,6 +1121,19 @@ fn large_read_size_is_capped_by_the_record_length_limit() {
     );
 }
 
+#[cfg(feature = "zstd")]
+#[test]
+fn builtin_zstd_reads_with_a_small_record_length_limit() {
+    let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
+    let messages = read_linear_with(
+        &mcap,
+        None,
+        LinearReaderOptions::default().with_record_length_limit(128),
+    )
+    .expect("a small limit only bounds buffering");
+    assert_eq!(messages.len(), 2);
+}
+
 /// Byte length of the first chunk's header, up to and including `compressed_size`.
 fn chunk_header_len(mcap: &[u8]) -> usize {
     let (len_at, _) = chunk_record_span(mcap);

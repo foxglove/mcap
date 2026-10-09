@@ -38,10 +38,14 @@ pub trait Decompressor: Send {
     ///
     /// Return 0 when any amount will do; `LinearReader` then reads up to 64 KiB at a time. Small
     /// non-zero values make it read that few bytes per call, so return a buffer size, not a
-    /// minimum, unless the format needs one. After a call that made no progress, return the total
-    /// number of compressed bytes you need buffered. Otherwise `LinearReader` doubles the buffered
-    /// input until the decoder makes progress or the cap is reached, and returns
-    /// [`McapError::ChunkTooLarge`] at the cap.
+    /// minimum, unless the format needs one. A large value with a small `record_length_limit`
+    /// makes `LinearReader` refill its buffer to the limit after every record.
+    ///
+    /// After a call that made no progress, `LinearReader` buffers at least twice as many bytes as
+    /// it passed in, or this value if it is larger, so return the total you need buffered. If the
+    /// decoder still makes no progress once every remaining compressed byte is buffered,
+    /// `LinearReader` returns a decompression error. If it reaches `record_length_limit` first, it
+    /// returns [`McapError::ChunkTooLarge`].
     /// [`IndexedReader`](crate::sans_io::IndexedReader) already holds the whole chunk and does not
     /// use this hint.
     fn next_read_size(&self) -> usize;
@@ -57,8 +61,9 @@ pub trait Decompressor: Send {
     ///
     /// `consumed` and `wrote` must not exceed the buffer lengths. Returning zero for both asks for
     /// more compressed input, so do that only when no output can be produced without more input.
-    /// [`LinearReader`](crate::sans_io::LinearReader) then reads at least one more byte of the
-    /// chunk, and returns an error only when `src` already held every remaining compressed byte.
+    /// [`LinearReader`](crate::sans_io::LinearReader) then buffers more of the chunk. It returns a
+    /// decompression error when `src` already held every remaining compressed byte, or
+    /// [`McapError::ChunkTooLarge`] when `src` already held `record_length_limit` bytes.
     /// [`IndexedReader`](crate::sans_io::IndexedReader) passes the whole chunk, so zero progress is
     /// an error there.
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult>;
