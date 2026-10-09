@@ -1111,7 +1111,10 @@ fn large_read_size_is_capped_by_the_record_length_limit() {
         TestDecoder::xor("xor").with_read_size(usize::MAX),
         LinearReaderOptions::default().with_record_length_limit(limit),
     );
-    assert!(result.is_err(), "a truncated chunk must not read cleanly");
+    assert!(
+        matches!(result, Err(McapError::UnexpectedEof)),
+        "the capped read should run off the end of the file: {result:?}"
+    );
     assert!(
         requests.iter().all(|&need| need <= limit),
         "requests exceeded the record length limit: {requests:?}"
@@ -1147,14 +1150,63 @@ fn stall_at_the_record_length_limit_is_chunk_too_large() {
 #[cfg(feature = "zstd")]
 #[test]
 fn builtin_zstd_reads_with_a_small_record_length_limit() {
-    let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
-    let messages = read_linear_with_options(
-        &mcap,
-        None,
-        LinearReaderOptions::default().with_record_length_limit(128),
-    )
-    .expect("a small limit only bounds buffering");
-    assert_eq!(messages.len(), 2);
+    let channel = std::sync::Arc::new(crate::Channel {
+        id: 1,
+        topic: "topic".into(),
+        schema: None,
+        message_encoding: "raw".into(),
+        metadata: BTreeMap::new(),
+    });
+    let mut writer = crate::WriteOptions::new()
+        .compression(Some(crate::Compression::Zstd))
+        .chunk_size(None)
+        .create(Cursor::new(Vec::new()))
+        .expect("writer");
+    // Incompressible payloads so the one chunk's compressed size is far above the limit.
+    let mut state = 0x9E37_79B9u32;
+    for sequence in 0..10 {
+        let payload: Vec<u8> = (0..100)
+            .map(|_| {
+                state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                (state >> 24) as u8
+            })
+            .collect();
+        writer
+            .write(&crate::Message {
+                channel: channel.clone(),
+                sequence,
+                log_time: sequence.into(),
+                publish_time: sequence.into(),
+                data: payload.into(),
+            })
+            .expect("write");
+    }
+    writer.finish().expect("finish");
+    let mcap = writer.into_inner().into_inner();
+
+    let limit = 256;
+    let mut reader = LinearReader::new_with_options(
+        LinearReaderOptions::default().with_record_length_limit(limit),
+    );
+    let mut cursor = Cursor::new(mcap.as_slice());
+    let mut messages = 0;
+    let mut largest_request = 0;
+    while let Some(event) = reader.next_event() {
+        match event.expect("a small limit only bounds buffering") {
+            LinearReadEvent::ReadRequest(need) => {
+                largest_request = largest_request.max(need);
+                let read = cursor.read(reader.insert(need)).expect("read");
+                reader.notify_read(read);
+            }
+            LinearReadEvent::Record { opcode, .. } if opcode == op::MESSAGE => messages += 1,
+            LinearReadEvent::Record { .. } => {}
+        }
+    }
+    assert_eq!(messages, 10);
+    assert!(
+        largest_request <= limit,
+        "requested {largest_request} bytes with a {limit}-byte limit"
+    );
 }
 
 #[cfg(feature = "zstd")]

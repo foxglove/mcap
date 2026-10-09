@@ -819,21 +819,18 @@ impl LinearReader {
                         // for_chunk always installs a decompressed-content hasher, including for
                         // uncompressed chunks. Those records are read from file_data, so only
                         // uncompressed_data_hasher has hashed them.
-                        let calculated = if state.decompressor.is_some() {
-                            self.decompressed_content.hasher_mut().take().map(|hasher| {
-                                let calculated = hasher.finalize();
-                                (state.crc, calculated)
-                            })
+                        let hasher = if state.decompressor.is_some() {
+                            self.decompressed_content.hasher_mut().take()
                         } else {
-                            state.uncompressed_data_hasher.take().map(|hasher| {
-                                let calculated = hasher.finalize();
-                                (state.crc, calculated)
-                            })
+                            state.uncompressed_data_hasher.take()
                         };
-                        calculated.and_then(|(saved, calculated)| {
-                            (saved != 0 && saved != calculated)
-                                .then_some(McapError::BadChunkCrc { saved, calculated })
-                        })
+                        let saved = state.crc;
+                        hasher
+                            .map(|hasher| hasher.finalize())
+                            .and_then(|calculated| {
+                                (saved != 0 && saved != calculated)
+                                    .then_some(McapError::BadChunkCrc { saved, calculated })
+                            })
                     };
                     let active = self
                         .chunk_state
