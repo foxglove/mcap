@@ -12,13 +12,24 @@ use crate::{parse_record, McapError, McapResult, Summary, MAGIC};
 
 const XOR_KEY: u8 = 0x5A;
 
+/// Decoding state for one length-prefixed XOR frame.
+#[derive(Default)]
+struct XorFrame {
+    remaining: Option<usize>,
+    len_buf: [u8; 4],
+    len_filled: usize,
+}
+
 enum DecoderKind {
     /// Length-prefixed XOR. Once the payload is finished, another `decompress` call is an error so
     /// tests can tell that padding after the frame was fed to the decoder. `reset` starts a new frame.
-    Xor {
-        remaining: Option<usize>,
-        len_buf: [u8; 4],
-        len_filled: usize,
+    Xor(XorFrame),
+    /// Like `Xor`, but makes no progress until the whole frame is in `src`.
+    WholeFrame {
+        frame: XorFrame,
+        /// Raise `next_read_size` to the frame size once the length prefix has been seen.
+        hint_frame_size: bool,
+        hint: Option<usize>,
     },
     Stall,
     Fail,
@@ -28,14 +39,6 @@ enum DecoderKind {
     OverWrite,
     /// Fills the entire output buffer on every call.
     Greedy,
-    /// Returns no progress once, then raises `next_read_size` so the reader must fetch more input.
-    NeedMore {
-        probed: bool,
-        want: usize,
-        remaining: Option<usize>,
-        len_buf: [u8; 4],
-        len_filled: usize,
-    },
 }
 
 struct TestDecoder {
@@ -66,12 +69,27 @@ impl TestDecoder {
     }
 
     fn xor(name: &'static str) -> Self {
+        Self::new(name, DecoderKind::Xor(XorFrame::default()))
+    }
+
+    fn whole_frame(name: &'static str) -> Self {
         Self::new(
             name,
-            DecoderKind::Xor {
-                remaining: None,
-                len_buf: [0; 4],
-                len_filled: 0,
+            DecoderKind::WholeFrame {
+                frame: XorFrame::default(),
+                hint_frame_size: false,
+                hint: None,
+            },
+        )
+    }
+
+    fn whole_frame_with_hint(name: &'static str) -> Self {
+        Self::new(
+            name,
+            DecoderKind::WholeFrame {
+                frame: XorFrame::default(),
+                hint_frame_size: true,
+                hint: None,
             },
         )
     }
@@ -88,19 +106,6 @@ impl TestDecoder {
         Self::new(name, DecoderKind::Greedy)
     }
 
-    fn need_more(name: &'static str) -> Self {
-        Self::new(
-            name,
-            DecoderKind::NeedMore {
-                probed: false,
-                want: 1,
-                remaining: None,
-                len_buf: [0; 4],
-                len_filled: 0,
-            },
-        )
-    }
-
     fn stall(name: &'static str) -> Self {
         Self::new(name, DecoderKind::Stall)
     }
@@ -113,7 +118,9 @@ impl TestDecoder {
 impl Decompressor for TestDecoder {
     fn next_read_size(&self) -> usize {
         match &self.kind {
-            DecoderKind::NeedMore { want, .. } => *want,
+            DecoderKind::WholeFrame {
+                hint: Some(hint), ..
+            } => *hint,
             _ => self.read_size,
         }
     }
@@ -137,52 +144,37 @@ impl Decompressor for TestDecoder {
                 consumed: usize::from(!src.is_empty()),
                 wrote: dst.len(),
             }),
-            DecoderKind::Xor {
-                remaining,
-                len_buf,
-                len_filled,
-            } => xor_decompress(remaining, len_buf, len_filled, src, dst),
-            DecoderKind::NeedMore {
-                probed,
-                want,
-                remaining,
-                len_buf,
-                len_filled,
+            DecoderKind::Xor(frame) => xor_decompress(frame, src, dst),
+            DecoderKind::WholeFrame {
+                frame,
+                hint_frame_size,
+                hint,
             } => {
-                if !*probed {
-                    *probed = true;
-                    *want = src.len().saturating_add(32);
-                    return Ok(DecompressResult {
-                        consumed: 0,
-                        wrote: 0,
-                    });
+                if frame.remaining.is_none() {
+                    let frame_size = src
+                        .get(..4)
+                        .map(|len| 4 + u32::from_le_bytes(len.try_into().unwrap()) as usize);
+                    if frame_size.map_or(true, |size| src.len() < size) {
+                        if *hint_frame_size {
+                            *hint = frame_size;
+                        }
+                        return Ok(DecompressResult {
+                            consumed: 0,
+                            wrote: 0,
+                        });
+                    }
                 }
-                xor_decompress(remaining, len_buf, len_filled, src, dst)
+                xor_decompress(frame, src, dst)
             }
         }
     }
 
     fn reset(&mut self) -> McapResult<()> {
         match &mut self.kind {
-            DecoderKind::Xor {
-                remaining,
-                len_filled,
-                ..
-            } => {
-                *remaining = None;
-                *len_filled = 0;
-            }
-            DecoderKind::NeedMore {
-                probed,
-                want,
-                remaining,
-                len_filled,
-                ..
-            } => {
-                *probed = false;
-                *want = 1;
-                *remaining = None;
-                *len_filled = 0;
+            DecoderKind::Xor(frame) => *frame = XorFrame::default(),
+            DecoderKind::WholeFrame { frame, hint, .. } => {
+                *frame = XorFrame::default();
+                *hint = None;
             }
             DecoderKind::Stall
             | DecoderKind::Fail
@@ -202,9 +194,7 @@ impl Decompressor for TestDecoder {
 }
 
 fn xor_decompress(
-    remaining: &mut Option<usize>,
-    len_buf: &mut [u8; 4],
-    len_filled: &mut usize,
+    frame: &mut XorFrame,
     src: &[u8],
     dst: &mut [u8],
 ) -> McapResult<DecompressResult> {
@@ -214,7 +204,7 @@ fn xor_decompress(
             wrote: 0,
         });
     }
-    match *remaining {
+    match frame.remaining {
         // The frame is finished. Padding after it must not be passed back in; a later chunk has
         // to reset() before this decoder will start another frame.
         Some(0) => Err(McapError::DecompressionError(
@@ -231,20 +221,20 @@ fn xor_decompress(
             for (out, input) in dst.iter_mut().zip(src.iter()).take(take) {
                 *out = input ^ XOR_KEY;
             }
-            *remaining = Some(left - take);
+            frame.remaining = Some(left - take);
             Ok(DecompressResult {
                 consumed: take,
                 wrote: take,
             })
         }
         None => {
-            let take = (4 - *len_filled).min(src.len());
-            len_buf[*len_filled..*len_filled + take].copy_from_slice(&src[..take]);
-            *len_filled += take;
-            if *len_filled == 4 {
-                let len = u32::from_le_bytes(*len_buf) as usize;
-                *remaining = Some(len);
-                *len_filled = 0;
+            let filled = frame.len_filled;
+            let take = (4 - filled).min(src.len());
+            frame.len_buf[filled..filled + take].copy_from_slice(&src[..take]);
+            frame.len_filled += take;
+            if frame.len_filled == 4 {
+                frame.remaining = Some(u32::from_le_bytes(frame.len_buf) as usize);
+                frame.len_filled = 0;
             }
             Ok(DecompressResult {
                 consumed: take,
@@ -739,12 +729,31 @@ fn custom_compression_without_registration_is_unsupported() {
 }
 
 #[test]
-fn short_read_asks_for_more_input_instead_of_stalling() {
-    let mcap = xor_mcap(&sample_chunks());
+fn no_progress_buffers_more_input_until_the_frame_fits() {
     let expected = vec![(1, 10, b"one".to_vec()), (1, 20, b"two".to_vec())];
-    assert_eq!(
-        read_linear(&mcap, Some(TestDecoder::need_more("xor"))).expect("linear read-more"),
-        expected
+    for decoder in [TestDecoder::whole_frame, TestDecoder::whole_frame_with_hint] {
+        assert_eq!(
+            read_linear(&xor_mcap(&sample_chunks()), Some(decoder("xor"))).expect("linear"),
+            expected
+        );
+    }
+
+    let mcap = xor_mcap(&[ChunkSpec::new(10, &[7; 4096], 0)]);
+    let request_count = |decoder| {
+        let (requests, result) =
+            linear_read_requests(&mcap, decoder, LinearReaderOptions::default());
+        result.expect("read");
+        requests.len()
+    };
+    let doubled = request_count(TestDecoder::whole_frame("xor"));
+    let hinted = request_count(TestDecoder::whole_frame_with_hint("xor"));
+    assert!(
+        doubled < 40,
+        "no progress should grow the buffer, not add one byte per call: {doubled} requests"
+    );
+    assert!(
+        hinted < doubled,
+        "a raised next_read_size should be fetched at once: {hinted} vs {doubled} requests"
     );
 }
 
@@ -1024,31 +1033,18 @@ fn builtin_cache_does_not_count_as_a_caller_registration() {
     assert_caller_decompressor_ran(err);
 }
 
-#[cfg(feature = "zstd")]
 #[test]
 fn indexed_reader_reports_a_failed_reset() {
-    let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
-    let summary = Summary::read(&mcap)
-        .expect("summary read")
-        .expect("summary");
-    let mut reader = IndexedReader::new(&summary).expect("reader");
-    reader
-        .add_decompressor(FailingResetDecoder {
-            inner: super::zstd::ZstdDecoder::new(),
-            poisoned: false,
-        })
-        .expect("register");
-    let Some(Ok(IndexedReadEvent::ReadChunkRequest { offset, length })) = reader.next_event()
-    else {
-        panic!("expected a chunk request");
-    };
-    let start = offset as usize;
-    let err = reader
-        .insert_chunk_record_data(offset, &mcap[start..start + length])
+    let mcap = xor_mcap(&sample_chunks());
+    let err = read_indexed(&mcap, Some(TestDecoder::xor("xor").with_failing_reset()))
         .expect_err("reset failure should be returned");
     assert!(
         err.to_string().contains("reset failed"),
         "unexpected error: {err}"
+    );
+    assert_caller_decompressor_ran(
+        read_indexed(&mcap, Some(TestDecoder::fail("xor").with_failing_reset()))
+            .expect_err("a decompression error should win over the reset error"),
     );
 }
 
@@ -1129,6 +1125,32 @@ fn large_read_size_is_capped_by_the_record_length_limit() {
     );
 }
 
+#[test]
+fn stall_at_the_record_length_limit_is_chunk_too_large() {
+    let mcap = xor_mcap(&[ChunkSpec::new(10, &[7; 4096], 0)]);
+    let (len_at, _) = chunk_record_span(&mcap);
+    let data_start = len_at + 8 + chunk_header_len(&mcap);
+    // Not a power of two, so doubling from a one-byte hint overshoots it.
+    let limit = 1000;
+    for read_size in [0, 1] {
+        let (requests, result) = linear_read_requests(
+            &mcap,
+            TestDecoder::stall("xor").with_read_size(read_size),
+            LinearReaderOptions::default().with_record_length_limit(limit),
+        );
+        assert!(
+            matches!(result, Err(McapError::ChunkTooLarge(_))),
+            "read size {read_size}: {result:?}"
+        );
+        let requested: usize = requests.iter().sum();
+        assert!(
+            requested <= data_start + limit,
+            "read size {read_size} buffered past the limit: {requested} bytes requested, \
+             chunk data starts at {data_start}"
+        );
+    }
+}
+
 #[cfg(feature = "zstd")]
 #[test]
 fn builtin_zstd_reads_with_a_small_record_length_limit() {
@@ -1173,7 +1195,7 @@ fn custom_decompressor_checks_a_real_chunk_crc() {
         LinearReaderOptions::default().with_validate_chunk_crcs(true),
         LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
     ];
-    for options in modes {
+    for options in modes.clone() {
         assert_eq!(
             read_linear_with_options(&good, Some(TestDecoder::xor("xor")), options).expect("crc"),
             expected
@@ -1181,10 +1203,7 @@ fn custom_decompressor_checks_a_real_chunk_crc() {
     }
 
     let bad = xor_mcap_bad_crc(&chunks);
-    for options in [
-        LinearReaderOptions::default().with_validate_chunk_crcs(true),
-        LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
-    ] {
+    for options in modes {
         let result = read_linear_with_options(&bad, Some(TestDecoder::xor("xor")), options);
         assert!(
             matches!(result, Err(McapError::BadChunkCrc { .. })),
