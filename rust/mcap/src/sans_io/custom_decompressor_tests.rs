@@ -1084,12 +1084,10 @@ fn custom_decompressor_checks_a_real_chunk_crc() {
         LinearReaderOptions::default().with_validate_chunk_crcs(true),
         LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
     ] {
+        let err = read_linear_with(&bad, Some(TestDecoder::xor("xor")), options);
         assert!(
-            matches!(
-                read_linear_with(&bad, Some(TestDecoder::xor("xor")), options),
-                Err(McapError::BadChunkCrc { .. })
-            ),
-            "options {options:?} should reject a bad chunk CRC"
+            matches!(err, Err(McapError::BadChunkCrc { .. })),
+            "a bad chunk CRC should be rejected, got {err:?}"
         );
     }
 }
