@@ -210,7 +210,8 @@ pub struct LinearReaderOptions {
     pub validate_summary_section_crc: bool,
     /// If Some(limit), the reader will return an error on any non-chunk record with length > `limit`.
     /// If used in conjunction with `prevalidate_chunk_crcs`, the reader will return an error on any
-    /// chunk record where the compressed OR decompressed length are > `limit`.
+    /// chunk record where the compressed OR decompressed length are > `limit`. It also caps how
+    /// much compressed chunk data is buffered for a decompressor.
     pub record_length_limit: Option<usize>,
 }
 
@@ -484,6 +485,7 @@ impl LinearReader {
                     &mut self.decompressed_content,
                     &mut $chunk_state.compressed_remaining,
                     &mut $chunk_state.uncompressed_remaining,
+                    self.options.record_length_limit,
                 ) {
                     Ok(None) => &self.decompressed_content.unread()[..$n],
                     Ok(Some(n)) => return Some(Ok(LinearReadEvent::ReadRequest(n))),
@@ -956,9 +958,16 @@ fn recycle_decompressor(
     reset_result
 }
 
+/// Compressed bytes to request when a decompressor's `next_read_size()` is 0.
+const DEFAULT_COMPRESSED_READ_SIZE: usize = 64 * 1024;
+
 // decompresses up to `n` bytes from `from` into `to`. Repeatedly calls `decompress` until
 // either the input is exhausted or enough data has been written. Returns None if all required
 // data has been decompressed, or Some(need) if more bytes need to be read from the input.
+//
+// Compressed input is buffered up to the smaller of the chunk's remaining compressed size and
+// `record_length_limit`, so a corrupt chunk size cannot make a large `next_read_size()` allocate
+// more than the limit.
 fn decompress_inner(
     decompressor: &mut Box<dyn Decompressor>,
     n: usize,
@@ -966,16 +975,21 @@ fn decompress_inner(
     dest_buf: &mut RwBuf,
     compressed_remaining: &mut u64,
     uncompressed_remaining: &mut u64,
+    record_length_limit: Option<usize>,
 ) -> McapResult<Option<usize>> {
     let additional = n.saturating_sub(dest_buf.len());
     if additional == 0 {
         return Ok(None);
     }
     dest_buf.reserve_exact(additional);
+    let max_buffered = record_length_limit.unwrap_or(usize::MAX);
     loop {
         let remaining = clamp_to_usize(*compressed_remaining);
         let have = src_buf.len();
-        let need = decompressor.next_read_size().min(remaining);
+        let need = decompressor
+            .next_read_size()
+            .min(remaining)
+            .min(max_buffered);
         if need > have {
             return Ok(Some(need - have));
         }
@@ -991,7 +1005,12 @@ fn decompress_inner(
         // looks like a stall. Checked after the output is known to have room, so a full output
         // buffer does not trigger an extra read.
         if have == 0 && remaining > 0 {
-            return Ok(Some(1));
+            return Ok(Some(
+                DEFAULT_COMPRESSED_READ_SIZE
+                    .min(remaining)
+                    .min(max_buffered)
+                    .max(1),
+            ));
         }
         let src_len = have.min(remaining);
         let src = &src_buf.unread()[..src_len];
@@ -999,10 +1018,17 @@ fn decompress_inner(
         let res = check_decompress_result(decompressor.decompress(src, dst)?, src_len, dst_len)?;
         if res.consumed == 0 && res.wrote == 0 {
             // No progress asks for more input. Count it as a stall only once every remaining
-            // compressed byte was already passed in.
+            // compressed byte was already passed in. Without a larger hint, double the buffered
+            // input so a decoder waiting for a whole frame does not get one byte per call.
             if src_len < remaining {
-                let retry_need = decompressor.next_read_size().min(remaining);
-                let want = retry_need.max(have.saturating_add(1)).min(remaining);
+                if have >= max_buffered {
+                    return Err(McapError::ChunkTooLarge(*compressed_remaining));
+                }
+                let want = decompressor
+                    .next_read_size()
+                    .max(have.saturating_mul(2))
+                    .min(remaining)
+                    .min(max_buffered);
                 return Ok(Some(want - have));
             }
             return Err(no_progress_error());

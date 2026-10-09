@@ -31,13 +31,17 @@ pub trait Decompressor: Send {
     /// How many compressed bytes to buffer before the next [`Decompressor::decompress`] call.
     ///
     /// [`LinearReader`](crate::sans_io::LinearReader) calls this before every `decompress` call,
-    /// including the first of a chunk, and waits until `min(next_read_size(), remaining compressed
-    /// bytes)` are available. Return 0 when any amount will do. An empty buffer with compressed
-    /// bytes still in the chunk makes `LinearReader` fetch at least one more byte instead of
-    /// calling `decompress`. A large value makes `LinearReader` buffer that much of the chunk,
-    /// capped at the chunk's compressed size. After a call that made no progress, return the total
-    /// number of compressed bytes you need buffered, more than the `src.len()` you were given.
-    /// Otherwise `LinearReader` asks for one more byte at a time.
+    /// including the first of a chunk, and waits until this many bytes are available. The value is
+    /// capped at the chunk's remaining compressed size and at
+    /// [`record_length_limit`](crate::sans_io::LinearReaderOptions::record_length_limit) when one
+    /// is set.
+    ///
+    /// Return 0 when any amount will do; `LinearReader` then reads up to 64 KiB at a time. Small
+    /// non-zero values make it read that few bytes per call, so return a buffer size, not a
+    /// minimum, unless the format needs one. After a call that made no progress, return the total
+    /// number of compressed bytes you need buffered. Otherwise `LinearReader` doubles the buffered
+    /// input until the decoder makes progress or the cap is reached, and returns
+    /// [`McapError::ChunkTooLarge`] at the cap.
     /// [`IndexedReader`](crate::sans_io::IndexedReader) already holds the whole chunk and does not
     /// use this hint.
     fn next_read_size(&self) -> usize;

@@ -1054,6 +1054,86 @@ fn zero_read_size_still_decompresses_the_chunk() {
     );
 }
 
+/// Reads `mcap` with `decompressor`, returning every `ReadRequest` size and the final result.
+fn linear_read_requests(
+    mcap: &[u8],
+    decompressor: TestDecoder,
+    options: LinearReaderOptions,
+) -> (Vec<usize>, McapResult<()>) {
+    let mut reader = LinearReader::new_with_options(options);
+    reader.add_decompressor(decompressor).expect("register");
+    let mut cursor = Cursor::new(mcap);
+    let mut requests = Vec::new();
+    let mut iterations = 0;
+    while let Some(event) = reader.next_event() {
+        iterations += 1;
+        assert!(iterations < 100_000, "linear reader did not finish");
+        match event {
+            Ok(LinearReadEvent::ReadRequest(need)) => {
+                requests.push(need);
+                let read = cursor.read(reader.insert(need)).expect("read");
+                reader.notify_read(read);
+            }
+            Ok(LinearReadEvent::Record { .. }) => {}
+            Err(err) => return (requests, Err(err)),
+        }
+    }
+    (requests, Ok(()))
+}
+
+#[test]
+fn zero_read_size_reads_compressed_data_in_blocks() {
+    let mcap = xor_mcap(&[ChunkSpec::new(10, &[7; 4096], 0)]);
+    let (requests, result) = linear_read_requests(
+        &mcap,
+        TestDecoder::xor("xor").with_read_size(0),
+        LinearReaderOptions::default(),
+    );
+    result.expect("read");
+    assert!(
+        requests.len() < 20,
+        "a hint of 0 should not read one byte per call: {} requests",
+        requests.len()
+    );
+}
+
+#[test]
+fn large_read_size_is_capped_by_the_record_length_limit() {
+    let mut mcap = xor_mcap(&[ChunkSpec::new(10, b"one", 0)]);
+    let (len_at, _) = chunk_record_span(&mcap);
+    let header_len = chunk_header_len(&mcap);
+    let compressed_size_at = len_at + 8 + header_len - 8;
+    let huge = 64u64 << 30;
+    mcap[len_at..len_at + 8].copy_from_slice(&huge.to_le_bytes());
+    mcap[compressed_size_at..compressed_size_at + 8]
+        .copy_from_slice(&(huge - header_len as u64).to_le_bytes());
+
+    let limit = 1 << 16;
+    let (requests, result) = linear_read_requests(
+        &mcap,
+        TestDecoder::xor("xor").with_read_size(usize::MAX),
+        LinearReaderOptions::default().with_record_length_limit(limit),
+    );
+    assert!(result.is_err(), "a truncated chunk must not read cleanly");
+    assert!(
+        requests.iter().all(|&need| need <= limit),
+        "requests exceeded the record length limit: {requests:?}"
+    );
+}
+
+/// Byte length of the first chunk's header, up to and including `compressed_size`.
+fn chunk_header_len(mcap: &[u8]) -> usize {
+    let (len_at, _) = chunk_record_span(mcap);
+    // start time, end time, uncompressed size, uncompressed CRC
+    let compression_len_at = len_at + 8 + 28;
+    let compression_len = u32::from_le_bytes(
+        mcap[compression_len_at..compression_len_at + 4]
+            .try_into()
+            .unwrap(),
+    );
+    32 + compression_len as usize + 8
+}
+
 #[test]
 fn zero_read_size_stall_errors_after_the_chunk_is_buffered() {
     let mcap = xor_mcap(&sample_chunks());
