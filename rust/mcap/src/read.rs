@@ -6,6 +6,11 @@
 //! for random access through the summary, and [`crate::sans_io::SummaryReader`] for the summary
 //! alone. They pull bytes on request, so memory scales with the largest record or chunk, not
 //! the file.
+//!
+//! The readers in this module, including [`Summary::stream_chunk`], use only the built-in
+//! decompressors. To register a custom
+//! [`Decompressor`](crate::sans_io::decompressor::Decompressor), use one of the streaming readers;
+//! for bytes already in memory, wrap them in a [`std::io::Cursor`].
 use std::{
     borrow::Cow,
     collections::{hash_map::Entry, BTreeMap, HashMap},

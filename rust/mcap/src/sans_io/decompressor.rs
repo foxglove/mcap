@@ -35,7 +35,8 @@ pub trait Decompressor: Send {
     /// bytes)` are available. Return 0 when any amount will do. An empty buffer with compressed
     /// bytes still in the chunk makes `LinearReader` fetch at least one more byte instead of
     /// calling `decompress`. A large value makes `LinearReader` buffer that much of the chunk,
-    /// capped at the chunk's compressed size.
+    /// capped at the chunk's compressed size. After a call that made no progress, return how many
+    /// bytes you need. Otherwise `LinearReader` asks for one more byte at a time.
     /// [`IndexedReader`](crate::sans_io::IndexedReader) already holds the whole chunk and does not
     /// use this hint.
     fn next_read_size(&self) -> usize;
@@ -46,8 +47,11 @@ pub trait Decompressor: Send {
     /// been written. Bytes left unread after that, such as padding after the last frame, are
     /// skipped.
     ///
+    /// `dst` may be as small as one byte: `LinearReader` sizes it to the next record it parses.
+    /// Write as much as fits and keep any other decoded output for the next call.
+    ///
     /// `consumed` and `wrote` must not exceed the buffer lengths. Returning zero for both asks for
-    /// more compressed input. [`LinearReader`](crate::sans_io::LinearReader) then reads at least
+    /// more compressed input, so do that only when no output can be produced without more input. [`LinearReader`](crate::sans_io::LinearReader) then reads at least
     /// one more byte of the chunk, and returns an error only when `src` already held every
     /// remaining compressed byte. [`IndexedReader`](crate::sans_io::IndexedReader) passes the whole
     /// chunk, so zero progress is an error there.

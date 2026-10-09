@@ -1139,7 +1139,7 @@ fn bad_chunk_crc_is_reported_when_reset_fails() {
 }
 
 #[test]
-fn chunk_reader_accepts_an_uncompressed_chunk_with_a_crc() {
+fn chunk_reader_checks_an_uncompressed_chunk_crc() {
     let mcap = one_message_mcap(None);
     let (len_at, body_end) = chunk_record_span(&mcap);
     let body = &mcap[len_at + 8..body_end];
@@ -1148,13 +1148,23 @@ fn chunk_reader_accepts_an_uncompressed_chunk_with_a_crc() {
     assert!(header.compression.is_empty());
     assert_ne!(header.uncompressed_crc, 0);
     let data = &body[cursor.position() as usize..];
-    let records = crate::read::ChunkReader::new(header, data)
+    let records = crate::read::ChunkReader::new(header.clone(), data)
         .expect("chunk reader")
         .collect::<McapResult<Vec<_>>>()
         .expect("uncompressed chunk with a real CRC");
     assert!(records
         .iter()
         .any(|record| matches!(record, Record::Message { .. })));
+
+    let mut bad_header = header;
+    bad_header.uncompressed_crc ^= 1;
+    let result = crate::read::ChunkReader::new(bad_header, data)
+        .expect("chunk reader")
+        .collect::<McapResult<Vec<_>>>();
+    assert!(
+        matches!(result, Err(McapError::BadChunkCrc { .. })),
+        "a bad uncompressed chunk CRC must be rejected, got {result:?}"
+    );
 }
 
 #[test]
