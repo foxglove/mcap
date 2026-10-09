@@ -55,6 +55,8 @@ pub trait Decompressor: Send {
     /// Resets internal state so this instance can decode another chunk.
     ///
     /// Not called before the first chunk. Register an instance that is already ready to decode.
+    /// On [`LinearReader`](crate::sans_io::LinearReader), a bad chunk CRC is returned instead of a
+    /// reset error when both fail. The instance is still kept for the next chunk.
     fn reset(&mut self) -> McapResult<()>;
     /// The chunk `compression` string this decompressor handles.
     ///

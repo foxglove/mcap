@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::io::{Cursor, Read};
 
-use binrw::{BinWrite, BinWriterExt};
+use binrw::{BinRead, BinWrite, BinWriterExt};
 
 use super::decompressor::{DecompressResult, Decompressor};
 use super::{IndexedReadEvent, IndexedReader, LinearReadEvent, LinearReader, LinearReaderOptions};
@@ -1136,6 +1136,25 @@ fn bad_chunk_crc_is_reported_when_reset_fails() {
         1,
         "reading should finish after the CRC error: {errors:?}"
     );
+}
+
+#[test]
+fn chunk_reader_accepts_an_uncompressed_chunk_with_a_crc() {
+    let mcap = one_message_mcap(None);
+    let (len_at, body_end) = chunk_record_span(&mcap);
+    let body = &mcap[len_at + 8..body_end];
+    let mut cursor = Cursor::new(body);
+    let header = ChunkHeader::read_le(&mut cursor).expect("chunk header");
+    assert!(header.compression.is_empty());
+    assert_ne!(header.uncompressed_crc, 0);
+    let data = &body[cursor.position() as usize..];
+    let records = crate::read::ChunkReader::new(header, data)
+        .expect("chunk reader")
+        .collect::<McapResult<Vec<_>>>()
+        .expect("uncompressed chunk with a real CRC");
+    assert!(records
+        .iter()
+        .any(|record| matches!(record, Record::Message { .. })));
 }
 
 #[test]

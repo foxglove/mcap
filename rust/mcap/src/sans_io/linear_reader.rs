@@ -814,19 +814,24 @@ impl LinearReader {
                             .chunk_state
                             .as_mut()
                             .expect("chunk state should be set");
-                        if let Some(hasher) = self.decompressed_content.hasher_mut().take() {
-                            let calculated = hasher.finalize();
-                            let saved = state.crc;
-                            (saved != 0 && saved != calculated)
-                                .then_some(McapError::BadChunkCrc { saved, calculated })
-                        } else if let Some(hasher) = state.uncompressed_data_hasher.take() {
-                            let calculated = hasher.finalize();
-                            let saved = state.crc;
-                            (saved != 0 && saved != calculated)
-                                .then_some(McapError::BadChunkCrc { saved, calculated })
+                        // for_chunk always installs a decompressed-content hasher, including for
+                        // uncompressed chunks. Those records are read from file_data, so only
+                        // uncompressed_data_hasher has hashed them.
+                        let calculated = if state.decompressor.is_some() {
+                            self.decompressed_content.hasher_mut().take().map(|hasher| {
+                                let calculated = hasher.finalize();
+                                (state.crc, calculated)
+                            })
                         } else {
-                            None
-                        }
+                            state.uncompressed_data_hasher.take().map(|hasher| {
+                                let calculated = hasher.finalize();
+                                (state.crc, calculated)
+                            })
+                        };
+                        calculated.and_then(|(saved, calculated)| {
+                            (saved != 0 && saved != calculated)
+                                .then_some(McapError::BadChunkCrc { saved, calculated })
+                        })
                     };
                     let active = self
                         .chunk_state
@@ -974,18 +979,19 @@ fn decompress_inner(
         if need > have {
             return Ok(Some(need - have));
         }
-        // A hint of 0 means "any amount". Do not call decompress with an empty buffer while the
-        // chunk still has compressed bytes, or a frame boundary (where lz4 and zstd report 0)
-        // looks like a stall.
-        if have == 0 && remaining > 0 {
-            return Ok(Some(1));
-        }
         let dst = dest_buf.unwritten_mut();
         if dst.is_empty() {
             return Ok(None);
         }
         if *uncompressed_remaining == 0 {
             return Err(McapError::UnexpectedEoc);
+        }
+        // A hint of 0 means "any amount". Do not call decompress with an empty buffer while the
+        // chunk still has compressed bytes, or a frame boundary (where lz4 and zstd report 0)
+        // looks like a stall. Checked after the output is known to have room, so a full output
+        // buffer does not trigger an extra read.
+        if have == 0 && remaining > 0 {
+            return Ok(Some(1));
         }
         let src_len = have.min(remaining);
         let src = &src_buf.unread()[..src_len];
