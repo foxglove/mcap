@@ -559,11 +559,10 @@ impl IndexedReaderOptions {
     }
 }
 
-/// Drives a streaming [`Decompressor`] until `uncompressed_size` bytes have been written, then
-/// resets it, even on error.
+/// Writes `uncompressed_size` decompressed bytes into `dst`, then calls [`Decompressor::reset`].
 ///
-/// Compressed bytes left once the output is full, such as padding after the last frame, are never
-/// passed to the decompressor, which could read them as the start of another frame.
+/// `reset` runs after a decompression error too. Bytes in `src` past the point where `dst` is full
+/// are not passed to [`Decompressor::decompress`].
 fn decompress_registered(
     decompressor: &mut dyn Decompressor,
     src: &[u8],

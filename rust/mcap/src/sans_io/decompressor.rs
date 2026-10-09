@@ -13,69 +13,42 @@ pub struct DecompressResult {
     pub wrote: usize,
 }
 
-/// A streaming decompressor for one chunk compression format.
+/// A streaming decompressor for one MCAP chunk compression format.
 ///
-/// Register an instance with `add_decompressor` on
-/// [`LinearReader`](crate::sans_io::LinearReader) or [`IndexedReader`](crate::sans_io::IndexedReader).
-/// [`MessageReader`](crate::sans_io::MessageReader), [`io::MessageReader`](crate::io::MessageReader),
-/// and, with the `tokio` feature, `tokio::LinearReader` forward to their inner `LinearReader`.
-/// The reader uses it for chunks whose `compression` field equals [`Decompressor::name`], keeps
-/// one instance per name, and calls [`Decompressor::reset`] after each chunk it finishes reading.
-/// `reset` is not called before the first chunk, so the instance must be ready to decode when it
-/// is registered.
-///
-/// The readers in [`crate::read`], including [`MessageStream`](crate::MessageStream), do not
-/// accept custom decompressors. For bytes already in memory, use
-/// [`io::MessageReader`](crate::io::MessageReader) over a [`std::io::Cursor`] instead.
+/// [`name`](Self::name) is the chunk `compression` string this decompressor handles. Register an
+/// instance with a reader's `add_decompressor` before that reader reaches a chunk with the name.
+/// One instance is kept per name. [`reset`](Self::reset) is called after each chunk, and not
+/// before the first, so the instance must be ready to decode when it is registered.
 pub trait Decompressor: Send {
-    /// How many compressed bytes to buffer before the next [`Decompressor::decompress`] call.
+    /// How many compressed bytes should be available in `src` on the next
+    /// [`decompress`](Self::decompress) call.
     ///
-    /// [`LinearReader`](crate::sans_io::LinearReader) calls this before every `decompress` call,
-    /// including the first of a chunk, and waits until this many bytes are available. The value is
-    /// capped at the chunk's remaining compressed size and at
-    /// [`record_length_limit`](crate::sans_io::LinearReaderOptions::record_length_limit) when one
-    /// is set.
-    ///
-    /// Return 0 when any amount will do; `LinearReader` then reads up to 64 KiB at a time. Small
-    /// non-zero values make it read that few bytes per call, so return a buffer size, not a
-    /// minimum, unless the format needs one. A large value with a small `record_length_limit`
-    /// makes `LinearReader` refill its buffer to the limit after every record.
-    ///
-    /// After a call that made no progress, `LinearReader` buffers at least twice as many bytes as
-    /// it passed in, or this value if it is larger, so return the total you need buffered. If the
-    /// decoder still makes no progress once every remaining compressed byte is buffered,
-    /// `LinearReader` returns a decompression error. If it reaches `record_length_limit` first, it
-    /// returns [`McapError::ChunkTooLarge`].
-    /// [`IndexedReader`](crate::sans_io::IndexedReader) already holds the whole chunk and does not
-    /// use this hint.
+    /// Return 0 when any amount of input is acceptable. Otherwise return how many bytes must be
+    /// buffered before progress is possible. A caller may pass fewer bytes than this asks for.
     fn next_read_size(&self) -> usize;
-    /// Decompresses up to `dst.len()` bytes, consuming up to `src.len()` bytes from `src`.
+    /// Decompresses bytes from `src` into `dst`.
     ///
-    /// A chunk may contain several frames, including skippable ones, so keep decoding across frame
-    /// boundaries. The reader stops calling this once the chunk's declared uncompressed size has
-    /// been written. Bytes left unread after that, such as padding after the last frame, are
-    /// skipped.
+    /// Consume at most `src.len()` bytes and write at most `dst.len()` bytes. [`DecompressResult`]
+    /// reports those counts and must not claim more. `dst` may be as small as one byte; keep
+    /// decoded output that does not fit and write it on a later call.
     ///
-    /// `dst` may be as small as one byte: `LinearReader` sizes it to the next record it parses.
-    /// Write as much as fits and keep any other decoded output for the next call.
+    /// A chunk may hold several frames, including skippable frames. Continue across frame
+    /// boundaries until the caller stops. The caller stops once the chunk's declared uncompressed
+    /// size has been written, and does not pass compressed bytes left after that point.
     ///
-    /// `consumed` and `wrote` must not exceed the buffer lengths. Returning zero for both asks for
-    /// more compressed input, so do that only when no output can be produced without more input.
-    /// [`LinearReader`](crate::sans_io::LinearReader) then buffers more of the chunk. It returns a
-    /// decompression error when `src` already held every remaining compressed byte, or
-    /// [`McapError::ChunkTooLarge`] when `src` already held `record_length_limit` bytes.
-    /// [`IndexedReader`](crate::sans_io::IndexedReader) passes the whole chunk, so zero progress is
-    /// an error there.
+    /// Return `consumed: 0` and `wrote: 0` only when no output can be produced without more
+    /// compressed input. Returning that when `src` already holds enough input to make progress is
+    /// an error.
     fn decompress(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<DecompressResult>;
-    /// Resets internal state so this instance can decode another chunk.
+    /// Prepares this instance to decode another chunk.
     ///
-    /// If this fails, the reader returns the error and keeps the instance for the next chunk. A bad
-    /// chunk CRC on [`LinearReader`](crate::sans_io::LinearReader), or a decompression error on
-    /// [`IndexedReader`](crate::sans_io::IndexedReader), is returned instead when both occur.
+    /// Called after each chunk, not before the first. On failure the error is returned and the
+    /// instance stays registered.
     fn reset(&mut self) -> McapResult<()>;
     /// The chunk `compression` string this decompressor handles.
     ///
-    /// Must be non-empty: `""` marks an uncompressed chunk, and `add_decompressor` rejects it.
+    /// Must be non-empty. An empty string means the chunk is not compressed, and registering this
+    /// decompressor fails with [`McapError::EmptyDecompressorName`].
     fn name(&self) -> &'static str;
 }
 

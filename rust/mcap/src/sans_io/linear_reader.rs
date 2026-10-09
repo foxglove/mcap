@@ -620,9 +620,7 @@ impl LinearReader {
                     let min_header_buf = load!(MIN_CHUNK_HEADER_SIZE);
                     let compression_len =
                         u32::from_le_bytes(min_header_buf[28..32].try_into().unwrap());
-                    // The compression string sits between the length prefix and compressed_size.
-                    // A corrupt file can declare a multi-gigabyte string here. Requesting that
-                    // many bytes used to allocate them in insert() before any length check ran.
+                    // compression_len is untrusted. Reject an overlong header before loading it.
                     let header_len =
                         (MIN_CHUNK_HEADER_SIZE as u64).saturating_add(u64::from(compression_len));
                     if header_len > len {
