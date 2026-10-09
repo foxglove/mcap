@@ -24,3 +24,6 @@ pub(crate) fn check_len(len: u64, limit: Option<usize>) -> Option<usize> {
         _ => Some(len_as_usize),
     }
 }
+
+#[cfg(test)]
+mod custom_decompressor_tests;

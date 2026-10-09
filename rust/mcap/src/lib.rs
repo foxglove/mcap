@@ -128,6 +128,10 @@ pub enum McapError {
     UnknownSchema(String, u16),
     #[error("Unsupported compression format `{0}`")]
     UnsupportedCompression(String),
+    #[error("decompressor name must be non-empty")]
+    EmptyDecompressorName,
+    #[error("decompressor `{0}` is already registered")]
+    DuplicateDecompressor(String),
     #[error("Error during decompression: `{0}`")]
     DecompressionError(String),
     #[error("chunk size option exceeds usize max: `{0}`")]
@@ -235,6 +239,7 @@ mod assertions {
     assert_impl_all!(Writer<Cursor<Vec<u8>>>: Send);
     assert_impl_all!(MessageStream: Send);
     assert_impl_all!(sans_io::LinearReader: Send);
+    assert_impl_all!(sans_io::IndexedReader: Send, Sync);
     #[cfg(feature = "tokio")]
     assert_impl_all!(tokio::linear_reader::LinearReader<Cursor<Vec<u8>>>: Send);
 }

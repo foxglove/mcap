@@ -71,7 +71,9 @@ struct MaterializedInputMessages {
 }
 
 enum MergeMessageStream<'a> {
-    Indexed(IndexedInputMessageReader<'a>),
+    // Boxed because IndexedReader's inline state, including its decompressor map, is far larger
+    // than the other variant.
+    Indexed(Box<IndexedInputMessageReader<'a>>),
     Materialized(MaterializedInputMessages),
 }
 
@@ -440,11 +442,9 @@ fn merge_messages<W: Write + Seek>(
                 && common::summary_supports_indexed_read(summary)
                 && common::summary_indexes_all_messages(input.data, summary)
             {
-                streams.push(MergeMessageStream::Indexed(IndexedInputMessageReader::new(
-                    input_idx,
-                    input,
-                    summary.clone(),
-                )?));
+                streams.push(MergeMessageStream::Indexed(Box::new(
+                    IndexedInputMessageReader::new(input_idx, input, summary.clone())?,
+                )));
                 continue;
             }
         }

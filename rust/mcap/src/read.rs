@@ -6,6 +6,12 @@
 //! for random access through the summary, and [`crate::sans_io::SummaryReader`] for the summary
 //! alone. They pull bytes on request, so memory scales with the largest record or chunk, not
 //! the file.
+//!
+//! The readers in this module, including [`Summary::stream_chunk`], use only the built-in
+//! decompressors. For a custom [`Decompressor`](crate::sans_io::decompressor::Decompressor), use
+//! [`crate::sans_io::LinearReader`], [`crate::sans_io::IndexedReader`], or
+//! [`crate::io::MessageReader`], which reads bytes already in memory through a
+//! [`std::io::Cursor`].
 use std::{
     borrow::Cow,
     collections::{hash_map::Entry, BTreeMap, HashMap},
@@ -490,6 +496,10 @@ impl<'a> Iterator for RawMessageStream<'a> {
 /// (complete with its [`Channel`]) from the raw header and data.
 ///
 /// This stops at the end of the data section and does not read the summary.
+///
+/// Only the built-in lz4 and zstd decompressors are supported. For a custom
+/// [`Decompressor`](crate::sans_io::decompressor::Decompressor), use
+/// [`io::MessageReader`](crate::io::MessageReader) over a [`std::io::Cursor`] instead.
 ///
 /// Because tying the lifetime of each message to the underlying MCAP memory map
 /// makes it very difficult to send between threads or use in async land,
