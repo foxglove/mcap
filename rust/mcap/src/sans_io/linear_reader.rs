@@ -634,13 +634,9 @@ impl LinearReader {
                             .ok_or(McapError::ChunkTooLarge(header_len)));
                     let header_buf = consume!(header_len);
                     let header: ChunkHeader = check!(std::io::Cursor::new(header_buf).read_le());
-                    // Re-use or construct a compressor
-                    let decompressor = check!(get_decompressor(
-                        &mut self.decompressors,
-                        &mut self.builtin_decompressors,
-                        &header.compression
-                    ));
 
+                    // Length checks run before the decompressor is taken out of the map. An error
+                    // here must leave a caller-registered decoder in place for a later chunk.
                     let chunk_data_len = check!(len
                         .checked_sub(header_len as u64)
                         .ok_or(McapError::UnexpectedEoc));
@@ -652,6 +648,12 @@ impl LinearReader {
                         self.options.record_length_limit
                     )
                     .ok_or(McapError::ChunkTooLarge(len)));
+
+                    let decompressor = check!(get_decompressor(
+                        &mut self.decompressors,
+                        &mut self.builtin_decompressors,
+                        &header.compression
+                    ));
 
                     let state = ChunkState {
                         decompressor,
@@ -798,34 +800,56 @@ impl LinearReader {
                 }
                 PaddingAfterChunk => {
                     // discard any padding bytes after the chunk records and validate CRCs if
-                    // necessary
-                    let state = self
+                    // necessary. Check the CRC before reset: a failed reset must not hide a bad
+                    // chunk CRC. Move back to file records before returning either error so a
+                    // later next_event does not consume this padding again.
+                    let padding = self
                         .chunk_state
-                        .as_mut()
-                        .expect("chunk state should be set");
-                    let _ = consume!(state.padding_after_compressed_data);
-                    if let Some(active) = state.decompressor.take() {
-                        check!(recycle_decompressor(
-                            &mut self.decompressors,
-                            &mut self.builtin_decompressors,
-                            active,
-                        ));
+                        .as_ref()
+                        .expect("chunk state should be set")
+                        .padding_after_compressed_data;
+                    let _ = consume!(padding);
+                    let crc_error = {
+                        let state = self
+                            .chunk_state
+                            .as_mut()
+                            .expect("chunk state should be set");
                         if let Some(hasher) = self.decompressed_content.hasher_mut().take() {
                             let calculated = hasher.finalize();
                             let saved = state.crc;
-                            if saved != 0 && saved != calculated {
-                                return Some(Err(McapError::BadChunkCrc { saved, calculated }));
-                            }
+                            (saved != 0 && saved != calculated)
+                                .then_some(McapError::BadChunkCrc { saved, calculated })
+                        } else if let Some(hasher) = state.uncompressed_data_hasher.take() {
+                            let calculated = hasher.finalize();
+                            let saved = state.crc;
+                            (saved != 0 && saved != calculated)
+                                .then_some(McapError::BadChunkCrc { saved, calculated })
+                        } else {
+                            None
                         }
-                    } else if let Some(hasher) = state.uncompressed_data_hasher.take() {
-                        let calculated = hasher.finalize();
-                        let saved = state.crc;
-                        if saved != 0 && saved != calculated {
-                            return Some(Err(McapError::BadChunkCrc { saved, calculated }));
-                        }
-                    }
+                    };
+                    let active = self
+                        .chunk_state
+                        .as_mut()
+                        .expect("chunk state should be set")
+                        .decompressor
+                        .take();
                     self.chunk_state = None;
                     self.currently_reading = FileRecord;
+                    let reset_result = if let Some(active) = active {
+                        recycle_decompressor(
+                            &mut self.decompressors,
+                            &mut self.builtin_decompressors,
+                            active,
+                        )
+                    } else {
+                        Ok(())
+                    };
+                    match (crc_error, reset_result) {
+                        (Some(err), _) => return Some(Err(err)),
+                        (None, Err(err)) => return Some(Err(err)),
+                        (None, Ok(())) => {}
+                    }
                 }
                 EndMagic => {
                     if self.options.skip_end_magic {
@@ -944,12 +968,17 @@ fn decompress_inner(
     }
     dest_buf.reserve_exact(additional);
     loop {
-        let need = decompressor
-            .next_read_size()
-            .min(clamp_to_usize(*compressed_remaining));
+        let remaining = clamp_to_usize(*compressed_remaining);
         let have = src_buf.len();
+        let need = decompressor.next_read_size().min(remaining);
         if need > have {
             return Ok(Some(need - have));
+        }
+        // A hint of 0 means "any amount". Do not call decompress with an empty buffer while the
+        // chunk still has compressed bytes, or a frame boundary (where lz4 and zstd report 0)
+        // looks like a stall.
+        if have == 0 && remaining > 0 {
+            return Ok(Some(1));
         }
         let dst = dest_buf.unwritten_mut();
         if dst.is_empty() {
@@ -958,20 +987,19 @@ fn decompress_inner(
         if *uncompressed_remaining == 0 {
             return Err(McapError::UnexpectedEoc);
         }
-        let src_len = have.min(clamp_to_usize(*compressed_remaining));
+        let src_len = have.min(remaining);
         let src = &src_buf.unread()[..src_len];
         let dst_len = dst.len();
         let res = check_decompress_result(decompressor.decompress(src, dst)?, src_len, dst_len)?;
         if res.consumed == 0 && res.wrote == 0 {
-            // No progress means the decompressor wants more input. Read more if next_read_size now
-            // asks for more than is buffered; otherwise it is a stall.
-            let retry_need = decompressor
-                .next_read_size()
-                .min(clamp_to_usize(*compressed_remaining));
-            if retry_need <= have {
-                return Err(no_progress_error());
+            // No progress asks for more input. Count it as a stall only once every remaining
+            // compressed byte was already passed in.
+            if src_len < remaining {
+                let retry_need = decompressor.next_read_size().min(remaining);
+                let want = retry_need.max(have.saturating_add(1)).min(remaining);
+                return Ok(Some(want - have));
             }
-            continue;
+            return Err(no_progress_error());
         }
         if res.wrote as u64 > *uncompressed_remaining {
             return Err(McapError::DecompressionError(format!(
@@ -1419,7 +1447,7 @@ mod tests {
         let mut buf = Vec::new();
         {
             let mut cursor = std::io::Cursor::new(buf);
-            let data = Vec::from_iter(std::iter::repeat_n(0x20u8, 1024 * 1024 * 4));
+            let data = Vec::from_iter(std::iter::repeat(0x20u8).take(1024 * 1024 * 4));
             let mut writer = crate::WriteOptions::new()
                 .compression(None)
                 .chunk_size(None)

@@ -4,7 +4,7 @@ use std::io::{Cursor, Read};
 use binrw::{BinWrite, BinWriterExt};
 
 use super::decompressor::{DecompressResult, Decompressor};
-use super::{IndexedReadEvent, IndexedReader, LinearReadEvent, LinearReader};
+use super::{IndexedReadEvent, IndexedReader, LinearReadEvent, LinearReader, LinearReaderOptions};
 use crate::records::{
     op, Channel, ChunkHeader, ChunkIndex, DataEnd, Footer, Header, MessageHeader, Record,
 };
@@ -41,59 +41,68 @@ enum DecoderKind {
 struct TestDecoder {
     name: &'static str,
     kind: DecoderKind,
+    read_size: usize,
+    fail_reset: bool,
 }
 
 impl TestDecoder {
-    fn xor(name: &'static str) -> Self {
+    fn new(name: &'static str, kind: DecoderKind) -> Self {
         Self {
             name,
-            kind: DecoderKind::Xor {
+            kind,
+            read_size: 1,
+            fail_reset: false,
+        }
+    }
+
+    fn with_read_size(mut self, read_size: usize) -> Self {
+        self.read_size = read_size;
+        self
+    }
+
+    fn fail_reset(mut self) -> Self {
+        self.fail_reset = true;
+        self
+    }
+
+    fn xor(name: &'static str) -> Self {
+        Self::new(
+            name,
+            DecoderKind::Xor {
                 remaining: None,
                 len_buf: [0; 4],
                 len_filled: 0,
             },
-        }
+        )
     }
 
     fn over_report(name: &'static str, wrote: bool) -> Self {
-        Self {
-            name,
-            kind: DecoderKind::OverReport { wrote },
-        }
+        Self::new(name, DecoderKind::OverReport { wrote })
     }
 
     fn greedy(name: &'static str) -> Self {
-        Self {
-            name,
-            kind: DecoderKind::Greedy,
-        }
+        Self::new(name, DecoderKind::Greedy)
     }
 
     fn need_more(name: &'static str) -> Self {
-        Self {
+        Self::new(
             name,
-            kind: DecoderKind::NeedMore {
+            DecoderKind::NeedMore {
                 probed: false,
                 want: 1,
                 remaining: None,
                 len_buf: [0; 4],
                 len_filled: 0,
             },
-        }
+        )
     }
 
     fn stall(name: &'static str) -> Self {
-        Self {
-            name,
-            kind: DecoderKind::Stall,
-        }
+        Self::new(name, DecoderKind::Stall)
     }
 
     fn fail(name: &'static str) -> Self {
-        Self {
-            name,
-            kind: DecoderKind::Fail,
-        }
+        Self::new(name, DecoderKind::Fail)
     }
 }
 
@@ -101,7 +110,7 @@ impl Decompressor for TestDecoder {
     fn next_read_size(&self) -> usize {
         match &self.kind {
             DecoderKind::NeedMore { want, .. } => *want,
-            _ => 1,
+            _ => self.read_size,
         }
     }
 
@@ -175,6 +184,9 @@ impl Decompressor for TestDecoder {
             | DecoderKind::Fail
             | DecoderKind::OverReport { .. }
             | DecoderKind::Greedy => {}
+        }
+        if self.fail_reset {
+            return Err(McapError::DecompressionError("reset failed".into()));
         }
         Ok(())
     }
@@ -307,6 +319,7 @@ struct BuiltChunk {
     log_time: u64,
     compression: String,
     uncompressed_size: u64,
+    uncompressed_crc: u32,
     compressed: Vec<u8>,
 }
 
@@ -341,7 +354,7 @@ fn write_indexed_mcap(chunks: &[BuiltChunk]) -> Vec<u8> {
             message_start_time: chunk.log_time,
             message_end_time: chunk.log_time,
             uncompressed_size: chunk.uncompressed_size,
-            uncompressed_crc: 0,
+            uncompressed_crc: chunk.uncompressed_crc,
             compression: chunk.compression.clone(),
             compressed_size: chunk.compressed.len() as u64,
         });
@@ -398,6 +411,15 @@ fn write_indexed_mcap(chunks: &[BuiltChunk]) -> Vec<u8> {
 
 /// Builds an indexed MCAP whose chunks use the `"xor"` compression string.
 fn xor_mcap(chunks: &[ChunkSpec]) -> Vec<u8> {
+    build_xor_mcap(chunks, false)
+}
+
+/// Like [`xor_mcap`], but each chunk's `uncompressed_crc` is wrong.
+fn xor_mcap_bad_crc(chunks: &[ChunkSpec]) -> Vec<u8> {
+    build_xor_mcap(chunks, true)
+}
+
+fn build_xor_mcap(chunks: &[ChunkSpec], corrupt_crc: bool) -> Vec<u8> {
     let built = chunks
         .iter()
         .map(|chunk| {
@@ -413,16 +435,32 @@ fn xor_mcap(chunks: &[ChunkSpec]) -> Vec<u8> {
             let mut compressed = Vec::with_capacity(4 + records.len() + chunk.trailing);
             compressed.extend_from_slice(&(records.len() as u32).to_le_bytes());
             compressed.extend(records.iter().map(|byte| byte ^ XOR_KEY));
-            compressed.extend(std::iter::repeat_n(0xA5u8, chunk.trailing));
+            compressed.extend(std::iter::repeat(0xA5u8).take(chunk.trailing));
+            let crc = crc32fast::hash(&records);
             BuiltChunk {
                 log_time: chunk.log_time,
                 compression: "xor".into(),
                 uncompressed_size: chunk.declared_uncompressed.unwrap_or(records.len() as u64),
+                uncompressed_crc: if corrupt_crc { crc ^ 1 } else { crc },
                 compressed,
             }
         })
         .collect::<Vec<_>>();
     write_indexed_mcap(&built)
+}
+
+/// Byte offset of a chunk record's length field, and the end of its body.
+fn chunk_record_span(mcap: &[u8]) -> (usize, usize) {
+    let mut offset = MAGIC.len();
+    while offset + 9 <= mcap.len() {
+        let opcode = mcap[offset];
+        let len = u64::from_le_bytes(mcap[offset + 1..offset + 9].try_into().unwrap()) as usize;
+        if opcode == op::CHUNK {
+            return (offset + 1, offset + 9 + len);
+        }
+        offset += 9 + len;
+    }
+    panic!("file has no chunk record");
 }
 
 fn sample_chunks() -> Vec<ChunkSpec> {
@@ -433,7 +471,15 @@ fn read_linear(
     mcap: &[u8],
     decompressor: Option<TestDecoder>,
 ) -> McapResult<Vec<(u16, u64, Vec<u8>)>> {
-    let mut reader = LinearReader::new();
+    read_linear_with(mcap, decompressor, LinearReaderOptions::default())
+}
+
+fn read_linear_with(
+    mcap: &[u8],
+    decompressor: Option<TestDecoder>,
+    options: LinearReaderOptions,
+) -> McapResult<Vec<(u16, u64, Vec<u8>)>> {
+    let mut reader = LinearReader::new_with_options(options);
     if let Some(decompressor) = decompressor {
         reader.add_decompressor(decompressor)?;
     }
@@ -786,6 +832,7 @@ fn registered_decompressor_reads_multi_frame_chunks() {
             log_time: 7,
             compression: "zstd".into(),
             uncompressed_size: records.len() as u64,
+            uncompressed_crc: 0,
             compressed,
         }]);
 
@@ -994,5 +1041,141 @@ fn indexed_reader_reports_a_failed_reset() {
     assert!(
         err.to_string().contains("reset failed"),
         "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn zero_read_size_still_decompresses_the_chunk() {
+    let mcap = xor_mcap(&sample_chunks());
+    let expected = vec![(1, 10, b"one".to_vec()), (1, 20, b"two".to_vec())];
+    assert_eq!(
+        read_linear(&mcap, Some(TestDecoder::xor("xor").with_read_size(0))).expect("linear"),
+        expected
+    );
+}
+
+#[test]
+fn zero_read_size_stall_errors_after_the_chunk_is_buffered() {
+    let mcap = xor_mcap(&sample_chunks());
+    assert_no_progress(
+        read_linear(&mcap, Some(TestDecoder::stall("xor").with_read_size(0)))
+            .expect_err("a hint of 0 must not loop forever"),
+    );
+}
+
+#[test]
+fn custom_decompressor_checks_a_real_chunk_crc() {
+    let chunks = [ChunkSpec::new(10, b"one", 0)];
+    let good = xor_mcap(&chunks);
+    let expected = vec![(1, 10, b"one".to_vec())];
+    let modes = [
+        LinearReaderOptions::default().with_validate_chunk_crcs(true),
+        LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
+    ];
+    for options in modes {
+        assert_eq!(
+            read_linear_with(&good, Some(TestDecoder::xor("xor")), options).expect("crc"),
+            expected
+        );
+    }
+
+    let bad = xor_mcap_bad_crc(&chunks);
+    for options in [
+        LinearReaderOptions::default().with_validate_chunk_crcs(true),
+        LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
+    ] {
+        assert!(
+            matches!(
+                read_linear_with(&bad, Some(TestDecoder::xor("xor")), options),
+                Err(McapError::BadChunkCrc { .. })
+            ),
+            "options {options:?} should reject a bad chunk CRC"
+        );
+    }
+}
+
+#[test]
+fn bad_chunk_crc_is_reported_when_reset_fails() {
+    let mut mcap = xor_mcap_bad_crc(&[ChunkSpec::new(10, b"one", 4)]);
+    let (len_at, body_end) = chunk_record_span(&mcap);
+    let len = u64::from_le_bytes(mcap[len_at..len_at + 8].try_into().unwrap());
+    mcap[len_at..len_at + 8].copy_from_slice(&(len + 8).to_le_bytes());
+    mcap.splice(body_end..body_end, std::iter::repeat(0xFF).take(8));
+
+    let mut reader = LinearReader::new_with_options(
+        LinearReaderOptions::default().with_validate_chunk_crcs(true),
+    );
+    reader
+        .add_decompressor(TestDecoder::xor("xor").fail_reset())
+        .expect("register");
+    let mut cursor = Cursor::new(mcap.as_slice());
+    let mut messages = 0;
+    let mut errors = Vec::new();
+    let mut iterations = 0;
+    while let Some(event) = reader.next_event() {
+        iterations += 1;
+        assert!(iterations < 100_000, "linear reader did not finish");
+        match event {
+            Ok(LinearReadEvent::ReadRequest(need)) => {
+                let read = cursor.read(reader.insert(need)).expect("read");
+                reader.notify_read(read);
+            }
+            Ok(LinearReadEvent::Record { opcode, .. }) => {
+                if opcode == op::MESSAGE {
+                    messages += 1;
+                }
+            }
+            Err(err) => errors.push(err),
+        }
+    }
+    assert_eq!(messages, 1);
+    assert!(
+        matches!(errors.first(), Some(McapError::BadChunkCrc { .. })),
+        "a failed reset must not hide the chunk CRC: {errors:?}"
+    );
+    assert_eq!(
+        errors.len(),
+        1,
+        "reading should finish after the CRC error: {errors:?}"
+    );
+}
+
+#[test]
+fn chunk_header_error_keeps_the_registered_decompressor() {
+    let mut mcap = xor_mcap(&[ChunkSpec::new(10, b"one", 0)]);
+    let (len_at, _) = chunk_record_span(&mcap);
+    let len = u64::from_le_bytes(mcap[len_at..len_at + 8].try_into().unwrap());
+    mcap[len_at..len_at + 8].copy_from_slice(&(len + 10_000).to_le_bytes());
+
+    let mut reader = LinearReader::new_with_options(
+        LinearReaderOptions::default().with_record_length_limit(128),
+    );
+    reader
+        .add_decompressor(TestDecoder::xor("xor"))
+        .expect("register");
+    let mut cursor = Cursor::new(mcap.as_slice());
+    let mut iterations = 0;
+    let err = loop {
+        iterations += 1;
+        assert!(iterations < 100_000, "linear reader did not finish");
+        match reader.next_event().expect("header length is known") {
+            Ok(LinearReadEvent::ReadRequest(need)) => {
+                let read = cursor.read(reader.insert(need)).expect("read");
+                reader.notify_read(read);
+            }
+            Ok(LinearReadEvent::Record { .. }) => {}
+            Err(err) => break err,
+        }
+    };
+    assert!(
+        matches!(err, McapError::ChunkTooLarge(_)),
+        "unexpected error: {err}"
+    );
+    assert!(
+        matches!(
+            reader.add_decompressor(TestDecoder::xor("xor")),
+            Err(McapError::DuplicateDecompressor(name)) if name == "xor"
+        ),
+        "the header error dropped the registered decompressor"
     );
 }
