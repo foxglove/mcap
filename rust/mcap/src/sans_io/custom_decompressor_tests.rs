@@ -22,10 +22,10 @@ enum DecoderKind {
     },
     Stall,
     Fail,
-    /// Reports a `consumed` or `wrote` past the end of the buffer it was given.
-    OverReport {
-        wrote: bool,
-    },
+    /// Reports a `consumed` past the end of `src`.
+    OverConsume,
+    /// Reports a `wrote` past the end of `dst`.
+    OverWrite,
     /// Fills the entire output buffer on every call.
     Greedy,
     /// Returns no progress once, then raises `next_read_size` so the reader must fetch more input.
@@ -60,7 +60,7 @@ impl TestDecoder {
         self
     }
 
-    fn fail_reset(mut self) -> Self {
+    fn with_failing_reset(mut self) -> Self {
         self.fail_reset = true;
         self
     }
@@ -76,8 +76,12 @@ impl TestDecoder {
         )
     }
 
-    fn over_report(name: &'static str, wrote: bool) -> Self {
-        Self::new(name, DecoderKind::OverReport { wrote })
+    fn over_consume(name: &'static str) -> Self {
+        Self::new(name, DecoderKind::OverConsume)
+    }
+
+    fn over_write(name: &'static str) -> Self {
+        Self::new(name, DecoderKind::OverWrite)
     }
 
     fn greedy(name: &'static str) -> Self {
@@ -121,11 +125,11 @@ impl Decompressor for TestDecoder {
                 wrote: 0,
             }),
             DecoderKind::Fail => Err(McapError::DecompressionError("caller decompressor".into())),
-            DecoderKind::OverReport { wrote: false } => Ok(DecompressResult {
+            DecoderKind::OverConsume => Ok(DecompressResult {
                 consumed: src.len() + 1,
                 wrote: 0,
             }),
-            DecoderKind::OverReport { wrote: true } => Ok(DecompressResult {
+            DecoderKind::OverWrite => Ok(DecompressResult {
                 consumed: 0,
                 wrote: dst.len() + 1,
             }),
@@ -182,7 +186,8 @@ impl Decompressor for TestDecoder {
             }
             DecoderKind::Stall
             | DecoderKind::Fail
-            | DecoderKind::OverReport { .. }
+            | DecoderKind::OverConsume
+            | DecoderKind::OverWrite
             | DecoderKind::Greedy => {}
         }
         if self.fail_reset {
@@ -299,18 +304,19 @@ where
 struct ChunkSpec {
     log_time: u64,
     payload: &'static [u8],
-    trailing: usize,
+    /// Bytes appended after the compressed frame.
+    padding: usize,
     /// Overrides the uncompressed size declared in the chunk header and chunk index.
-    declared_uncompressed: Option<u64>,
+    declared_uncompressed_size: Option<u64>,
 }
 
 impl ChunkSpec {
-    fn new(log_time: u64, payload: &'static [u8], trailing: usize) -> Self {
+    fn new(log_time: u64, payload: &'static [u8], padding: usize) -> Self {
         Self {
             log_time,
             payload,
-            trailing,
-            declared_uncompressed: None,
+            padding,
+            declared_uncompressed_size: None,
         }
     }
 }
@@ -432,15 +438,17 @@ fn build_xor_mcap(chunks: &[ChunkSpec], corrupt_crc: bool) -> Vec<u8> {
             message_body.extend_from_slice(chunk.payload);
             let mut records = Vec::new();
             append_record(&mut records, op::MESSAGE, &message_body);
-            let mut compressed = Vec::with_capacity(4 + records.len() + chunk.trailing);
+            let mut compressed = Vec::with_capacity(4 + records.len() + chunk.padding);
             compressed.extend_from_slice(&(records.len() as u32).to_le_bytes());
             compressed.extend(records.iter().map(|byte| byte ^ XOR_KEY));
-            compressed.extend(std::iter::repeat(0xA5u8).take(chunk.trailing));
+            compressed.extend(std::iter::repeat(0xA5u8).take(chunk.padding));
             let crc = crc32fast::hash(&records);
             BuiltChunk {
                 log_time: chunk.log_time,
                 compression: "xor".into(),
-                uncompressed_size: chunk.declared_uncompressed.unwrap_or(records.len() as u64),
+                uncompressed_size: chunk
+                    .declared_uncompressed_size
+                    .unwrap_or(records.len() as u64),
                 uncompressed_crc: if corrupt_crc { crc ^ 1 } else { crc },
                 compressed,
             }
@@ -471,10 +479,10 @@ fn read_linear(
     mcap: &[u8],
     decompressor: Option<TestDecoder>,
 ) -> McapResult<Vec<(u16, u64, Vec<u8>)>> {
-    read_linear_with(mcap, decompressor, LinearReaderOptions::default())
+    read_linear_with_options(mcap, decompressor, LinearReaderOptions::default())
 }
 
-fn read_linear_with(
+fn read_linear_with_options(
     mcap: &[u8],
     decompressor: Option<TestDecoder>,
     options: LinearReaderOptions,
@@ -604,7 +612,7 @@ fn assert_no_progress(err: McapError) {
     }
 }
 
-fn assert_caller_decompressor(err: McapError) {
+fn assert_caller_decompressor_ran(err: McapError) {
     match err {
         McapError::DecompressionError(message) => {
             assert!(
@@ -790,11 +798,11 @@ fn registered_decompressor_replaces_builtin() {
     ];
     for &(compression, name) in builtins {
         let mcap = one_message_mcap(Some(compression));
-        assert_caller_decompressor(
+        assert_caller_decompressor_ran(
             read_linear(&mcap, Some(TestDecoder::fail(name)))
                 .expect_err("linear should use caller"),
         );
-        assert_caller_decompressor(
+        assert_caller_decompressor_ran(
             read_indexed(&mcap, Some(TestDecoder::fail(name)))
                 .expect_err("indexed should use caller"),
         );
@@ -887,10 +895,10 @@ fn registered_decompressor_reads_multi_frame_chunks() {
 #[test]
 fn over_reported_buffer_lengths_are_errors() {
     let mcap = xor_mcap(&sample_chunks());
-    for wrote in [false, true] {
-        let linear = read_linear(&mcap, Some(TestDecoder::over_report("xor", wrote)))
+    for decoder in [TestDecoder::over_consume, TestDecoder::over_write] {
+        let linear = read_linear(&mcap, Some(decoder("xor")))
             .expect_err("linear should reject an over-reported result");
-        let indexed = read_indexed(&mcap, Some(TestDecoder::over_report("xor", wrote)))
+        let indexed = read_indexed(&mcap, Some(decoder("xor")))
             .expect_err("indexed should reject an over-reported result");
         for err in [linear, indexed] {
             match err {
@@ -909,7 +917,7 @@ fn over_reported_buffer_lengths_are_errors() {
 #[test]
 fn greedy_output_past_the_declared_size_is_an_error() {
     let mut chunks = vec![ChunkSpec::new(10, b"one", 0)];
-    chunks[0].declared_uncompressed = Some(4);
+    chunks[0].declared_uncompressed_size = Some(4);
     let mcap = xor_mcap(&chunks);
     let linear = read_linear(&mcap, Some(TestDecoder::greedy("xor")))
         .expect_err("linear should reject output past the uncompressed size");
@@ -1013,7 +1021,7 @@ fn builtin_cache_does_not_count_as_a_caller_registration() {
         }
     };
     assert_eq!(messages, 1, "the second chunk should not decode");
-    assert_caller_decompressor(err);
+    assert_caller_decompressor_ran(err);
 }
 
 #[cfg(feature = "zstd")]
@@ -1125,7 +1133,7 @@ fn large_read_size_is_capped_by_the_record_length_limit() {
 #[test]
 fn builtin_zstd_reads_with_a_small_record_length_limit() {
     let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
-    let messages = read_linear_with(
+    let messages = read_linear_with_options(
         &mcap,
         None,
         LinearReaderOptions::default().with_record_length_limit(128),
@@ -1167,7 +1175,7 @@ fn custom_decompressor_checks_a_real_chunk_crc() {
     ];
     for options in modes {
         assert_eq!(
-            read_linear_with(&good, Some(TestDecoder::xor("xor")), options).expect("crc"),
+            read_linear_with_options(&good, Some(TestDecoder::xor("xor")), options).expect("crc"),
             expected
         );
     }
@@ -1177,10 +1185,10 @@ fn custom_decompressor_checks_a_real_chunk_crc() {
         LinearReaderOptions::default().with_validate_chunk_crcs(true),
         LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
     ] {
-        let err = read_linear_with(&bad, Some(TestDecoder::xor("xor")), options);
+        let result = read_linear_with_options(&bad, Some(TestDecoder::xor("xor")), options);
         assert!(
-            matches!(err, Err(McapError::BadChunkCrc { .. })),
-            "a bad chunk CRC should be rejected, got {err:?}"
+            matches!(result, Err(McapError::BadChunkCrc { .. })),
+            "a bad chunk CRC should be rejected, got {result:?}"
         );
     }
 }
@@ -1197,7 +1205,7 @@ fn bad_chunk_crc_is_reported_when_reset_fails() {
         LinearReaderOptions::default().with_validate_chunk_crcs(true),
     );
     reader
-        .add_decompressor(TestDecoder::xor("xor").fail_reset())
+        .add_decompressor(TestDecoder::xor("xor").with_failing_reset())
         .expect("register");
     let mut cursor = Cursor::new(mcap.as_slice());
     let mut messages = 0;
