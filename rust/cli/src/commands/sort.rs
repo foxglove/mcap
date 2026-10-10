@@ -310,7 +310,7 @@ mod tests {
         let output = run_sort(build_out_of_order_indexed_input(), |input, out| {
             sort_command(input.clone(), out.clone())
         });
-        let library = crate::parse::read_header(&output)
+        let library = crate::parse::read_header_from_bytes(&output)
             .expect("read header")
             .expect("header present")
             .library;
@@ -343,8 +343,14 @@ mod tests {
                 PathBuf::from("/tmp/mcap-cli-cloud-sort-output.mcap"),
             ),
         )
-        .expect_err("cloud input should require scan opt-in before download");
-        assert!(err.to_string().contains("--allow-remote-scan"));
-        assert!(!err.to_string().contains("token=secret"));
+        .expect_err("cloud input should fail before producing output");
+        let message = err.to_string();
+        // Refused from the path alone, before any network or credential lookup; the query string
+        // must stay redacted.
+        assert!(!message.contains("token=secret"));
+        assert!(
+            message.contains("--allow-remote-scan"),
+            "unexpected error: {message}"
+        );
     }
 }
