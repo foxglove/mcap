@@ -969,6 +969,58 @@ fn registered_decompressor_reads_multi_frame_chunks() {
     }
 }
 
+#[cfg(feature = "zstd")]
+#[test]
+fn decoding_stops_at_the_declared_uncompressed_size() {
+    // One zstd frame holding two message records and a content checksum, in a chunk that
+    // declares only the first record's length. The readers decode that much and never feed the
+    // decoder the rest, so the second record is dropped and the checksum is not verified. See
+    // `Decompressors::decompress_chunk` for why.
+    let mut records = Vec::new();
+    let mut first_record_len = 0;
+    for (log_time, payload) in [(7, b"first".as_slice()), (8, b"second".as_slice())] {
+        let mut body = write_body(&MessageHeader {
+            channel_id: 1,
+            sequence: 1,
+            log_time,
+            publish_time: log_time,
+        });
+        body.extend_from_slice(payload);
+        append_record(&mut records, op::MESSAGE, &body);
+        if first_record_len == 0 {
+            first_record_len = records.len();
+        }
+    }
+    let mut compressor = zstd::bulk::Compressor::new(0).expect("compressor");
+    compressor.include_checksum(true).expect("checksum option");
+    let mut compressed = compressor.compress(&records).expect("compress");
+    // Corrupt the checksum, which is the last four bytes of the frame, and confirm that a full
+    // decode of the frame rejects it.
+    *compressed.last_mut().expect("frame") ^= 0xFF;
+    assert!(
+        zstd::decode_all(Cursor::new(&compressed[..])).is_err(),
+        "a full decode should reject the corrupt checksum"
+    );
+
+    let mcap = write_indexed_mcap(&[BuiltChunk {
+        log_time: 7,
+        compression: "zstd".into(),
+        uncompressed_size: first_record_len as u64,
+        uncompressed_crc: 0,
+        compressed,
+    }]);
+    let expected = vec![(1, 7, b"first".to_vec())];
+
+    let scan = drive_linear(&mcap, &mut LinearReader::new(), usize::MAX);
+    assert!(scan.errors.is_empty(), "linear: {:?}", scan.errors);
+    assert_eq!(scan.messages, expected, "linear");
+    assert_eq!(
+        read_indexed(&mcap, None::<TestDecoder>).expect("indexed"),
+        expected,
+        "indexed"
+    );
+}
+
 #[test]
 fn over_reported_buffer_lengths_are_errors() {
     let mcap = xor_mcap(&sample_chunks());

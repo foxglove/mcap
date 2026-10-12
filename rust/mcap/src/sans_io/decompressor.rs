@@ -90,8 +90,12 @@ impl Decompressors {
     /// Decodes a chunk that is fully in memory into `dst`, then resets the decompressor.
     ///
     /// A `decompress` call that makes no progress is an error, since no more input can arrive.
-    /// Input past the point where `dst` is full is not passed on. `reset` runs after a
-    /// decompression error too, and the decompression error wins.
+    /// `reset` runs after a decompression error too, and the decompression error wins.
+    ///
+    /// Input past the point where `dst` is full is not passed on, per the [`Decompressor`]
+    /// contract and like the linear reader. An oversize frame is truncated silently and a
+    /// compressor's trailing checksum goes unverified; the chunk's `uncompressed_crc` is the
+    /// integrity check, and it is in a header the indexed reader never sees.
     pub(crate) fn decompress_chunk(
         &mut self,
         name: &str,
