@@ -1686,6 +1686,9 @@ impl<W: Write + Seek> ChunkWriter<W> {
                     .build(sink)
                     // With the frame header held, only liblz4 setup can fail here, and in
                     // practice only its context allocation, which is out-of-memory territory.
+                    // If a future lz4 release wrote its frame header in more than one write,
+                    // an I/O error could reach this point and panic instead of being returned;
+                    // io_error_on_the_lz4_frame_header_does_not_lose_the_stream guards that.
                     .expect("lz4 encoder setup failed");
                 Compressor::Lz4(encoder)
             }
