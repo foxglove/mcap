@@ -731,12 +731,7 @@ fn find_or_make_chunk_slot(chunk_slots: &mut Vec<ChunkSlot>, data_start: u64) ->
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::BTreeMap,
-        io::{Read, Seek},
-    };
-
-    use crate::sans_io::{SummaryReadEvent, SummaryReader};
+    use std::collections::BTreeMap;
 
     use super::*;
 
@@ -950,11 +945,14 @@ mod tests {
     }
     #[test]
     fn test_compression() {
-        for compression in [
+        let compressions = [
             None,
+            #[cfg(feature = "lz4")]
             Some(crate::Compression::Lz4),
+            #[cfg(feature = "zstd")]
             Some(crate::Compression::Zstd),
-        ] {
+        ];
+        for compression in compressions {
             let mcap = make_mcap(compression, &[&[(0, 1), (0, 2)], &[(0, 3), (0, 4)]]);
             let messages = read_mcap_noseek(IndexedReaderOptions::new(), &mcap);
             assert_eq!(
@@ -987,8 +985,12 @@ mod tests {
         assert!(matches!(result, Err(McapError::ChunkTooLarge(_))));
     }
 
+    #[cfg(feature = "zstd")]
     #[test]
     fn test_against_fixtures() {
+        use crate::sans_io::{SummaryReadEvent, SummaryReader};
+        use std::io::{Read, Seek};
+
         let path = "tests/data/compressed.mcap";
         let count = 826;
         let block_sizes = [None, Some(16 * 1024), Some(1024), Some(128)];

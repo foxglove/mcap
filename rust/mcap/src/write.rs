@@ -1970,6 +1970,7 @@ mod tests {
 
     use super::*;
 
+    #[cfg(feature = "zstd")]
     const DEFAULT_LIBRARY_LENGTH: u64 = crate::LIBRARY_IDENTIFIER.len() as u64;
 
     #[test]
@@ -2184,6 +2185,7 @@ mod tests {
             .expect("could not write message");
     }
 
+    #[cfg(feature = "zstd")]
     #[test]
     fn writes_message_and_checks_stream_length() {
         let file = std::io::Cursor::new(Vec::new());

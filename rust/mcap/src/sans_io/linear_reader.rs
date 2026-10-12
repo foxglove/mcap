@@ -1362,10 +1362,18 @@ mod tests {
     test_chunked_parametrized! {
         none_none, None, LinearReaderOptions::default(),
         none_after, None, LinearReaderOptions::default().with_validate_chunk_crcs(true),
-        none_before, None, LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
+        none_before, None, LinearReaderOptions::default().with_prevalidate_chunk_crcs(true)
+    }
+
+    #[cfg(feature = "zstd")]
+    test_chunked_parametrized! {
         zstd_none, Some(Compression::Zstd), LinearReaderOptions::default(),
         zstd_after, Some(Compression::Zstd), LinearReaderOptions::default().with_validate_chunk_crcs(true),
-        zstd_before, Some(Compression::Zstd), LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
+        zstd_before, Some(Compression::Zstd), LinearReaderOptions::default().with_prevalidate_chunk_crcs(true)
+    }
+
+    #[cfg(feature = "lz4")]
+    test_chunked_parametrized! {
         lz4_none, Some(Compression::Lz4), LinearReaderOptions::default(),
         lz4_after, Some(Compression::Lz4), LinearReaderOptions::default().with_validate_chunk_crcs(true),
         lz4_before, Some(Compression::Lz4), LinearReaderOptions::default().with_prevalidate_chunk_crcs(true)
@@ -1540,6 +1548,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(feature = "zstd")]
     #[test]
     fn test_decompression_does_not_fail() {
         let mut f = std::fs::File::open("tests/data/zstd_chunk_with_padding.mcap")
