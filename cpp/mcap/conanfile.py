@@ -21,7 +21,7 @@ class McapConan(ConanFile):
         self.cpp.source.includedirs = ["include"]
 
     def requirements(self):
-        self.requires("lz4/1.9.4")
+        self.requires("lz4/1.10.0")
         self.requires("zstd/1.5.2")
 
     def package_id(self):
