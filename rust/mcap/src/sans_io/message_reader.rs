@@ -8,7 +8,7 @@ use std::{borrow::Cow, sync::Arc};
 use crate::{
     read::ChannelAccumulator,
     records::Record,
-    sans_io::{LinearReadEvent, LinearReader, LinearReaderOptions},
+    sans_io::{decompressor::Decompressor, LinearReadEvent, LinearReader, LinearReaderOptions},
     Channel, McapError, McapResult, Message,
 };
 
@@ -54,6 +54,16 @@ impl MessageReader {
             channeler: ChannelAccumulator::default(),
             done: false,
         }
+    }
+
+    /// Registers a chunk decompressor on the inner [`LinearReader`].
+    ///
+    /// See [`LinearReader::add_decompressor`] for which names are accepted and when to call it.
+    pub fn add_decompressor(
+        &mut self,
+        decompressor: impl Decompressor + 'static,
+    ) -> McapResult<()> {
+        self.reader.add_decompressor(decompressor)
     }
 
     /// The next event, or `None` once the data section is read or an error has been returned.
