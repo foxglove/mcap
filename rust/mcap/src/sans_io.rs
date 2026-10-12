@@ -11,10 +11,10 @@ pub use message_reader::{MessageReadEvent, MessageReader};
 pub use summary_reader::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};
 
 #[cfg(feature = "lz4")]
-pub mod lz4;
+mod lz4;
 
 #[cfg(feature = "zstd")]
-pub mod zstd;
+mod zstd;
 
 /// Utility function for checking u64 lengths from MCAP files.
 pub(crate) fn check_len(len: u64, limit: Option<usize>) -> Option<usize> {

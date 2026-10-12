@@ -24,12 +24,6 @@ pub struct Lz4Decoder {
     next_read_size: usize,
 }
 
-impl Default for Lz4Decoder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Lz4Decoder {
     pub fn new() -> Self {
         Lz4Decoder {

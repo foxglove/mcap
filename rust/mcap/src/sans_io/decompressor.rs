@@ -18,9 +18,8 @@ pub struct DecompressResult {
 /// [`IndexedReader`](crate::sans_io::IndexedReader), and the readers that wrap `LinearReader`
 /// accept one. The readers in [`crate::read`] do not.
 ///
-/// The built-in [`ZstdDecoder`](crate::sans_io::zstd::ZstdDecoder) and
-/// [`Lz4Decoder`](crate::sans_io::lz4::Lz4Decoder) implement this trait and are registered by
-/// default. Registering another decompressor under the same name replaces them.
+/// The built-in `"zstd"` and `"lz4"` decoders are registered by default when their crate
+/// features are enabled. Registering another decompressor under the same name replaces them.
 ///
 /// One instance is kept per name. [`reset`](Self::reset) is called after each chunk, and not
 /// before the first, so the instance must be ready to decode when it is registered.
