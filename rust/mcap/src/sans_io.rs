@@ -5,7 +5,9 @@ pub mod linear_reader;
 pub mod message_reader;
 pub mod summary_reader;
 
-pub use indexed_reader::{IndexedReadEvent, IndexedReader, IndexedReaderOptions};
+pub use indexed_reader::{
+    IndexedReadEvent, IndexedReader, IndexedReaderOptions, LogTimeBounds, LowerBound, UpperBound,
+};
 pub use linear_reader::{LinearReadEvent, LinearReader, LinearReaderOptions};
 pub use message_reader::{MessageReadEvent, MessageReader};
 pub use summary_reader::{SummaryReadEvent, SummaryReader, SummaryReaderOptions};

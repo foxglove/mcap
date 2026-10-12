@@ -44,43 +44,25 @@ MetadataIndex::MetadataIndex(const Metadata& metadata, ByteOffset fileOffset)
     , length(9 + 4 + metadata.name.size() + 4 + internal::KeyValueMapSize(metadata.metadata))
     , name(metadata.name) {}
 
-bool RecordOffset::operator==(const RecordOffset& other) const {
-  if (chunkOffset != std::nullopt && other.chunkOffset != std::nullopt) {
-    if (*chunkOffset != *other.chunkOffset) {
-      // messages are in separate chunks, cannot be equal.
-      return false;
-    }
-    // messages are in the same chunk, compare chunk-level offsets.
-    return (offset == other.offset);
+int RecordOffset::compare(const RecordOffset& other) const {
+  // Order first by position in the file: the chunk record's offset for a chunked record, or the
+  // record's own offset otherwise.
+  const ByteOffset filePosition = chunkOffset.has_value() ? *chunkOffset : offset;
+  const ByteOffset otherFilePosition =
+    other.chunkOffset.has_value() ? *other.chunkOffset : other.offset;
+  if (filePosition != otherFilePosition) {
+    return filePosition < otherFilePosition ? -1 : 1;
   }
-  if (chunkOffset != std::nullopt || other.chunkOffset != std::nullopt) {
-    // one message is in a chunk and one is not, cannot be equal.
-    return false;
+  // Same file position. A plain file offset naming the start of a chunk precedes every record
+  // inside that chunk, since the chunk record's header comes before its contents.
+  if (chunkOffset.has_value() != other.chunkOffset.has_value()) {
+    return chunkOffset.has_value() ? 1 : -1;
   }
-  // neither message is in a chunk, compare file-level offsets.
-  return (offset == other.offset);
-}
-
-bool RecordOffset::operator>(const RecordOffset& other) const {
-  if (chunkOffset != std::nullopt) {
-    if (other.chunkOffset != std::nullopt) {
-      if (*chunkOffset == *other.chunkOffset) {
-        // messages are in the same chunk, compare chunk-level offsets.
-        return (offset > other.offset);
-      }
-      // messages are in separate chunks, compare file-level offsets
-      return (*chunkOffset > *other.chunkOffset);
-    } else {
-      // this message is in a chunk, other is not, compare file-level offsets.
-      return (*chunkOffset > other.offset);
-    }
+  // Both plain (and therefore equal), or both in the same chunk: order by offset within it.
+  if (offset != other.offset) {
+    return offset < other.offset ? -1 : 1;
   }
-  if (other.chunkOffset != std::nullopt) {
-    // other message is in a chunk, this is not, compare file-level offsets.
-    return (offset > *other.chunkOffset);
-  }
-  // neither message is in a chunk, compare file-level offsets.
-  return (offset > other.offset);
+  return 0;
 }
 
 }  // namespace mcap

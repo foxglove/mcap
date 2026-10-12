@@ -150,10 +150,16 @@ impl CatOptions {
                 .checked_mul(1_000_000_000)
                 .context("end seconds timestamp overflows nanoseconds")?;
         }
+        // An end of zero means no end bound. Reject a crossed range here, as `filter` does, so
+        // the outcome does not depend on whether the file takes the indexed or linear path.
+        let end = (end != 0).then_some(end);
+        if end.is_some_and(|end| end < start) {
+            bail!("invalid time range query, end-time is before start-time");
+        }
         Ok(Self {
             topics,
             start,
-            end: (end != 0).then_some(end),
+            end,
             mode,
             times: render::TimeRenderer::new(time_format),
         })
@@ -246,10 +252,10 @@ fn cat_indexed(
     let mut indexed_opts =
         mcap::sans_io::IndexedReaderOptions::new().with_order(ReadOrder::LogTime);
     if opts.start != 0 {
-        indexed_opts = indexed_opts.log_time_on_or_after(opts.start);
+        indexed_opts = indexed_opts.starting_at(opts.start);
     }
     if let Some(end) = opts.end {
-        indexed_opts = indexed_opts.log_time_before(end);
+        indexed_opts = indexed_opts.ending_before(end);
     }
     // Reader-level topic filtering keys on `summary.channels`, so skip it when chunk-local channels
     // may exist (see `needs_in_chunk_definitions`) and let the per-message `include_topic` check
@@ -422,10 +428,10 @@ fn cat_remote_indexed(
     let mut indexed_opts =
         mcap::sans_io::IndexedReaderOptions::new().with_order(ReadOrder::LogTime);
     if opts.start != 0 {
-        indexed_opts = indexed_opts.log_time_on_or_after(opts.start);
+        indexed_opts = indexed_opts.starting_at(opts.start);
     }
     if let Some(end) = opts.end {
-        indexed_opts = indexed_opts.log_time_before(end);
+        indexed_opts = indexed_opts.ending_before(end);
     }
     // Reader-level topic filtering keys on `summary.channels`, so skip it when chunk-local channels
     // may exist (see `needs_in_chunk_definitions`) and let the per-message `include_topic` check
@@ -2805,6 +2811,54 @@ mod tests {
             CatOptions::from_args(&cat_command(CatFormat::Text, "/tf,/odom"), TimeFormat::Auto)
                 .expect("multiple topics should be allowed for text output");
         assert_eq!(opts.topics, vec!["/tf".to_string(), "/odom".to_string()]);
+    }
+
+    #[test]
+    fn from_args_rejects_end_before_start() {
+        let mut args = cat_command(CatFormat::Text, "");
+        args.start_nsecs = 10;
+        args.end_nsecs = 5;
+        let err = CatOptions::from_args(&args, TimeFormat::Auto)
+            .expect_err("an end before the start should error");
+        assert!(
+            err.to_string().contains("end-time is before start-time"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn from_args_rejects_end_secs_before_start_nsecs() {
+        let mut args = cat_command(CatFormat::Text, "");
+        args.start_nsecs = 2_000_000_000;
+        args.end_secs = 1;
+        let err = CatOptions::from_args(&args, TimeFormat::Auto)
+            .expect_err("an end before the start should error across units");
+        assert!(
+            err.to_string().contains("end-time is before start-time"),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn from_args_allows_end_equal_to_start() {
+        // Equal bounds are an empty range, not a crossed one.
+        let mut args = cat_command(CatFormat::Text, "");
+        args.start_nsecs = 10;
+        args.end_nsecs = 10;
+        let opts = CatOptions::from_args(&args, TimeFormat::Auto)
+            .expect("equal start and end should build options");
+        assert_eq!(opts.start, 10);
+        assert_eq!(opts.end, Some(10));
+    }
+
+    #[test]
+    fn from_args_treats_zero_end_as_unbounded() {
+        let mut args = cat_command(CatFormat::Text, "");
+        args.start_nsecs = 10;
+        let opts = CatOptions::from_args(&args, TimeFormat::Auto)
+            .expect("a start with no end should build options");
+        assert_eq!(opts.start, 10);
+        assert_eq!(opts.end, None);
     }
 
     #[test]

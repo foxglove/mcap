@@ -76,7 +76,11 @@ def read_protobuf_messages(
 
     try:
         for schema, channel, message, proto_msg in reader.iter_decoded_messages(
-            topics, start_time, end_time, log_time_order, reverse
+            topics,
+            log_time_order=log_time_order,
+            reverse=reverse,
+            starting_at=start_time,
+            ending_before=end_time,
         ):
             assert schema is not None
             yield McapProtobufMessage(
