@@ -50,6 +50,8 @@ enum WriteMode<W: Write + Seek> {
     Raw(CountingCrcWriter<W>),
     Chunk(ChunkWriter<W>),
     Attachment(AttachmentWriter<CountingCrcWriter<W>>),
+    /// A write to the underlying stream failed. The stream is kept so that
+    /// [`Writer::into_inner`] can still hand it back.
     Failed(W),
 }
 
@@ -977,23 +979,27 @@ impl<W: Write + Seek> Writer<W> {
         header: AttachmentHeader,
     ) -> McapResult<()> {
         self.finish_chunk()?;
-        if let Some(WriteMode::Failed(_)) = &self.writer {
-            return Err(McapError::AttemptedWriteAfterFailure);
-        }
-        let WriteMode::Raw(w) = self.writer.take().expect(Self::WRITER_IS_NONE) else {
+        let Some(WriteMode::Raw(w)) = self.writer.take() else {
             unreachable!(
-                "since finish_chunk was called, write mode is guaranteed to be raw at this point"
+                "since finish_chunk succeeded, write mode is guaranteed to be raw at this point"
             );
         };
 
-        self.writer = Some(WriteMode::Attachment(AttachmentWriter::new(
+        match AttachmentWriter::new(
             w,
             attachment_length,
             header,
             self.options.calculate_attachment_crcs,
-        )?));
-
-        Ok(())
+        ) {
+            Ok(attachment) => {
+                self.writer = Some(WriteMode::Attachment(attachment));
+                Ok(())
+            }
+            Err((w, err)) => {
+                self.writer = Some(WriteMode::Failed(w.finalize().0));
+                Err(err)
+            }
+        }
     }
 
     /// Write bytes to the current attachment.
@@ -1018,24 +1024,31 @@ impl<W: Write + Seek> Writer<W> {
     /// Before calling this method call [`Self::start_attachment`] and write bytes to the
     /// attachment using [`Self::put_attachment_bytes`].
     pub fn finish_attachment(&mut self) -> McapResult<()> {
-        let Some(WriteMode::Attachment(..)) = &mut self.writer else {
+        let Some(WriteMode::Attachment(writer)) = &self.writer else {
             return Err(McapError::AttachmentNotInProgress);
         };
 
+        // Check before taking the attachment writer, so a short attachment can still be completed.
+        writer.check_complete()?;
+
         let Some(WriteMode::Attachment(writer)) = self.writer.take() else {
-            panic!("WriteMode is guaranteed to be attachment by this point");
+            unreachable!("WriteMode is guaranteed to be attachment by this point");
         };
 
-        let (writer, attachment_index) = writer.finish()?;
-        self.attachment_count += 1;
-
-        if self.options.emit_attachment_indexes {
-            self.attachment_indexes.push(attachment_index);
+        match writer.finish() {
+            Ok((writer, attachment_index)) => {
+                self.attachment_count += 1;
+                if self.options.emit_attachment_indexes {
+                    self.attachment_indexes.push(attachment_index);
+                }
+                self.writer = Some(WriteMode::Raw(writer));
+                Ok(())
+            }
+            Err((w, err)) => {
+                self.writer = Some(WriteMode::Failed(w.finalize().0));
+                Err(err)
+            }
         }
-
-        self.writer = Some(WriteMode::Raw(writer));
-
-        Ok(())
     }
 
     /// Write an attachment to the MCAP file. This finishes any current chunk before writing the
@@ -1098,8 +1111,6 @@ impl<W: Write + Seek> Writer<W> {
         Ok(())
     }
 
-    const WRITER_IS_NONE: &'static str = "unreachable: self.writer should never be None";
-
     fn assert_not_finished(&self) {
         assert!(
             self.finished_summary.is_none(),
@@ -1125,11 +1136,12 @@ impl<W: Write + Seek> Writer<W> {
 
         // Rust forbids moving values out of a &mut reference. We made self.writer an Option so we
         // can work around this by using take() to temporarily replace it with None while we
-        // construct the ChunkWriter.
-        self.writer = Some(match self.writer.take().expect(Self::WRITER_IS_NONE) {
-            WriteMode::Raw(w) => {
+        // construct the ChunkWriter. Every path below must put something back, or into_inner()
+        // panics and every other call reports AttemptedWriteAfterFailure.
+        let mode = match self.writer.take() {
+            Some(WriteMode::Raw(w)) => {
                 // It's chunkin time.
-                WriteMode::Chunk(ChunkWriter::new(
+                match ChunkWriter::new(
                     w,
                     self.options.compression,
                     std::mem::take(&mut self.chunk_mode),
@@ -1142,13 +1154,22 @@ impl<W: Write + Seek> Writer<W> {
                         compression_threads: self.options.compression_threads,
                         reused_encoder: std::mem::take(&mut self.reusable_zstd_encoder),
                     },
-                )?)
+                ) {
+                    Ok(chunk) => WriteMode::Chunk(chunk),
+                    Err((w, err)) => {
+                        self.writer = Some(WriteMode::Failed(w));
+                        return Err(err);
+                    }
+                }
             }
-            chunk => chunk,
-        });
-        if let Some(WriteMode::Failed(_)) = &self.writer {
-            return Err(McapError::AttemptedWriteAfterFailure);
-        }
+            Some(WriteMode::Failed(w)) => {
+                self.writer = Some(WriteMode::Failed(w));
+                return Err(McapError::AttemptedWriteAfterFailure);
+            }
+            Some(mode) => mode,
+            None => return Err(McapError::AttemptedWriteAfterFailure),
+        };
+        self.writer = Some(mode);
 
         let Some(WriteMode::Chunk(c)) = &mut self.writer else {
             unreachable!("we're not in an attachment and write mode was set to chunk above")
@@ -1167,8 +1188,8 @@ impl<W: Write + Seek> Writer<W> {
         }
 
         // See start_chunk() for why we use take() here.
-        match self.writer.take().expect(Self::WRITER_IS_NONE) {
-            WriteMode::Chunk(c) => match c.finish() {
+        match self.writer.take() {
+            Some(WriteMode::Chunk(c)) => match c.finish() {
                 Ok((w, mode, index, reused_encoder)) => {
                     self.chunk_indexes.push(index);
                     self.chunk_mode = mode;
@@ -1180,11 +1201,13 @@ impl<W: Write + Seek> Writer<W> {
                     return Err(err);
                 }
             },
-            WriteMode::Failed(w) => {
+            Some(WriteMode::Failed(w)) => {
                 self.writer = Some(WriteMode::Failed(w));
                 return Err(McapError::AttemptedWriteAfterFailure);
             }
-            mode => self.writer = Some(mode),
+            Some(mode) => self.writer = Some(mode),
+            // Should be unreachable, but this runs from Drop, so it must never panic.
+            None => return Err(McapError::AttemptedWriteAfterFailure),
         };
 
         let Some(WriteMode::Raw(w)) = &mut self.writer else {
@@ -1313,11 +1336,12 @@ impl<W: Write + Seek> Writer<W> {
             self.finished_summary = Some(self.take_summary());
         }
         // Peel away all the layers of the writer to get the underlying stream.
-        match self.writer.take().expect(Self::WRITER_IS_NONE) {
-            WriteMode::Raw(w) => w.finalize().0,
-            WriteMode::Attachment(w) => w.writer.finalize().0.finalize().0,
-            WriteMode::Chunk(w) => w.compressor.finalize().0.into_inner().finalize().0.inner,
-            WriteMode::Failed(w) => w,
+        match self.writer.take() {
+            Some(WriteMode::Raw(w)) => w.finalize().0,
+            Some(WriteMode::Attachment(w)) => w.writer.finalize().0.finalize().0,
+            Some(WriteMode::Chunk(w)) => w.compressor.finalize().0.into_inner().finalize().0.inner,
+            Some(WriteMode::Failed(w)) => w,
+            None => unreachable!("self.writer is put back after every write, failed or not"),
         }
     }
 }
@@ -1592,6 +1616,8 @@ struct ChunkWriter<W: Write> {
 }
 
 impl<W: Write + Seek> ChunkWriter<W> {
+    /// Starts a chunk by writing a placeholder chunk header to the stream. On failure the stream
+    /// is handed back with the error.
     fn new(
         mut writer: CountingCrcWriter<W>,
         compression: Option<Compression>,
@@ -1600,17 +1626,15 @@ impl<W: Write + Seek> ChunkWriter<W> {
         calculate_chunk_crcs: bool,
         #[cfg(any(feature = "zstd", feature = "lz4"))] compression_level: u32,
         #[cfg(feature = "zstd")] zstd_state: ZstdChunkState,
-    ) -> McapResult<Self> {
+    ) -> Result<Self, (W, McapError)> {
         // Relative to start of original stream.
-        let chunk_offset = writer.stream_position()?;
+        let chunk_offset = match writer.stream_position() {
+            Ok(offset) => offset,
+            Err(err) => return Err((writer.finalize().0, err.into())),
+        };
 
         let (writer, pre_chunk_crc) = writer.finalize();
         let mut sink = ChunkSink::new(writer, mode);
-
-        // Relative to start of chunk sink stream.
-        let header_start = sink.stream_position()?;
-
-        op_and_len(&mut sink, op::CHUNK, !0)?;
 
         let compression_name = match compression {
             #[cfg(feature = "zstd")]
@@ -1622,62 +1646,45 @@ impl<W: Write + Seek> ChunkWriter<W> {
             None => "",
         };
 
-        // Write a dummy header that we'll overwrite with the actual values later.
-        // We just need its size (which only varies based on compression name).
-        let header = records::ChunkHeader {
-            message_start_time: 0,
-            message_end_time: 0,
-            uncompressed_size: !0,
-            uncompressed_crc: !0,
-            compression: String::from(compression_name),
-            compressed_size: !0,
-        };
-        sink.write_le(&header)?;
-        let data_start = sink.stream_position()?;
+        let (header_start, data_start) =
+            match Self::write_placeholder_header(&mut sink, compression_name) {
+                Ok(offsets) => offsets,
+                Err(err) => return Err((sink.inner, err)),
+            };
         let sink = CountingCrcWriter::new(sink, calculate_chunk_crcs);
 
         let compressor = match compression {
             #[cfg(feature = "zstd")]
             Some(Compression::Zstd) => {
-                let ZstdChunkState {
-                    compression_threads,
-                    reused_encoder,
-                } = zstd_state;
-                let enc = match reused_encoder {
-                    // Reuse the existing compression context -- and its worker thread pool, if
-                    // any -- for the new chunk instead of spawning `compression_threads` new OS
-                    // threads. `SessionOnly` resets frame state while leaving parameters
-                    // (including `NbWorkers`) untouched.
-                    Some(mut enc) => {
-                        enc.reinit()?;
-                        enc
-                    }
-                    None => {
-                        #[allow(unused_mut)]
-                        let mut enc =
-                            zraw::Encoder::with_dictionary(compression_level as i32, &[])?;
-                        // Enable multithreaded encoding on non-WASM targets.
-                        #[cfg(not(target_arch = "wasm32"))]
-                        enc.set_parameter(zraw::CParameter::NbWorkers(compression_threads))?;
-                        enc
-                    }
+                let enc = match Self::zstd_encoder(zstd_state, compression_level) {
+                    Ok(enc) => enc,
+                    Err(err) => return Err((sink.finalize().0.inner, err)),
                 };
-
                 Compressor::Zstd(zio::Writer::new(sink, enc))
             }
             #[cfg(feature = "lz4")]
-            Some(Compression::Lz4) => Compressor::Lz4(
+            Some(Compression::Lz4) => {
+                // The lz4 encoder writes its frame header, in a single write, during build(),
+                // and drops the sink if that write fails. Have the sink hold the frame header in
+                // memory so the write cannot fail; the sink writes it through ahead of the next
+                // write, by which point we own the encoder.
+                let mut sink = sink;
+                sink.get_mut().hold_frame_header();
                 // Note: lz4-1.10.0 supports multithreaded compression
                 // (github.com/lz4/lz4/pull/1336), but this is not yet
                 // available through the lz4 / lz4-sys crates.
-                lz4::EncoderBuilder::new()
+                let encoder = lz4::EncoderBuilder::new()
                     .level(compression_level)
                     // Disable the block checksum for wider compatibility with MCAP tooling that
                     // includes a fault block checksum calculation. Since the MCAP spec includes a
                     // CRC for the compressed chunk this would be a superfluous check anyway.
                     .block_checksum(lz4::liblz4::BlockChecksum::NoBlockChecksum)
-                    .build(sink)?,
-            ),
+                    .build(sink)
+                    // With the frame header held, only liblz4 setup can fail here, and in
+                    // practice only its context allocation, which is out-of-memory territory.
+                    .expect("lz4 encoder setup failed");
+                Compressor::Lz4(encoder)
+            }
             #[cfg(not(any(feature = "zstd", feature = "lz4")))]
             Some(_) => unreachable!("`Compression` is an empty enum that cannot be instantiated"),
             None => Compressor::Null(sink),
@@ -1694,6 +1701,56 @@ impl<W: Write + Seek> ChunkWriter<W> {
             pre_chunk_crc,
             emit_message_indexes,
         })
+    }
+
+    /// Writes the chunk opcode, a placeholder length, and a placeholder header for
+    /// [`Self::finish`] to overwrite. Returns the header and data offsets within the sink.
+    fn write_placeholder_header(
+        sink: &mut ChunkSink<W>,
+        compression_name: &str,
+    ) -> McapResult<(u64, u64)> {
+        let header_start = sink.stream_position()?;
+        op_and_len(sink, op::CHUNK, !0)?;
+        let header = records::ChunkHeader {
+            message_start_time: 0,
+            message_end_time: 0,
+            uncompressed_size: !0,
+            uncompressed_crc: !0,
+            compression: String::from(compression_name),
+            compressed_size: !0,
+        };
+        sink.write_le(&header)?;
+        let data_start = sink.stream_position()?;
+        Ok((header_start, data_start))
+    }
+
+    #[cfg(feature = "zstd")]
+    fn zstd_encoder(
+        zstd_state: ZstdChunkState,
+        compression_level: u32,
+    ) -> McapResult<zraw::Encoder<'static>> {
+        let ZstdChunkState {
+            compression_threads,
+            reused_encoder,
+        } = zstd_state;
+        match reused_encoder {
+            // Reuse the existing compression context -- and its worker thread pool, if
+            // any -- for the new chunk instead of spawning `compression_threads` new OS
+            // threads. `SessionOnly` resets frame state while leaving parameters
+            // (including `NbWorkers`) untouched.
+            Some(mut enc) => {
+                enc.reinit()?;
+                Ok(enc)
+            }
+            None => {
+                #[allow(unused_mut)]
+                let mut enc = zraw::Encoder::with_dictionary(compression_level as i32, &[])?;
+                // Enable multithreaded encoding on non-WASM targets.
+                #[cfg(not(target_arch = "wasm32"))]
+                enc.set_parameter(zraw::CParameter::NbWorkers(compression_threads))?;
+                Ok(enc)
+            }
+        }
     }
 
     fn write_record(&mut self, record: &Record) -> McapResult<()> {
@@ -1868,34 +1925,44 @@ struct AttachmentWriter<W> {
 
 impl<W: Write + Seek> AttachmentWriter<W> {
     /// Create a new [`AttachmentWriter`] and write the attachment header to the output.
+    ///
+    /// On failure the stream is handed back with the error.
     fn new(
         mut writer: W,
         attachment_length: u64,
         header: AttachmentHeader,
         calculate_crc: bool,
-    ) -> McapResult<Self> {
-        let record_offset = writer.stream_position()?;
+    ) -> Result<Self, (W, McapError)> {
+        let record_offset = match writer.stream_position() {
+            Ok(offset) => offset,
+            Err(err) => return Err((writer, err.into())),
+        };
 
         // We have to write to a temporary buffer here as the CountingCrcWriter doesn't support
         // seeking.
         let mut header_buf = vec![];
-        Cursor::new(&mut header_buf).write_le(&header)?;
+        if let Err(err) = Cursor::new(&mut header_buf).write_le(&header) {
+            return Err((writer, err.into()));
+        }
 
-        op_and_len(
-            &mut writer,
-            op::ATTACHMENT,
-            header_buf.len() as u64
-                // attachment_length
-                + size_of::<u64>() as u64
-                // attachment
-                + attachment_length
-                // crc
-                + size_of::<u32>() as u64,
-        )?;
+        let record_length = header_buf.len() as u64
+            // attachment_length
+            + size_of::<u64>() as u64
+            // attachment
+            + attachment_length
+            // crc
+            + size_of::<u32>() as u64;
+        if let Err(err) = op_and_len(&mut writer, op::ATTACHMENT, record_length) {
+            return Err((writer, err.into()));
+        }
 
         let mut writer = CountingCrcWriter::new(writer, calculate_crc);
-        writer.write_all(&header_buf)?;
-        writer.write_u64::<LE>(attachment_length)?;
+        if let Err(err) = writer.write_all(&header_buf) {
+            return Err((writer.finalize().0, err.into()));
+        }
+        if let Err(err) = writer.write_u64::<LE>(attachment_length) {
+            return Err((writer.finalize().0, err.into()));
+        }
 
         let attachment_offset = writer.position();
 
@@ -1929,22 +1996,38 @@ impl<W: Write + Seek> AttachmentWriter<W> {
         Ok(())
     }
 
-    /// Finish the attachment and write the CRC to the output, returning the [`AttachmentIndex`]
-    /// for the written attachment.
-    fn finish(self) -> McapResult<(W, AttachmentIndex)> {
+    /// Returns an error unless exactly `attachment_length` bytes have been written.
+    fn check_complete(&self) -> McapResult<()> {
         let expected = self.attachment_length;
         let current = self.writer.position() - self.attachment_offset;
 
         if expected != current {
             return Err(McapError::AttachmentIncomplete { expected, current });
         }
+        Ok(())
+    }
+
+    /// Finish the attachment and write the CRC to the output, returning the [`AttachmentIndex`]
+    /// for the written attachment.
+    ///
+    /// On failure the stream is handed back with the error.
+    fn finish(self) -> Result<(W, AttachmentIndex), (W, McapError)> {
+        // Defensive; the caller checks this first so a short attachment stays recoverable.
+        if let Err(err) = self.check_complete() {
+            return Err((self.writer.finalize().0, err));
+        }
 
         let (mut writer, hasher) = self.writer.finalize();
         let crc = hasher.map(|hasher| hasher.finalize()).unwrap_or(0);
-        writer.write_u32::<LE>(crc)?;
+        if let Err(err) = writer.write_u32::<LE>(crc) {
+            return Err((writer, err.into()));
+        }
 
         let offset = self.record_offset;
-        let length = writer.stream_position()? - offset;
+        let length = match writer.stream_position() {
+            Ok(end) => end - offset,
+            Err(err) => return Err((writer, err.into())),
+        };
 
         Ok((
             writer,
@@ -3073,5 +3156,141 @@ mod tests {
             writer.write(&message),
             Err(McapError::AttemptedWriteAfterFailure)
         );
+    }
+
+    /// A `Write + Seek` sink that fails once `budget` bytes have been written.
+    struct FullDisk {
+        inner: Cursor<Vec<u8>>,
+        budget: u64,
+    }
+
+    impl FullDisk {
+        fn new(budget: u64) -> Self {
+            Self {
+                inner: Cursor::new(Vec::new()),
+                budget,
+            }
+        }
+    }
+
+    impl Write for FullDisk {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            if self.inner.position() + buf.len() as u64 > self.budget {
+                return Err(io::Error::other("No space left on device"));
+            }
+            self.inner.write(buf)
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl Seek for FullDisk {
+        fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
+            self.inner.seek(pos)
+        }
+    }
+
+    /// How many bytes a new writer plus `f` write; a budget of that size fails the next write.
+    fn bytes_written_by(f: impl FnOnce(&mut Writer<Cursor<Vec<u8>>>)) -> u64 {
+        let mut writer = Writer::new(Cursor::new(Vec::new())).unwrap();
+        f(&mut writer);
+        writer.into_inner().get_ref().len() as u64
+    }
+
+    fn attachment_header() -> AttachmentHeader {
+        AttachmentHeader {
+            log_time: 0,
+            create_time: 0,
+            name: "notes.txt".into(),
+            media_type: "text/plain".into(),
+        }
+    }
+
+    /// After a failed write, later calls must report the failure rather than panic.
+    fn assert_failed(writer: &mut Writer<FullDisk>) {
+        assert_matches!(
+            writer.add_channel(0, "/after", "json", &BTreeMap::new()),
+            Err(McapError::AttemptedWriteAfterFailure)
+        );
+        assert_matches!(writer.finish(), Err(McapError::AttemptedWriteAfterFailure));
+    }
+
+    #[test]
+    fn io_error_starting_a_chunk_does_not_panic() {
+        // Chunking is on by default, so adding a channel opens the first chunk.
+        let budget = bytes_written_by(|_| {});
+        let mut writer = Writer::new(FullDisk::new(budget)).unwrap();
+        assert_matches!(
+            writer.add_channel(0, "/chat", "json", &BTreeMap::new()),
+            Err(McapError::Io(_))
+        );
+        assert_failed(&mut writer);
+        assert_eq!(writer.into_inner().inner.get_ref().len() as u64, budget);
+    }
+
+    #[test]
+    fn io_error_starting_an_attachment_does_not_panic() {
+        let budget = bytes_written_by(|_| {});
+        let mut writer = Writer::new(FullDisk::new(budget)).unwrap();
+        assert_matches!(
+            writer.start_attachment(4, attachment_header()),
+            Err(McapError::Io(_))
+        );
+        assert_failed(&mut writer);
+        // Drop calls finish(); a panic there aborts the process during an unwind.
+        drop(writer);
+    }
+
+    #[test]
+    fn io_error_finishing_an_attachment_does_not_panic() {
+        let budget = bytes_written_by(|w| {
+            w.start_attachment(4, attachment_header()).unwrap();
+            w.put_attachment_bytes(b"1234").unwrap();
+        });
+        let mut writer = Writer::new(FullDisk::new(budget)).unwrap();
+        writer.start_attachment(4, attachment_header()).unwrap();
+        writer.put_attachment_bytes(b"1234").unwrap();
+        // No room left for the CRC.
+        assert_matches!(writer.finish_attachment(), Err(McapError::Io(_)));
+        assert_failed(&mut writer);
+        writer.into_inner();
+    }
+
+    #[cfg(feature = "lz4")]
+    #[test]
+    fn io_error_on_the_lz4_frame_header_does_not_lose_the_stream() {
+        // The budget fits the placeholder chunk header (opcode, length, and the header with an
+        // "lz4" name) but not the lz4 frame header that the chunk sink holds back.
+        let budget = bytes_written_by(|_| {}) + 9 + 8 + 8 + 8 + 4 + (4 + 3) + 8;
+        let mut writer = WriteOptions::new()
+            .compression(Some(Compression::Lz4))
+            .create(FullDisk::new(budget))
+            .unwrap();
+        writer
+            .add_channel(0, "/chat", "json", &BTreeMap::new())
+            .unwrap();
+        assert_matches!(writer.finish(), Err(McapError::Io(_)));
+        assert_failed(&mut writer);
+        assert_eq!(writer.into_inner().inner.get_ref().len() as u64, budget);
+    }
+
+    #[test]
+    fn incomplete_attachment_can_be_completed() {
+        let mut writer = Writer::new(Cursor::new(Vec::new())).unwrap();
+        writer.start_attachment(4, attachment_header()).unwrap();
+        writer.put_attachment_bytes(b"12").unwrap();
+        assert_matches!(
+            writer.finish_attachment(),
+            Err(McapError::AttachmentIncomplete {
+                expected: 4,
+                current: 2
+            })
+        );
+        writer.put_attachment_bytes(b"34").unwrap();
+        writer.finish_attachment().unwrap();
+        let summary = writer.finish().unwrap();
+        assert_eq!(summary.attachment_indexes[0].data_size, 4);
     }
 }
