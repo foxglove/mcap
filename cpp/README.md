@@ -80,7 +80,7 @@ Output binaries can be found in:
 The C++ implementation of MCAP is maintained as a header-only library with the
 following dependencies:
 
-- [lz4](https://lz4.github.io/lz4/) (tested with [lz4/1.9.3](https://conan.io/center/lz4))
+- [lz4](https://lz4.github.io/lz4/) (tested with [lz4/1.10.0](https://conan.io/center/lz4))
 - [zstd](https://facebook.github.io/zstd/) (tested with [zstd/1.5.2](https://conan.io/center/zstd))
 
 If your project does not need `lz4` or `zstd` support, you can optionally disable these by defining

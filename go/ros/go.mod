@@ -1,12 +1,12 @@
 module github.com/foxglove/mcap/go/ros
 
-go 1.18
+go 1.22
 
 require (
 	github.com/foxglove/go-rosbag v0.0.6
 	github.com/foxglove/mcap/go/mcap v0.4.0
 	github.com/mattn/go-sqlite3 v1.14.14
-	github.com/pierrec/lz4/v4 v4.1.21
+	github.com/pierrec/lz4/v4 v4.1.33
 	github.com/stretchr/testify v1.9.0
 )
 
