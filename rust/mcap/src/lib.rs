@@ -73,6 +73,8 @@ pub mod write;
 mod chunk_sink;
 mod io_utils;
 pub mod sans_io;
+#[cfg(test)]
+mod test_util;
 
 use std::{borrow::Cow, collections::BTreeMap, fmt, sync::Arc};
 
