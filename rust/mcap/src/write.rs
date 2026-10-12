@@ -1023,6 +1023,10 @@ impl<W: Write + Seek> Writer<W> {
     ///
     /// Before calling this method call [`Self::start_attachment`] and write bytes to the
     /// attachment using [`Self::put_attachment_bytes`].
+    ///
+    /// Returns [`McapError::AttachmentIncomplete`] if fewer than `attachment_length` bytes have
+    /// been written. The attachment stays open, so you can write the remaining bytes and call
+    /// this again.
     pub fn finish_attachment(&mut self) -> McapResult<()> {
         let Some(WriteMode::Attachment(writer)) = &self.writer else {
             return Err(McapError::AttachmentNotInProgress);
@@ -2050,6 +2054,7 @@ mod tests {
     use std::sync::Arc;
 
     use crate::read::LinearReader;
+    use crate::test_util::FullDisk;
 
     use super::*;
 
@@ -3156,40 +3161,6 @@ mod tests {
             writer.write(&message),
             Err(McapError::AttemptedWriteAfterFailure)
         );
-    }
-
-    /// A `Write + Seek` sink that fails once `budget` bytes have been written.
-    struct FullDisk {
-        inner: Cursor<Vec<u8>>,
-        budget: u64,
-    }
-
-    impl FullDisk {
-        fn new(budget: u64) -> Self {
-            Self {
-                inner: Cursor::new(Vec::new()),
-                budget,
-            }
-        }
-    }
-
-    impl Write for FullDisk {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            if self.inner.position() + buf.len() as u64 > self.budget {
-                return Err(io::Error::other("No space left on device"));
-            }
-            self.inner.write(buf)
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl Seek for FullDisk {
-        fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-            self.inner.seek(pos)
-        }
     }
 
     /// How many bytes a new writer plus `f` write; a budget of that size fails the next write.

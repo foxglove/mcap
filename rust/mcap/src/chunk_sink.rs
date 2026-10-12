@@ -158,34 +158,7 @@ impl<W: Write> Write for ChunkSink<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// A writer that fails once `budget` bytes have been written.
-    struct FullDisk {
-        inner: Cursor<Vec<u8>>,
-        budget: u64,
-    }
-
-    impl FullDisk {
-        fn new(budget: u64) -> Self {
-            Self {
-                inner: Cursor::new(Vec::new()),
-                budget,
-            }
-        }
-    }
-
-    impl Write for FullDisk {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            if self.inner.position() + buf.len() as u64 > self.budget {
-                return Err(std::io::Error::other("No space left on device"));
-            }
-            self.inner.write(buf)
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
+    use crate::test_util::FullDisk;
 
     #[test]
     fn frame_header_goes_through_ahead_of_the_next_operation() {
