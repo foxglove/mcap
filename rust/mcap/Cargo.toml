@@ -55,6 +55,7 @@ tokio = { version = "1", features = ["io-util", "macros", "rt", "fs"] }
 [[bench]]
 name = "reader"
 harness = false
+required-features = ["zstd", "lz4"]
 
 [[example]]
 name = "conformance_reader_async"
