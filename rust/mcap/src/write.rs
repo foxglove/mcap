@@ -1236,10 +1236,21 @@ impl<W: Write + Seek> Writer<W> {
     ///
     /// Returns a [`Summary`] of data written to the file.  Subsequent calls to other methods will
     /// panic.
+    ///
+    /// If an I/O error occurs while writing the summary section or footer, the file is not a
+    /// complete MCAP, and the error is returned. The write is not retried: every later call to
+    /// this method, including the one made on drop, returns
+    /// [`McapError::AttemptedWriteAfterFailure`]. Use [`Self::into_inner()`] to get the underlying
+    /// stream back.
     pub fn finish(&mut self) -> McapResult<Summary> {
         if let Some(summary) = &self.finished_summary {
             // We already called finish().
             // Maybe we're dropping after the user called it?
+            if let Some(WriteMode::Failed(_)) = self.writer {
+                // The summary section or footer never reached the stream, so the file is not a
+                // complete MCAP. Say so again rather than hand back a summary describing one.
+                return Err(McapError::AttemptedWriteAfterFailure);
+            }
             return Ok(summary.clone());
         }
         // Finish any chunk we were working on and update stats, indexes, etc.
@@ -1256,27 +1267,35 @@ impl<W: Write + Seek> Writer<W> {
         let summary = self.take_summary();
         self.finished_summary = Some(summary.clone());
 
-        // Grab the writer - self.writer becoming None makes subsequent writes fail.
-        let writer = match &mut self.writer {
-            // We called finish_chunk() above, so we're back to raw writes for
-            // the summary section.
-            Some(WriteMode::Raw(w)) => w,
-            _ => unreachable!(),
+        // Take the writer out while writing the summary section. See start_chunk() for why we
+        // use take() here. On error the stream is parked in Failed, so that a later finish()
+        // reports the failure instead of the cached summary, and into_inner() still works.
+        let Some(WriteMode::Raw(mut writer)) = self.writer.take() else {
+            // We called finish_chunk() above, so we're back to raw writes for the summary section.
+            unreachable!("finish_chunk() leaves the writer in raw mode")
         };
         let data_section_crc = writer.current_checksum();
-        let writer = writer.get_mut();
+        let stream = writer.get_mut();
         // We're done with the data section!
-        write_record(
-            writer,
+        let result = write_record(
+            stream,
             &Record::DataEnd(records::DataEnd { data_section_crc }),
-        )?;
-        write_summary_and_footer_magic(
-            writer,
-            &summary,
-            &self.all_schema_ids,
-            &self.all_channel_ids,
-            &self.options,
-        )?;
+        )
+        .map_err(McapError::from)
+        .and_then(|()| {
+            write_summary_and_footer_magic(
+                stream,
+                &summary,
+                &self.all_schema_ids,
+                &self.all_channel_ids,
+                &self.options,
+            )
+        });
+        self.writer = Some(match &result {
+            Ok(()) => WriteMode::Raw(writer),
+            Err(_) => WriteMode::Failed(writer.finalize().0),
+        });
+        result?;
         Ok(summary)
     }
 
@@ -3264,6 +3283,22 @@ mod tests {
         assert_matches!(writer.finish(), Err(McapError::Io(_)));
         assert_failed(&mut writer);
         assert_eq!(writer.into_inner().inner.get_ref().len() as u64, budget);
+    }
+
+    #[test]
+    fn io_error_writing_the_footer_is_reported_by_every_finish() {
+        // One byte short of a complete file, so the end magic (written in one go) is rejected
+        // and the file ends after the footer.
+        let complete = bytes_written_by(|w| w.finish().map(drop).unwrap());
+        let budget = complete - 1;
+        let mut writer = Writer::new(FullDisk::new(budget)).unwrap();
+        assert_matches!(writer.finish(), Err(McapError::Io(_)));
+        // The summary was computed, but the file is not a complete MCAP, so a second finish()
+        // (including the one Drop makes) must not hand the summary back as if it were.
+        assert_matches!(writer.finish(), Err(McapError::AttemptedWriteAfterFailure));
+        let written = writer.into_inner().inner.into_inner();
+        assert_eq!(written.len() as u64, complete - MAGIC.len() as u64);
+        assert!(!written.ends_with(MAGIC));
     }
 
     #[test]

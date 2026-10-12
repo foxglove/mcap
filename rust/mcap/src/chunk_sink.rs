@@ -72,10 +72,25 @@ impl<W> ChunkSink<W> {
 
 impl<W: Write> ChunkSink<W> {
     /// Writes a held frame header through to the underlying writer.
+    ///
+    /// Only the bytes that reached the writer are dropped from the held header, so that if the
+    /// write fails partway through and the caller keeps writing, the retry does not duplicate
+    /// the bytes that were already written.
     fn write_frame_header(&mut self) -> std::io::Result<()> {
-        if !self.frame_header.is_empty() {
-            self.inner.write_all(&self.frame_header)?;
-            self.frame_header.clear();
+        while !self.frame_header.is_empty() {
+            match self.inner.write(&self.frame_header) {
+                Ok(0) => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::WriteZero,
+                        "failed to write whole frame header",
+                    ))
+                }
+                Ok(n) => {
+                    self.frame_header.drain(..n);
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::Interrupted => {}
+                Err(err) => return Err(err),
+            }
         }
         Ok(())
     }
@@ -179,6 +194,40 @@ mod tests {
         sink.write_all(b"header").unwrap();
         assert!(sink.write_all(b"data").is_err());
         assert!(sink.finish().1.is_err());
+    }
+
+    #[test]
+    fn partially_written_frame_header_is_not_duplicated_on_retry() {
+        /// Accepts one byte per write until `fail_after` bytes, then fails once and recovers.
+        struct Trickle {
+            inner: Cursor<Vec<u8>>,
+            fail_after: u64,
+            failed: bool,
+        }
+        impl Write for Trickle {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                if self.inner.position() >= self.fail_after && !self.failed {
+                    self.failed = true;
+                    return Err(std::io::Error::other("transient"));
+                }
+                self.inner.write(&buf[..1])
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let trickle = Trickle {
+            inner: Cursor::new(Vec::new()),
+            fail_after: 3,
+            failed: false,
+        };
+        let mut sink = ChunkSink::new(trickle, ChunkMode::Direct);
+        sink.hold_frame_header();
+        sink.write_all(b"header").unwrap();
+        assert!(sink.write_all(b"data").is_err());
+        assert_eq!(sink.inner.inner.get_ref(), b"hea");
+        sink.write_all(b"data").unwrap();
+        assert_eq!(sink.inner.inner.get_ref(), b"headerdata");
     }
 
     #[test]
