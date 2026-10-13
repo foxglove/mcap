@@ -1,7 +1,9 @@
 #include "crc32.hpp"
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cerrno>
+#include <cstring>
 #include <iostream>
 #include <system_error>
 #ifndef MCAP_COMPRESSION_NO_LZ4
@@ -926,13 +928,33 @@ uint64_t McapWriter::getRecordSize(const Message& message) {
 uint64_t McapWriter::write(IWritable& output, const Message& message) {
   const uint64_t recordSize = getRecordSize(message);
 
-  write(output, OpCode::Message);
-  write(output, recordSize);
-  write(output, message.channelId);
-  write(output, message.sequence);
-  write(output, message.logTime);
-  write(output, message.publishTime);
-  write(output, message.data, message.dataSize);
+  // Stage the fixed-size record header in one buffer so that the output
+  // receives two writes per message (header, payload). Each IWritable::write
+  // call updates the CRC when enabled and, for unchunked files, reaches the
+  // FileWriter/StreamWriter and its error check.
+  constexpr size_t HeaderSize = /* opcode */ 1 + /* record length */ 8 + /* channel id */ 2 +
+                                /* sequence */ 4 + /* log time */ 8 + /* publish time */ 8;
+  static_assert(sizeof(OpCode) + sizeof(recordSize) + sizeof(message.channelId) +
+                    sizeof(message.sequence) + sizeof(message.logTime) +
+                    sizeof(message.publishTime) ==
+                  HeaderSize,
+                "Message header layout does not match HeaderSize");
+  std::array<std::byte, HeaderSize> header;
+  size_t offset = 0;
+  const auto put = [&header, &offset](const auto& value) {
+    std::memcpy(header.data() + offset, &value, sizeof(value));
+    offset += sizeof(value);
+  };
+  put(OpCode::Message);
+  put(recordSize);
+  put(message.channelId);
+  put(message.sequence);
+  put(message.logTime);
+  put(message.publishTime);
+  assert(offset == HeaderSize);
+
+  output.write(header.data(), HeaderSize);
+  output.write(message.data, message.dataSize);
 
   return 9 + recordSize;
 }
