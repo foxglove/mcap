@@ -447,11 +447,8 @@ public:
    *
    * @param onProblem A callback that will be called when a parsing error
    *   occurs. Problems can either be recoverable, indicating some data could
-   *   not be read, or non-recoverable, stopping the iteration. A file order
-   *   read made before the summary has been read runs to the end of the
-   *   input, through the Footer record and the trailing magic bytes, and
-   *   reports a problem if the input ends before them or they are wrong, so
-   *   a truncated file is reported after its last message.
+   *   not be read, or non-recoverable, stopping the iteration. See
+   *   `LinearMessageView` for what is reported at the end of the input.
    */
   LinearMessageView readMessages(const ProblemCallback& onProblem);
   /**
@@ -860,6 +857,12 @@ private:
 
 /**
  * @brief An iterable view of Messages in an MCAP file.
+ *
+ * Every `McapReader::readMessages()` overload returns one of these. A file
+ * order read made before the summary has been read runs to the end of the
+ * input, through the Footer record and the trailing magic bytes, and reports
+ * a problem to the `ProblemCallback` if the input ends before them or they
+ * are wrong, so a truncated file is reported after its last message.
  */
 struct MCAP_PUBLIC LinearMessageView {
   struct MCAP_PUBLIC Iterator {
