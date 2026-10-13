@@ -171,7 +171,6 @@ func (l *Lexer) Next(p []byte) (TokenType, []byte, error) {
 			}
 			return TokenError, nil, err
 		}
-		l.atEnd = false
 		opcode := OpCode(l.buf[0])
 		recordLen := binary.LittleEndian.Uint64(l.buf[1:9])
 		if l.maxRecordSize > 0 && recordLen > uint64(l.maxRecordSize) {
