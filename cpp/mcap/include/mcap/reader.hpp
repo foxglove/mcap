@@ -883,6 +883,10 @@ struct MCAP_PUBLIC LinearMessageView {
   const Status& status() const;
 
 private:
+  // readMessages() reports problems found before iteration begins, such as invalid options, on
+  // the empty view it returns.
+  friend McapReader;
+
   /// Records `status` as the view status if no problem has been recorded yet, then invokes the
   /// ProblemCallback.
   void reportProblem(const Status& status);

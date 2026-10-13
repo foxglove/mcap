@@ -647,10 +647,13 @@ LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem,
     return LinearMessageView{*this, onProblem};
   }
 
+  // Invalid options yield an empty view that reports the problem, both through the callback and
+  // through its status().
   const auto boundsStatus = options.validate();
   if (!boundsStatus.ok()) {
-    onProblem(boundsStatus);
-    return LinearMessageView{*this, onProblem};
+    LinearMessageView view{*this, onProblem};
+    view.reportProblem(boundsStatus);
+    return view;
   }
   const auto [startOffset, endOffset] = byteRange_(options);
   return LinearMessageView{*this, options, startOffset, endOffset, onProblem};

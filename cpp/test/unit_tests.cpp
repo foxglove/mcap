@@ -681,6 +681,40 @@ TEST_CASE("LinearMessageView::status()", "[reader]") {
     REQUIRE(view.status().ok());
   }
 
+  SECTION("Crossed time range, no-op callback") {
+    // Without a callback that records anything, status() is the only way to find out why the
+    // view is empty.
+    const auto onProblem = [](const mcap::Status&) {};
+    Buffer buffer;
+    writeFile(buffer, 1, false);
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    mcap::ReadMessageOptions options;
+    options.startingAt(100).endingBefore(50);
+    auto view = reader.readMessages(onProblem, options);
+    REQUIRE(view.status().code == mcap::StatusCode::InvalidMessageReadOptions);
+    REQUIRE(view.begin() == view.end());
+  }
+
+  SECTION("Crossed time range, callback overload") {
+    std::vector<mcap::Status> reported;
+    const auto onProblem = [&reported](const mcap::Status& status) {
+      reported.push_back(status);
+    };
+    Buffer buffer;
+    writeFile(buffer, 1, false);
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    mcap::ReadMessageOptions options;
+    options.startingAt(100).endingBefore(50);
+    auto view = reader.readMessages(onProblem, options);
+    REQUIRE(reported.size() == 1);
+    REQUIRE(reported[0].code == mcap::StatusCode::InvalidMessageReadOptions);
+    REQUIRE(view.status().code == reported[0].code);
+    REQUIRE(view.status().message == reported[0].message);
+    REQUIRE(view.begin() == view.end());
+  }
+
   SECTION("Corrupt record, no-callback overload") {
     Buffer buffer;
     writeFile(buffer, 1, false);
@@ -1118,6 +1152,7 @@ TEST_CASE("explicit time range bounds", "[reader]") {
     auto view = reader.readMessages(onProblem, options);
     REQUIRE(reported.has_value());
     REQUIRE(reported->code == mcap::StatusCode::InvalidMessageReadOptions);
+    REQUIRE(view.status().code == mcap::StatusCode::InvalidMessageReadOptions);
     REQUIRE(view.begin() == view.end());
     options.startingAt(5).endingBefore(5);
     requireOk(options.validate());
