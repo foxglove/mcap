@@ -1138,6 +1138,22 @@ impl<W: Write + Seek> Writer<W> {
             "Trying to write to a chunk when chunking is disabled"
         );
 
+        // This runs for every message. Leave the writer in place when a chunk is already open:
+        // a take() and put-back moves the whole ChunkWriter, and the compiler does not always
+        // remove that move.
+        if !matches!(self.writer, Some(WriteMode::Chunk(_))) {
+            self.open_chunk()?;
+        }
+
+        let Some(WriteMode::Chunk(c)) = &mut self.writer else {
+            unreachable!("open_chunk() leaves a chunk writer in place")
+        };
+
+        Ok(c)
+    }
+
+    /// Starts a new chunk. Only called when no chunk is open.
+    fn open_chunk(&mut self) -> McapResult<()> {
         // Rust forbids moving values out of a &mut reference. We made self.writer an Option so we
         // can work around this by using take() to temporarily replace it with None while we
         // construct the ChunkWriter. Every path below must put something back, or into_inner()
@@ -1174,12 +1190,7 @@ impl<W: Write + Seek> Writer<W> {
             None => return Err(McapError::AttemptedWriteAfterFailure),
         };
         self.writer = Some(mode);
-
-        let Some(WriteMode::Chunk(c)) = &mut self.writer else {
-            unreachable!("we're not in an attachment and write mode was set to chunk above")
-        };
-
-        Ok(c)
+        Ok(())
     }
 
     /// Finish the current chunk, if we have one.
@@ -1191,7 +1202,7 @@ impl<W: Write + Seek> Writer<W> {
             return Err(McapError::AttachmentNotInProgress);
         }
 
-        // See start_chunk() for why we use take() here.
+        // See open_chunk() for why we use take() here.
         match self.writer.take() {
             Some(WriteMode::Chunk(c)) => match c.finish() {
                 Ok((w, mode, index, reused_encoder)) => {
@@ -3075,7 +3086,7 @@ mod tests {
         // finish_chunk() hands the just-finished chunk's zstd encoder (and its worker
         // thread pool, if compression_threads > 1) into reusable_zstd_encoder so the
         // *next* chunk can reinit it instead of building a fresh one. write() immediately
-        // takes it back out again -- via start_chunk()'s mem::take() -- the moment a new
+        // takes it back out again -- via open_chunk()'s mem::take() -- the moment a new
         // chunk opens, in the same call, so the field is only observably populated in the
         // gap between a chunk closing and (if any) the next one opening. finish() calls
         // finish_chunk() too, but by definition no next chunk can ever start after
