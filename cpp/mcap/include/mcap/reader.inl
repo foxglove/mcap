@@ -624,6 +624,11 @@ LinearMessageView McapReader::readMessages(const ProblemCallback& onProblem) {
   return readMessages(onProblem, ReadMessageOptions{});
 }
 
+LinearMessageView McapReader::readMessages(const ReadMessageOptions& options) {
+  const auto onProblem = [](const Status&) {};
+  return readMessages(onProblem, options);
+}
+
 LinearMessageView McapReader::readMessages(Timestamp startingAt, Timestamp endingBefore) {
   const auto onProblem = [](const Status&) {};
   ReadMessageOptions options;
