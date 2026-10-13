@@ -55,6 +55,18 @@ enum WriteMode<W: Write + Seek> {
     Failed(W),
 }
 
+impl<W: Write + Seek> WriteMode<W> {
+    /// Peels away all the layers of the writer to get the underlying stream.
+    fn into_inner(self) -> W {
+        match self {
+            WriteMode::Raw(w) => w.finalize().0,
+            WriteMode::Attachment(w) => w.writer.finalize().0.finalize().0,
+            WriteMode::Chunk(w) => w.compressor.finalize().0.into_inner().finalize().0.inner,
+            WriteMode::Failed(w) => w,
+        }
+    }
+}
+
 #[derive(EnumSetType, Debug)]
 pub enum PrivateRecordOptions {
     /// If set and chunking is enabled, the private record will be written into a chunk. Otherwise, the record will be written directly to the file.
@@ -629,9 +641,9 @@ impl<W: Write + Seek> Writer<W> {
             data: schema.data,
         };
         if self.options.use_chunks {
-            self.start_chunk()?.write_record(&record)
+            self.write_in_chunk(|c| c.write_record(&record))
         } else {
-            Ok(write_record(&mut self.finish_chunk()?, &record)?)
+            self.write_raw(|w| Ok(write_record(w, &record)?))
         }
     }
 
@@ -762,9 +774,9 @@ impl<W: Write + Seek> Writer<W> {
     fn write_channel(&mut self, channel: records::Channel) -> McapResult<()> {
         let record = Record::Channel(channel);
         if self.options.use_chunks {
-            self.start_chunk()?.write_record(&record)
+            self.write_in_chunk(|c| c.write_record(&record))
         } else {
-            Ok(write_record(self.finish_chunk()?, &record)?)
+            self.write_raw(|w| Ok(write_record(w, &record)?))
         }
     }
 
@@ -889,17 +901,14 @@ impl<W: Write + Seek> Writer<W> {
         }
 
         if self.options.use_chunks {
-            self.start_chunk()?.write_message(header, data)?;
+            self.write_in_chunk(|c| c.write_message(header, data))
         } else {
-            write_record(
-                self.finish_chunk()?,
-                &Record::Message {
-                    header: *header,
-                    data: Cow::Borrowed(data),
-                },
-            )?;
+            let record = Record::Message {
+                header: *header,
+                data: Cow::Borrowed(data),
+            };
+            self.write_raw(|w| Ok(write_record(w, &record)?))
         }
-        Ok(())
     }
 
     /// Write a private record using the provided options.
@@ -921,12 +930,10 @@ impl<W: Write + Seek> Writer<W> {
         };
 
         if self.options.use_chunks && options.contains(PrivateRecordOptions::IncludeInChunks) {
-            self.start_chunk()?.write_record(&record)?;
+            self.write_in_chunk(|c| c.write_record(&record))
         } else {
-            write_record(self.finish_chunk()?, &record)?;
+            self.write_raw(|w| Ok(write_record(w, &record)?))
         }
-
-        Ok(())
     }
 
     /// Start writing an attachment.
@@ -1012,9 +1019,8 @@ impl<W: Write + Seek> Writer<W> {
             return Err(McapError::AttachmentNotInProgress);
         };
 
-        writer.put_bytes(bytes)?;
-
-        Ok(())
+        let result = writer.put_bytes(bytes);
+        self.fail_on_io_error(result)
     }
 
     /// Finish the current attachment.
@@ -1075,13 +1081,13 @@ impl<W: Write + Seek> Writer<W> {
     /// Write a [Metadata](https://mcap.dev/spec#metadata-op0x0c) record to the MCAP file. This
     /// finishes any current chunk before writing the metadata.
     pub fn write_metadata(&mut self, metadata: &Metadata) -> McapResult<()> {
-        let w = self.finish_chunk()?;
-        let offset = w.stream_position()?;
-
-        // Should we specialize this to avoid taking a clone of the map?
-        write_record(w, &Record::Metadata(metadata.clone()))?;
-
-        let length = w.stream_position()? - offset;
+        let (offset, length) = self.write_raw(|w| {
+            let offset = w.stream_position()?;
+            // Should we specialize this to avoid taking a clone of the map?
+            write_record(w, &Record::Metadata(metadata.clone()))?;
+            let length = w.stream_position()? - offset;
+            Ok((offset, length))
+        })?;
 
         self.metadata_count += 1;
         if self.options.emit_metadata_indexes {
@@ -1111,8 +1117,43 @@ impl<W: Write + Seek> Writer<W> {
     /// A stream of zeroes will compress great at any chunk size, and a stream
     /// of random data will compress terribly at any chunk size.)
     pub fn flush(&mut self) -> McapResult<()> {
-        self.finish_chunk()?.flush()?;
-        Ok(())
+        self.write_raw(|w| Ok(w.flush()?))
+    }
+
+    /// Runs `f` on the current chunk, starting one if needed. See [`Self::fail_on_io_error`].
+    fn write_in_chunk(
+        &mut self,
+        f: impl FnOnce(&mut ChunkWriter<W>) -> McapResult<()>,
+    ) -> McapResult<()> {
+        let result = self.start_chunk().and_then(f);
+        self.fail_on_io_error(result)
+    }
+
+    /// Runs `f` on the raw stream, finishing the current chunk if needed. See
+    /// [`Self::fail_on_io_error`].
+    fn write_raw<T>(
+        &mut self,
+        f: impl FnOnce(&mut CountingCrcWriter<W>) -> McapResult<T>,
+    ) -> McapResult<T> {
+        let result = self.finish_chunk().and_then(f);
+        self.fail_on_io_error(result)
+    }
+
+    /// Parks the stream in [`WriteMode::Failed`] if `result` is an I/O error.
+    ///
+    /// Once part of a record (or of a compressed chunk) has failed to reach the stream, nothing
+    /// written after it can be read back, and a summary section would describe a file that is
+    /// not there. So after an I/O error every later call, including [`Self::finish`], reports
+    /// [`McapError::AttemptedWriteAfterFailure`] instead of writing anything more. Other errors
+    /// are reported as they are: those paths return before touching the stream, so the caller can
+    /// correct the input and carry on.
+    fn fail_on_io_error<T>(&mut self, result: McapResult<T>) -> McapResult<T> {
+        if let Err(McapError::Io(_)) = &result {
+            if let Some(mode) = self.writer.take() {
+                self.writer = Some(WriteMode::Failed(mode.into_inner()));
+            }
+        }
+        result
     }
 
     fn assert_not_finished(&self) {
@@ -1125,6 +1166,11 @@ impl<W: Write + Seek> Writer<W> {
 
     /// Starts a new chunk if we haven't done so already.
     fn start_chunk(&mut self) -> McapResult<&mut ChunkWriter<W>> {
+        // Checked before the finished assertion: a finish() whose footer failed to reach the
+        // stream leaves the writer both finished and failed, and the failure is what matters.
+        if let Some(WriteMode::Failed(_)) = self.writer {
+            return Err(McapError::AttemptedWriteAfterFailure);
+        }
         self.assert_not_finished();
 
         // It is not possible to start writing a chunk if we're still writing an attachment. Return
@@ -1195,6 +1241,10 @@ impl<W: Write + Seek> Writer<W> {
 
     /// Finish the current chunk, if we have one.
     fn finish_chunk(&mut self) -> McapResult<&mut CountingCrcWriter<W>> {
+        // See start_chunk() for why this comes before the finished assertion.
+        if let Some(WriteMode::Failed(_)) = self.writer {
+            return Err(McapError::AttemptedWriteAfterFailure);
+        }
         self.assert_not_finished();
         // If we're currently writing an attachment then we're not writing a chunk. Return an
         // error instead.
@@ -1369,14 +1419,10 @@ impl<W: Write + Seek> Writer<W> {
         if self.finished_summary.is_none() {
             self.finished_summary = Some(self.take_summary());
         }
-        // Peel away all the layers of the writer to get the underlying stream.
-        match self.writer.take() {
-            Some(WriteMode::Raw(w)) => w.finalize().0,
-            Some(WriteMode::Attachment(w)) => w.writer.finalize().0.finalize().0,
-            Some(WriteMode::Chunk(w)) => w.compressor.finalize().0.into_inner().finalize().0.inner,
-            Some(WriteMode::Failed(w)) => w,
-            None => unreachable!("self.writer is put back after every write, failed or not"),
-        }
+        self.writer
+            .take()
+            .expect("self.writer is put back after every write, failed or not")
+            .into_inner()
     }
 }
 
@@ -3203,9 +3249,32 @@ mod tests {
 
     /// How many bytes a new writer plus `f` write; a budget of that size fails the next write.
     fn bytes_written_by(f: impl FnOnce(&mut Writer<Cursor<Vec<u8>>>)) -> u64 {
-        let mut writer = Writer::new(Cursor::new(Vec::new())).unwrap();
+        bytes_written_with(WriteOptions::new(), f)
+    }
+
+    fn bytes_written_with(
+        options: WriteOptions,
+        f: impl FnOnce(&mut Writer<Cursor<Vec<u8>>>),
+    ) -> u64 {
+        let mut writer = options.create(Cursor::new(Vec::new())).unwrap();
         f(&mut writer);
         writer.into_inner().get_ref().len() as u64
+    }
+
+    fn message<'a>(data: &'a [u8]) -> Message<'a> {
+        Message {
+            channel: Arc::new(Channel {
+                id: 0,
+                topic: "/chat".into(),
+                schema: None,
+                message_encoding: "json".into(),
+                metadata: Default::default(),
+            }),
+            sequence: 0,
+            log_time: 0,
+            publish_time: 0,
+            data: Cow::Borrowed(data),
+        }
     }
 
     fn attachment_header() -> AttachmentHeader {
@@ -3294,11 +3363,58 @@ mod tests {
         let mut writer = Writer::new(FullDisk::new(budget)).unwrap();
         assert_matches!(writer.finish(), Err(McapError::Io(_)));
         // The summary was computed, but the file is not a complete MCAP, so a second finish()
-        // (including the one Drop makes) must not hand the summary back as if it were.
-        assert_matches!(writer.finish(), Err(McapError::AttemptedWriteAfterFailure));
+        // (including the one Drop makes) must not hand the summary back as if it were, and a
+        // write must report the failure rather than panic because the file is "finished".
+        assert_failed(&mut writer);
         let written = writer.into_inner().inner.into_inner();
         assert_eq!(written.len() as u64, complete - MAGIC.len() as u64);
         assert!(!written.ends_with(MAGIC));
+    }
+
+    #[test]
+    fn io_error_inside_a_chunk_fails_the_writer() {
+        // Without compression the message goes straight to the stream, so the error surfaces on
+        // the write itself rather than when the chunk is finished.
+        let options = WriteOptions::new().compression(None);
+        let budget = bytes_written_with(options.clone(), |w| {
+            w.add_channel(0, "/chat", "json", &BTreeMap::new()).unwrap();
+        });
+        let mut writer = options.create(FullDisk::new(budget)).unwrap();
+        writer
+            .add_channel(0, "/chat", "json", &BTreeMap::new())
+            .unwrap();
+        assert_matches!(writer.write(&message(b"hello")), Err(McapError::Io(_)));
+        assert_failed(&mut writer);
+        writer.into_inner();
+    }
+
+    #[test]
+    fn io_error_outside_a_chunk_fails_the_writer() {
+        let options = WriteOptions::new().use_chunks(false);
+        let budget = bytes_written_with(options.clone(), |w| {
+            w.add_channel(0, "/chat", "json", &BTreeMap::new()).unwrap();
+        });
+        let mut writer = options.create(FullDisk::new(budget)).unwrap();
+        writer
+            .add_channel(0, "/chat", "json", &BTreeMap::new())
+            .unwrap();
+        assert_matches!(writer.write(&message(b"hello")), Err(McapError::Io(_)));
+        assert_failed(&mut writer);
+        writer.into_inner();
+    }
+
+    #[test]
+    fn io_error_writing_attachment_bytes_fails_the_writer() {
+        let budget = bytes_written_by(|w| w.start_attachment(4, attachment_header()).unwrap());
+        let mut writer = Writer::new(FullDisk::new(budget)).unwrap();
+        writer.start_attachment(4, attachment_header()).unwrap();
+        assert_matches!(writer.put_attachment_bytes(b"1234"), Err(McapError::Io(_)));
+        assert_matches!(
+            writer.put_attachment_bytes(b"1234"),
+            Err(McapError::AttachmentNotInProgress)
+        );
+        assert_failed(&mut writer);
+        writer.into_inner();
     }
 
     #[test]
