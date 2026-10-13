@@ -8,7 +8,8 @@
 //! the file.
 //!
 //! The readers in this module, including [`Summary::stream_chunk`], use only the built-in
-//! decompressors. For a custom [`Decompressor`](crate::sans_io::decompressor::Decompressor), use
+//! decompressors enabled by the `zstd` and `lz4` crate features. For a custom
+//! [`Decompressor`](crate::sans_io::decompressor::Decompressor), use
 //! [`crate::sans_io::LinearReader`], [`crate::sans_io::IndexedReader`], or
 //! [`crate::io::MessageReader`], which reads bytes already in memory through a
 //! [`std::io::Cursor`].

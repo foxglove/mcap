@@ -1,7 +1,4 @@
 //! Implement decompression algorithms for MCAP chunk data
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
-
 use crate::{McapError, McapResult};
 
 /// How many bytes one [`Decompressor::decompress`] call consumed and wrote.
@@ -20,6 +17,10 @@ pub struct DecompressResult {
 /// [`LinearReader`](crate::sans_io::LinearReader),
 /// [`IndexedReader`](crate::sans_io::IndexedReader), and the readers that wrap `LinearReader`
 /// accept one. The readers in [`crate::read`] do not.
+///
+/// The built-in `"zstd"` and `"lz4"` decoders are registered by default when their crate
+/// features are enabled. Registering another decompressor under the same name replaces them.
+///
 /// One instance is kept per name. [`reset`](Self::reset) is called after each chunk, and not
 /// before the first, so the instance must be ready to decode when it is registered.
 pub trait Decompressor: Send {
@@ -55,20 +56,110 @@ pub trait Decompressor: Send {
     fn name(&self) -> &'static str;
 }
 
-pub(crate) fn register_decompressor(
-    decompressors: &mut HashMap<String, Box<dyn Decompressor>>,
-    decompressor: impl Decompressor + 'static,
-) -> McapResult<()> {
-    let name = decompressor.name();
-    if name.is_empty() {
-        return Err(McapError::EmptyDecompressorName);
+/// A reader's decompressors, looked up by [`Decompressor::name`].
+///
+/// A reader holds a handful, so scanning their names is cheaper than hashing the chunk's
+/// compression string.
+pub(crate) struct Decompressors(Vec<Box<dyn Decompressor>>);
+
+impl Decompressors {
+    /// The built-in decoders enabled by crate features. Each allocates its native context on
+    /// first use, so this is cheap for readers that never meet a compressed chunk.
+    pub(crate) fn builtin() -> Self {
+        Self(vec![
+            #[cfg(feature = "zstd")]
+            Box::new(crate::sans_io::zstd::ZstdDecoder::new()),
+            #[cfg(feature = "lz4")]
+            Box::new(crate::sans_io::lz4::Lz4Decoder::new()),
+        ])
     }
-    match decompressors.entry(name.to_owned()) {
-        Entry::Occupied(_) => Err(McapError::DuplicateDecompressor(name.to_owned())),
-        Entry::Vacant(entry) => {
-            entry.insert(Box::new(decompressor));
-            Ok(())
+
+    /// Stores `decompressor`, replacing any decompressor with the same name.
+    pub(crate) fn register(&mut self, decompressor: impl Decompressor + 'static) -> McapResult<()> {
+        let name = decompressor.name();
+        if name.is_empty() {
+            return Err(McapError::EmptyDecompressorName);
         }
+        match self.position(name) {
+            Some(i) => self.0[i] = Box::new(decompressor),
+            None => self.0.push(Box::new(decompressor)),
+        }
+        Ok(())
+    }
+
+    /// Decodes a chunk that is fully in memory into `dst`, then resets the decompressor.
+    ///
+    /// A `decompress` call that makes no progress is an error, since no more input can arrive.
+    /// `reset` runs after a decompression error too, and the decompression error wins.
+    ///
+    /// Input past the point where `dst` is full is not passed on, per the [`Decompressor`]
+    /// contract and like the linear reader. An oversize frame is truncated silently and a
+    /// compressor's trailing checksum goes unverified; the chunk's `uncompressed_crc` is the
+    /// integrity check, and it is in a header the indexed reader never sees.
+    pub(crate) fn decompress_chunk(
+        &mut self,
+        name: &str,
+        src: &[u8],
+        dst: &mut Vec<u8>,
+        uncompressed_size: usize,
+    ) -> McapResult<()> {
+        let decompressor = match self.position(name) {
+            Some(i) => self.0[i].as_mut(),
+            None => return Err(McapError::UnsupportedCompression(name.into())),
+        };
+        dst.clear();
+        dst.resize(uncompressed_size, 0);
+        let mut input_pos = 0;
+        let mut output_pos = 0;
+        let decompressed = (|| {
+            while output_pos < uncompressed_size {
+                let input = &src[input_pos..];
+                let output = &mut dst[output_pos..uncompressed_size];
+                let output_len = output.len();
+                let res = check_decompress_result(
+                    decompressor.decompress(input, output)?,
+                    input.len(),
+                    output_len,
+                )?;
+                if res.consumed == 0 && res.wrote == 0 {
+                    return Err(no_progress_error());
+                }
+                input_pos += res.consumed;
+                output_pos += res.wrote;
+            }
+            Ok(())
+        })();
+        decompressed.and(decompressor.reset())
+    }
+
+    /// Removes the decompressor named `name`, for a reader that streams a chunk across calls.
+    pub(crate) fn take(&mut self, name: &str) -> Option<Box<dyn Decompressor>> {
+        let i = self.position(name)?;
+        Some(self.0.swap_remove(i))
+    }
+
+    /// Resets a decompressor from [`take`](Self::take) and puts it back. If a replacement was
+    /// registered under its name in the meantime, the replacement stays and `decompressor` is
+    /// dropped without a reset. The instance goes back even when reset fails, so the next chunk
+    /// reports the failure instead of finding no decompressor.
+    pub(crate) fn restore(&mut self, mut decompressor: Box<dyn Decompressor>) -> McapResult<()> {
+        if self.position(decompressor.name()).is_some() {
+            return Ok(());
+        }
+        let reset = decompressor.reset();
+        self.0.push(decompressor);
+        reset
+    }
+
+    #[cfg(test)]
+    pub(crate) fn contains(&self, name: &str) -> bool {
+        self.position(name).is_some()
+    }
+
+    fn position(&self, name: &str) -> Option<usize> {
+        self.0
+            .iter()
+            .position(|decompressor| decompressor.name() == name)
     }
 }
 

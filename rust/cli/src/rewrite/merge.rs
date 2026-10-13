@@ -71,8 +71,8 @@ struct MaterializedInputMessages {
 }
 
 enum MergeMessageStream<'a> {
-    // Boxed because IndexedReader's inline state, including its decompressor map, is far larger
-    // than the other variant.
+    // Boxed because IndexedReader's inline state (chunk slots, message indexes, filter) makes
+    // this variant far larger than the other, which clippy's large_enum_variant lint rejects.
     Indexed(Box<IndexedInputMessageReader<'a>>),
     Materialized(MaterializedInputMessages),
 }

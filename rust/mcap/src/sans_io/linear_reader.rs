@@ -1,9 +1,7 @@
 //! Contains a [sans-io](https://sans-io.readthedocs.io/) MCAP reader struct, [`LinearReader`].
 //! This can be used to read MCAP data from any source of bytes.
-use std::collections::HashMap;
-
 use super::decompressor::{
-    check_decompress_result, no_progress_error, register_decompressor, Decompressor,
+    check_decompress_result, no_progress_error, Decompressor, Decompressors,
 };
 use crate::{
     records::{op, ChunkHeader},
@@ -11,12 +9,6 @@ use crate::{
     McapError, McapResult, MAGIC,
 };
 use binrw::BinReaderExt;
-
-#[cfg(feature = "lz4")]
-use super::lz4;
-
-#[cfg(feature = "zstd")]
-use super::zstd;
 
 #[derive(Clone)]
 enum CurrentlyReading {
@@ -41,15 +33,10 @@ enum CurrentlyReading {
 }
 use CurrentlyReading::*;
 
-struct ActiveDecompressor {
-    decompressor: Box<dyn Decompressor>,
-    // True if registered through `add_decompressor`, false for a built-in lz4/zstd decoder.
-    from_caller: bool,
-}
-
 struct ChunkState {
-    // The decompressor to use for loading records for this chunk. None if not compressed.
-    decompressor: Option<ActiveDecompressor>,
+    // The decompressor to use for loading records for this chunk, taken out of
+    // `LinearReader::decompressors` for the duration of the chunk. None if not compressed.
+    decompressor: Option<Box<dyn Decompressor>>,
     // For uncompressed chunks, records are sliced directly out of `file_data`.  Therefore we can't
     // use `decompressed_content.hasher` to calculate a CRC, so we maintain a separate hasher for
     // this purpose.
@@ -321,11 +308,8 @@ pub struct LinearReader {
     file_data: RwBuf,
     // data decompressed from compressed chunks
     decompressed_content: RwBuf,
-    // Caller-supplied decompressors, keyed by compression string. Built-in decoders are not
-    // stored here, so caching one cannot block or replace a registration.
-    decompressors: HashMap<String, Box<dyn Decompressor>>,
-    // Built-in lz4/zstd decoders reused across chunks.
-    builtin_decompressors: HashMap<String, Box<dyn Decompressor>>,
+    // Reused across chunks. Starts with the built-in decoders.
+    decompressors: Decompressors,
     // Stores the number of bytes written into this reader since the last `next_event()` call.
     options: LinearReaderOptions,
     at_eof: bool,
@@ -355,8 +339,7 @@ impl LinearReader {
             ),
             options,
             chunk_state: None,
-            decompressors: Default::default(),
-            builtin_decompressors: Default::default(),
+            decompressors: Decompressors::builtin(),
             at_eof: false,
         }
     }
@@ -371,11 +354,7 @@ impl LinearReader {
         );
         result.currently_reading = ChunkRecord;
         result.chunk_state = Some(ChunkState {
-            decompressor: get_decompressor(
-                &mut HashMap::new(),
-                &mut HashMap::new(),
-                &header.compression,
-            )?,
+            decompressor: get_decompressor(&mut result.decompressors, &header.compression)?,
             crc: header.uncompressed_crc,
             uncompressed_data_hasher: Some(crc32fast::Hasher::new()),
             uncompressed_len: header.uncompressed_size,
@@ -389,11 +368,10 @@ impl LinearReader {
     /// Registers a decompressor for chunks whose `compression` field equals
     /// [`Decompressor::name`].
     ///
-    /// Call this before reading the chunks it should decode. A registered decompressor takes
-    /// precedence over the built-in `"lz4"` and `"zstd"` decoders and works whether or not those
-    /// crate features are enabled. Without a registration, `"lz4"` and `"zstd"` chunks use the
-    /// built-in decoders when their features are enabled, and any other non-empty compression
-    /// string returns [`McapError::UnsupportedCompression`].
+    /// Call this before reading the chunks it should decode. The built-in `"zstd"` and `"lz4"`
+    /// decoders are registered by default when their features are enabled. Registering under an
+    /// existing name replaces that decompressor from the next chunk on; a chunk with no
+    /// registration for its compression string returns [`McapError::UnsupportedCompression`].
     ///
     /// Before each `decompress` call, this reader buffers [`Decompressor::next_read_size`] bytes,
     /// or up to 64 KiB when that returns 0. A small hint produces small reads. After a call that
@@ -402,26 +380,24 @@ impl LinearReader {
     /// buffer is already at [`record_length_limit`](LinearReaderOptions::record_length_limit), or
     /// a decompression error when every remaining compressed byte is already buffered.
     ///
-    /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty, or
-    /// [`McapError::DuplicateDecompressor`] when that name is already registered, including while
-    /// the registered decompressor is decoding the current chunk.
+    /// Returns [`McapError::EmptyDecompressorName`] when `name()` is empty.
     pub fn add_decompressor(
         &mut self,
         decompressor: impl Decompressor + 'static,
     ) -> McapResult<()> {
-        let name = decompressor.name().to_owned();
-        let in_use = self
-            .chunk_state
-            .as_ref()
-            .and_then(|state| state.decompressor.as_ref())
-            .is_some_and(|active| active.from_caller && active.decompressor.name() == name);
-        if in_use {
-            return Err(McapError::DuplicateDecompressor(name));
-        }
-        register_decompressor(&mut self.decompressors, decompressor)?;
-        // A cached built-in decoder for this name will no longer be used.
-        self.builtin_decompressors.remove(&name);
-        Ok(())
+        self.decompressors.register(decompressor)
+    }
+
+    /// Whether a decompressor is registered under `name`, counting one that is decoding the
+    /// current chunk.
+    #[cfg(test)]
+    pub(crate) fn has_decompressor(&self, name: &str) -> bool {
+        self.decompressors.contains(name)
+            || self
+                .chunk_state
+                .as_ref()
+                .and_then(|state| state.decompressor.as_ref())
+                .is_some_and(|decompressor| decompressor.name() == name)
     }
 
     /// Get a mutable slice to write new MCAP data into. Call [`Self::notify_read`] afterwards with
@@ -643,7 +619,7 @@ impl LinearReader {
                     let header: ChunkHeader = check!(std::io::Cursor::new(header_buf).read_le());
 
                     // Length checks run before the decompressor is taken out of the map. An error
-                    // here must leave a caller-registered decoder in place for a later chunk.
+                    // here must leave the decoder in place for a later chunk.
                     let chunk_data_len = check!(len
                         .checked_sub(header_len as u64)
                         .ok_or(McapError::UnexpectedEoc));
@@ -658,7 +634,6 @@ impl LinearReader {
 
                     let decompressor = check!(get_decompressor(
                         &mut self.decompressors,
-                        &mut self.builtin_decompressors,
                         &header.compression
                     ));
 
@@ -718,8 +693,7 @@ impl LinearReader {
                             }
                             self.currently_reading = ChunkRecord;
                         }
-                        Some(active) => {
-                            let decompressor = &mut active.decompressor;
+                        Some(decompressor) => {
                             // decompress all available compressed data until there are no compressed
                             // bytes remaining. If not all of the compressed bytes are available in
                             // file_data, decompress! will return a Read event for more data.
@@ -766,8 +740,7 @@ impl LinearReader {
                             state.compressed_remaining -= (OPCODE_LEN_SIZE + len) as u64;
                             return Some(Ok(LinearReadEvent::Record { data, opcode }));
                         }
-                        Some(active) => {
-                            let decompressor = &mut active.decompressor;
+                        Some(decompressor) => {
                             if self.decompressed_content.len() == 0 {
                                 self.decompressed_content.clear();
                             }
@@ -837,7 +810,7 @@ impl LinearReader {
                                     .then_some(McapError::BadChunkCrc { saved, calculated })
                             })
                     };
-                    let active = self
+                    let decompressor = self
                         .chunk_state
                         .as_mut()
                         .expect("chunk state should be set")
@@ -845,14 +818,9 @@ impl LinearReader {
                         .take();
                     self.chunk_state = None;
                     self.currently_reading = FileRecord;
-                    let reset_result = if let Some(active) = active {
-                        recycle_decompressor(
-                            &mut self.decompressors,
-                            &mut self.builtin_decompressors,
-                            active,
-                        )
-                    } else {
-                        Ok(())
+                    let reset_result = match decompressor {
+                        Some(decompressor) => self.decompressors.restore(decompressor),
+                        None => Ok(()),
                     };
                     match (crc_error, reset_result) {
                         (Some(err), _) => return Some(Err(err)),
@@ -907,57 +875,20 @@ fn clamp_to_usize(len: u64) -> usize {
     len.try_into().unwrap_or(usize::MAX)
 }
 
+/// Takes the decompressor for `name` out of `decompressors` for the duration of a chunk.
+///
+/// Returns `None` for an empty name, which means the chunk is uncompressed.
 fn get_decompressor(
-    registered: &mut HashMap<String, Box<dyn Decompressor>>,
-    builtins: &mut HashMap<String, Box<dyn Decompressor>>,
+    decompressors: &mut Decompressors,
     name: &str,
-) -> McapResult<Option<ActiveDecompressor>> {
-    // An empty compression string means the chunk is uncompressed.
+) -> McapResult<Option<Box<dyn Decompressor>>> {
     if name.is_empty() {
         return Ok(None);
     }
-    if let Some(decompressor) = registered.remove(name) {
-        return Ok(Some(ActiveDecompressor {
-            decompressor,
-            from_caller: true,
-        }));
-    }
-    if let Some(decompressor) = builtins.remove(name) {
-        return Ok(Some(ActiveDecompressor {
-            decompressor,
-            from_caller: false,
-        }));
-    }
-    match name {
-        #[cfg(feature = "zstd")]
-        "zstd" => Ok(Some(ActiveDecompressor {
-            decompressor: Box::new(zstd::ZstdDecoder::new()),
-            from_caller: false,
-        })),
-        #[cfg(feature = "lz4")]
-        "lz4" => Ok(Some(ActiveDecompressor {
-            decompressor: Box::new(lz4::Lz4Decoder::new()?),
-            from_caller: false,
-        })),
-        _ => Err(McapError::UnsupportedCompression(name.into())),
-    }
-}
-
-fn recycle_decompressor(
-    registered: &mut HashMap<String, Box<dyn Decompressor>>,
-    builtins: &mut HashMap<String, Box<dyn Decompressor>>,
-    mut active: ActiveDecompressor,
-) -> McapResult<()> {
-    // Put the instance back before checking reset. A failed reset must not drop a caller-supplied
-    // decoder and let a later chunk fall through to the built-in one.
-    let reset_result = active.decompressor.reset();
-    let name = active.decompressor.name().to_owned();
-    if active.from_caller {
-        registered.entry(name).or_insert(active.decompressor);
-    } else if !registered.contains_key(&name) {
-        builtins.entry(name).or_insert(active.decompressor);
-    }
-    reset_result
+    decompressors
+        .take(name)
+        .map(Some)
+        .ok_or_else(|| McapError::UnsupportedCompression(name.into()))
 }
 
 /// Compressed bytes to request when a decompressor's `next_read_size()` is 0.

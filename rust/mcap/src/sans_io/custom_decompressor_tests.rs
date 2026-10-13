@@ -586,11 +586,20 @@ fn read_indexed<D: Decompressor + 'static>(
     mcap: &[u8],
     decompressor: Option<D>,
 ) -> McapResult<Vec<(u16, u64, Vec<u8>)>> {
-    let summary = Summary::read(mcap)?.expect("file should contain a summary");
-    let mut reader = IndexedReader::new(&summary)?;
+    let mut reader = indexed_reader(mcap)?;
     if let Some(decompressor) = decompressor {
         reader.add_decompressor(decompressor)?;
     }
+    drive_indexed(mcap, &mut reader)
+}
+
+fn indexed_reader(mcap: &[u8]) -> McapResult<IndexedReader> {
+    let summary = Summary::read(mcap)?.expect("file should contain a summary");
+    IndexedReader::new(&summary)
+}
+
+/// Reads every message out of `reader`, serving its chunk requests from `mcap`.
+fn drive_indexed(mcap: &[u8], reader: &mut IndexedReader) -> McapResult<Vec<(u16, u64, Vec<u8>)>> {
     let mut messages = Vec::new();
     let mut iterations = 0;
     while let Some(event) = reader.next_event() {
@@ -692,52 +701,73 @@ fn assert_caller_decompressor_ran(err: McapError) {
 }
 
 #[test]
-fn add_decompressor_rejects_empty_and_duplicate_names() {
+fn add_decompressor_rejects_empty_names() {
     let mut linear = LinearReader::new();
     assert!(matches!(
         linear.add_decompressor(TestDecoder::fail("")),
         Err(McapError::EmptyDecompressorName)
     ));
-    linear
-        .add_decompressor(TestDecoder::xor("xor"))
-        .expect("first registration");
-    assert!(matches!(
-        linear.add_decompressor(TestDecoder::xor("xor")),
-        Err(McapError::DuplicateDecompressor(name)) if name == "xor"
-    ));
-
     let mut indexed = IndexedReader::new(&Summary::default()).expect("empty summary");
     assert!(matches!(
         indexed.add_decompressor(TestDecoder::fail("")),
         Err(McapError::EmptyDecompressorName)
     ));
-    indexed
-        .add_decompressor(TestDecoder::xor("xor"))
-        .expect("first registration");
-    assert!(matches!(
-        indexed.add_decompressor(TestDecoder::xor("xor")),
-        Err(McapError::DuplicateDecompressor(name)) if name == "xor"
-    ));
 }
 
 #[test]
-fn add_decompressor_rejects_a_name_held_by_the_open_chunk() {
+fn add_decompressor_replaces_an_earlier_registration() {
+    let mcap = xor_mcap(&sample_chunks());
+    let expected = vec![(1, 10, b"one".to_vec()), (1, 20, b"two".to_vec())];
+
+    let mut linear = LinearReader::new();
+    linear.add_decompressor(TestDecoder::fail("xor")).unwrap();
+    linear.add_decompressor(TestDecoder::xor("xor")).unwrap();
+    let scan = drive_linear(&mcap, &mut linear, usize::MAX);
+    assert!(scan.errors.is_empty(), "errors: {:?}", scan.errors);
+    assert_eq!(scan.messages, expected);
+
+    let mut indexed = indexed_reader(&mcap).unwrap();
+    indexed.add_decompressor(TestDecoder::fail("xor")).unwrap();
+    indexed.add_decompressor(TestDecoder::xor("xor")).unwrap();
+    assert_eq!(drive_indexed(&mcap, &mut indexed).unwrap(), expected);
+}
+
+#[test]
+fn registering_during_a_chunk_applies_from_the_next_chunk() {
     let mcap = xor_mcap(&sample_chunks());
     let mut reader = LinearReader::new();
+    // The replaced instance is dropped without a reset, so its failing reset is never reported.
     reader
-        .add_decompressor(TestDecoder::xor("xor"))
+        .add_decompressor(TestDecoder::xor("xor").with_failing_reset())
         .expect("register");
-    let scan = drive_linear_with(&mcap, &mut reader, usize::MAX, |_| true, |_| true);
-    assert!(
-        scan.errors.is_empty(),
-        "stopped before a message: {:?}",
-        scan.errors
+    let mut registered = false;
+    let scan = drive_linear_with(
+        &mcap,
+        &mut reader,
+        usize::MAX,
+        |_| true,
+        |reader| {
+            if !registered {
+                registered = true;
+                // The first registration is decoding the first chunk at this point.
+                reader
+                    .add_decompressor(TestDecoder::fail("xor"))
+                    .expect("replace while decoding");
+            }
+            false
+        },
     );
-    assert_eq!(scan.messages.len(), 1, "expected to be inside a chunk");
-    assert!(matches!(
-        reader.add_decompressor(TestDecoder::xor("xor")),
-        Err(McapError::DuplicateDecompressor(name)) if name == "xor"
-    ));
+    assert_eq!(
+        scan.messages,
+        vec![(1, 10, b"one".to_vec())],
+        "the first chunk should finish with the earlier decompressor"
+    );
+    let err = scan
+        .errors
+        .into_iter()
+        .next()
+        .expect("the second chunk should fail");
+    assert_caller_decompressor_ran(err);
 }
 
 #[test]
@@ -760,10 +790,7 @@ fn chunk_header_error_keeps_the_registered_decompressor() {
         scan.errors
     );
     assert!(
-        matches!(
-            reader.add_decompressor(TestDecoder::xor("xor")),
-            Err(McapError::DuplicateDecompressor(name)) if name == "xor"
-        ),
+        reader.has_decompressor("xor"),
         "the header error dropped the registered decompressor"
     );
 }
@@ -853,7 +880,7 @@ fn registered_decompressor_replaces_builtin() {
 
 #[cfg(feature = "zstd")]
 #[test]
-fn builtin_cache_does_not_count_as_a_caller_registration() {
+fn builtin_replaced_during_a_chunk_is_used_from_the_next_chunk() {
     let mcap = two_chunk_mcap(Some(crate::Compression::Zstd));
     let mut reader = LinearReader::new();
     let mut registered = false;
@@ -868,7 +895,7 @@ fn builtin_cache_does_not_count_as_a_caller_registration() {
                 // The built-in zstd decoder is decoding the first chunk at this point.
                 reader
                     .add_decompressor(TestDecoder::fail("zstd"))
-                    .expect("a built-in decoder is not a caller registration");
+                    .expect("replace the built-in while it is decoding");
             }
             false
         },
@@ -940,6 +967,58 @@ fn registered_decompressor_reads_multi_frame_chunks() {
             .unwrap_or_else(|err| panic!("{label}, indexed: {err}"));
         assert_eq!(messages.len(), 1, "{label}, indexed");
     }
+}
+
+#[cfg(feature = "zstd")]
+#[test]
+fn decoding_stops_at_the_declared_uncompressed_size() {
+    // One zstd frame holding two message records and a content checksum, in a chunk that
+    // declares only the first record's length. The readers decode that much and never feed the
+    // decoder the rest, so the second record is dropped and the checksum is not verified. See
+    // `Decompressors::decompress_chunk` for why.
+    let mut records = Vec::new();
+    let mut first_record_len = 0;
+    for (log_time, payload) in [(7, b"first".as_slice()), (8, b"second".as_slice())] {
+        let mut body = write_body(&MessageHeader {
+            channel_id: 1,
+            sequence: 1,
+            log_time,
+            publish_time: log_time,
+        });
+        body.extend_from_slice(payload);
+        append_record(&mut records, op::MESSAGE, &body);
+        if first_record_len == 0 {
+            first_record_len = records.len();
+        }
+    }
+    let mut compressor = zstd::bulk::Compressor::new(0).expect("compressor");
+    compressor.include_checksum(true).expect("checksum option");
+    let mut compressed = compressor.compress(&records).expect("compress");
+    // Corrupt the checksum, which is the last four bytes of the frame, and confirm that a full
+    // decode of the frame rejects it.
+    *compressed.last_mut().expect("frame") ^= 0xFF;
+    assert!(
+        zstd::decode_all(Cursor::new(&compressed[..])).is_err(),
+        "a full decode should reject the corrupt checksum"
+    );
+
+    let mcap = write_indexed_mcap(&[BuiltChunk {
+        log_time: 7,
+        compression: "zstd".into(),
+        uncompressed_size: first_record_len as u64,
+        uncompressed_crc: 0,
+        compressed,
+    }]);
+    let expected = vec![(1, 7, b"first".to_vec())];
+
+    let scan = drive_linear(&mcap, &mut LinearReader::new(), usize::MAX);
+    assert!(scan.errors.is_empty(), "linear: {:?}", scan.errors);
+    assert_eq!(scan.messages, expected, "linear");
+    assert_eq!(
+        read_indexed(&mcap, None::<TestDecoder>).expect("indexed"),
+        expected,
+        "indexed"
+    );
 }
 
 #[test]
