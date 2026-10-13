@@ -349,19 +349,15 @@ fn cat_remote_indexed(
             source::remote_scan_opt_in_suffix()
         );
     }
-    // The parsed summary may have omitted channels it could not define; chunks define those. Read
-    // them only when an omitted channel's messages could be output. With a topic filter that misses
-    // them, reader-level filtering keeps them out, so treat them as defined and let the planned
-    // chunks suffice.
+    // The summary parser omits channels whose schema it lacks (e.g. `repeat_schemas(false)`); the
+    // chunks define those, and `omitted_channels` flags them even without message indexes. Read the
+    // chunk definitions only when an omitted channel's messages could be output; otherwise
+    // reader-level topic filtering keeps them out, so treat them as defined.
     let omitted_channels = remote.omitted_channels();
-    let needs_in_chunk_definitions = if omitted_channels
+    let needs_in_chunk_definitions = omitted_channels
         .values()
         .any(|topic| opts.include_topic(topic))
-    {
-        true
-    } else {
-        needs_in_chunk_definitions_beyond(summary, omitted_channels)
-    };
+        || needs_in_chunk_definitions_beyond(summary, omitted_channels);
     let mut channels = mcap::read::ChannelAccumulator::from_summary(summary);
 
     let included_topics: BTreeSet<String> = summary
@@ -504,12 +500,9 @@ fn cat_remote_indexed(
 /// reader-level topic filtering -- which keys on `summary.channels` only -- and filter per message
 /// instead, otherwise a chunk-local channel matching a `--topics` filter would be silently dropped.
 ///
-/// The standard writer repeats all channels or none, but a summary that repeats channels without
-/// their schemas (`repeat_schemas(false)`) reaches the remote path with those channels omitted by
-/// `parse::parse_summary_section`, so the mixed case is a standard layout there; the remote caller
-/// also consults `RemoteMcap::omitted_channels`, which sees that case even without message indexes
-/// (see `remote_cat_resolves_schema_omitted_from_summary`). Files from other tools may also repeat
-/// definitions partially.
+/// The standard writer repeats all channels or none, but `repeat_schemas(false)` repeats channels
+/// without their schemas, and files from other tools may repeat definitions partially, so the mixed
+/// case is a real layout rather than a corrupt file.
 fn needs_in_chunk_definitions(summary: &mcap::Summary) -> bool {
     needs_in_chunk_definitions_beyond(summary, &BTreeMap::new())
 }
