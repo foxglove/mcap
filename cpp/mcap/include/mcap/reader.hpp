@@ -442,7 +442,8 @@ public:
    * @brief Returns an iterable view with `begin()` and `end()` methods for
    * iterating Messages in the MCAP file.
    * Uses the options from `options` to select the messages that are yielded.
-   * Problems encountered while iterating are ignored; use
+   * Problems are ignored, including invalid `options` (see
+   * ReadMessageOptions::validate()), which yield an empty view; use
    * readMessages(onProblem, options) to be notified of them.
    *
    * @param options Options controlling which messages are yielded and in what
