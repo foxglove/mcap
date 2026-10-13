@@ -6,8 +6,8 @@
 import { open, readFile, stat } from "fs/promises";
 import { crc32 } from "zlib";
 
-import { McapWriter } from "../../typescript/core/src/index.ts";
-import { FileHandleWritable } from "../../typescript/nodejs/src/index.ts";
+import { McapWriter } from "@mcap/core";
+import { FileHandleWritable } from "@mcap/nodejs";
 
 // Shared payload blob parameters; must match gen_blob.py and the other
 // language benches. Message i's payload is the window of the blob starting

@@ -69,7 +69,8 @@ No additional install is needed; the benchmark script imports from `../python/mc
 - **Node.js** (v20.15 or later, for `crc32` in `node:zlib`)
 - **npx** (included with Node.js)
 - **tsx** (invoked via `npx tsx`; no global install required)
-- Node modules must be installed at the repo root (`npm install` from the repo root)
+- Node modules must be installed at the repo root (`corepack enable` and
+  `yarn install`, as in the development guide)
 
 ## Building
 
@@ -84,7 +85,9 @@ This will:
 - Compile the C++ benchmarks (`cpp_bench/bench_write`, `cpp_bench/bench_read`)
 - Build the Rust benchmarks in release mode (`rust_bench/target/release/`)
 - Build the Go benchmarks (`go_bench/bench_write`, `go_bench/bench_read`)
-- Verify the Python and TypeScript scripts exist (no compilation needed)
+- Verify the Python scripts exist (no compilation needed)
+- Build the TypeScript packages the benches import (`@mcap/core`,
+  `@mcap/nodejs`, `@mcap/support`)
 
 To build a single language:
 
@@ -313,6 +316,9 @@ index to skip irrelevant chunks, or falls back to a linear scan.
   files.
 - The C++ benchmarks link against system lz4/zstd libraries. The Rust
   and Go benchmarks use their own compression implementations.
+- The TypeScript benches run the packages' compiled output rather than the
+  `.ts` sources through `tsx`: the run-time transpiler measured about 5%
+  slower for identical library code, which is not the library's cost.
 - Python and TypeScript benchmarks are interpreted/JIT and will be
   significantly slower than the compiled language benchmarks.
 
