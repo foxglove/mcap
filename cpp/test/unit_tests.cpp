@@ -803,6 +803,18 @@ TEST_CASE("explicit time range bounds", "[reader]") {
     REQUIRE(count == 6);
   }
   {
+    // The options-only overload selects messages without a problem callback.
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    mcap::ReadMessageOptions options;
+    options.startingAt(3).endingBefore(5);
+    std::vector<mcap::Timestamp> times;
+    for (const auto& msgView : reader.readMessages(options)) {
+      times.push_back(msgView.message.logTime);
+    }
+    REQUIRE(times == std::vector<mcap::Timestamp>{3, 4});
+  }
+  {
     // The deprecated positional overloads, including the defaulted end time, are unchanged.
     mcap::McapReader reader;
     requireOk(reader.open(buffer));

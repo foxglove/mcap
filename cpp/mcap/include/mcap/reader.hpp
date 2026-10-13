@@ -440,6 +440,17 @@ public:
   LinearMessageView readMessages(const ProblemCallback& onProblem);
   /**
    * @brief Returns an iterable view with `begin()` and `end()` methods for
+   * iterating Messages in the MCAP file.
+   * Uses the options from `options` to select the messages that are yielded.
+   * Problems encountered while iterating are ignored; use
+   * readMessages(onProblem, options) to be notified of them.
+   *
+   * @param options Options controlling which messages are yielded and in what
+   *   order.
+   */
+  LinearMessageView readMessages(const ReadMessageOptions& options);
+  /**
+   * @brief Returns an iterable view with `begin()` and `end()` methods for
    * iterating Messages in the MCAP file. If a non-zero `startingAt` is
    * provided, this will first parse the Summary section (by calling
    * `readSummary()`) if allowed by the configuration options and it has not
