@@ -928,13 +928,17 @@ uint64_t McapWriter::getRecordSize(const Message& message) {
 uint64_t McapWriter::write(IWritable& output, const Message& message) {
   const uint64_t recordSize = getRecordSize(message);
 
-  // Stage the fixed-size record header in one buffer so the output receives
-  // two writes per message (header, payload) rather than seven. In an
-  // unchunked file every write reaches the underlying FileWriter/StreamWriter
-  // and its error check, so this cuts the per-message call overhead by more
-  // than 3x; chunked files save the same number of BufferWriter appends.
+  // Stage the fixed-size record header in one buffer so that the output
+  // receives two writes per message (header, payload). Each IWritable::write
+  // call updates the CRC when enabled and, for unchunked files, reaches the
+  // FileWriter/StreamWriter and its error check.
   constexpr size_t HeaderSize = /* opcode */ 1 + /* record length */ 8 + /* channel id */ 2 +
                                 /* sequence */ 4 + /* log time */ 8 + /* publish time */ 8;
+  static_assert(sizeof(OpCode) + sizeof(recordSize) + sizeof(message.channelId) +
+                    sizeof(message.sequence) + sizeof(message.logTime) +
+                    sizeof(message.publishTime) ==
+                  HeaderSize,
+                "Message header layout does not match HeaderSize");
   std::array<std::byte, HeaderSize> header;
   size_t offset = 0;
   const auto put = [&header, &offset](const auto& value) {
