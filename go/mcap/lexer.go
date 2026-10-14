@@ -137,8 +137,8 @@ type Lexer struct {
 
 	// skipMagic also accepts input that ends without the trailing magic bytes.
 	skipMagic bool
-	// afterFooter is set while the last token returned was the footer, so the next bytes must be
-	// the trailing magic.
+	// afterFooter is set once the footer has been returned. After it, Next only reads and checks
+	// the trailing magic bytes.
 	afterFooter bool
 	// atEnd is set once the trailing magic has been read, so further calls keep returning io.EOF.
 	atEnd bool
