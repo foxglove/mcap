@@ -223,17 +223,21 @@ func (r *Reader) GetAttachmentReader(offset uint64) (*AttachmentReader, error) {
 	return ar, nil
 }
 
+// GetMetadata returns the metadata record located at the specific offset.
 func (r *Reader) GetMetadata(offset uint64) (*Metadata, error) {
 	_, err := r.rs.Seek(int64(offset), io.SeekStart)
 	if err != nil {
 		return nil, err
 	}
-	token, data, err := r.l.Next(nil)
+	// Read the record straight from the stream rather than through the lexer. The lexer tracks
+	// where it is in the file (inside a chunk, or after the footer), and seeking the stream
+	// underneath it would make it misread the record.
+	opcode, data, err := readRecord(r.rs, nil)
 	if err != nil {
 		return nil, err
 	}
-	if token != TokenMetadata {
-		return nil, NewErrUnexpectedToken(fmt.Errorf("expected metadata record, found %q", token))
+	if opcode != OpMetadata {
+		return nil, NewErrUnexpectedToken(fmt.Errorf("expected metadata record, found %q", opcode))
 	}
 	metadata, err := ParseMetadata(data)
 	if err != nil {
