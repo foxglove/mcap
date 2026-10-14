@@ -38,10 +38,14 @@
     "ts-jest": "29.4.12",
     "typedoc": "0.28.20",
     "typescript": "5.9.3",
-    "wrangler": "4.143.0"
+    "wrangler": "4.151.0"
   },
   "resolutions": {
+    "js-yaml@npm:^3.13.1": "4.3.2",
+    "postcss-selector-parser@npm:^6.0.11": "7.1.6",
+    "postcss-selector-parser@npm:^6.0.16": "7.1.6",
     "serialize-javascript": "^7.0.5",
+    "tinypool@npm:^1.0.2": "2.1.2",
     "undici@npm:7.29.0": "7.29.1",
     "uuid": "^11.1.1"
   }
