@@ -48,10 +48,7 @@ export type McapWriterOptions = {
    * overshoot it by up to one message. Ignored when `useChunks` is false. Defaults to 1 MiB.
    */
   chunkSize?: number;
-  /**
-   * Compresses a finalized chunk's records. `chunkData` is a view into the writer's chunk buffer
-   * that is reused for the next chunk, so it must not be retained after the callback returns.
-   */
+  /** Compresses a finalized chunk's records. `chunkData` is an exact-size copy the callback may keep. */
   compressChunk?: (chunkData: Uint8Array) => { compression: string; compressedData: Uint8Array };
 };
 
@@ -523,14 +520,15 @@ export class McapWriter {
     }
 
     // A view, not a copy: writeChunk() below copies the records into #recordWriter before the
-    // chunk builder is reset.
+    // chunk builder is reset. The view stays internal; the compressChunk callback gets an
+    // exact-size copy, since its backing buffer is public API.
     const chunkData = this.#chunkBuilder.bufferView();
     const uncompressedSize = BigInt(chunkData.length);
     const uncompressedCrc = crc32(chunkData);
     let compression = "";
     let compressedData = chunkData;
     if (this.#compressChunk) {
-      ({ compression, compressedData } = this.#compressChunk(chunkData));
+      ({ compression, compressedData } = this.#compressChunk(chunkData.slice()));
     }
 
     const chunkRecord: Chunk = {
