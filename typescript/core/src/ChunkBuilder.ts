@@ -26,6 +26,11 @@ class ChunkBuilder {
     return this.#recordWriter.buffer;
   }
 
+  /** A view of the chunk's records (not a copy), valid until the next add or reset. */
+  bufferView(): Uint8Array {
+    return this.#recordWriter.bufferView();
+  }
+
   get byteLength(): number {
     return this.#recordWriter.length;
   }
