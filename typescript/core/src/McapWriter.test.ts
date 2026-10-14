@@ -375,6 +375,108 @@ describe("McapWriter", () => {
     ]);
   });
 
+  it("indexes attachments and metadata added after messages without chunks", async () => {
+    const tempBuffer = new TempBuffer();
+    const writer = new McapWriter({ writable: tempBuffer, useChunks: false });
+    await writer.start();
+    const channelId = await writer.registerChannel({
+      topic: "test",
+      schemaId: 0,
+      messageEncoding: "json",
+      metadata: new Map(),
+    });
+    await writer.addMessage({
+      channelId,
+      sequence: 0,
+      logTime: 0n,
+      publishTime: 0n,
+      data: new Uint8Array(),
+    });
+    await writer.addAttachment({
+      name: "attachment",
+      logTime: 0n,
+      createTime: 0n,
+      mediaType: "text/plain",
+      data: new TextEncoder().encode("foo"),
+    });
+    await writer.addMessage({
+      channelId,
+      sequence: 1,
+      logTime: 1n,
+      publishTime: 1n,
+      data: new Uint8Array(),
+    });
+    await writer.addMetadata({ name: "metadata", metadata: new Map([["key", "value"]]) });
+    await writer.end();
+
+    const reader = await McapIndexedReader.Initialize({ readable: tempBuffer });
+    expect((await collect(reader.readAttachments())).map((a) => a.name)).toEqual(["attachment"]);
+    expect((await collect(reader.readMetadata())).map((m) => m.name)).toEqual(["metadata"]);
+  });
+
+  it("flushes unchunked records as they accumulate and keeps indexes and data section CRC correct", async () => {
+    const tempBuffer = new TempBuffer();
+    const writeSpy = jest.spyOn(tempBuffer, "write");
+    const writer = new McapWriter({ writable: tempBuffer, useChunks: false });
+    await writer.start();
+    const channelId = await writer.registerChannel({
+      topic: "test",
+      schemaId: 0,
+      messageEncoding: "json",
+      metadata: new Map(),
+    });
+    // Each message alone exceeds the 1 MiB write buffer, so every message is written out as it
+    // is added, exercising the mid-stream write path.
+    const writesBeforeMessages = writeSpy.mock.calls.length;
+    for (let i = 0; i < 3; i++) {
+      await writer.addMessage({
+        channelId,
+        sequence: i,
+        logTime: BigInt(i),
+        publishTime: BigInt(i),
+        data: new Uint8Array(1024 * 1024).fill(i),
+      });
+    }
+    expect(writeSpy.mock.calls.length - writesBeforeMessages).toBe(3);
+    // A small message stays buffered rather than being written out immediately
+    await writer.addMessage({
+      channelId,
+      sequence: 3,
+      logTime: 3n,
+      publishTime: 3n,
+      data: new Uint8Array([3]),
+    });
+    expect(writeSpy.mock.calls.length - writesBeforeMessages).toBe(3);
+    await writer.addAttachment({
+      name: "attachment",
+      logTime: 0n,
+      createTime: 0n,
+      mediaType: "text/plain",
+      data: new TextEncoder().encode("foo"),
+    });
+    await writer.addMetadata({ name: "metadata", metadata: new Map([["key", "value"]]) });
+    await writer.end();
+
+    const reader = await McapIndexedReader.Initialize({ readable: tempBuffer });
+    expect(reader.dataSectionCrc).toEqual(
+      crc32(tempBuffer.get().slice(0, Number(reader.dataEndOffset))),
+    );
+    expect((await collect(reader.readAttachments())).map((a) => a.name)).toEqual(["attachment"]);
+    expect((await collect(reader.readMetadata())).map((m) => m.name)).toEqual(["metadata"]);
+    // unchunked messages are only visible to a streaming read
+    const messages = readAsMcapStream(tempBuffer.get()).filter((rec) => rec.type === "Message");
+    expect(messages.map((rec) => rec.data.byteLength)).toEqual([
+      1024 * 1024,
+      1024 * 1024,
+      1024 * 1024,
+      1,
+    ]);
+    // (avoid toEqual on the full arrays, which is very slow for 1 MiB typed arrays)
+    messages.forEach((rec, i) => {
+      expect(rec.data.every((byte) => byte === i)).toBe(true);
+    });
+  });
+
   it("supports append mode", async () => {
     const tempBuffer = new TempBuffer();
 
