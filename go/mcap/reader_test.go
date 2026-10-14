@@ -1312,7 +1312,15 @@ func TestLogTimeBounds(t *testing.T) {
 	}, EndingAtNanos(5))
 	assert.True(t, mixed.includesLogTime(5))
 	// A zero EndNanos, as in a zero-value ReadOptions, means no upper bound.
-	assert.True(t, (&ReadOptions{}).logTimeBounds().includesLogTime(math.MaxUint64))
+	unbounded := (&ReadOptions{}).logTimeBounds()
+	assert.True(t, unbounded.includesLogTime(math.MaxUint64))
+	// Bounds that admit nothing include no log time and overlap no range.
+	nothingAfter := apply(t, StartingAfterNanos(math.MaxUint64))
+	assert.False(t, nothingAfter.includesLogTime(math.MaxUint64))
+	assert.False(t, nothingAfter.overlapsLogTimes(0, math.MaxUint64))
+	nothingBefore := apply(t, EndingBeforeNanos(0))
+	assert.False(t, nothingBefore.includesLogTime(0))
+	assert.False(t, nothingBefore.overlapsLogTimes(0, math.MaxUint64))
 
 	// Only a strictly crossed range is crossed; empty ranges are not.
 	assert.True(t, apply(t, StartingAtNanos(5), EndingBeforeNanos(3)).isCrossed())
