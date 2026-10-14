@@ -57,12 +57,12 @@ cargo bench -p mcap-cli --bench commands -- merge
 ## Generated inputs and cleanup
 
 Each suite runs both `indexed` inputs (summary, chunk indexes, and message indexes present) and
-`linear` inputs (summary omitted, forcing a scan fallback). It uses deterministic pseudo-random
-message payloads at `100B`, `1KB`, `10KB`, `100KB`, and `1MB` sizes. The benchmark validates
-each command output for basic MCAP correctness, expected message count, summary presence, and
-log-time ordering where applicable. Read-only commands (`cat`, `info`, `du`) are instead
-validated once before timing, from one untimed run's stdout: line count, message count, and
-per-topic sizes. Timed runs discard stdout.
+`linear` inputs (summary omitted, forcing a scan fallback), except `info` and `du-approximate`
+(see above). It uses deterministic pseudo-random message payloads at `100B`, `1KB`, `10KB`,
+`100KB`, and `1MB` sizes. The benchmark validates each command output for basic MCAP
+correctness, expected message count, summary presence, and log-time ordering where applicable.
+Read-only commands (`cat`, `info`, `du`) are instead validated once before timing, from one
+untimed run's stdout: line count, message count, and per-topic sizes. Timed runs discard stdout.
 
 Workload and payload sizes use SI units (`1KB = 1,000 bytes`, `1MB = 1,000,000 bytes`). Criterion
 reports byte throughput using its native IEC units such as `MiB/s` and `GiB/s`.
