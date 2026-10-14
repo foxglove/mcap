@@ -5,12 +5,9 @@
 
 import { open, stat } from "fs/promises";
 
-import {
-  McapIndexedReader,
-  McapStreamReader,
-} from "../../typescript/core/src/index.ts";
-import { FileHandleReadable } from "../../typescript/nodejs/src/index.ts";
-import { loadDecompressHandlers } from "../../typescript/support/src/decompressHandlers.ts";
+import { McapIndexedReader, McapStreamReader } from "@mcap/core";
+import { FileHandleReadable } from "@mcap/nodejs";
+import { loadDecompressHandlers } from "@mcap/support";
 
 async function main(): Promise<number> {
   if (process.argv.length < 3 || process.argv.length > 7) {
