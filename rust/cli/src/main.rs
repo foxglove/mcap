@@ -1,3 +1,4 @@
+mod byte_source;
 mod cli;
 mod commands;
 mod context;
