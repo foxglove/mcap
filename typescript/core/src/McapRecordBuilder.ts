@@ -47,6 +47,11 @@ export class McapRecordBuilder {
     return this.#bufferBuilder.buffer;
   }
 
+  /** A view of the written data (not a copy), valid until the next write or reset. */
+  bufferView(): Uint8Array {
+    return this.#bufferBuilder.bufferView(0, this.#bufferBuilder.length);
+  }
+
   reset(): void {
     this.#bufferBuilder.reset();
   }

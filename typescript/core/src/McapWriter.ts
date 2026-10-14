@@ -24,6 +24,13 @@ import type {
 } from "./types.ts";
 import { LIBRARY_IDENTIFIER } from "./version.ts";
 
+/**
+ * When chunks are disabled, records are buffered and written to the writable once this many bytes
+ * have accumulated (and before any attachment or metadata record), so that a large data section
+ * is not held in memory until end() and the writable receives reasonably sized writes.
+ */
+const UNCHUNKED_WRITE_BUFFER_SIZE = 1024 * 1024;
+
 export type McapWriterOptions = {
   writable: IWritable;
   useStatistics?: boolean;
@@ -36,6 +43,10 @@ export type McapWriterOptions = {
   useMessageIndex?: boolean;
   useChunkIndex?: boolean;
   startChannelId?: number;
+  /**
+   * A chunk is finalized once its uncompressed records exceed this many bytes, so chunks may
+   * overshoot it by up to one message. Ignored when `useChunks` is false. Defaults to 1 MiB.
+   */
   chunkSize?: number;
   compressChunk?: (chunkData: Uint8Array) => { compression: string; compressedData: Uint8Array };
 };
@@ -194,19 +205,13 @@ export class McapWriter {
     this.#recordWriter.writeMagic();
     this.#recordWriter.writeHeader(header);
 
-    this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
-    await this.#writable.write(this.#recordWriter.buffer);
-    this.#recordWriter.reset();
+    await this.#writeRecords();
   }
 
   async end(): Promise<void> {
     await this.#finalizeChunk();
 
-    if (this.#dataSectionCrc != undefined) {
-      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
-    }
-    await this.#writable.write(this.#recordWriter.buffer);
-    this.#recordWriter.reset();
+    await this.#writeRecords();
 
     this.#recordWriter.writeDataEnd({
       dataSectionCrc: this.#dataSectionCrc == undefined ? 0 : crc32Final(this.#dataSectionCrc),
@@ -233,9 +238,7 @@ export class McapWriter {
     }
 
     if (this.#repeatChannels) {
-      summaryCrc = crc32Update(summaryCrc, this.#recordWriter.buffer);
-      await this.#writable.write(this.#recordWriter.buffer);
-      this.#recordWriter.reset();
+      summaryCrc = await this.#writeSummaryRecords(summaryCrc);
       const channelStart = this.#writable.position();
       let channelLength = 0n;
       for (const channel of this.#channels.values()) {
@@ -249,9 +252,7 @@ export class McapWriter {
     }
 
     if (this.statistics) {
-      summaryCrc = crc32Update(summaryCrc, this.#recordWriter.buffer);
-      await this.#writable.write(this.#recordWriter.buffer);
-      this.#recordWriter.reset();
+      summaryCrc = await this.#writeSummaryRecords(summaryCrc);
       const statisticsStart = this.#writable.position();
       const statisticsLength = this.#recordWriter.writeStatistics(this.statistics);
       summaryOffsets.push({
@@ -261,14 +262,8 @@ export class McapWriter {
       });
     }
 
-    summaryCrc = crc32Update(summaryCrc, this.#recordWriter.buffer);
-    await this.#writable.write(this.#recordWriter.buffer);
-    this.#recordWriter.reset();
-
     if (this.#metadataIndices) {
-      summaryCrc = crc32Update(summaryCrc, this.#recordWriter.buffer);
-      await this.#writable.write(this.#recordWriter.buffer);
-      this.#recordWriter.reset();
+      summaryCrc = await this.#writeSummaryRecords(summaryCrc);
       const metadataIndexStart = this.#writable.position();
       let metadataIndexLength = 0n;
       for (const metadataIndex of this.#metadataIndices) {
@@ -282,9 +277,7 @@ export class McapWriter {
     }
 
     if (this.#attachmentIndices) {
-      summaryCrc = crc32Update(summaryCrc, this.#recordWriter.buffer);
-      await this.#writable.write(this.#recordWriter.buffer);
-      this.#recordWriter.reset();
+      summaryCrc = await this.#writeSummaryRecords(summaryCrc);
       const attachmentIndexStart = this.#writable.position();
       let attachmentIndexLength = 0n;
       for (const attachmentIndex of this.#attachmentIndices) {
@@ -298,9 +291,7 @@ export class McapWriter {
     }
 
     if (this.#chunkIndices) {
-      summaryCrc = crc32Update(summaryCrc, this.#recordWriter.buffer);
-      await this.#writable.write(this.#recordWriter.buffer);
-      this.#recordWriter.reset();
+      summaryCrc = await this.#writeSummaryRecords(summaryCrc);
       const chunkIndexStart = this.#writable.position();
       let chunkIndexLength = 0n;
       for (const chunkIndex of this.#chunkIndices) {
@@ -313,9 +304,7 @@ export class McapWriter {
       });
     }
 
-    summaryCrc = crc32Update(summaryCrc, this.#recordWriter.buffer);
-    await this.#writable.write(this.#recordWriter.buffer);
-    this.#recordWriter.reset();
+    summaryCrc = await this.#writeSummaryRecords(summaryCrc);
 
     const summaryOffsetStart = this.#writable.position();
     const summaryLength = summaryOffsetStart - summaryStart;
@@ -328,7 +317,7 @@ export class McapWriter {
       }
     }
 
-    summaryCrc = crc32Update(summaryCrc, this.#recordWriter.buffer);
+    summaryCrc = crc32Update(summaryCrc, this.#recordWriter.bufferView());
 
     const footer: Footer = {
       summaryStart: summaryLength === 0n ? 0n : summaryStart,
@@ -429,23 +418,25 @@ export class McapWriter {
 
     if (this.#chunkBuilder) {
       this.#chunkBuilder.addMessage(message);
+      if (this.#chunkBuilder.byteLength > this.#chunkSize) {
+        await this.#finalizeChunk();
+      }
     } else {
       this.#recordWriter.writeMessage(message);
-    }
-
-    if (this.#chunkBuilder && this.#chunkBuilder.byteLength > this.#chunkSize) {
-      await this.#finalizeChunk();
+      if (this.#recordWriter.length > UNCHUNKED_WRITE_BUFFER_SIZE) {
+        await this.#writeRecords();
+      }
     }
   }
 
   async addAttachment(attachment: Attachment): Promise<void> {
+    const offset = this.#nextRecordOffset();
     const length = this.#recordWriter.writeAttachment(attachment);
     if (this.statistics) {
       ++this.statistics.attachmentCount;
     }
 
     if (this.#attachmentIndices) {
-      const offset = this.#writable.position();
       this.#attachmentIndices.push({
         logTime: attachment.logTime,
         createTime: attachment.createTime,
@@ -457,21 +448,17 @@ export class McapWriter {
       });
     }
 
-    if (this.#dataSectionCrc != undefined) {
-      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
-    }
-    await this.#writable.write(this.#recordWriter.buffer);
-    this.#recordWriter.reset();
+    await this.#writeRecords();
   }
 
   async addMetadata(metadata: Metadata): Promise<void> {
+    const offset = this.#nextRecordOffset();
     const recordSize = this.#recordWriter.writeMetadata(metadata);
     if (this.statistics) {
       ++this.statistics.metadataCount;
     }
 
     if (this.#metadataIndices) {
-      const offset = this.#writable.position();
       this.#metadataIndices.push({
         name: metadata.name,
         offset,
@@ -479,11 +466,48 @@ export class McapWriter {
       });
     }
 
-    if (this.#dataSectionCrc != undefined) {
-      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
+    await this.#writeRecords();
+  }
+
+  /**
+   * The file offset the next record written to #recordWriter will land at. This accounts for
+   * records that have been built but not yet flushed to the writable.
+   */
+  #nextRecordOffset(): bigint {
+    return this.#writable.position() + BigInt(this.#recordWriter.length);
+  }
+
+  /**
+   * Writes everything pending in #recordWriter to the output, folding it into the data section
+   * CRC.
+   */
+  async #writeRecords(): Promise<void> {
+    if (this.#recordWriter.length === 0) {
+      return;
     }
-    await this.#writable.write(this.#recordWriter.buffer);
+    if (this.#dataSectionCrc != undefined) {
+      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.bufferView());
+    }
+    // .buffer is a copy, so reset before awaiting the write
+    const data = this.#recordWriter.buffer;
     this.#recordWriter.reset();
+    await this.#writable.write(data);
+  }
+
+  /**
+   * Writes the summary records built so far to the output, folding them into the given summary
+   * CRC. Returns the updated CRC.
+   */
+  async #writeSummaryRecords(summaryCrc: number): Promise<number> {
+    if (this.#recordWriter.length === 0) {
+      return summaryCrc;
+    }
+    const updatedCrc = crc32Update(summaryCrc, this.#recordWriter.bufferView());
+    // .buffer is a copy, so reset before awaiting the write
+    const data = this.#recordWriter.buffer;
+    this.#recordWriter.reset();
+    await this.#writable.write(data);
+    return updatedCrc;
   }
 
   async #finalizeChunk(): Promise<void> {
@@ -512,19 +536,13 @@ export class McapWriter {
       records: compressedData,
     };
 
-    const chunkStartOffset = this.#writable.position();
+    const chunkStartOffset = this.#nextRecordOffset();
 
     const chunkLength = this.#recordWriter.writeChunk(chunkRecord);
 
     const messageIndexOffsets = this.#chunkIndices ? new Map<number, bigint>() : undefined;
 
-    if (this.#dataSectionCrc != undefined) {
-      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
-    }
-    await this.#writable.write(this.#recordWriter.buffer);
-    this.#recordWriter.reset();
-
-    const messageIndexStart = this.#writable.position();
+    const messageIndexStart = this.#nextRecordOffset();
     let messageIndexLength = 0n;
     for (const messageIndex of this.#chunkBuilder.indices) {
       messageIndexOffsets?.set(messageIndex.channelId, messageIndexStart + messageIndexLength);
@@ -546,10 +564,6 @@ export class McapWriter {
     }
     this.#chunkBuilder.reset();
 
-    if (this.#dataSectionCrc != undefined) {
-      this.#dataSectionCrc = crc32Update(this.#dataSectionCrc, this.#recordWriter.buffer);
-    }
-    await this.#writable.write(this.#recordWriter.buffer);
-    this.#recordWriter.reset();
+    await this.#writeRecords();
   }
 }
