@@ -51,17 +51,35 @@ type logTimeBound struct {
 	value uint64
 }
 
-// logTimeBounds is the log time range a read is limited to, with each bound kept as provided.
+// logTimeRange is a log time range as inclusive log times, resolved once so that the
+// per-message check is two comparisons. The range is empty when first > last. The zero value
+// admits only log time 0; construct values with ReadOptions.logTimeBounds.
+//
+// It is kept to two fields so the compiler holds it in registers when the predicates are
+// inlined; a larger struct would be copied to the stack on every message.
+type logTimeRange struct {
+	first uint64
+	last  uint64
+}
+
+// includesLogTime reports whether a message logged at logTime falls inside the range.
+func (r logTimeRange) includesLogTime(logTime uint64) bool {
+	return r.first <= logTime && logTime <= r.last
+}
+
+// overlapsLogTimes reports whether any log time in [first, last] falls inside the range.
+func (r logTimeRange) overlapsLogTimes(first, last uint64) bool {
+	return r.first <= r.last && r.first <= last && first <= r.last
+}
+
+// logTimeBounds is the log time range a read is limited to, with each bound kept as provided
+// alongside the resolved logTimeRange the iterators use.
 type logTimeBounds struct {
 	lower logTimeBound
 	upper logTimeBound
 	// upperFromField is set when upper came from the EndNanos field rather than an option.
 	upperFromField bool
-	// first and last are the range as inclusive log times, resolved once so that the
-	// per-message check is two comparisons. The range is empty when first > last. The zero
-	// value admits only log time 0; construct values with ReadOptions.logTimeBounds.
-	first uint64
-	last  uint64
+	logTimeRange
 }
 
 // logTimeBounds returns the option-set bounds, falling back to StartNanos/EndNanos on a side
@@ -100,16 +118,6 @@ func (ro *ReadOptions) logTimeBounds() logTimeBounds {
 func (b logTimeBounds) empty() logTimeBounds {
 	b.first, b.last = 1, 0
 	return b
-}
-
-// includesLogTime reports whether a message logged at logTime falls inside the range.
-func (b logTimeBounds) includesLogTime(logTime uint64) bool {
-	return b.first <= logTime && logTime <= b.last
-}
-
-// overlapsLogTimes reports whether any log time in [first, last] falls inside the range.
-func (b logTimeBounds) overlapsLogTimes(first, last uint64) bool {
-	return b.first <= b.last && b.first <= last && first <= b.last
 }
 
 // isCrossed reports whether the upper bound lies strictly below the lower bound. An empty
