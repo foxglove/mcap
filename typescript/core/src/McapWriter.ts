@@ -26,8 +26,8 @@ import { LIBRARY_IDENTIFIER } from "./version.ts";
 
 /**
  * When chunks are disabled, records are buffered and written to the writable once this many bytes
- * have accumulated (and before any attachment or metadata record), so that a large data section
- * is not held in memory until end() and the writable receives reasonably sized writes.
+ * have accumulated, when an attachment or metadata record is added, and at end(). This keeps a
+ * large data section out of memory and gives the writable reasonably sized writes.
  */
 const UNCHUNKED_WRITE_BUFFER_SIZE = 1024 * 1024;
 
@@ -45,7 +45,8 @@ export type McapWriterOptions = {
   startChannelId?: number;
   /**
    * A chunk is finalized once its uncompressed records exceed this many bytes, so chunks may
-   * overshoot it by up to one message. Ignored when `useChunks` is false. Defaults to 1 MiB.
+   * overshoot it by up to one message and its schema and channel records. Ignored when
+   * `useChunks` is false. Defaults to 1 MiB.
    */
   chunkSize?: number;
   /** Compresses a finalized chunk's records. `chunkData` is an exact-size copy the callback may keep. */
