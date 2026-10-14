@@ -375,6 +375,46 @@ describe("McapWriter", () => {
     ]);
   });
 
+  it("gives compressChunk an exact-size copy the callback may keep", async () => {
+    const inputs: Uint8Array[] = [];
+    const snapshots: Uint8Array[] = [];
+    const writer = new McapWriter({
+      writable: new TempBuffer(),
+      chunkSize: 1, // every message closes a chunk
+      compressChunk: (data) => {
+        inputs.push(data);
+        snapshots.push(data.slice());
+        return { compression: "", compressedData: data };
+      },
+    });
+    await writer.start();
+    const channelId = await writer.registerChannel({
+      topic: "test",
+      schemaId: 0,
+      messageEncoding: "json",
+      metadata: new Map(),
+    });
+    for (let i = 0; i < 3; i++) {
+      await writer.addMessage({
+        channelId,
+        sequence: i,
+        logTime: BigInt(i),
+        publishTime: BigInt(i),
+        data: new Uint8Array(64).fill(i + 1),
+      });
+    }
+    await writer.end();
+
+    expect(inputs).toHaveLength(3);
+    for (const [i, input] of inputs.entries()) {
+      // a private, exact-size backing buffer: safe to transfer or read via .buffer
+      expect(input.byteOffset).toBe(0);
+      expect(input.buffer.byteLength).toBe(input.byteLength);
+      // not overwritten by the chunks finalized after it
+      expect(input).toEqual(snapshots[i]);
+    }
+  });
+
   it("indexes attachments and metadata added after messages without chunks", async () => {
     const tempBuffer = new TempBuffer();
     const writer = new McapWriter({ writable: tempBuffer, useChunks: false });
