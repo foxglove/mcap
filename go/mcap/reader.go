@@ -99,7 +99,7 @@ func (r *Reader) unindexedIterator(opts *ReadOptions) *unindexedMessageIterator 
 	return &unindexedMessageIterator{
 		lexer:            r.l,
 		topics:           topicMap,
-		bounds:           opts.logTimeBounds(),
+		bounds:           opts.logTimeBounds().logTimeRange,
 		metadataCallback: opts.MetadataCallback,
 	}
 }
@@ -117,7 +117,7 @@ func (r *Reader) indexedMessageIterator(
 		lexer:            r.l,
 		rs:               r.rs,
 		topics:           topicMap,
-		bounds:           opts.logTimeBounds(),
+		bounds:           opts.logTimeBounds().logTimeRange,
 		order:            opts.Order,
 		metadataCallback: opts.MetadataCallback,
 	}

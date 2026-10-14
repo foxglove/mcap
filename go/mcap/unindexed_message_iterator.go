@@ -9,7 +9,7 @@ type unindexedMessageIterator struct {
 	schemas  slicemap[Schema]
 	channels slicemap[Channel]
 	topics   map[string]bool
-	bounds   logTimeBounds
+	bounds   logTimeRange
 
 	recordBuf []byte
 

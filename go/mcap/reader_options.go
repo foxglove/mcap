@@ -51,12 +51,35 @@ type logTimeBound struct {
 	value uint64
 }
 
-// logTimeBounds is the log time range a read is limited to, with each bound kept as provided.
+// logTimeRange is a log time range as inclusive log times, resolved once so that the
+// per-message check is two comparisons. The range is empty when first > last. The zero value
+// admits only log time 0; construct values with ReadOptions.logTimeBounds.
+//
+// It is kept to two fields so the compiler holds it in registers when the predicates are
+// inlined; a larger struct would be copied to the stack on every message.
+type logTimeRange struct {
+	first uint64
+	last  uint64
+}
+
+// includesLogTime reports whether a message logged at logTime falls inside the range.
+func (r logTimeRange) includesLogTime(logTime uint64) bool {
+	return r.first <= logTime && logTime <= r.last
+}
+
+// overlapsLogTimes reports whether any log time in [first, last] falls inside the range.
+func (r logTimeRange) overlapsLogTimes(first, last uint64) bool {
+	return r.first <= r.last && r.first <= last && first <= r.last
+}
+
+// logTimeBounds is the log time range a read is limited to, with each bound kept as provided
+// alongside the resolved logTimeRange the iterators use.
 type logTimeBounds struct {
 	lower logTimeBound
 	upper logTimeBound
 	// upperFromField is set when upper came from the EndNanos field rather than an option.
 	upperFromField bool
+	logTimeRange
 }
 
 // logTimeBounds returns the option-set bounds, falling back to StartNanos/EndNanos on a side
@@ -70,39 +93,31 @@ func (ro *ReadOptions) logTimeBounds() logTimeBounds {
 		bounds.upper = logTimeBound{kind: logTimeBoundExclusive, value: ro.EndNanos}
 		bounds.upperFromField = true
 	}
+	bounds.first, bounds.last = 0, math.MaxUint64
+	switch bounds.lower.kind {
+	case logTimeBoundInclusive:
+		bounds.first = bounds.lower.value
+	case logTimeBoundExclusive:
+		if bounds.lower.value == math.MaxUint64 {
+			return bounds.empty()
+		}
+		bounds.first = bounds.lower.value + 1
+	}
+	switch bounds.upper.kind {
+	case logTimeBoundInclusive:
+		bounds.last = bounds.upper.value
+	case logTimeBoundExclusive:
+		if bounds.upper.value == 0 {
+			return bounds.empty()
+		}
+		bounds.last = bounds.upper.value - 1
+	}
 	return bounds
 }
 
-func (b logTimeBounds) lowerBoundIncludes(logTime uint64) bool {
-	switch b.lower.kind {
-	case logTimeBoundInclusive:
-		return logTime >= b.lower.value
-	case logTimeBoundExclusive:
-		return logTime > b.lower.value
-	default:
-		return true
-	}
-}
-
-func (b logTimeBounds) upperBoundIncludes(logTime uint64) bool {
-	switch b.upper.kind {
-	case logTimeBoundInclusive:
-		return logTime <= b.upper.value
-	case logTimeBoundExclusive:
-		return logTime < b.upper.value
-	default:
-		return true
-	}
-}
-
-// includesLogTime reports whether a message logged at logTime falls inside the range.
-func (b logTimeBounds) includesLogTime(logTime uint64) bool {
-	return b.lowerBoundIncludes(logTime) && b.upperBoundIncludes(logTime)
-}
-
-// overlapsLogTimes reports whether any log time in [first, last] falls inside the range.
-func (b logTimeBounds) overlapsLogTimes(first, last uint64) bool {
-	return b.lowerBoundIncludes(last) && b.upperBoundIncludes(first)
+func (b logTimeBounds) empty() logTimeBounds {
+	b.first, b.last = 1, 0
+	return b
 }
 
 // isCrossed reports whether the upper bound lies strictly below the lower bound. An empty

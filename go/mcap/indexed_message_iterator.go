@@ -45,7 +45,7 @@ type indexedMessageIterator struct {
 	lexer  *Lexer
 	rs     io.ReadSeeker
 	topics map[string]bool
-	bounds logTimeBounds
+	bounds logTimeRange
 	order  ReadOrder
 
 	channels          slicemap[Channel]
