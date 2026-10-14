@@ -95,6 +95,7 @@ To build a single language:
 make cpp_bench                                     # C++ only
 make rust_bench                        # Rust only
 make go_bench                          # Go only
+make typescript_bench                  # TypeScript only
 ```
 
 ## Running
@@ -142,6 +143,14 @@ check only requires the selected languages to be built:
 ```
 make rust_bench
 LANGS=rust ./run_bench.sh
+```
+
+TypeScript has a build step too, since the benches run the packages'
+compiled output:
+
+```
+make typescript_bench
+LANGS=typescript ./run_bench.sh
 ```
 
 Note that the cross-language payload-CRC and message-count checks

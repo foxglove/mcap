@@ -47,15 +47,13 @@ rust_bench: rust_bench/src/bin/bench_write.rs rust_bench/src/bin/bench_read.rs r
 go_bench: go_bench/cmd/bench_write/main.go go_bench/cmd/bench_read/main.go go_bench/go.mod
 	cd go_bench && go build -o bench_write ./cmd/bench_write && go build -o bench_read ./cmd/bench_read
 
-# Build the packages the TypeScript benches import, as each package's own
-# `build` script does.
+# Build the packages the TypeScript benches import.
 TS_PACKAGES = core nodejs support
 
 typescript_bench:
 	@test -f typescript_bench/bench_write.ts || (echo "ERROR: typescript_bench/bench_write.ts not found" >&2; exit 1)
 	@test -f typescript_bench/bench_read.ts || (echo "ERROR: typescript_bench/bench_read.ts not found" >&2; exit 1)
-	cd ../typescript && npx tsc -b $(foreach p,$(TS_PACKAGES),$(p)/tsconfig.json $(p)/tsconfig.cjs.json)
-	for p in $(TS_PACKAGES); do echo '{"type":"commonjs"}' > ../typescript/$$p/dist/cjs/package.json; done
+	cd .. && $(foreach p,$(TS_PACKAGES),yarn workspace @mcap/$(p) build &&) true
 
 bench: all
 	./run_bench.sh
@@ -64,4 +62,3 @@ clean:
 	rm -f cpp_bench/bench_write cpp_bench/bench_read
 	cd rust_bench && cargo clean
 	rm -f go_bench/bench_write go_bench/bench_read
-	rm -rf $(foreach p,$(TS_PACKAGES),../typescript/$(p)/dist)

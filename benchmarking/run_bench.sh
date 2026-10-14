@@ -59,7 +59,10 @@ for lang in $LANGS; do
     go)         require_bin "$GO_WRITE"; require_bin "$GO_READ" ;;
     cpp)        require_bin "$CPP_WRITE"; require_bin "$CPP_READ" ;;
     python)     require_file "$PY_WRITE"; require_file "$PY_READ" ;;
-    typescript) require_file "$TS_WRITE"; require_file "$TS_READ" ;;
+    typescript) require_file "$TS_WRITE"; require_file "$TS_READ"
+                for p in core nodejs support; do
+                  require_file "${SCRIPT_DIR}/../typescript/$p/dist/esm/index.js"
+                done ;;
     *)          echo "ERROR: unknown language in LANGS: $lang" >&2; exit 1 ;;
   esac
 done
