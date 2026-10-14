@@ -313,10 +313,12 @@ export class McapWriter {
     }
 
     // The summary CRC covers the summary section and summary offsets (not DataEnd), plus the
-    // footer fields up to the CRC itself.
+    // footer fields up to the CRC itself. This is a small copy rather than a subarray: the
+    // subarray would start at an unaligned offset, and feeding crc32Update one unaligned input
+    // measurably slows its optimized code for the large aligned buffers on the hot path.
     let summaryCrc = crc32Update(
       crc32Init(),
-      this.#recordWriter.bufferView().subarray(summaryStartInBuffer),
+      this.#recordWriter.bufferView().slice(summaryStartInBuffer),
     );
 
     const footer: Footer = {
