@@ -1321,6 +1321,10 @@ func TestLogTimeBounds(t *testing.T) {
 	nothingBefore := apply(t, EndingBeforeNanos(0))
 	assert.False(t, nothingBefore.includesLogTime(0))
 	assert.False(t, nothingBefore.overlapsLogTimes(0, math.MaxUint64))
+	// An empty range reached through ordinary values, with first > last, behaves the same.
+	emptyRange := apply(t, StartingAtNanos(5), EndingBeforeNanos(5))
+	assert.False(t, emptyRange.includesLogTime(5))
+	assert.False(t, emptyRange.overlapsLogTimes(0, 10))
 
 	// Only a strictly crossed range is crossed; empty ranges are not.
 	assert.True(t, apply(t, StartingAtNanos(5), EndingBeforeNanos(3)).isCrossed())

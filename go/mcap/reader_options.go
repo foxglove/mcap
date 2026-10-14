@@ -58,7 +58,8 @@ type logTimeBounds struct {
 	// upperFromField is set when upper came from the EndNanos field rather than an option.
 	upperFromField bool
 	// first and last are the range as inclusive log times, resolved once so that the
-	// per-message check is two comparisons. The range is empty when first > last.
+	// per-message check is two comparisons. The range is empty when first > last. The zero
+	// value admits only log time 0; construct values with ReadOptions.logTimeBounds.
 	first uint64
 	last  uint64
 }
@@ -102,12 +103,12 @@ func (b logTimeBounds) empty() logTimeBounds {
 }
 
 // includesLogTime reports whether a message logged at logTime falls inside the range.
-func (b *logTimeBounds) includesLogTime(logTime uint64) bool {
+func (b logTimeBounds) includesLogTime(logTime uint64) bool {
 	return b.first <= logTime && logTime <= b.last
 }
 
 // overlapsLogTimes reports whether any log time in [first, last] falls inside the range.
-func (b *logTimeBounds) overlapsLogTimes(first, last uint64) bool {
+func (b logTimeBounds) overlapsLogTimes(first, last uint64) bool {
 	return b.first <= b.last && b.first <= last && first <= b.last
 }
 
