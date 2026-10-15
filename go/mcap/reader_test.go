@@ -739,6 +739,54 @@ func TestReadingMetadata(t *testing.T) {
 	assert.Equal(t, expectedMetadata, metadata)
 }
 
+func TestReadingMetadataAfterSequentialRead(t *testing.T) {
+	buf := &bytes.Buffer{}
+	writer, err := NewWriter(buf, &WriterOptions{
+		Chunked:     true,
+		ChunkSize:   1024,
+		Compression: "",
+	})
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteHeader(&Header{}))
+	require.NoError(t, writer.WriteSchema(&Schema{ID: 1, Name: "s", Encoding: "e"}))
+	require.NoError(t, writer.WriteChannel(&Channel{ID: 1, SchemaID: 1, Topic: "t", MessageEncoding: "e"}))
+	require.NoError(t, writer.WriteMessage(&Message{ChannelID: 1, LogTime: 1}))
+	expectedMetadata := &Metadata{
+		Name: "foo",
+		Metadata: map[string]string{
+			"foo": "bar",
+		},
+	}
+	require.NoError(t, writer.WriteMetadata(expectedMetadata))
+	require.NoError(t, writer.WriteMessage(&Message{ChannelID: 1, LogTime: 2}))
+	require.NoError(t, writer.Close())
+
+	reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+	require.NoError(t, err)
+
+	// Read the whole file in file order, so the lexer consumes the footer and trailing magic.
+	it, err := reader.Messages(UsingIndex(false))
+	require.NoError(t, err)
+	count := 0
+	for {
+		_, _, _, err := it.NextInto(nil)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		count++
+	}
+	assert.Equal(t, 2, count)
+
+	// Random access must still work afterwards.
+	info, err := reader.Info()
+	require.NoError(t, err)
+	require.Len(t, info.MetadataIndexes, 1)
+	metadata, err := reader.GetMetadata(info.MetadataIndexes[0].Offset)
+	require.NoError(t, err)
+	assert.Equal(t, expectedMetadata, metadata)
+}
+
 func TestGetAttachmentReader(t *testing.T) {
 	buf := &bytes.Buffer{}
 	writer, err := NewWriter(buf, &WriterOptions{
