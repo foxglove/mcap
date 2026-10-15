@@ -768,10 +768,29 @@ impl<W: Write + Seek> Writer<W> {
         }
     }
 
-    /// Write the given message (and its provided channel, if not already added).
-    /// The provided channel ID and schema ID will be used as IDs in the resulting MCAP.
+    /// Write the given message, adding its channel (and schema) the first time its channel ID is
+    /// seen. The provided channel ID and schema ID will be used as IDs in the resulting MCAP.
+    ///
+    /// Once a channel ID has been added, by an earlier call or by [`Self::add_channel_with_id`],
+    /// later messages with that ID are written to it without comparing their channel or schema
+    /// content to what was added. When combining messages from several sources whose IDs may
+    /// collide, remap them to distinct IDs before writing.
     pub fn write(&mut self, message: &Message) -> McapResult<()> {
-        if let Some(schema) = message.channel.schema.as_ref() {
+        if !self.all_channel_ids.contains_key(&message.channel.id) {
+            self.add_message_channel(&message.channel)?;
+        }
+        let header = MessageHeader {
+            channel_id: message.channel.id,
+            sequence: message.sequence,
+            log_time: message.log_time,
+            publish_time: message.publish_time,
+        };
+        self.write_to_known_channel(&header, &message.data)
+    }
+
+    /// Adds a channel not yet known by ID, along with its schema if that ID is also new.
+    fn add_message_channel(&mut self, channel: &Channel) -> McapResult<()> {
+        if let Some(schema) = channel.schema.as_ref() {
             let content = SchemaContent {
                 name: Cow::Borrowed(&schema.name),
                 encoding: Cow::Borrowed(&schema.encoding),
@@ -799,57 +818,32 @@ impl<W: Write + Seek> Writer<W> {
                 }
             }
         }
-        let schema_id = match message.channel.schema.as_ref() {
-            None => 0,
-            Some(schema) => schema.id,
-        };
+        let schema_id = channel.schema.as_ref().map(|s| s.id).unwrap_or(0);
         let channel_content = ChannelContent {
-            topic: Cow::Borrowed(&message.channel.topic),
+            topic: Cow::Borrowed(&channel.topic),
             schema_id,
-            message_encoding: Cow::Borrowed(&message.channel.message_encoding),
-            metadata: Cow::Borrowed(&message.channel.metadata),
+            message_encoding: Cow::Borrowed(&channel.message_encoding),
+            metadata: Cow::Borrowed(&channel.metadata),
         };
-        let canonical_channel_id = self.canonical_channels.get_by_left(&channel_content);
-        match self.all_channel_ids.entry(message.channel.id) {
-            Entry::Occupied(other) => {
-                let canonical_channel_id = canonical_channel_id
-                    .expect("values in all_channel_ids should be valid canonical channel IDs");
-                if *canonical_channel_id != *other.get() {
-                    return Err(McapError::ConflictingChannels(
-                        message.channel.topic.clone(),
-                    ));
-                }
+        // Identical content may already be registered under another ID; this ID then maps to it.
+        let canonical_channel_id = match self.canonical_channels.get_by_left(&channel_content) {
+            Some(&canonical_channel_id) => canonical_channel_id,
+            None => {
+                self.canonical_channels
+                    .insert_no_overwrite(channel_content.into_owned(), channel.id)
+                    .expect("a channel ID absent from all_channel_ids is not canonical");
+                channel.id
             }
-            Entry::Vacant(entry) => {
-                // no previous channel has been written with this ID, but one may have with the same content.
-                // this is OK.
-                if let Some(canonical_channel_id) = canonical_channel_id {
-                    entry.insert(*canonical_channel_id);
-                } else {
-                    self.canonical_channels
-                        .insert_no_overwrite(channel_content.into_owned(), message.channel.id)
-                        .expect(
-                            "all values in all_channel_ids should be valid canonical channel IDs",
-                        );
-                    entry.insert(message.channel.id);
-                }
-                self.write_channel(records::Channel {
-                    id: message.channel.id,
-                    schema_id: message.channel.schema.as_ref().map(|s| s.id).unwrap_or(0),
-                    topic: message.channel.topic.clone(),
-                    message_encoding: message.channel.message_encoding.clone(),
-                    metadata: message.channel.metadata.clone(),
-                })?;
-            }
-        }
-        let header = MessageHeader {
-            channel_id: message.channel.id,
-            sequence: message.sequence,
-            log_time: message.log_time,
-            publish_time: message.publish_time,
         };
-        let data: &[u8] = &message.data;
-        self.write_to_known_channel(&header, data)
+        self.all_channel_ids
+            .insert(channel.id, canonical_channel_id);
+        self.write_channel(records::Channel {
+            id: channel.id,
+            schema_id,
+            topic: channel.topic.clone(),
+            message_encoding: channel.message_encoding.clone(),
+            metadata: channel.metadata.clone(),
+        })
     }
 
     /// Write a message to an added channel, given its ID.
@@ -2926,6 +2920,55 @@ mod tests {
             publish_time: sequence.into(),
             data: Vec::new().into(),
         }
+    }
+
+    #[test]
+    fn write_to_added_channel_id_does_not_compare_content() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let schema = Arc::new(crate::Schema {
+            id: 1,
+            name: "schema".into(),
+            encoding: "jsonschema".into(),
+            data: br#"{}"#.to_vec().into(),
+        });
+        let channel = crate::Channel {
+            id: 1,
+            topic: "/a".into(),
+            schema: Some(schema),
+            message_encoding: "json".into(),
+            metadata: Default::default(),
+        };
+        let relabeled = crate::Channel {
+            topic: "/b".into(),
+            schema: Some(Arc::new(crate::Schema {
+                id: 2,
+                name: "other".into(),
+                encoding: "jsonschema".into(),
+                data: br#"{"type":"object"}"#.to_vec().into(),
+            })),
+            ..channel.clone()
+        };
+        writer
+            .write(&message_on(channel, 0))
+            .expect("failed to write first message");
+        writer
+            .write(&message_on(relabeled, 1))
+            .expect("a known channel ID should be written as-is");
+
+        writer.finish().expect("failed in finish");
+        let buf = writer.into_inner().into_inner();
+        let summary = crate::Summary::read(&buf)
+            .expect("failed to parse summary")
+            .expect("expected a summary");
+        assert_eq!(summary.channels.len(), 1);
+        assert_eq!(summary.channels[&1].topic, "/a");
+        assert_eq!(summary.schemas.len(), 1);
+        let topics: Vec<String> = crate::MessageStream::new(&buf)
+            .expect("failed to read messages")
+            .map(|message| message.expect("message").channel.topic.clone())
+            .collect();
+        assert_eq!(topics, vec!["/a", "/a"]);
     }
 
     #[test]
