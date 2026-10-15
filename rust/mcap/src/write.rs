@@ -771,10 +771,13 @@ impl<W: Write + Seek> Writer<W> {
     /// Write the given message, adding its channel (and schema) the first time its channel ID is
     /// seen. The provided channel ID and schema ID will be used as IDs in the resulting MCAP.
     ///
-    /// Once a channel ID has been added, by an earlier call or by [`Self::add_channel_with_id`],
-    /// later messages with that ID are written to it without comparing their channel or schema
-    /// content to what was added. When combining messages from several sources whose IDs may
-    /// collide, remap them to distinct IDs before writing.
+    /// Once a channel ID is known, from an earlier call, [`Self::add_channel`], or
+    /// [`Self::add_channel_with_id`], later messages with that ID are written to it without
+    /// comparing their channel or schema content to what was added. When combining messages from
+    /// several sources whose IDs may collide, remap them to distinct IDs before writing.
+    ///
+    /// Returns [`McapError::ConflictingSchemas`] if a new channel's schema ID is already used by a
+    /// schema with different content.
     pub fn write(&mut self, message: &Message) -> McapResult<()> {
         if !self.all_channel_ids.contains_key(&message.channel.id) {
             self.add_message_channel(&message.channel)?;
@@ -788,7 +791,7 @@ impl<W: Write + Seek> Writer<W> {
         self.write_to_known_channel(&header, &message.data)
     }
 
-    /// Adds a channel not yet known by ID, along with its schema if that ID is also new.
+    /// Adds a channel whose ID is not yet known, and its schema if the schema ID is also new.
     fn add_message_channel(&mut self, channel: &Channel) -> McapResult<()> {
         if let Some(schema) = channel.schema.as_ref() {
             let content = SchemaContent {
