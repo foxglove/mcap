@@ -1640,6 +1640,72 @@ mod tests {
         }
     }
 
+    #[test]
+    fn channels_with_identical_content_keep_their_own_ids() {
+        let input_for = |chunked: bool, summaryless: bool| {
+            let mut output = Cursor::new(Vec::new());
+            {
+                let mut options = mcap::WriteOptions::new().use_chunks(chunked);
+                if summaryless {
+                    options = options
+                        .emit_summary_records(false)
+                        .emit_summary_offsets(false);
+                }
+                let mut writer = options.create(&mut output).expect("writer");
+                writer
+                    .add_schema_with_id(1, "schema", "jsonschema", br#"{}"#)
+                    .expect("schema");
+                for channel_id in [3, 7] {
+                    writer
+                        .add_channel_with_id(channel_id, 1, "/same", "json", &BTreeMap::new())
+                        .expect("channel");
+                }
+                for t in 0..6u64 {
+                    writer
+                        .write_to_known_channel(
+                            &mcap::records::MessageHeader {
+                                channel_id: if t % 2 == 0 { 3 } else { 7 },
+                                sequence: t as u32,
+                                log_time: t,
+                                publish_time: t,
+                            },
+                            b"x",
+                        )
+                        .expect("write");
+                }
+                writer.finish().expect("finish");
+            }
+            output.into_inner()
+        };
+        let channel_ids_and_log_times = |bytes: &[u8]| -> Vec<(u16, u64)> {
+            mcap::MessageStream::new(bytes)
+                .expect("message stream")
+                .map(|message| {
+                    let message = message.expect("message");
+                    (message.channel.id, message.log_time)
+                })
+                .collect()
+        };
+
+        for (chunked, summaryless) in [(true, false), (true, true), (false, true)] {
+            let input = input_for(chunked, summaryless);
+            for order in [
+                MessageOrder::Preserve,
+                MessageOrder::LogTime,
+                MessageOrder::Topic,
+            ] {
+                let output = run_filter(&input, &ordered_options(order));
+                let mut written = channel_ids_and_log_times(&output);
+                written.sort_by_key(|(_, log_time)| *log_time);
+                assert_eq!(
+                    written,
+                    vec![(3, 0), (7, 1), (3, 2), (7, 3), (3, 4), (7, 5)],
+                    "chunked={chunked}, summaryless={summaryless}, order={order:?}"
+                );
+            }
+        }
+    }
+
     /// Two channels (`/alpha`, `/beta`) interleaved in log-time order, so the `topic` ordering is
     /// observably different from the stored/log-time order. Covers the indexed path (chunked, with
     /// a summary) and both linear paths (chunked-summaryless and fully unchunked).
@@ -1722,72 +1788,6 @@ mod tests {
                 vec![0, 1, 2, 3, 4],
                 "messages within a channel should ascend by log time"
             );
-        }
-    }
-
-    #[test]
-    fn channels_with_identical_content_keep_their_own_ids() {
-        let input_for = |chunked: bool, summaryless: bool| {
-            let mut output = Cursor::new(Vec::new());
-            {
-                let mut options = mcap::WriteOptions::new().use_chunks(chunked);
-                if summaryless {
-                    options = options
-                        .emit_summary_records(false)
-                        .emit_summary_offsets(false);
-                }
-                let mut writer = options.create(&mut output).expect("writer");
-                writer
-                    .add_schema_with_id(1, "schema", "jsonschema", br#"{}"#)
-                    .expect("schema");
-                for channel_id in [3, 7] {
-                    writer
-                        .add_channel_with_id(channel_id, 1, "/same", "json", &BTreeMap::new())
-                        .expect("channel");
-                }
-                for t in 0..6u64 {
-                    writer
-                        .write_to_known_channel(
-                            &mcap::records::MessageHeader {
-                                channel_id: if t % 2 == 0 { 3 } else { 7 },
-                                sequence: t as u32,
-                                log_time: t,
-                                publish_time: t,
-                            },
-                            b"x",
-                        )
-                        .expect("write");
-                }
-                writer.finish().expect("finish");
-            }
-            output.into_inner()
-        };
-        let channel_ids_and_log_times = |bytes: &[u8]| -> Vec<(u16, u64)> {
-            mcap::MessageStream::new(bytes)
-                .expect("message stream")
-                .map(|message| {
-                    let message = message.expect("message");
-                    (message.channel.id, message.log_time)
-                })
-                .collect()
-        };
-
-        for (chunked, summaryless) in [(true, false), (true, true), (false, true)] {
-            let input = input_for(chunked, summaryless);
-            for order in [
-                MessageOrder::Preserve,
-                MessageOrder::LogTime,
-                MessageOrder::Topic,
-            ] {
-                let output = run_filter(&input, &ordered_options(order));
-                let mut written = channel_ids_and_log_times(&output);
-                written.sort_by_key(|(_, log_time)| *log_time);
-                assert_eq!(
-                    written,
-                    vec![(3, 0), (7, 1), (3, 2), (7, 3), (3, 4), (7, 5)],
-                    "chunked={chunked}, summaryless={summaryless}, order={order:?}"
-                );
-            }
         }
     }
 
