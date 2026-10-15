@@ -827,7 +827,7 @@ impl<W: Write + Seek> Writer<W> {
         };
         // Identical content may already be registered under another ID; this ID then maps to it.
         let canonical_channel_id = match self.canonical_channels.get_by_left(&channel_content) {
-            Some(&canonical_channel_id) => canonical_channel_id,
+            Some(&id) => id,
             None => {
                 self.canonical_channels
                     .insert_no_overwrite(channel_content.into_owned(), channel.id)
