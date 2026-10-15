@@ -781,9 +781,7 @@ impl<W: Write + Seek> Writer<W> {
             match self.all_schema_ids.entry(schema.id) {
                 Entry::Occupied(other) => {
                     // ensure that this message schema does not conflict with the existing one's content
-                    let canonical_schema_id = canonical_schema_id
-                        .expect("all values in all_schema_ids should be canonical schema IDs");
-                    if *other.get() != *canonical_schema_id {
+                    if canonical_schema_id != Some(other.get()) {
                         return Err(McapError::ConflictingSchemas(schema.name.clone()));
                     }
                 }
@@ -2918,6 +2916,49 @@ mod tests {
             .expect("expected a summary");
         assert_eq!(summary.channels.len(), 2);
         assert_eq!(summary.schemas.len(), 2);
+    }
+
+    fn message_on(channel: crate::Channel<'static>, sequence: u32) -> crate::Message<'static> {
+        crate::Message {
+            channel: Arc::new(channel),
+            sequence,
+            log_time: sequence.into(),
+            publish_time: sequence.into(),
+            data: Vec::new().into(),
+        }
+    }
+
+    #[test]
+    fn write_rejects_new_channel_with_conflicting_schema_id() {
+        let file = std::io::Cursor::new(Vec::new());
+        let mut writer = Writer::new(file).expect("failed to construct writer");
+        let schema = |data: &[u8]| {
+            Some(Arc::new(crate::Schema {
+                id: 1,
+                name: "schema".into(),
+                encoding: "jsonschema".into(),
+                data: data.to_vec().into(),
+            }))
+        };
+        let first_channel = crate::Channel {
+            id: 1,
+            topic: "/a".into(),
+            schema: schema(br#"{}"#),
+            message_encoding: "json".into(),
+            metadata: Default::default(),
+        };
+        let second_channel = crate::Channel {
+            id: 2,
+            schema: schema(br#"{"type":"object"}"#),
+            ..first_channel.clone()
+        };
+        writer
+            .write(&message_on(first_channel, 0))
+            .expect("failed to write first message");
+        let err = writer
+            .write(&message_on(second_channel, 1))
+            .expect_err("a new channel reusing a schema ID with different content should fail");
+        assert_matches!(err, McapError::ConflictingSchemas(_));
     }
 
     #[test]
