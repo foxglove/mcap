@@ -353,10 +353,10 @@ fn write_ordered_buffer<W: Write + Seek>(
     Ok(())
 }
 
-/// Writes one message, registering its channel (and schema) with the writer on first use.
-/// Later messages on that channel go through `write_to_known_channel`, because `Writer::write`
-/// hashes the full channel and schema content on every call, which dominates rewrite time for
-/// inputs with large schemas. Input channel IDs are unique, so the first registration holds.
+/// Writes one message, adding its channel and schema to the writer on first use. Later messages
+/// on that channel go through `write_to_known_channel`, which skips the full channel and schema
+/// content hash that `Writer::write` does on every call. The input readers reject a redefined
+/// channel ID, so an ID in `known_channel_ids` always refers to the same channel.
 fn write_message<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     known_channel_ids: &mut BTreeSet<u16>,
