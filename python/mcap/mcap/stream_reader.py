@@ -15,7 +15,9 @@ except ImportError:
 
 from .data_stream import ReadDataStream
 from .exceptions import (
+    EndOfFile,
     InvalidMagic,
+    McapError,
     RecordLengthLimitExceeded,
     UnsupportedCompressionError,
 )
@@ -55,24 +57,51 @@ class CRCValidationError(ValueError):
         )
 
 
+class _ChunkRecordDataStream(ReadDataStream):
+    """Bound known fields to a chunk record without copying its bytes."""
+
+    def __init__(self, stream: ReadDataStream, record_end: int):
+        self._parent = stream
+        self._record_end = record_end
+
+    @property
+    def count(self) -> int:
+        return self._parent.count
+
+    def read(self, length: int) -> bytes:
+        if length < 0 or self.count + length > self._record_end:
+            raise McapError("chunk record exceeds its declared length")
+        data = self._parent.read(length)
+        if len(data) != length:
+            raise EndOfFile()
+        return data
+
+
 def breakup_chunk(chunk: Chunk, validate_crc: bool = False) -> List[McapRecord]:
     stream, stream_length = get_chunk_data_stream(chunk, validate_crc=validate_crc)
     records: List[McapRecord] = []
     while stream.count < stream_length:
         opcode = stream.read1()
         length = stream.read8()
+        record_end = stream.count + length
+        if record_end > stream_length:
+            raise EndOfFile()
+        record_stream = _ChunkRecordDataStream(stream, record_end)
         if opcode == Opcode.CHANNEL:
-            channel = Channel.read(stream)
+            channel = Channel.read(record_stream)
             records.append(channel)
         elif opcode == Opcode.MESSAGE:
-            message = Message.read(stream, length)
+            message = Message.read(record_stream, length)
             records.append(message)
         elif opcode == Opcode.SCHEMA:
-            schema = Schema.read(stream)
+            schema = Schema.read(record_stream)
             records.append(schema)
         else:
             # Unknown chunk record type
             stream.read(length)
+
+        if stream.count < record_end:
+            stream.read(record_end - stream.count)
 
     return records
 
