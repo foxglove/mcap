@@ -819,6 +819,13 @@ impl<W: Write + Seek> Writer<W> {
             }
         }
         let schema_id = channel.schema.as_ref().map(|s| s.id).unwrap_or(0);
+        self.write_channel(records::Channel {
+            id: channel.id,
+            schema_id,
+            topic: channel.topic.clone(),
+            message_encoding: channel.message_encoding.clone(),
+            metadata: channel.metadata.clone(),
+        })?;
         let channel_content = ChannelContent {
             topic: Cow::Borrowed(&channel.topic),
             schema_id,
@@ -837,13 +844,7 @@ impl<W: Write + Seek> Writer<W> {
         };
         self.all_channel_ids
             .insert(channel.id, canonical_channel_id);
-        self.write_channel(records::Channel {
-            id: channel.id,
-            schema_id,
-            topic: channel.topic.clone(),
-            message_encoding: channel.message_encoding.clone(),
-            metadata: channel.metadata.clone(),
-        })
+        Ok(())
     }
 
     /// Write a message to an added channel, given its ID.
