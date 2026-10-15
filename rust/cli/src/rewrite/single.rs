@@ -104,7 +104,7 @@ fn filter_indexed<W: Write + Seek>(
     // preamble. The other orders keep the log-time preamble written up front.
     let fold_seeds_into_groups = matches!(opts.order, MessageOrder::Topic);
     let mut pre_start_buffered = Vec::<BufferedMessage>::new();
-    let mut registered_channels = BTreeSet::<u16>::new();
+    let mut known_channel_ids = BTreeSet::<u16>::new();
 
     if !opts.last_per_channel_topics.is_empty() && opts.start > 0 {
         let target_topics: BTreeSet<String> = summary
@@ -189,7 +189,7 @@ fn filter_indexed<W: Write + Seek>(
                 } else {
                     write_message(
                         writer,
-                        &mut registered_channels,
+                        &mut known_channel_ids,
                         &mcap::Message {
                             channel,
                             sequence: message.sequence,
@@ -254,7 +254,7 @@ fn filter_indexed<W: Write + Seek>(
                     } else {
                         write_message(
                             writer,
-                            &mut registered_channels,
+                            &mut known_channel_ids,
                             &mcap::Message {
                                 channel,
                                 sequence: header.sequence,
@@ -270,7 +270,7 @@ fn filter_indexed<W: Write + Seek>(
         if buffer_for_ordering {
             write_ordered_buffer(
                 writer,
-                &mut registered_channels,
+                &mut known_channel_ids,
                 buffered_messages,
                 opts.order,
             )?;
@@ -308,7 +308,7 @@ struct BufferedMessage {
 /// a single-topic reader fetch one byte range instead of scanning chunks scattered across the file.
 fn write_ordered_buffer<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
-    registered_channels: &mut BTreeSet<u16>,
+    known_channel_ids: &mut BTreeSet<u16>,
     mut messages: Vec<BufferedMessage>,
     order: MessageOrder,
 ) -> Result<()> {
@@ -340,7 +340,7 @@ fn write_ordered_buffer<W: Write + Seek>(
         }
         write_message(
             writer,
-            registered_channels,
+            known_channel_ids,
             &mcap::Message {
                 channel: message.channel.clone(),
                 sequence: message.sequence,
@@ -359,10 +359,10 @@ fn write_ordered_buffer<W: Write + Seek>(
 /// inputs with large schemas. Input channel IDs are unique, so the first registration holds.
 fn write_message<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
-    registered_channels: &mut BTreeSet<u16>,
+    known_channel_ids: &mut BTreeSet<u16>,
     message: &mcap::Message,
 ) -> Result<()> {
-    if registered_channels.insert(message.channel.id) {
+    if known_channel_ids.insert(message.channel.id) {
         writer.write(message)?;
     } else {
         writer.write_to_known_channel(
@@ -406,7 +406,7 @@ fn filter_linear<W: Write + Seek>(
     // Messages buffered for the sorted path. This holds the whole selected message set in memory,
     // so the summaryless ordered path is not memory-bounded.
     let mut buffered_messages = Vec::<BufferedMessage>::new();
-    let mut registered_channels = BTreeSet::<u16>::new();
+    let mut known_channel_ids = BTreeSet::<u16>::new();
 
     // Keep checking chunk CRCs: a corrupt input must fail, not be rewritten with a valid CRC.
     let records = mcap::read::ChunkFlattener::new_with_options(
@@ -453,7 +453,7 @@ fn filter_linear<W: Write + Seek>(
                 } else {
                     write_message(
                         writer,
-                        &mut registered_channels,
+                        &mut known_channel_ids,
                         &mcap::Message {
                             channel,
                             sequence: header.sequence,
@@ -485,7 +485,7 @@ fn filter_linear<W: Write + Seek>(
     if buffer_for_ordering {
         write_ordered_buffer(
             writer,
-            &mut registered_channels,
+            &mut known_channel_ids,
             buffered_messages,
             opts.order,
         )?;
@@ -1762,7 +1762,7 @@ mod tests {
             }
             output.into_inner()
         };
-        let channel_ids = |bytes: &[u8]| -> Vec<(u16, u64)> {
+        let channel_ids_and_log_times = |bytes: &[u8]| -> Vec<(u16, u64)> {
             mcap::MessageStream::new(bytes)
                 .expect("message stream")
                 .map(|message| {
@@ -1780,7 +1780,7 @@ mod tests {
                 MessageOrder::Topic,
             ] {
                 let output = run_filter(&input, &ordered_options(order));
-                let mut written = channel_ids(&output);
+                let mut written = channel_ids_and_log_times(&output);
                 written.sort_by_key(|(_, log_time)| *log_time);
                 assert_eq!(
                     written,

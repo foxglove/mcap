@@ -540,10 +540,10 @@ fn write_input(
     let schema_id = writer
         .add_schema("Bench", "raw", &vec![b'#'; SCHEMA_BYTES])
         .expect("add generated schema");
-    let selected = writer
+    let selected_channel_id = writer
         .add_channel(schema_id, "/bench/selected", "raw", &Default::default())
         .expect("add generated channel");
-    let other = writer
+    let other_channel_id = writer
         .add_channel(schema_id, "/bench/other", "raw", &Default::default())
         .expect("add generated channel");
 
@@ -559,9 +559,9 @@ fn write_input(
             } => (input_order * input_count + input_idx) as u64,
         };
         let channel_id = if input_order % 2 == 0 {
-            selected
+            selected_channel_id
         } else {
-            other
+            other_channel_id
         };
         writer
             .write_to_known_channel(
