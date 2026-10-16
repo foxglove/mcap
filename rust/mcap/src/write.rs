@@ -2943,7 +2943,7 @@ mod tests {
             message_encoding: "json".into(),
             metadata: Default::default(),
         };
-        let relabeled = crate::Channel {
+        let conflicting_channel = crate::Channel {
             topic: "/b".into(),
             schema: Some(Arc::new(crate::Schema {
                 id: 2,
@@ -2957,7 +2957,7 @@ mod tests {
             .write(&message_on(channel, 0))
             .expect("failed to write first message");
         writer
-            .write(&message_on(relabeled, 1))
+            .write(&message_on(conflicting_channel, 1))
             .expect("a known channel ID should be written as-is");
 
         writer.finish().expect("failed in finish");
