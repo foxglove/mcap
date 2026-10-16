@@ -771,10 +771,10 @@ impl<W: Write + Seek> Writer<W> {
     /// Write the given message, adding its channel (and schema) the first time its channel ID is
     /// seen. The provided channel ID and schema ID will be used as IDs in the resulting MCAP.
     ///
-    /// Once a channel ID is known, from an earlier call, [`Self::add_channel`], or
-    /// [`Self::add_channel_with_id`], later messages with that ID are written to it without
-    /// comparing their channel or schema content to what was added. When combining messages from
-    /// several sources whose IDs may collide, remap them to distinct IDs before writing.
+    /// If the channel ID is already known from an earlier `write`, [`Self::add_channel`], or
+    /// [`Self::add_channel_with_id`], the message is written to that channel without comparing its
+    /// channel or schema content. When combining sources whose IDs may collide, remap them to
+    /// distinct IDs before writing.
     ///
     /// Returns [`McapError::ConflictingSchemas`] if a new channel's schema ID is already used by a
     /// schema with different content.
