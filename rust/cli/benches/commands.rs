@@ -1,8 +1,6 @@
-use std::borrow::Cow;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
@@ -13,6 +11,9 @@ const DEFAULT_SAMPLE_SIZE: usize = 10;
 const DEFAULT_WARMUP_MS: u64 = 250;
 const DEFAULT_MEASUREMENT_SECS: u64 = 2;
 const PAYLOAD_SIZES: &[usize] = &[100, 1_000, 10_000, 100_000, 1_000_000];
+// Real schemas (e.g. concatenated ROS 2 message definitions) are often tens of KB. A trivial
+// schema hides any per-message cost that scales with schema size.
+const SCHEMA_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone)]
 struct BenchConfig {
@@ -475,9 +476,10 @@ impl BenchConfig {
         };
         let compression_label = compression.unwrap_or("none");
         self.inputs_dir().join(format!(
-            "payload{}_messages{}_chunk{}_{}_{}_{}_part{}.mcap",
+            "payload{}_messages{}_schema{}_chunk{}_{}_{}_{}_part{}.mcap",
             payload_size,
             message_count,
+            SCHEMA_BYTES,
             self.chunk_bytes,
             mode.label(),
             order_label,
@@ -535,26 +537,15 @@ fn write_input(
         .create(std::io::BufWriter::new(file))
         .expect("create MCAP writer");
 
-    let schema = Arc::new(mcap::Schema {
-        id: 1,
-        name: "Bench".to_string(),
-        encoding: "raw".to_string(),
-        data: Cow::Borrowed(b"{}"),
-    });
-    let selected = Arc::new(mcap::Channel {
-        id: 1,
-        topic: "/bench/selected".to_string(),
-        schema: Some(schema.clone()),
-        message_encoding: "raw".to_string(),
-        metadata: Default::default(),
-    });
-    let other = Arc::new(mcap::Channel {
-        id: 2,
-        topic: "/bench/other".to_string(),
-        schema: Some(schema),
-        message_encoding: "raw".to_string(),
-        metadata: Default::default(),
-    });
+    let schema_id = writer
+        .add_schema("Bench", "raw", &vec![b'#'; SCHEMA_BYTES])
+        .expect("add generated schema");
+    let selected_channel_id = writer
+        .add_channel(schema_id, "/bench/selected", "raw", &Default::default())
+        .expect("add generated channel");
+    let other_channel_id = writer
+        .add_channel(schema_id, "/bench/other", "raw", &Default::default())
+        .expect("add generated channel");
 
     let mut payload = vec![0u8; payload_size];
     for input_order in 0..message_count {
@@ -567,19 +558,21 @@ fn write_input(
                 input_count,
             } => (input_order * input_count + input_idx) as u64,
         };
-        let channel = if input_order % 2 == 0 {
-            selected.clone()
+        let channel_id = if input_order % 2 == 0 {
+            selected_channel_id
         } else {
-            other.clone()
+            other_channel_id
         };
         writer
-            .write(&mcap::Message {
-                channel,
-                sequence: input_order as u32,
-                log_time,
-                publish_time: log_time,
-                data: Cow::Borrowed(payload.as_slice()),
-            })
+            .write_to_known_channel(
+                &mcap::records::MessageHeader {
+                    channel_id,
+                    sequence: input_order as u32,
+                    log_time,
+                    publish_time: log_time,
+                },
+                &payload,
+            )
             .expect("write generated message");
     }
     writer.finish().expect("finish generated MCAP");
