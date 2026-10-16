@@ -822,6 +822,12 @@ impl<W: Write + Seek> Writer<W> {
             }
         }
         let schema_id = channel.schema.as_ref().map(|s| s.id).unwrap_or(0);
+        let channel_content = ChannelContent {
+            topic: Cow::Borrowed(&channel.topic),
+            schema_id,
+            message_encoding: Cow::Borrowed(&channel.message_encoding),
+            metadata: Cow::Borrowed(&channel.metadata),
+        };
         self.write_channel(records::Channel {
             id: channel.id,
             schema_id,
@@ -829,12 +835,6 @@ impl<W: Write + Seek> Writer<W> {
             message_encoding: channel.message_encoding.clone(),
             metadata: channel.metadata.clone(),
         })?;
-        let channel_content = ChannelContent {
-            topic: Cow::Borrowed(&channel.topic),
-            schema_id,
-            message_encoding: Cow::Borrowed(&channel.message_encoding),
-            metadata: Cow::Borrowed(&channel.metadata),
-        };
         // Identical content may already be registered under another ID; this ID then maps to it.
         let canonical_channel_id = match self.canonical_channels.get_by_left(&channel_content) {
             Some(&id) => id,
