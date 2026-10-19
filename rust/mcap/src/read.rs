@@ -1011,6 +1011,73 @@ mod tests {
         ));
     }
 
+    /// An uncompressed chunk holding `records`, with no CRC to check.
+    fn uncompressed_chunk(records: Vec<u8>) -> (records::ChunkHeader, Vec<u8>) {
+        let header = records::ChunkHeader {
+            message_start_time: 0,
+            message_end_time: 0,
+            uncompressed_size: records.len() as u64,
+            uncompressed_crc: 0,
+            compression: String::new(),
+            compressed_size: records.len() as u64,
+        };
+        (header, records)
+    }
+
+    fn raw_record(opcode: u8, body: &[u8]) -> Vec<u8> {
+        let mut record = vec![opcode];
+        record.extend_from_slice(&(body.len() as u64).to_le_bytes());
+        record.extend_from_slice(body);
+        record
+    }
+
+    /// A message record for channel 0 carrying `data`.
+    fn raw_message(data: &[u8]) -> Vec<u8> {
+        let mut body = Vec::new();
+        body.extend_from_slice(&0u16.to_le_bytes()); // channel id
+        body.extend_from_slice(&0u32.to_le_bytes()); // sequence
+        body.extend_from_slice(&0u64.to_le_bytes()); // log time
+        body.extend_from_slice(&0u64.to_le_bytes()); // publish time
+        body.extend_from_slice(data);
+        raw_record(op::MESSAGE, &body)
+    }
+
+    #[test]
+    fn chunk_reader_ends_after_a_record_it_cannot_skip() {
+        // The first record claims far more bytes than the chunk holds, so the reader can never
+        // reach the message behind it.
+        let mut records = vec![op::CHANNEL];
+        records.extend_from_slice(&(u64::MAX / 2).to_le_bytes());
+        records.extend_from_slice(&raw_message(b"hi"));
+        let (header, data) = uncompressed_chunk(records);
+
+        let mut reader = ChunkReader::new(header, &data).expect("chunk reader");
+        assert!(matches!(
+            reader.next(),
+            Some(Err(
+                McapError::UnexpectedEof | McapError::RecordTooLarge { .. }
+            ))
+        ));
+        assert!(reader.next().is_none(), "the reader ends after the error");
+        assert!(reader.next().is_none(), "and stays ended");
+    }
+
+    #[test]
+    fn chunk_reader_continues_after_a_record_that_fails_to_parse() {
+        // A channel record whose body ends after the id, then a complete message.
+        let mut records = raw_record(op::CHANNEL, &[0, 0]);
+        records.extend_from_slice(&raw_message(b"hi"));
+        let (header, data) = uncompressed_chunk(records);
+
+        let mut reader = ChunkReader::new(header, &data).expect("chunk reader");
+        assert!(matches!(reader.next(), Some(Err(_))));
+        assert!(matches!(
+            reader.next(),
+            Some(Ok(Record::Message { data, .. })) if data.as_ref() == b"hi"
+        ));
+        assert!(reader.next().is_none());
+    }
+
     #[test]
     fn add_schema_from_slice_keeps_the_first_copy_on_repeat() {
         let header = || records::SchemaHeader {

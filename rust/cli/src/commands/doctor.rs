@@ -1183,6 +1183,74 @@ mod tests {
         );
     }
 
+    fn uncompressed_single_chunk_mcap() -> Vec<u8> {
+        write_mcap(
+            |opts| opts.compression(None).chunk_size(Some(1024 * 1024)),
+            None,
+            &[10, 20, 30],
+        )
+    }
+
+    #[test]
+    fn reports_a_nested_record_the_reader_cannot_skip_once() {
+        let mut mcap = uncompressed_single_chunk_mcap();
+        let chunk_offset = first_record_offset(&mcap, op::CHUNK).expect("chunk record");
+        let first_nested_record = chunk_records_offset(&mcap, chunk_offset);
+        // Claim far more bytes than the chunk holds for the first nested record.
+        mcap[first_nested_record + 1..first_nested_record + 9]
+            .copy_from_slice(&(u64::MAX / 2).to_le_bytes());
+        zero_chunk_and_data_section_crcs(&mut mcap, chunk_offset);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        let nested_errors = diagnosis
+            .errors
+            .iter()
+            .filter(|err| err.contains("failed to parse nested chunk record"))
+            .count();
+        assert_eq!(nested_errors, 1, "{:?}", diagnosis.errors);
+    }
+
+    #[test]
+    fn keeps_examining_a_chunk_after_a_nested_record_fails_to_parse() {
+        let mut mcap = uncompressed_single_chunk_mcap();
+        let chunk_offset = first_record_offset(&mcap, op::CHUNK).expect("chunk record");
+        let schema_offset = chunk_records_offset(&mcap, chunk_offset);
+        assert_eq!(
+            mcap[schema_offset],
+            op::SCHEMA,
+            "the chunk opens with the schema"
+        );
+        corrupt_schema_data_length(&mut mcap, schema_offset);
+        zero_chunk_and_data_section_crcs(&mut mcap, chunk_offset);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        let nested_errors = diagnosis
+            .errors
+            .iter()
+            .filter(|err| err.contains("failed to parse nested chunk record"))
+            .count();
+        assert_eq!(nested_errors, 1, "{:?}", diagnosis.errors);
+        // The channel after the bad schema was still examined: it names a schema the scan
+        // never saw.
+        assert!(
+            diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("unknown Schema")),
+            "{:?}",
+            diagnosis.errors
+        );
+        // And the messages after the channel were checked against it.
+        assert!(
+            !diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("before a channel record")),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
     #[test]
     fn chunk_index_validation_reads_the_file_once() {
         let mcap = write_mcap(|opts| opts, None, &[10, 20, 30, 40]);
@@ -1221,9 +1289,37 @@ mod tests {
         mcap[crc_field..crc_field + 4].copy_from_slice(&[0; 4]);
     }
 
+    /// Offset of the first record inside an uncompressed chunk's records field.
+    fn chunk_records_offset(mcap: &[u8], chunk_offset: usize) -> usize {
+        // ChunkHeader: message_start_time, message_end_time, uncompressed_size (8 each),
+        // uncompressed_crc (4), compression string (4 + len), compressed_size (8).
+        let header_offset = chunk_offset + 9;
+        let compression_len = u32::from_le_bytes(
+            mcap[header_offset + 28..header_offset + 32]
+                .try_into()
+                .expect("compression length"),
+        ) as usize;
+        header_offset + 32 + compression_len + 8
+    }
+
+    /// Zeroes the chunk's CRC and the data section CRC (zero means "not computed") so a
+    /// corrupted chunk is examined record by record and the scan reaches the summary.
+    fn zero_chunk_and_data_section_crcs(mcap: &mut [u8], chunk_offset: usize) {
+        let crc_field = chunk_offset + 9 + 24;
+        mcap[crc_field..crc_field + 4].copy_from_slice(&[0; 4]);
+        let data_end = first_record_offset(mcap, op::DATA_END).expect("data end record");
+        mcap[data_end + 9..data_end + 13].copy_from_slice(&[0; 4]);
+    }
+
     fn corrupt_first_schema_data_length(mcap: &mut [u8]) {
         let schema_record_offset =
             first_record_offset(mcap, op::SCHEMA).expect("schema record should exist");
+        corrupt_schema_data_length(mcap, schema_record_offset);
+    }
+
+    /// Sets the data length of the schema record at `schema_record_offset` to u32::MAX so it
+    /// fails to parse.
+    fn corrupt_schema_data_length(mcap: &mut [u8], schema_record_offset: usize) {
         let body_offset = schema_record_offset + 9;
         let body_len = read_record_len(mcap, schema_record_offset) as usize;
         let body = &mut mcap[body_offset..body_offset + body_len];

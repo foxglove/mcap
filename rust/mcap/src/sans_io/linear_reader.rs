@@ -30,6 +30,9 @@ enum CurrentlyReading {
     PaddingAfterChunk,
     EndMagic,
     AfterEndMagic,
+    /// An error left the reader with no record boundary to resume from. Every later
+    /// `next_event` returns `None`.
+    Failed,
 }
 use CurrentlyReading::*;
 
@@ -426,7 +429,16 @@ impl LinearReader {
     }
 
     /// Yields the next event the caller should take to progress through the file.
+    ///
+    /// Most errors end the reader: once `next_event` has returned one, every later call returns
+    /// `None`, since the input left no record boundary to resume from. The exception is an
+    /// error found after a chunk's last record was yielded, such as
+    /// [`McapError::BadChunkCrc`] from [`validate_chunk_crcs`](LinearReaderOptions::validate_chunk_crcs).
+    /// Reading then continues with the record after the chunk.
     pub fn next_event(&mut self) -> Option<McapResult<LinearReadEvent<'_>>> {
+        if matches!(self.currently_reading, Failed) {
+            return None;
+        }
         if self.at_eof {
             // At EOF. If the reader is not expecting end magic or has already seen it, and it isn't
             // in the middle of a record or chunk, this is OK.
@@ -437,6 +449,7 @@ impl LinearReader {
             {
                 return None;
             }
+            self.currently_reading = Failed;
             return Some(Err(McapError::UnexpectedEof));
         }
         /// Macros for loading data into the reader. These return early with Read(n) if
@@ -477,18 +490,27 @@ impl LinearReader {
                 ) {
                     Ok(None) => &self.decompressed_content.unread()[..$n],
                     Ok(Some(n)) => return Some(Ok(LinearReadEvent::ReadRequest(n))),
-                    Err(err) => return Some(Err(err)),
+                    Err(err) => fail!(err),
                 }
             }};
         }
 
+        // Returns an error that the reader cannot resume after. The reader ends here: every later
+        // next_event() returns None.
+        macro_rules! fail {
+            ($err:expr) => {{
+                self.currently_reading = Failed;
+                return Some(Err($err.into()));
+            }};
+        }
+
         // returns early on error. This is similar to the ? operator, but it returns an
-        // Option<Result> instead of a Result.
+        // Option<Result> instead of a Result. The reader ends like fail!.
         macro_rules! check {
             ($t:expr) => {
                 match $t {
                     Ok(t) => t,
-                    Err(err) => return Some(Err(err.into())),
+                    Err(err) => fail!(err),
                 }
             };
         }
@@ -499,7 +521,7 @@ impl LinearReader {
                     if !self.options.skip_start_magic {
                         let data = consume!(MAGIC.len());
                         if *data != *MAGIC {
-                            return Some(Err(McapError::BadMagic));
+                            fail!(McapError::BadMagic);
                         }
                     }
                     self.currently_reading = CurrentlyReading::FileRecord;
@@ -555,7 +577,7 @@ impl LinearReader {
                     let saved = rec.data_section_crc;
                     if let Some(calculated) = calculated {
                         if saved != 0 && calculated != saved {
-                            return Some(Err(McapError::BadDataCrc { saved, calculated }));
+                            fail!(McapError::BadDataCrc { saved, calculated });
                         }
                     }
                     if self.options.validate_summary_section_crc {
@@ -585,7 +607,7 @@ impl LinearReader {
                         let calculated = hasher.finalize();
                         let saved = footer.summary_crc;
                         if saved != 0 && saved != calculated {
-                            return Some(Err(McapError::BadSummaryCrc { saved, calculated }));
+                            fail!(McapError::BadSummaryCrc { saved, calculated });
                         }
                     }
                     self.currently_reading = EndMagic;
@@ -612,10 +634,10 @@ impl LinearReader {
                     let header_len =
                         (MIN_CHUNK_HEADER_SIZE as u64).saturating_add(u64::from(compression_len));
                     if header_len > len {
-                        return Some(Err(McapError::BadChunkLength {
+                        fail!(McapError::BadChunkLength {
                             header: header_len,
                             available: len,
-                        }));
+                        });
                     }
                     let header_len =
                         check!(check_len(header_len, self.options.record_length_limit)
@@ -694,7 +716,7 @@ impl LinearReader {
                             let calculated = crc32fast::hash(records);
                             let saved = state.crc;
                             if calculated != saved {
-                                return Some(Err(McapError::BadChunkCrc { saved, calculated }));
+                                fail!(McapError::BadChunkCrc { saved, calculated });
                             }
                             self.currently_reading = ChunkRecord;
                         }
@@ -712,7 +734,7 @@ impl LinearReader {
                                     crc32fast::hash(self.decompressed_content.unread());
                                 let saved = state.crc;
                                 if calculated != saved {
-                                    return Some(Err(McapError::BadChunkCrc { saved, calculated }));
+                                    fail!(McapError::BadChunkCrc { saved, calculated });
                                 }
                                 self.currently_reading = ChunkRecord;
                                 continue;
@@ -768,10 +790,10 @@ impl LinearReader {
                             }
                             let opcode_len_buf = decompress!(OPCODE_LEN_SIZE, state, decompressor);
                             let Some((&[opcode], rest)) = opcode_len_buf.split_first_chunk() else {
-                                return Some(Err(McapError::UnexpectedEoc));
+                                fail!(McapError::UnexpectedEoc);
                             };
                             let Some((&len_buf, _)) = rest.split_first_chunk() else {
-                                return Some(Err(McapError::UnexpectedEoc));
+                                fail!(McapError::UnexpectedEoc);
                             };
                             let len = u64::from_le_bytes(len_buf);
                             let len = check!(check_len(len, self.options.record_length_limit)
@@ -842,14 +864,15 @@ impl LinearReader {
                             self.currently_reading = AfterEndMagic;
                             continue;
                         } else {
-                            return Some(Err(McapError::BadMagic));
+                            fail!(McapError::BadMagic);
                         }
                     }
                 }
+                Failed => return None,
                 AfterEndMagic => {
                     if self.options.check_finishes_after_end_magic {
                         if self.file_data.len() > 0 {
-                            return Some(Err(McapError::BytesAfterEndMagic));
+                            fail!(McapError::BytesAfterEndMagic);
                         } else if self.at_eof {
                             return None;
                         } else {
@@ -1149,6 +1172,96 @@ mod tests {
             assert!(iter_count < 10000);
         }
         panic!("should have errored")
+    }
+
+    /// Drives the reader over `bytes` to the end, recording every record opcode and error in
+    /// the order they were returned.
+    fn collect_events(bytes: &[u8], options: LinearReaderOptions) -> Vec<Result<u8, McapError>> {
+        let mut reader = LinearReader::new_with_options(options);
+        let mut cursor = std::io::Cursor::new(bytes);
+        let mut events = Vec::new();
+        while let Some(event) = reader.next_event() {
+            match event {
+                Ok(LinearReadEvent::ReadRequest(n)) => {
+                    let written = cursor
+                        .read(reader.insert(n))
+                        .expect("insert should not fail");
+                    reader.notify_read(written);
+                }
+                Ok(LinearReadEvent::Record { opcode, .. }) => events.push(Ok(opcode)),
+                Err(err) => events.push(Err(err)),
+            }
+            assert!(events.len() < 10000, "the reader never ended");
+        }
+        events
+    }
+
+    #[test]
+    fn an_error_the_reader_cannot_resume_after_ends_it() {
+        let file = basic_chunked_file(None).unwrap();
+        let events = collect_events(
+            &file,
+            LinearReaderOptions::default().with_record_length_limit(10),
+        );
+        assert_matches!(
+            events.as_slice(),
+            [Err(McapError::RecordTooLarge { .. })],
+            "{events:?}"
+        );
+
+        // Cut off inside a record: the reader reports it once and ends.
+        let events = collect_events(&file[..file.len() / 2], LinearReaderOptions::default());
+        assert_matches!(events.last(), Some(Err(McapError::UnexpectedEof)));
+        assert_eq!(
+            events.iter().filter(|event| event.is_err()).count(),
+            1,
+            "{events:?}"
+        );
+    }
+
+    #[test]
+    fn a_bad_chunk_crc_found_after_its_records_does_not_end_the_reader() {
+        let mut file = basic_chunked_file(None).unwrap();
+        // Flip the last payload byte of the first message, which lies inside the first chunk.
+        let payload: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let payload_at = file
+            .windows(payload.len())
+            .position(|window| window == payload)
+            .expect("first message payload");
+        file[payload_at + payload.len() - 1] ^= 0xFF;
+
+        // Checked after the chunk's records: the mismatch is reported once, then reading goes
+        // on with the next chunk's records and the rest of the file.
+        let events = collect_events(
+            &file,
+            LinearReaderOptions::default().with_validate_chunk_crcs(true),
+        );
+        let error_at = events
+            .iter()
+            .position(|event| matches!(event, Err(McapError::BadChunkCrc { .. })))
+            .expect("bad chunk crc reported");
+        let after: Vec<u8> = events[error_at + 1..]
+            .iter()
+            .map(|event| *event.as_ref().expect("no error after the chunk crc"))
+            .collect();
+        assert_eq!(&after[..2], &[op::MESSAGE_INDEX, op::MESSAGE], "{events:?}");
+        assert_eq!(after.last(), Some(&op::FOOTER), "{events:?}");
+
+        // Checked before the chunk's records: no record boundary to resume from, so the
+        // reader ends.
+        let events = collect_events(
+            &file,
+            LinearReaderOptions::default().with_prevalidate_chunk_crcs(true),
+        );
+        assert_matches!(
+            events.last(),
+            Some(Err(McapError::BadChunkCrc { .. })),
+            "{events:?}"
+        );
+        assert!(
+            !events.iter().any(|event| matches!(event, Ok(op::FOOTER))),
+            "{events:?}"
+        );
     }
 
     /// MAGIC + empty Header + a Chunk whose compression-string length disagrees with the
