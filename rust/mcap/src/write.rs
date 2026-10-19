@@ -1766,6 +1766,9 @@ impl<W: Write + Seek> ChunkWriter<W> {
                 // Enable multithreaded encoding on non-WASM targets.
                 #[cfg(not(target_arch = "wasm32"))]
                 enc.set_parameter(zraw::CParameter::NbWorkers(compression_threads))?;
+                // zstd has no worker threads on wasm, so the setting is unused there.
+                #[cfg(target_arch = "wasm32")]
+                let _ = compression_threads;
                 Ok(enc)
             }
         }
