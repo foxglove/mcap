@@ -3308,11 +3308,9 @@ mod tests {
         let window = crate::byte_source::REMOTE_READ_AHEAD_BYTES;
         assert!(body.len() > 2 * window);
         let (url, requests) = serve_http_counting(body, true);
-        let mut source = crate::byte_source::open_byte_source(
-            Some(Path::new(&url)),
-            super::SourceOptions::new(true),
-        )
-        .expect("remote open");
+        let mut source =
+            crate::byte_source::open_byte_source(Path::new(&url), super::SourceOptions::new(true))
+                .expect("remote open");
         let after_open = requests.load(Ordering::SeqCst);
 
         assert_eq!(count_remote_messages(source.as_mut()), 600);

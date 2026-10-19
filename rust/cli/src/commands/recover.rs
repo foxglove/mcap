@@ -124,8 +124,12 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome>
     if let (Some(input), Some(output)) = (args.file.as_deref(), args.output.as_deref()) {
         source::ensure_distinct_local_input_output(input, output)?;
     }
-    // Path, URL, and stdin all go through ByteSource (stdin spooled; remotes ranged or spooled).
-    let mut input = byte_source::open_byte_source(args.file.as_deref(), source_options)?;
+    // Recovery only scans forward, so stdin is read as it arrives rather than spooled; a path or
+    // URL opens as a random-access source (remotes ranged, or downloaded with the opt-in).
+    let mut input: Box<dyn ByteSource> = match args.file.as_deref() {
+        Some(path) => byte_source::open_byte_source(path, source_options)?,
+        None => Box::new(byte_source::SequentialSource::stdin()?),
+    };
     source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
     let compression = resolve_compression(&args.compression)?;
 
@@ -964,6 +968,86 @@ mod tests {
             .expect("header present")
             .library;
         assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
+    }
+
+    /// Reader that fails partway through its data, like a pipe whose writer died.
+    struct FailingReader {
+        data: Cursor<Vec<u8>>,
+        fail_at: u64,
+    }
+
+    impl std::io::Read for FailingReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let remaining = self.fail_at.saturating_sub(self.data.position());
+            if remaining == 0 {
+                return Err(std::io::Error::other("input stream failed"));
+            }
+            let limit = usize::try_from(remaining)
+                .unwrap_or(usize::MAX)
+                .min(buf.len());
+            self.data.read(&mut buf[..limit])
+        }
+    }
+
+    #[test]
+    fn sequential_input_failing_mid_stream_keeps_recovered_records() {
+        // Many small chunks, so a failure partway through the data section leaves complete
+        // chunks before it.
+        let mut input = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(256))
+                .compression(None)
+                .create(Cursor::new(&mut input))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            for i in 0..300u32 {
+                writer
+                    .write_to_known_channel(
+                        &MessageHeader {
+                            channel_id,
+                            sequence: i,
+                            log_time: u64::from(i),
+                            publish_time: u64::from(i),
+                        },
+                        b"payload",
+                    )
+                    .expect("write");
+            }
+            writer.finish().expect("finish");
+        }
+        let summary = mcap::Summary::read(&input)
+            .expect("read summary")
+            .expect("summary present");
+        assert!(
+            summary.chunk_indexes.len() > 2,
+            "fixture should span many chunks"
+        );
+        let fail_at = summary.chunk_indexes[summary.chunk_indexes.len() / 2].chunk_start_offset;
+
+        let mut source = crate::byte_source::SequentialSource::new(
+            FailingReader {
+                data: Cursor::new(input),
+                fail_at,
+            },
+            "<pipe>",
+        );
+        let target = super::resolve_compression("none").expect("compression");
+        let (stats, output) =
+            recover_to_sink(&mut source, Cursor::new(Vec::new()), target, 1024, false)
+                .expect("a mid-stream read error is lossy, not fatal");
+        assert!(stats.truncated);
+        assert!(stats.is_lossy());
+        let (messages, _, _) = count_output_records(&output.into_inner());
+        assert!(
+            messages > 0 && messages < 300,
+            "expected a partial recovery, got {messages} of 300 messages"
+        );
     }
 
     #[test]

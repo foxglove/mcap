@@ -1,8 +1,9 @@
-//! Random-access byte sources for sans-io MCAP reads: local files via seek+read, remote URLs
-//! via HTTP range requests, and stdin spooled to a temp file (see [`open_byte_source`]).
+//! Byte sources for sans-io MCAP reads: local files via seek+read and remote URLs via HTTP
+//! range requests (see [`open_byte_source`]), plus a forward-only [`SequentialSource`] for
+//! stdin and other streams that commands read exactly once, in order.
 
 use std::fs::File;
-use std::io::{BufReader, IsTerminal as _, Read as _, Seek as _, SeekFrom, Write as _};
+use std::io::{BufReader, IsTerminal as _, Read, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context, Result};
@@ -249,6 +250,75 @@ impl ByteSource for RemoteRangeSource {
     }
 }
 
+/// Forward-only stream such as stdin. Serves reads at the current position straight from the
+/// reader and refuses any other offset, so a command that only scans in order neither buffers
+/// nor spools the input.
+pub struct SequentialSource<R> {
+    reader: R,
+    pos: u64,
+    name: String,
+}
+
+impl SequentialSource<std::io::Stdin> {
+    pub fn stdin() -> Result<Self> {
+        let stdin = std::io::stdin();
+        if stdin.is_terminal() {
+            bail!("{PLEASE_SUPPLY_FILE}");
+        }
+        Ok(Self::new(stdin, "<stdin>"))
+    }
+}
+
+impl<R: Read> SequentialSource<R> {
+    pub fn new(reader: R, name: impl Into<String>) -> Self {
+        Self {
+            reader,
+            pos: 0,
+            name: name.into(),
+        }
+    }
+}
+
+impl<R: Read> ByteSource for SequentialSource<R> {
+    fn size(&self) -> Result<Option<u64>> {
+        Ok(None)
+    }
+
+    fn is_remote(&self) -> bool {
+        false
+    }
+
+    fn display_name(&self) -> String {
+        self.name.clone()
+    }
+
+    fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
+        if offset != self.pos {
+            bail!(
+                "{} is not seekable: read at offset {offset} requested at position {}",
+                self.name,
+                self.pos
+            );
+        }
+        if dest.is_empty() {
+            return Ok(0);
+        }
+        let n = loop {
+            match self.reader.read(dest) {
+                Ok(n) => break n,
+                Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(err) => {
+                    return Err(err).with_context(|| {
+                        format!("failed to read {} at offset {offset}", self.name)
+                    })
+                }
+            }
+        };
+        self.pos += n as u64;
+        Ok(n)
+    }
+}
+
 /// In-memory bytes, mainly for unit tests.
 #[cfg(test)]
 pub struct MemorySource {
@@ -288,17 +358,10 @@ impl ByteSource for MemorySource {
     }
 }
 
-/// Open a local path, remote URL, or stdin (`None`, spooled to a tempfile) as a [`ByteSource`].
-/// Remotes use range requests when available; otherwise they need `--allow-remote-scan` and are
-/// downloaded to a tempfile.
-pub fn open_byte_source(
-    path: Option<&Path>,
-    options: SourceOptions,
-) -> Result<Box<dyn ByteSource>> {
-    let Some(path) = path else {
-        return Ok(Box::new(spool_stdin_to_local()?));
-    };
-
+/// Open a local path or remote URL as a random-access [`ByteSource`]. Remotes use range
+/// requests when available; otherwise they need `--allow-remote-scan` and are downloaded to a
+/// tempfile.
+pub fn open_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dyn ByteSource>> {
     if is_remote_url(path) {
         return open_remote_byte_source(path, options);
     }
@@ -318,20 +381,6 @@ fn open_remote_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dy
         }
         None => Ok(Box::new(spool_remote_to_local(path, options)?)),
     }
-}
-
-fn spool_stdin_to_local() -> Result<LocalFileSource> {
-    let stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        bail!("{PLEASE_SUPPLY_FILE}");
-    }
-    let mut temp_file = tempfile::Builder::new()
-        .prefix("mcap-cli-stdin-bytesource-")
-        .tempfile()
-        .context("failed to create temporary file for stdin input")?;
-    std::io::copy(&mut stdin.lock(), temp_file.as_file_mut())
-        .context("failed to read input from stdin")?;
-    LocalFileSource::from_temp_file(temp_file, PathBuf::from("<stdin>"))
 }
 
 fn spool_remote_to_local(path: &Path, options: SourceOptions) -> Result<LocalFileSource> {
@@ -435,6 +484,47 @@ mod tests {
             .read_at(size as u64 - 5, usize::MAX)
             .expect("huge read_at clamps to EOF");
         assert_eq!(tail, &expected[size - 5..]);
+    }
+
+    #[test]
+    fn sequential_source_serves_in_order_reads_and_refuses_seeks() {
+        let mut source = SequentialSource::new(Cursor::new(vec![1u8, 2, 3, 4, 5]), "<pipe>");
+        assert_eq!(source.size().expect("size"), None);
+        assert_eq!(source.display_name(), "<pipe>");
+
+        let mut dest = [0u8; 2];
+        assert_eq!(source.read_into(0, &mut dest).expect("first read"), 2);
+        assert_eq!(dest, [1, 2]);
+        assert_eq!(source.read_at(2, 2).expect("second read"), vec![3, 4]);
+
+        let err = source
+            .read_into(0, &mut dest)
+            .expect_err("re-reading an earlier offset must fail");
+        assert!(format!("{err:#}").contains("not seekable"), "{err:#}");
+        let err = source
+            .read_into(10, &mut dest)
+            .expect_err("skipping ahead must fail");
+        assert!(format!("{err:#}").contains("not seekable"), "{err:#}");
+
+        // The failed reads did not advance the position.
+        assert_eq!(source.read_into(4, &mut dest).expect("last read"), 1);
+        assert_eq!(dest[0], 5);
+        assert_eq!(source.read_into(5, &mut dest).expect("at eof"), 0);
+    }
+
+    #[test]
+    fn sequential_source_reports_reader_errors_with_its_name() {
+        struct Broken;
+        impl Read for Broken {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("pipe exploded"))
+            }
+        }
+        let mut source = SequentialSource::new(Broken, "<pipe>");
+        let err = source.read_at(0, 4).expect_err("reader error propagates");
+        let message = format!("{err:#}");
+        assert!(message.contains("failed to read <pipe>"), "{message}");
+        assert!(message.contains("pipe exploded"), "{message}");
     }
 
     #[test]
