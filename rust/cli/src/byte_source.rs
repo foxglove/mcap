@@ -28,6 +28,14 @@ pub trait ByteSource {
     /// Read `[offset, offset+len)` into a new buffer, clamped to EOF. Hot paths should prefer
     /// [`Self::read_into`].
     fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>> {
+        // Clamp before allocating: `len` often comes from a record length field in the file,
+        // which a damaged file can set near u64::MAX.
+        let len = match self.size()? {
+            Some(size) => {
+                len.min(usize::try_from(size.saturating_sub(offset)).unwrap_or(usize::MAX))
+            }
+            None => len,
+        };
         if len == 0 {
             return Ok(Vec::new());
         }
@@ -421,6 +429,12 @@ mod tests {
         check(0, 0, 0);
         // Sequential continuation still works after the EOF clamp left `pos` at the end.
         check(3, 8, 8);
+
+        // A length from a corrupt record field must be clamped before anything is allocated.
+        let tail = source
+            .read_at(size as u64 - 5, usize::MAX)
+            .expect("huge read_at clamps to EOF");
+        assert_eq!(tail, &expected[size - 5..]);
     }
 
     #[test]
@@ -431,6 +445,12 @@ mod tests {
         assert_eq!(&dest[..2], &[4, 5]);
         assert_eq!(source.read_into(5, &mut dest[..1]).expect("past eof"), 0);
         assert_eq!(source.read_at(3, 10).expect("read_at"), vec![4, 5]);
+        // A length from a corrupt record field must be clamped before anything is allocated.
+        assert_eq!(
+            source.read_at(3, usize::MAX).expect("huge read_at"),
+            vec![4, 5]
+        );
+        assert!(source.read_at(5, usize::MAX).expect("past eof").is_empty());
     }
 
     /// Walks every top-level record through `read_into`, the way the sans-io readers do.

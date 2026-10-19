@@ -989,6 +989,66 @@ mod tests {
         );
     }
 
+    #[test]
+    fn chunk_index_pointing_at_a_huge_record_length_is_reported_not_fatal() {
+        // A message payload that, read as a record header, is a Chunk with a length near
+        // u64::MAX. The fixture is otherwise valid, so only the chunk index is corrupted.
+        let mut payload = vec![op::CHUNK];
+        payload.extend_from_slice(&(u64::MAX - 1).to_le_bytes());
+        let mut mcap = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .compression(None)
+                .create(std::io::Cursor::new(&mut mcap))
+                .expect("create writer");
+            let schema_id = writer
+                .add_schema("test_schema", "raw", b"{}")
+                .expect("add schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "raw", &BTreeMap::new())
+                .expect("add channel");
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id,
+                        sequence: 0,
+                        log_time: 10,
+                        publish_time: 10,
+                    },
+                    &payload,
+                )
+                .expect("write message");
+            writer.finish().expect("finish writer");
+        }
+
+        let payload_offset =
+            mcap.windows(payload.len())
+                .position(|window| window == payload)
+                .expect("uncompressed payload should be in the file") as u64;
+        let chunk_index_offset =
+            first_record_offset(&mcap, op::CHUNK_INDEX).expect("chunk index should exist");
+        // ChunkIndex body: message_start_time, message_end_time, chunk_start_offset, ...
+        let start_offset_field = chunk_index_offset + 9 + 16;
+        mcap[start_offset_field..start_offset_field + 8]
+            .copy_from_slice(&payload_offset.to_le_bytes());
+        // Footer body: summary_start, summary_offset_start, summary_crc. A zero CRC is "not
+        // computed", so the scan reaches the corrupted index without a CRC error.
+        let footer_offset = mcap.len() - mcap::MAGIC.len() - 9 - 20;
+        assert_eq!(mcap[footer_offset], op::FOOTER);
+        let crc_field = footer_offset + 9 + 16;
+        mcap[crc_field..crc_field + 4].copy_from_slice(&[0; 4]);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        assert!(
+            diagnosis.errors.iter().any(|err| {
+                err.contains(&format!("Chunk index points to offset {payload_offset}"))
+                    && err.contains("record extends beyond file")
+            }),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
     fn corrupt_first_schema_data_length(mcap: &mut [u8]) {
         let schema_record_offset =
             first_record_offset(mcap, op::SCHEMA).expect("schema record should exist");
