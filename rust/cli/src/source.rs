@@ -156,26 +156,6 @@ impl RemoteMcap {
     }
 }
 
-pub(crate) enum StreamingInput {
-    Local(std::fs::File),
-    Stdin(std::io::Stdin),
-    RemoteMaterialized {
-        file: std::fs::File,
-        #[allow(dead_code)]
-        temp_file: NamedTempFile,
-    },
-}
-
-impl std::io::Read for StreamingInput {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            StreamingInput::Local(file) => file.read(buf),
-            StreamingInput::Stdin(stdin) => stdin.read(buf),
-            StreamingInput::RemoteMaterialized { file, .. } => file.read(buf),
-        }
-    }
-}
-
 pub fn map_file(path: &Path) -> anyhow::Result<Mmap> {
     let file =
         std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
@@ -264,10 +244,6 @@ fn local_paths_have_same_file_id(_input: &Path, _output: &Path) -> Result<bool> 
     // Same-path and symlink aliases are still caught by canonical path equality above. Detecting
     // NTFS hard links would require platform-specific file IDs beyond the standard library.
     Ok(false)
-}
-
-pub fn open_seekable_mcap_source(path: &Path) -> Result<std::fs::File> {
-    std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))
 }
 
 pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<ParsedMcap> {
@@ -365,32 +341,6 @@ fn read_stdin_to_mapped_input(reader: &mut impl std::io::Read) -> Result<InputDa
     }
     let mmap = map_file(temp_file.path())?;
     Ok(InputData::TempMapped { temp_file, mmap })
-}
-
-pub(crate) fn open_streaming_input(
-    file: Option<&Path>,
-    options: SourceOptions,
-) -> Result<StreamingInput> {
-    if let Some(path) = file {
-        if is_remote_url(path) {
-            // Remote clients are async, while recover's reader pipeline is synchronous.
-            // Materializing keeps the recovery path simple and consistently gated by
-            // `--allow-remote-scan` in `materialize_input`.
-            let materialized = materialize_input(path, options)?;
-            let file = open_seekable_mcap_source(materialized.path())?;
-            let temp_file = materialized
-                .temp_file
-                .expect("remote streaming input should have a temp file");
-            return Ok(StreamingInput::RemoteMaterialized { file, temp_file });
-        }
-        return Ok(StreamingInput::Local(open_seekable_mcap_source(path)?));
-    }
-
-    let stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        bail!("{PLEASE_SUPPLY_FILE}");
-    }
-    Ok(StreamingInput::Stdin(stdin))
 }
 
 pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<MaterializedInput> {
@@ -1230,7 +1180,12 @@ impl RemoteRangeReader {
         })
     }
 
-    fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
+    /// Takes the tail prefetched at open time, if still present, as `(start_offset, bytes)`.
+    pub(crate) fn take_tail(&mut self) -> Option<(u64, Vec<u8>)> {
+        self.tail.take().map(|tail| (tail.start, tail.bytes))
+    }
+
+    pub(crate) fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         if length == 0 || offset >= self.size {
             return Ok(Vec::new());
         }
@@ -1241,8 +1196,12 @@ impl RemoteRangeReader {
         self.source.get_range(offset..end)
     }
 
-    fn size(&self) -> u64 {
+    pub(crate) fn size(&self) -> u64 {
         self.size
+    }
+
+    pub(crate) fn display_url(&self) -> &str {
+        &self.source.display_url
     }
 }
 
@@ -1384,7 +1343,7 @@ fn status_from_object_store_message(message: &str) -> Option<String> {
     (!status.is_empty()).then(|| status.to_string())
 }
 
-fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
+pub(crate) fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
     if is_remote_url(path) {
         return RemoteRangeReader::open(path);
     }
@@ -1452,7 +1411,7 @@ fn build_object_store(
     Ok((store, object_path))
 }
 
-fn read_remote_input_to_writer(path: &Path, writer: &mut impl Write) -> Result<()> {
+pub(crate) fn read_remote_input_to_writer(path: &Path, writer: &mut impl Write) -> Result<()> {
     let source = ObjectStoreSource::open_for_download(path)?;
     eprintln!("Warning: reading entire remote file {}", source.display_url);
     source.download_to_writer(writer, REMOTE_DOWNLOAD_CHUNK_BYTES)
@@ -1531,7 +1490,7 @@ pub(crate) fn require_remote_indexed_read_budget(
     );
 }
 
-fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()> {
+pub(crate) fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()> {
     if options.allow_remote_scan {
         return Ok(());
     }
@@ -1540,6 +1499,22 @@ fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()
         "remote input {display} requires opt-in because this command must download or scan remote data; {}",
         remote_scan_opt_in_suffix()
     );
+}
+
+/// Errors when a remote [`ByteSource`](crate::byte_source::ByteSource) would need a full linear
+/// scan without `--allow-remote-scan`.
+pub(crate) fn require_remote_scan_for_linear(
+    source: &dyn crate::byte_source::ByteSource,
+    options: SourceOptions,
+) -> Result<()> {
+    if source.is_remote() && !options.allow_remote_scan {
+        bail!(
+            "{}: remote file requires a full scan; {}",
+            source.display_name(),
+            remote_scan_opt_in_suffix()
+        );
+    }
+    Ok(())
 }
 
 fn read_summary_from_remote(
@@ -3265,5 +3240,112 @@ mod tests {
             .expect("non-range HTTP input should materialize with scan opt-in");
 
         assert!(parsed.channels.contains_key(&channel_id));
+    }
+
+    /// Summaryless, chunked, uncompressed fixture of `message_count` 1 KiB messages.
+    fn linear_mcap_without_summary(message_count: u32) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(16 * 1024))
+                .compression(None)
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            for sequence in 0..message_count {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id,
+                            sequence,
+                            log_time: u64::from(sequence),
+                            publish_time: u64::from(sequence),
+                        },
+                        &[0u8; 1024],
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish writer");
+        }
+        buffer
+    }
+
+    /// Scans every top-level record through `read_into`, the way the sans-io readers do.
+    fn count_remote_messages(source: &mut dyn crate::byte_source::ByteSource) -> usize {
+        let mut reader = mcap::sans_io::LinearReader::new();
+        let mut pos = 0u64;
+        let mut messages = 0usize;
+        while let Some(event) = reader.next_event() {
+            match event.expect("remote linear scan") {
+                mcap::sans_io::LinearReadEvent::ReadRequest(need) => {
+                    let buf = reader.insert(need);
+                    let n = source.read_into(pos, buf).expect("remote read_into");
+                    reader.notify_read(n);
+                    pos += n as u64;
+                }
+                mcap::sans_io::LinearReadEvent::Record { opcode, .. } => {
+                    if opcode == mcap::records::op::MESSAGE {
+                        messages += 1;
+                    }
+                }
+            }
+        }
+        messages
+    }
+
+    #[test]
+    fn remote_linear_scan_uses_one_request_per_read_ahead_window() {
+        // 600 x 1 KiB messages, several windows' worth: about one request per window, not per
+        // record.
+        let body: &'static [u8] = Box::leak(linear_mcap_without_summary(600).into_boxed_slice());
+        let window = crate::byte_source::REMOTE_READ_AHEAD_BYTES;
+        assert!(body.len() > 2 * window);
+        let (url, requests) = serve_http_counting(body, true);
+        let mut source = crate::byte_source::open_byte_source(
+            Some(Path::new(&url)),
+            super::SourceOptions::new(true),
+        )
+        .expect("remote open");
+        let after_open = requests.load(Ordering::SeqCst);
+
+        assert_eq!(count_remote_messages(source.as_mut()), 600);
+        let scan_requests = requests.load(Ordering::SeqCst) - after_open;
+        let minimum = body.len().div_ceil(window);
+        assert!(
+            scan_requests >= minimum && scan_requests <= minimum + 2,
+            "expected about {minimum} window fills for {} bytes, got {scan_requests}",
+            body.len()
+        );
+    }
+
+    #[test]
+    fn remote_linear_scan_refills_window_across_boundaries() {
+        // Shrink the window so the scan refills it several times, including across record
+        // boundaries.
+        let body: &'static [u8] = Box::leak(linear_mcap_without_summary(600).into_boxed_slice());
+        let (url, requests) = serve_http_counting(body, true);
+        let reader = super::open_remote_range_reader(Path::new(&url))
+            .expect("remote open")
+            .expect("range support");
+        let mut source = crate::byte_source::RemoteRangeSource::new(reader);
+        let window = 64 * 1024;
+        source.set_read_ahead_bytes(window);
+        let after_open = requests.load(Ordering::SeqCst);
+
+        assert_eq!(count_remote_messages(&mut source), 600);
+        let scan_requests = requests.load(Ordering::SeqCst) - after_open;
+        let minimum = body.len().div_ceil(window);
+        assert!(
+            scan_requests >= minimum && scan_requests <= minimum + 2,
+            "expected about {minimum} window fills for {} bytes, got {scan_requests}",
+            body.len()
+        );
     }
 }
