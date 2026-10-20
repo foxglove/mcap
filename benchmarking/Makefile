@@ -1,18 +1,8 @@
-CXX ?= g++
-# -g and -fno-omit-frame-pointer keep perf/hotspot profiles readable.
-# Measured cost of C++ frame pointers on the fixed-payload path: below
-# the suite's run-to-run noise floor (<±3%). The Rust bench deliberately
-# does NOT force frame pointers — measured at a real 5-9% penalty there —
-# so profile Rust with perf's --call-graph dwarf instead. Go keeps frame
-# pointers by default on amd64/arm64.
-CXXFLAGS ?= -O2 -g -fno-omit-frame-pointer -Wall -Wextra -Wpedantic -Wconversion \
-  -Wundef -Wshadow -Walloca -Wcast-qual \
-  -Wdisabled-optimization -Wdouble-promotion -Wfloat-equal \
-  -Wformat-signedness -Winit-self -Wmissing-include-dirs -Wmultichar \
-  -Wpacked -Wpointer-arith -Wredundant-decls \
-  -Wswitch-default -Wwrite-strings \
-  -fvisibility=hidden \
-  -std=c++17 -I../cpp/mcap/include
+# The C++ benches build through cpp_bench/CMakeLists.txt, which consumes the
+# mcap project in ../cpp and holds the compiler flags. CMake honors CC/CXX on
+# the first configure.
+CPP_BUILD_DIR = cpp_bench/build
+CMAKE_ARGS ?=
 
 RUST_WRITE = rust_bench/target/release/bench_write
 RUST_READ = rust_bench/target/release/bench_read
@@ -24,22 +14,15 @@ GO_READ = go_bench/bench_read
 
 all: cpp_bench rust_bench go_bench python_bench typescript_bench
 
-cpp_bench: cpp_bench/bench_write cpp_bench/bench_read
+# Always runs CMake; the build is incremental and tracks the mcap headers.
+cpp_bench:
+	cmake -S cpp_bench -B $(CPP_BUILD_DIR) $(CMAKE_ARGS)
+	cmake --build $(CPP_BUILD_DIR)
 
 python_bench:
 	@test -f python_bench/bench_write.py || (echo "ERROR: python_bench/bench_write.py not found" >&2; exit 1)
 	@test -f python_bench/bench_read.py || (echo "ERROR: python_bench/bench_read.py not found" >&2; exit 1)
 	@test -f gen_blob.py || (echo "ERROR: gen_blob.py not found" >&2; exit 1)
-
-# The benches compile the header-only mcap library directly, so they must be
-# rebuilt when it changes, not just when the bench source changes.
-MCAP_CPP_HEADERS = $(wildcard ../cpp/mcap/include/mcap/*)
-
-cpp_bench/bench_write: cpp_bench/bench_write.cpp $(MCAP_CPP_HEADERS)
-	$(CXX) $(CXXFLAGS) cpp_bench/bench_write.cpp -o cpp_bench/bench_write -llz4 -lzstd
-
-cpp_bench/bench_read: cpp_bench/bench_read.cpp $(MCAP_CPP_HEADERS)
-	$(CXX) $(CXXFLAGS) cpp_bench/bench_read.cpp -o cpp_bench/bench_read -llz4 -lzstd
 
 rust_bench: rust_bench/src/bin/bench_write.rs rust_bench/src/bin/bench_read.rs rust_bench/Cargo.toml
 	cd rust_bench && cargo build --release
@@ -60,5 +43,6 @@ bench: all
 
 clean:
 	rm -f cpp_bench/bench_write cpp_bench/bench_read
+	rm -rf $(CPP_BUILD_DIR)
 	cd rust_bench && cargo clean
 	rm -f go_bench/bench_write go_bench/bench_read
