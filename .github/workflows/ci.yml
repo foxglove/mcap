@@ -219,7 +219,7 @@ jobs:
       - run: cargo build --workspace --all-features
       - run: cargo test --workspace --all-features
       - run: cargo build -p mcap --all-features --target wasm32-unknown-unknown
-      - run: cargo check -p mcap --all-features --target wasm32-unknown-unknown
+      - run: cargo clippy -p mcap --all-features --target wasm32-unknown-unknown -- --no-deps -D warnings
 
       # Verify the crate builds with the rust-version declared in rust/mcap/Cargo.toml,
       # using the committed Cargo.lock so we test our own MSRV rather than dependencies.
