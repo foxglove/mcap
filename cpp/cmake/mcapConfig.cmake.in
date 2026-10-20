@@ -1,0 +1,29 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# FindLZ4/FindZstd are installed next to this file. Prepend them so a
+# consumer's modules of the same name cannot shadow them, and restore the
+# path afterwards since this runs in the consumer's scope. A consumer can
+# still find either library itself first; the modules then return early.
+set(_mcap_saved_module_path "${CMAKE_MODULE_PATH}")
+list(PREPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
+
+set(MCAP_COMPRESSION_NO_LZ4 @MCAP_COMPRESSION_NO_LZ4@)
+set(MCAP_COMPRESSION_NO_ZSTD @MCAP_COMPRESSION_NO_ZSTD@)
+
+# A failed find_dependency() returns before the restore, but also fails the
+# configure.
+if(NOT MCAP_COMPRESSION_NO_LZ4)
+  find_dependency(LZ4 MODULE)
+endif()
+if(NOT MCAP_COMPRESSION_NO_ZSTD)
+  find_dependency(Zstd MODULE)
+endif()
+
+set(CMAKE_MODULE_PATH "${_mcap_saved_module_path}")
+unset(_mcap_saved_module_path)
+
+include("${CMAKE_CURRENT_LIST_DIR}/mcapTargets.cmake")
+
+check_required_components(mcap)
