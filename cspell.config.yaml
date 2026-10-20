@@ -44,6 +44,7 @@ words:
   - Anduril
   - bagfile
   - bfbs
+  - bindir
   - bytearray
   - callerid
   - capnp
@@ -53,6 +54,7 @@ words:
   - cmake
   - colcon
   - conanfile
+  - conanrun
   - conans
   - corepack
   - crc
@@ -65,6 +67,8 @@ words:
   - dtype
   - elems
   - emerg
+  - endforeach
+  - endfunction
   - flatbuffer
   - flatbuffers
   - flatc
@@ -81,6 +85,7 @@ words:
   - issubdtype
   - jsonschema
   - kaitai
+  - liblz
   - libmcap
   - magick
   - matplotlib
