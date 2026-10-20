@@ -22,9 +22,7 @@ clean:
 	docker rm -f hdoc
 	docker rmi -f mcap_cpp_dev
 	docker rmi -f mcap_cpp_ci
-	rm -rf bench/build
-	rm -rf examples/build
-	rm -rf test/build
+	rm -rf build
 
 .PHONY: format-check
 format-check: dev-image
@@ -36,11 +34,11 @@ format-fix: dev-image
 
 .PHONY: bench
 bench: dev-image
-	docker run -t --rm -v $(CURDIR):/src mcap_cpp_dev ./bench/build/Release/bin/bench-tests
+	docker run -t --rm -v $(CURDIR):/src mcap_cpp_dev ./build/Release/bin/bench-tests
 
 .PHONY: bench-host
 bench-host:
-	./bench/build/Release/bin/bench-tests
+	./build/Release/bin/bench-tests
 
 .PHONY: test
 test: dev-image
@@ -48,8 +46,8 @@ test: dev-image
 
 .PHONY: test-host
 test-host:
-	./test/build/Debug/bin/unit-tests
-	./test/build/Debug/bin/unit-tests-nocompress
+	./build/Debug/bin/unit-tests
+	./build/Debug/bin/unit-tests-nocompress
 
 .PHONY: hdoc-build
 hdoc-build:
@@ -65,11 +63,11 @@ run-examples-host:
 
 .PHONY: test-examples
 test-examples: dev-image
-	docker run -t --rm -v $(CURDIR):/src mcap_cpp_ci examples/build/Release/bin/example_protobuf_unit_tests
+	docker run -t --rm -v $(CURDIR):/src mcap_cpp_ci build/Release/bin/example_protobuf_unit_tests
 
 .PHONY: test-examples-host
 test-examples-host:
-	./examples/build/Release/bin/example_protobuf_unit_tests
+	./build/Release/bin/example_protobuf_unit_tests
 
 .PHONY: ci-image
 ci-image: hdoc-build
