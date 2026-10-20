@@ -30,6 +30,16 @@ jobs:
       - run: make test-host
       - run: make test-examples-host
       - run: make run-examples-host
+      - name: Check library version
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/releases/cpp/v')
+        run: |
+          source_version="$(sed -nE 's/^#define MCAP_LIBRARY_VERSION "(.*)"$/\1/p' mcap/include/mcap/types.hpp)"
+          tag_version="${GITHUB_REF#refs/tags/releases/cpp/v}"
+          if [ "$source_version" != "$tag_version" ]; then
+            echo "::error::cpp/mcap/include/mcap/types.hpp MCAP_LIBRARY_VERSION ($source_version) does not match release tag ($tag_version)"
+            exit 1
+          fi
+          echo "cpp/mcap/include/mcap/types.hpp MCAP_LIBRARY_VERSION ($source_version) matches release tag"
 
   # Native aarch64 coverage for the hardware-specific code paths (e.g. the
   # ARM CRC32 kernel in crc32.hpp), building on the host like cpp-windows
@@ -65,8 +75,8 @@ jobs:
         env:
           CC: ${{ matrix.cc }}
           CXX: ${{ matrix.cxx }}
-      - run: ./test/build/Debug/bin/unit-tests
-      - run: ./test/build/Debug/bin/unit-tests-nocompress
+      - run: ./build/Debug/bin/unit-tests
+      - run: ./build/Debug/bin/unit-tests-nocompress
 
   cpp-windows:
     runs-on: windows-latest
@@ -88,7 +98,25 @@ jobs:
           python-version: "3.10"
       - run: pip install "conan>=2.0,<3"
       - run: bash build.sh --build-tests-only
-      - run: ./test/build/Debug/bin/unit-tests
+      - run: ./build/Debug/bin/unit-tests
+
+  # The CMake project without Conan: install against system lz4 and zstd,
+  # build a consumer against the installed config, and build the benchmarks,
+  # which use add_subdirectory. On this runner lz4 has only a pkg-config file
+  # and zstd has a CMake config, so both discovery paths run.
+  cpp-cmake:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblz4-dev libzstd-dev pkg-config
+      - run: cmake -S cpp -B /tmp/mcap-build -DCMAKE_INSTALL_PREFIX=/tmp/mcap-prefix
+      - run: cmake --install /tmp/mcap-build
+      - run: cmake -S cpp/test_package -B /tmp/mcap-consumer -DCMAKE_PREFIX_PATH=/tmp/mcap-prefix
+      - run: cmake --build /tmp/mcap-consumer
+      - run: /tmp/mcap-consumer/test_package
+      - run: make -C benchmarking cpp_bench
 
   go:
     runs-on: ubuntu-latest
