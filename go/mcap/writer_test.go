@@ -524,7 +524,7 @@ func TestUnchunkedReadWrite(t *testing.T) {
 	} {
 		tokenType, _, err := lexer.Next(nil)
 		require.NoError(t, err)
-		assert.Equal(t, expected, tokenType, fmt.Sprintf("want %s got %s", expected, tokenType))
+		assert.Equalf(t, expected, tokenType, "want %s got %s", expected, tokenType)
 	}
 }
 
