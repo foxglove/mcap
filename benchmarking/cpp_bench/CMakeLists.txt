@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.18)
 project(mcap_cpp_bench CXX)
 
 # -O2 -g without the -DNDEBUG RelWithDebInfo would add, so the library's
