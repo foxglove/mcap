@@ -1,9 +1,9 @@
 module github.com/foxglove/mcap/go/mcap
 
-go 1.22
+go 1.24
 
 require (
-	github.com/klauspost/compress v1.16.7
+	github.com/klauspost/compress v1.18.7
 	github.com/pierrec/lz4/v4 v4.1.33
 	github.com/stretchr/testify v1.9.0
 )
