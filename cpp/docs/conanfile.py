@@ -5,7 +5,7 @@ from conan.tools.cmake import CMake
 class McapDocsConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     generators = "CMakeDeps", "CMakeToolchain"
-    requires = "mcap/2.1.3"
+    requires = "mcap/2.2.0"
 
     def layout(self):
         self.folders.build = "."
