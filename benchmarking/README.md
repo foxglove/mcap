@@ -32,7 +32,7 @@ benchmarking/
 ### C++
 
 - **g++** (or another C++17 compiler)
-- **cmake** 3.16 or later
+- **cmake** 3.18 or later
 - **pkg-config**
 - **liblz4-dev** — LZ4 compression library
 - **libzstd-dev** — Zstandard compression library
