@@ -129,7 +129,7 @@ The project's CMakeLists.txt lives in `cpp`, not at the repository root, so a
 include(FetchContent)
 FetchContent_Declare(mcap
   GIT_REPOSITORY https://github.com/foxglove/mcap.git
-  GIT_TAG        releases/cpp/v2.2.0
+  GIT_TAG        releases/cpp/vX.Y.Z  # must be >= 2.3.0
   SOURCE_SUBDIR  cpp)
 FetchContent_MakeAvailable(mcap)
 
