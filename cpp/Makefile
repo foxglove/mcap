@@ -55,7 +55,7 @@ hdoc-build:
 
 .PHONY: run-examples
 run-examples: dev-image
-	docker run -t --rm -v $(CURDIR):/src mcap_cpp_ci ./run_examples.sh
+	docker run -t --rm -v $(CURDIR):/src mcap_cpp_dev ./run_examples.sh
 
 .PHONY: run-examples-host
 run-examples-host:
@@ -63,7 +63,7 @@ run-examples-host:
 
 .PHONY: test-examples
 test-examples: dev-image
-	docker run -t --rm -v $(CURDIR):/src mcap_cpp_ci build/Release/bin/example_protobuf_unit_tests
+	docker run -t --rm -v $(CURDIR):/src mcap_cpp_dev build/Release/bin/example_protobuf_unit_tests
 
 .PHONY: test-examples-host
 test-examples-host:
