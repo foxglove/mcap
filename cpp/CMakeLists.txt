@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.18)
 
 # The version is defined once, as MCAP_LIBRARY_VERSION in types.hpp. This file
 # and conanfile.py both read it from there.
