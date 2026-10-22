@@ -1,6 +1,6 @@
 import time
 from io import BufferedWriter
-from typing import IO, Any, Dict, Optional, Union
+from typing import IO, Any, Dict, Optional, Tuple, Union
 
 from mcap.exceptions import McapError
 from mcap.records import Schema
@@ -38,7 +38,7 @@ class Writer:
             enable_crcs=enable_crcs,
         )
         self._encoders: Dict[int, EncoderFunction] = {}
-        self._channel_ids: Dict[str, int] = {}
+        self._channel_ids: Dict[Tuple[str, int], int] = {}
         self._writer.start(profile="ros2", library=_library_identifier())
         self._finished = False
 
@@ -93,14 +93,15 @@ class Writer:
             encoder = type_dict[schema.name]
             self._encoders[schema.id] = encoder
 
-        if topic not in self._channel_ids:
+        channel_key = (topic, schema.id)
+        if channel_key not in self._channel_ids:
             channel_id = self._writer.register_channel(
                 topic=topic,
                 message_encoding="cdr",
                 schema_id=schema.id,
             )
-            self._channel_ids[topic] = channel_id
-        channel_id = self._channel_ids[topic]
+            self._channel_ids[channel_key] = channel_id
+        channel_id = self._channel_ids[channel_key]
 
         data = encoder(message)
 
