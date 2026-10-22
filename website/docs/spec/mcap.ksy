@@ -55,6 +55,11 @@ enums:
     0x0d: metadata_index
     0x0e: summary_offset
     0x0f: data_end
+    0x10: field
+    0x11: message_fields
+    0x12: field_index
+    0x13: field_chunk_index
+    0x14: attachment_fields
 
 types:
   magic:
@@ -125,6 +130,11 @@ types:
             opcode::metadata_index: metadata_index
             opcode::summary_offset: summary_offset
             opcode::data_end: data_end
+            opcode::field: field
+            opcode::message_fields: message_fields
+            opcode::field_index: field_index
+            opcode::field_chunk_index: field_chunk_index
+            opcode::attachment_fields: attachment_fields
 
   header:
     seq:
@@ -441,3 +451,101 @@ types:
         doc: |
           CRC-32 of all bytes in the data section. A value of 0 indicates the CRC-32 is not
           available.
+
+  field:
+    seq:
+      - id: id
+        type: u2
+      - id: name
+        type: prefixed_str
+      - id: encoding
+        type: prefixed_str
+      - id: length
+        type: u1
+        doc: |
+          High bit (0x80) set indicates a variable-length value (uint32 length prefix in
+          each Message Fields entry). Otherwise the low 7 bits are the fixed byte length.
+          A field is indexed (via Field Index / Field Chunk Index records) if and only if
+          those records are present; there is no flag in this record.
+
+  message_fields:
+    seq:
+      - id: channel_id
+        type: u2
+      - id: len_fields
+        type: u4
+      - id: fields
+        size: len_fields
+        doc: |
+          Concatenated entries of the form <uint16 field_id><value>. The width of each
+          value is determined by the corresponding Field record's `length` and cannot be
+          resolved without it, so the entries are not expanded here.
+
+  attachment_fields:
+    seq:
+      - id: len_fields
+        type: u4
+      - id: fields
+        size: len_fields
+        doc: |
+          Concatenated entries of the form <uint16 field_id><value>, as in message_fields.
+
+  field_index:
+    seq:
+      - id: channel_id
+        type: u2
+      - id: field_id
+        type: u2
+      - id: len_records
+        type: u4
+      - id: records
+        size: len_records
+        type: field_index_entries
+    types:
+      field_index_entry:
+        seq:
+          - id: value
+            type: u8
+          - id: offset
+            type: u8
+      field_index_entries:
+        seq:
+          - id: entries
+            type: field_index_entry
+            repeat: eos
+
+  field_chunk_index:
+    seq:
+      - id: field_id
+        type: u2
+      - id: ofs_chunk
+        -orig-id: chunk_start_offset
+        type: u8
+      - id: min_value
+        type: u8
+      - id: max_value
+        type: u8
+      - id: len_message_index_offsets
+        type: u4
+      - id: message_index_offsets
+        size: len_message_index_offsets
+        type: message_index_offsets
+      - id: message_index_length
+        type: u8
+    instances:
+      chunk:
+        io: _root._io
+        pos: ofs_chunk
+        type: record
+    types:
+      message_index_offset:
+        seq:
+          - id: channel_id
+            type: u2
+          - id: offset
+            type: u8
+      message_index_offsets:
+        seq:
+          - id: entries
+            type: message_index_offset
+            repeat: eos
