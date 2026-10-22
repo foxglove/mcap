@@ -1,7 +1,12 @@
 import time
 from typing import List
 
-from mcap._message_queue import QueueItem, _MessageQueue, make_message_queue
+from mcap._message_queue import (
+    MessageTuple,
+    QueueItem,
+    _MessageQueue,
+    make_message_queue,
+)
 from mcap.records import Channel, ChunkIndex, Message, Schema
 
 
@@ -21,7 +26,7 @@ def dummy_chunk_index(start_time: int, end_time: int, chunk_offset: int) -> Chun
 
 def dummy_message_tuple(
     log_time: int, chunk_offset: int, message_offset: int
-) -> QueueItem:
+) -> MessageTuple:
     return (
         (
             Schema(
@@ -146,3 +151,56 @@ def test_insert_order_is_faster():
     insert_end = time.time()
 
     assert insert_end - insert_start < log_time_end - log_time_start
+
+
+def push_chunk_elements(mq: _MessageQueue):
+    """The same elements as push_elements, but with the messages queued in bulk."""
+    mq.push(dummy_chunk_index(3, 6, 100))
+    mq.push(dummy_chunk_index(1, 2, 400))
+    mq.push(dummy_chunk_index(4, 5, 500))
+    mq.push_chunk_messages(
+        200,
+        [
+            dummy_message_tuple(3, 200, 10),
+            dummy_message_tuple(3, 200, 20),
+            dummy_message_tuple(5, 200, 30),
+        ],
+    )
+
+
+def drain(mq: _MessageQueue) -> List[QueueItem]:
+    results: List[QueueItem] = []
+    while mq:
+        results.append(mq.pop())
+    return results
+
+
+def test_chunk_messages_match_individual_pushes():
+    """queuing a chunk's messages in bulk orders them as pushing one at a time does."""
+    for reverse in (False, True):
+        one_at_a_time = make_message_queue(log_time_order=True, reverse=reverse)
+        push_elements(one_at_a_time)
+        in_bulk = make_message_queue(log_time_order=True, reverse=reverse)
+        push_chunk_elements(in_bulk)
+        assert drain(in_bulk) == drain(one_at_a_time)
+
+
+def test_chunk_messages_out_of_log_time_order():
+    """a chunk whose messages are not in log time order is still drained in order."""
+    mq = make_message_queue(log_time_order=True)
+    mq.push_chunk_messages(
+        100,
+        [
+            dummy_message_tuple(30, 100, 0),
+            dummy_message_tuple(10, 100, 1),
+            dummy_message_tuple(20, 100, 2),
+        ],
+    )
+    messages = [item for item in drain(mq) if not isinstance(item, ChunkIndex)]
+    assert [item[2] for item in messages] == [1, 2, 0]
+
+
+def test_empty_chunk_messages():
+    mq = make_message_queue(log_time_order=True)
+    mq.push_chunk_messages(100, [])
+    assert len(mq) == 0
