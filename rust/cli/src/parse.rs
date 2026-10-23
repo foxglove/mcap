@@ -25,6 +25,7 @@ pub struct ParsedMcap {
     pub message_start_time: Option<u64>,
     pub message_end_time: Option<u64>,
     pub channel_message_counts: BTreeMap<u16, u64>,
+    pub channel_message_time_ranges: BTreeMap<u16, (u64, u64)>,
     pub attachment_count: Option<u32>,
     pub metadata_count: Option<u32>,
     pub channels: std::collections::BTreeMap<u16, records::Channel>,
@@ -38,16 +39,15 @@ pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
     parse_mcap_with_scan_fallback(mcap, false)
 }
 
-pub fn parse_mcap_with_scan_fallback(
-    mcap: &[u8],
-    scan_without_statistics: bool,
-) -> Result<ParsedMcap> {
+pub fn parse_mcap_with_scan_fallback(mcap: &[u8], force_scan_data: bool) -> Result<ParsedMcap> {
     let header = read_header(mcap)?;
     if let Some(parsed_from_summary) = parse_mcap_from_summary(mcap, header.clone())? {
-        if scan_without_statistics && parsed_from_summary.statistics.is_none() {
-            eprintln!(
-                "Warning: Statistics record not available; full scan may be slow. Run `mcap doctor` for details."
-            );
+        if force_scan_data {
+            if parsed_from_summary.statistics.is_none() {
+                eprintln!(
+                    "Warning: Statistics record not available; full scan may be slow. Run `mcap doctor` for details."
+                );
+            }
             return parse_mcap_linear(mcap, header);
         }
         return Ok(parsed_from_summary);
@@ -253,6 +253,12 @@ fn collect_record(
         Record::Message { header, .. } => {
             increment_optional_u64(&mut out.message_count, "message")?;
             increment_map_count(&mut out.channel_message_counts, header.channel_id)?;
+            let range = out
+                .channel_message_time_ranges
+                .entry(header.channel_id)
+                .or_insert((header.log_time, header.log_time));
+            range.0 = range.0.min(header.log_time);
+            range.1 = range.1.max(header.log_time);
             out.message_start_time = Some(
                 out.message_start_time
                     .map_or(header.log_time, |start| start.min(header.log_time)),
@@ -314,6 +320,135 @@ fn collect_record(
         _ => {}
     }
     Ok(())
+}
+
+/// Accumulates a channel's first and last `log_time` from one message index.
+pub(crate) fn collect_message_index_time_range(
+    ranges: &mut BTreeMap<u16, (u64, u64)>,
+    index: &records::MessageIndex,
+) -> Result<()> {
+    let Some((first, last)) = index.records.iter().map(|entry| entry.log_time).fold(
+        None::<(u64, u64)>,
+        |range, log_time| match range {
+            Some((first, last)) => Some((first.min(log_time), last.max(log_time))),
+            None => Some((log_time, log_time)),
+        },
+    ) else {
+        return Ok(());
+    };
+    let range = ranges.entry(index.channel_id).or_insert((first, last));
+    range.0 = range.0.min(first);
+    range.1 = range.1.max(last);
+    Ok(())
+}
+
+/// Parses one complete MessageIndex record, including its opcode and length prefix.
+pub(crate) fn parse_message_index_record(bytes: &[u8]) -> Result<records::MessageIndex> {
+    let header = bytes
+        .get(..9)
+        .context("message index record header is truncated")?;
+    if header[0] != records::op::MESSAGE_INDEX {
+        bail!("expected MessageIndex record");
+    }
+    let body_len = usize::try_from(u64::from_le_bytes(
+        header[1..9].try_into().expect("message index length slice"),
+    ))
+    .context("message index record length is too large for this platform")?;
+    let body = bytes
+        .get(9..9 + body_len)
+        .context("message index record body is truncated")?;
+    match mcap::parse_record(records::op::MESSAGE_INDEX, body)? {
+        Record::MessageIndex(index) => Ok(index),
+        _ => unreachable!("opcode is checked above"),
+    }
+}
+
+/// Parses one contiguous MessageIndex record sequence and accumulates channel time ranges.
+pub(crate) fn collect_message_indexes_from_bytes(
+    bytes: &[u8],
+    ranges: &mut BTreeMap<u16, (u64, u64)>,
+) -> Result<()> {
+    let mut offset = 0usize;
+    while offset < bytes.len() {
+        let record = bytes
+            .get(offset..)
+            .context("message index record is truncated")?;
+        let index = parse_message_index_record(record)?;
+        let record_len = message_index_record_length(record)?;
+        offset = offset
+            .checked_add(record_len)
+            .context("message index record range overflows")?;
+        collect_message_index_time_range(ranges, &index)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn message_index_record_length(bytes: &[u8]) -> Result<usize> {
+    let length = bytes
+        .get(1..9)
+        .context("message index record header is truncated")?;
+    let body_len = usize::try_from(u64::from_le_bytes(
+        length.try_into().expect("message index length slice"),
+    ))
+    .context("message index record is too large for this platform")?;
+    9usize
+        .checked_add(body_len)
+        .context("message index record length overflows")
+}
+
+/// Fills `channel_message_time_ranges` from the message indexes referenced by the summary.
+///
+/// This reads only the index records after each chunk. It does not decompress or scan chunk data.
+pub(crate) fn collect_channel_time_ranges_from_indexes(
+    mcap: &[u8],
+    parsed: &mut ParsedMcap,
+) -> Result<()> {
+    let mut exact_ranges = BTreeMap::new();
+    for chunk in &parsed.chunk_indexes {
+        let Some(first_offset) = chunk.message_index_offsets.values().min().copied() else {
+            continue;
+        };
+        if chunk.message_index_length == 0 {
+            continue;
+        }
+        let start = usize::try_from(first_offset).context("message index offset is too large")?;
+        let length = usize::try_from(chunk.message_index_length)
+            .context("message index length is too large")?;
+        let end = start
+            .checked_add(length)
+            .context("message index range overflows")?;
+        let bytes = mcap
+            .get(start..end)
+            .context("message index range is outside the input")?;
+        match collect_message_indexes_from_bytes(bytes, &mut exact_ranges) {
+            Ok(()) => {}
+            Err(_) => {
+                break;
+            }
+        }
+    }
+    for (channel_id, range) in exact_ranges {
+        parsed.channel_message_time_ranges.insert(channel_id, range);
+    }
+    Ok(())
+}
+
+/// Adds a conservative channel time range inferred from chunk indexes that claim the channel.
+///
+/// Message indexes are in the data section rather than the summary, so this keeps `mcap info`
+/// summary-only while avoiding the whole-file denominator when chunk metadata can narrow it.
+pub(crate) fn add_chunk_index_time_ranges(parsed: &mut ParsedMcap) {
+    let exact_ranges = parsed.channel_message_time_ranges.clone();
+    for chunk in &parsed.chunk_indexes {
+        for channel_id in chunk.message_index_offsets.keys() {
+            let (start, end) = (chunk.message_start_time, chunk.message_end_time);
+            parsed
+                .channel_message_time_ranges
+                .entry(*channel_id)
+                .or_insert((start, end));
+        }
+    }
+    parsed.channel_message_time_ranges.extend(exact_ranges);
 }
 
 fn increment_optional_u64(count: &mut Option<u64>, label: &str) -> Result<()> {
@@ -608,9 +743,10 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        collect_attachment_indexes_linear, collect_metadata_indexes_linear, parse_mcap,
-        parse_mcap_from_summary, parse_mcap_with_scan_fallback, parse_summary_section,
-        ChunkDefinitions,
+        add_chunk_index_time_ranges, collect_attachment_indexes_linear,
+        collect_channel_time_ranges_from_indexes, collect_message_index_time_range,
+        collect_metadata_indexes_linear, parse_mcap, parse_mcap_from_summary,
+        parse_mcap_with_scan_fallback, parse_summary_section, ChunkDefinitions, ParsedMcap,
     };
     use mcap::records;
 
@@ -833,6 +969,10 @@ mod tests {
             parsed.channel_message_counts.get(&channel_id).copied(),
             Some(2)
         );
+        assert_eq!(
+            parsed.channel_message_time_ranges.get(&channel_id),
+            Some(&(10, 40))
+        );
     }
 
     #[test]
@@ -852,6 +992,186 @@ mod tests {
         assert_eq!(parsed.message_count, Some(0));
         assert_eq!(parsed.attachment_count, Some(0));
         assert_eq!(parsed.metadata_count, Some(0));
+    }
+
+    #[test]
+    fn parse_message_index_updates_channel_log_time_range() {
+        let index = records::MessageIndex {
+            channel_id: 7,
+            records: vec![
+                records::MessageIndexEntry {
+                    log_time: 40,
+                    offset: 0,
+                },
+                records::MessageIndexEntry {
+                    log_time: 10,
+                    offset: 20,
+                },
+                records::MessageIndexEntry {
+                    log_time: 30,
+                    offset: 40,
+                },
+            ],
+        };
+
+        let mut ranges = BTreeMap::new();
+        collect_message_index_time_range(&mut ranges, &index).expect("collect index range");
+        assert_eq!(ranges.get(&7), Some(&(10, 40)));
+    }
+
+    #[test]
+    fn chunk_index_range_does_not_replace_exact_message_index_range() {
+        let mut parsed = ParsedMcap {
+            chunk_indexes: vec![records::ChunkIndex {
+                message_start_time: 1,
+                message_end_time: 1_000,
+                chunk_start_offset: 0,
+                chunk_length: 0,
+                message_index_offsets: BTreeMap::from([(7, 0)]),
+                message_index_length: 0,
+                compression: String::new(),
+                compressed_size: 0,
+                uncompressed_size: 0,
+            }],
+            channel_message_time_ranges: BTreeMap::from([(7, (10, 20))]),
+            ..ParsedMcap::default()
+        };
+
+        add_chunk_index_time_ranges(&mut parsed);
+        assert_eq!(parsed.channel_message_time_ranges.get(&7), Some(&(10, 20)));
+    }
+
+    #[test]
+    fn message_indexes_extract_distinct_channel_ranges_from_one_chunk() {
+        let mut buffer = Vec::new();
+        let (early_channel, late_channel) = {
+            let mut writer = mcap::WriteOptions::new()
+                .compression(None)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let early_channel = writer
+                .add_channel(schema_id, "/early", "json", &BTreeMap::new())
+                .expect("early channel");
+            let late_channel = writer
+                .add_channel(schema_id, "/late", "json", &BTreeMap::new())
+                .expect("late channel");
+            for (channel_id, log_time) in [(early_channel, 10), (late_channel, 1_000)] {
+                writer
+                    .write_to_known_channel(
+                        &records::MessageHeader {
+                            channel_id,
+                            sequence: 0,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        br#"{"k":"v"}"#,
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish writer");
+            (early_channel, late_channel)
+        };
+
+        let mut parsed = parse_mcap(&buffer).expect("parse summary");
+        assert_eq!(parsed.chunk_indexes.len(), 1);
+        let chunk = &parsed.chunk_indexes[0];
+        assert_eq!(chunk.message_start_time, 10);
+        assert_eq!(chunk.message_end_time, 1_000);
+        assert!(parsed.channel_message_time_ranges.is_empty());
+
+        collect_channel_time_ranges_from_indexes(&buffer, &mut parsed).expect("index ranges");
+        assert_eq!(
+            parsed.channel_message_time_ranges.get(&early_channel),
+            Some(&(10, 10))
+        );
+        assert_eq!(
+            parsed.channel_message_time_ranges.get(&late_channel),
+            Some(&(1_000, 1_000))
+        );
+    }
+
+    #[test]
+    fn chunk_index_range_fills_channels_without_message_index_data() {
+        let mut parsed = ParsedMcap {
+            chunk_indexes: vec![records::ChunkIndex {
+                message_start_time: 10,
+                message_end_time: 1_000,
+                chunk_start_offset: 0,
+                chunk_length: 0,
+                message_index_offsets: BTreeMap::new(),
+                message_index_length: 0,
+                compression: String::new(),
+                compressed_size: 0,
+                uncompressed_size: 0,
+            }],
+            ..ParsedMcap::default()
+        };
+
+        add_chunk_index_time_ranges(&mut parsed);
+        assert!(parsed.channel_message_time_ranges.is_empty());
+    }
+
+    #[test]
+    fn parse_mcap_force_scan_replaces_summary_counts_with_scanned_time_ranges() {
+        let mut buffer = Vec::new();
+        let (channel_id, other_channel_id) = {
+            let mut writer = mcap::WriteOptions::new()
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/early", "json", &BTreeMap::new())
+                .expect("channel");
+            let other_channel_id = writer
+                .add_channel(schema_id, "/late", "json", &BTreeMap::new())
+                .expect("channel");
+            for (channel_id, sequence, log_time) in [
+                (channel_id, 1, 10),
+                (channel_id, 2, 30),
+                (other_channel_id, 1, 1_000),
+                (other_channel_id, 2, 1_100),
+            ] {
+                writer
+                    .write_to_known_channel(
+                        &records::MessageHeader {
+                            channel_id,
+                            sequence,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        br#"{"k":"v"}"#,
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish writer");
+            (channel_id, other_channel_id)
+        };
+
+        let summary_only = parse_mcap(&buffer).expect("parse mcap from summary");
+        let statistics = summary_only
+            .statistics
+            .as_ref()
+            .expect("summary should include statistics");
+        assert_eq!(statistics.message_start_time, 10);
+        assert_eq!(statistics.message_end_time, 1_100);
+        assert!(summary_only.channel_message_time_ranges.is_empty());
+
+        let parsed =
+            parse_mcap_with_scan_fallback(&buffer, true).expect("parse mcap with forced scan");
+        assert!(parsed.statistics.is_some());
+        assert_eq!(
+            parsed.channel_message_time_ranges.get(&channel_id),
+            Some(&(10, 30))
+        );
+        assert_eq!(
+            parsed.channel_message_time_ranges.get(&other_channel_id),
+            Some(&(1_000, 1_100))
+        );
     }
 
     #[test]
