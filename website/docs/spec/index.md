@@ -19,6 +19,10 @@ MCAP files are designed to work well under various workloads, resource constrain
 
 A [Kaitai Struct](http://kaitai.io) description for the MCAP format is provided at [mcap.ksy](https://github.com/foxglove/mcap/blob/main/website/docs/spec/mcap.ksy).
 
+## Media Type
+
+The registered [media type](https://en.wikipedia.org/wiki/Media_type) for MCAP files is [`application/vnd.mcap`](https://www.iana.org/assignments/media-types/application/vnd.mcap), and the file extension is `.mcap`. Applications that transfer MCAP files over protocols carrying a media type, such as HTTP, should use this value.
+
 ## File Structure
 
 A valid MCAP file is structured as follows. The Summary and Summary Offset sections are optional.
@@ -257,6 +261,8 @@ Attachment records must not appear within a chunk.
 | 4 + N | media_type  | String                       | [Media type](https://en.wikipedia.org/wiki/Media_type) (e.g "text/plain").                                               |
 | 8 + N | data        | uint64 length-prefixed Bytes | Attachment data.                                                                                                         |
 | 4     | crc         | uint32                       | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed. |
+
+The `media_type` field should use a registered media type where one exists. An MCAP file carried as an attachment should use `application/vnd.mcap`.
 
 ### Metadata (op=0x0C)
 
