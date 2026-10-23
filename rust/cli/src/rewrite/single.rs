@@ -10,26 +10,41 @@ use anyhow::{bail, Context, Result};
 
 use super::common;
 use super::options::{include_topic, resolve_options, ResolvedOptions, RewriteOptions};
+use crate::byte_source::{self, ByteSource};
 use crate::cli::MessageOrder;
-use crate::{parse, source};
+use crate::parse;
+use crate::source::{self, SourceOptions};
 
-pub(crate) fn run(args: RewriteOptions, source_options: source::SourceOptions) -> Result<()> {
+pub(crate) fn run(args: RewriteOptions, source_options: SourceOptions) -> Result<()> {
     let opts = resolve_options(&args)?;
     if let (Some(input), Some(output)) = (args.file.as_deref(), opts.output.as_deref()) {
         source::ensure_distinct_local_input_output(input, output)?;
     }
-    let input = source::load_input(args.file.as_deref(), source_options)?;
+    // A rewrite reads message data, so a remote input needs the scan opt-in. Refuse from the path
+    // before opening the source, so no request is sent.
+    if let Some(path) = args
+        .file
+        .as_deref()
+        .filter(|path| source::is_remote_url(path))
+    {
+        source::require_remote_scan_allowed(path, source_options)?;
+    }
+    let mut input = byte_source::open_byte_source(args.file.as_deref(), source_options)?;
 
     let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
-    filter_to_writer(input.as_slice(), sink, &opts, disable_seeking)
+    filter_to_writer(input.as_mut(), sink, &opts, disable_seeking, source_options)
 }
 
 fn filter_to_writer<W: Write + Seek>(
-    input: &[u8],
+    input: &mut dyn ByteSource,
     sink: W,
     opts: &ResolvedOptions,
     disable_seeking: bool,
+    source_options: SourceOptions,
 ) -> Result<()> {
+    // Both paths read message data, so a remote input without opt-in is refused before the header
+    // read, summary read, or message-index probe issues any request.
+    common::require_remote_scan_for_chunks(input, source_options)?;
     let profile = common::read_header(input)?
         .map(|header| header.profile)
         .unwrap_or_default();
@@ -44,27 +59,29 @@ fn filter_to_writer<W: Write + Seek>(
         },
         disable_seeking,
     )?;
-    filter_with_writer(input, &mut writer, opts)?;
+    filter_with_writer(input, &mut writer, opts, source_options)?;
     writer.finish().context("failed to finish mcap writer")?;
     Ok(())
 }
 
 fn filter_with_writer<W: Write + Seek>(
-    input: &[u8],
+    input: &mut dyn ByteSource,
     writer: &mut mcap::Writer<W>,
     opts: &ResolvedOptions,
+    source_options: SourceOptions,
 ) -> Result<()> {
-    if let Some(summary) = common::read_indexed_summary(input)? {
+    if let Some(summary) = common::read_indexed_summary(input, source_options)? {
         // An index-only read skips messages that live outside the chunk indexes (loose top-level
         // messages, or chunks missing message-index records). Divert to a lossless linear scan only
         // when the summary *proves* such messages exist; a stats-less indexed file keeps the fast
         // path (its index read is correct, and `--last-per-channel` needs it).
         if !summary.chunk_indexes.is_empty()
-            && !common::summary_has_unindexed_messages(input, &summary)
+            && !common::summary_has_unindexed_messages(input, &summary)?
         {
-            return filter_indexed(input, &summary, writer, opts);
+            return filter_indexed(input, &summary, writer, opts, source_options);
         }
     }
+    common::require_remote_scan_for_linear(input, source_options)?;
     filter_linear(input, writer, opts)
 }
 
@@ -78,10 +95,11 @@ struct PreStartMessage {
 }
 
 fn filter_indexed<W: Write + Seek>(
-    input: &[u8],
+    input: &mut dyn ByteSource,
     summary: &mcap::Summary,
     writer: &mut mcap::Writer<W>,
     opts: &ResolvedOptions,
+    source_options: SourceOptions,
 ) -> Result<()> {
     let has_topic_filters = !opts.include_topics.is_empty() || !opts.exclude_topics.is_empty();
     let included_topics: BTreeSet<String> = summary
@@ -93,7 +111,7 @@ fn filter_indexed<W: Write + Seek>(
 
     // Metadata is written first, before any messages (see module docs).
     if opts.include_metadata {
-        common::for_each_metadata(input, Some(summary), |metadata| {
+        common::for_each_metadata(input, Some(summary), source_options, |metadata| {
             writer.write_metadata(&metadata)?;
             Ok(())
         })?;
@@ -279,7 +297,7 @@ fn filter_indexed<W: Write + Seek>(
 
     // Attachments are written last, kept regardless of the message time range.
     if opts.include_attachments {
-        common::for_each_attachment(input, Some(summary), |attachment| {
+        common::for_each_attachment(input, Some(summary), source_options, |attachment| {
             writer
                 .attach(&attachment)
                 .with_context(|| format!("failed to write attachment '{}'", attachment.name))?;
@@ -379,7 +397,7 @@ fn write_message<W: Write + Seek>(
 }
 
 fn filter_linear<W: Write + Seek>(
-    input: &[u8],
+    input: &mut dyn ByteSource,
     writer: &mut mcap::Writer<W>,
     opts: &ResolvedOptions,
 ) -> Result<()> {
@@ -393,92 +411,95 @@ fn filter_linear<W: Write + Seek>(
 
     // Metadata is written first, before any messages (see module docs). Metadata records are never
     // stored inside chunks, so a top-level linear scan surfaces them without decompressing chunks.
+    // Linear path already opted into remote scan above; pass allow_remote_scan=true so the shared
+    // helper does not re-check.
     if opts.include_metadata {
-        common::for_each_metadata(input, None, |metadata| {
+        common::for_each_metadata(input, None, SourceOptions::new(true), |metadata| {
             writer.write_metadata(&metadata)?;
             Ok(())
         })?;
     }
 
     let mut channels = mcap::read::ChannelAccumulator::default();
-    // Collected during the message pass (borrowing from `input`, no copy) and written last.
-    let mut pending_attachments = Vec::<mcap::Attachment>::new();
+    // Collected during the message pass and written last.
+    let mut pending_attachments = Vec::<mcap::Attachment<'static>>::new();
     // Messages buffered for the sorted path. This holds the whole selected message set in memory,
     // so the summaryless ordered path is not memory-bounded.
     let mut buffered_messages = Vec::<BufferedMessage>::new();
     let mut known_channel_ids = BTreeSet::<u16>::new();
 
-    // Keep checking chunk CRCs: a corrupt input must fail, not be rewritten with a valid CRC.
-    let records = mcap::read::ChunkFlattener::new_with_options(
+    // Match ChunkFlattener: decompress chunks and validate CRCs while streaming nested records.
+    byte_source::for_each_linear_record(
         input,
-        mcap::read::Options::ValidateChunkCrcs.into(),
-    )?;
-    for record in records {
-        match record? {
-            // ChunkFlattener hands out owned records, so this moves the bytes rather than copying
-            // them.
-            mcap::records::Record::Schema { header, data } => {
-                channels
-                    .add_schema(header, Cow::Owned(data.into_owned()))
-                    .context(parse::INVALID_DEFINITION_HINT)?;
-            }
-            mcap::records::Record::Channel(channel) => {
-                channels
-                    .add_channel(channel)
-                    .context(parse::INVALID_DEFINITION_HINT)?;
-            }
-            mcap::records::Record::Message { header, data } => {
-                if header.log_time < opts.start || header.log_time >= opts.end {
-                    continue;
+        mcap::sans_io::LinearReaderOptions::default().with_validate_chunk_crcs(true),
+        |opcode, data| {
+            match mcap::parse_record(opcode, data)? {
+                mcap::records::Record::Schema { header, data } => {
+                    channels
+                        .add_schema(header, Cow::Owned(data.into_owned()))
+                        .context(parse::INVALID_DEFINITION_HINT)?;
                 }
-
-                let channel = parse::message_channel(
-                    channels.get(header.channel_id),
-                    header.channel_id,
-                    header.sequence,
-                )?;
-
-                if !include_topic(&channel.topic, opts) {
-                    continue;
+                mcap::records::Record::Channel(channel) => {
+                    channels
+                        .add_channel(channel)
+                        .context(parse::INVALID_DEFINITION_HINT)?;
                 }
+                mcap::records::Record::Message { header, data } => {
+                    if header.log_time < opts.start || header.log_time >= opts.end {
+                        return Ok(());
+                    }
 
-                if buffer_for_ordering {
-                    buffered_messages.push(BufferedMessage {
-                        channel,
-                        sequence: header.sequence,
-                        log_time: header.log_time,
-                        publish_time: header.publish_time,
-                        data: data.into_owned(),
-                    });
-                } else {
-                    write_message(
-                        writer,
-                        &mut known_channel_ids,
-                        &mcap::Message {
+                    let channel = parse::message_channel(
+                        channels.get(header.channel_id),
+                        header.channel_id,
+                        header.sequence,
+                    )?;
+
+                    if !include_topic(&channel.topic, opts) {
+                        return Ok(());
+                    }
+
+                    if buffer_for_ordering {
+                        buffered_messages.push(BufferedMessage {
                             channel,
                             sequence: header.sequence,
                             log_time: header.log_time,
                             publish_time: header.publish_time,
-                            data: Cow::Borrowed(data.as_ref()),
-                        },
-                    )?;
+                            data: data.into_owned(),
+                        });
+                    } else {
+                        write_message(
+                            writer,
+                            &mut known_channel_ids,
+                            &mcap::Message {
+                                channel,
+                                sequence: header.sequence,
+                                log_time: header.log_time,
+                                publish_time: header.publish_time,
+                                data: Cow::Owned(data.into_owned()),
+                            },
+                        )?;
+                    }
                 }
+                mcap::records::Record::Attachment { header, data, .. }
+                    if opts.include_attachments =>
+                {
+                    // Kept regardless of the message time range.
+                    pending_attachments.push(mcap::Attachment {
+                        log_time: header.log_time,
+                        create_time: header.create_time,
+                        name: header.name,
+                        media_type: header.media_type,
+                        data: Cow::Owned(data.into_owned()),
+                    });
+                }
+                // Metadata is handled up front; everything else (indexes, statistics, etc.) is
+                // regenerated by the writer.
+                _ => {}
             }
-            mcap::records::Record::Attachment { header, data, .. } if opts.include_attachments => {
-                // Kept regardless of the message time range.
-                pending_attachments.push(mcap::Attachment {
-                    log_time: header.log_time,
-                    create_time: header.create_time,
-                    name: header.name,
-                    media_type: header.media_type,
-                    data,
-                });
-            }
-            // Metadata is handled up front; everything else (indexes, statistics, etc.) is
-            // regenerated by the writer.
-            _ => {}
-        }
-    }
+            Ok(())
+        },
+    )?;
 
     // Buffered messages are sorted and written before the attachments. The sort is stable, so
     // equal keys keep their insertion (file) order, matching the indexed reader's tie-break.
@@ -505,11 +526,15 @@ fn filter_linear<W: Write + Seek>(
 mod tests {
     use std::collections::{BTreeMap, HashMap};
     use std::io::Cursor;
+    use std::sync::Arc;
 
     use regex::Regex;
 
     use super::{common, filter_to_writer, MessageOrder, ResolvedOptions};
+    use crate::byte_source::{ByteSource, MemorySource};
     use crate::cli::CommonRewriteArgs;
+    use crate::source::SourceOptions;
+    use anyhow::Result;
 
     /// Builds rewrite options from the shared CLI args, exercising the engine defaults (CRC on,
     /// chunked, metadata/attachments kept).
@@ -525,6 +550,33 @@ mod tests {
             chunk_size,
             no_crc: false,
         })
+    }
+
+    fn run_filter(input: &[u8], opts: &ResolvedOptions) -> Vec<u8> {
+        let mut source = MemorySource::new(input.to_vec());
+        let mut output = Cursor::new(Vec::new());
+        filter_to_writer(
+            &mut source,
+            &mut output,
+            opts,
+            false,
+            SourceOptions::default(),
+        )
+        .expect("filter should succeed");
+        output.into_inner()
+    }
+
+    fn filter_bytes(input: &[u8], opts: &ResolvedOptions) -> Result<Vec<u8>> {
+        let mut source = MemorySource::new(input.to_vec());
+        let mut output = Cursor::new(Vec::new());
+        filter_to_writer(
+            &mut source,
+            &mut output,
+            opts,
+            false,
+            SourceOptions::default(),
+        )?;
+        Ok(output.into_inner())
     }
 
     fn write_filter_test_input(chunked: bool, summaryless: bool) -> Vec<u8> {
@@ -681,11 +733,13 @@ mod tests {
         // write it back out with a fresh, valid CRC.
         let mut input = write_uncompressed_chunked_summaryless_input();
         common::corrupt_first_chunk_message(&mut input);
+        let mut source = MemorySource::new(input);
         let err = filter_to_writer(
-            &input,
+            &mut source,
             &mut Cursor::new(Vec::new()),
             &include_all_options(),
             false,
+            SourceOptions::default(),
         )
         .expect_err("a corrupt chunk must fail the rewrite");
         assert!(
@@ -695,12 +749,6 @@ mod tests {
             )),
             "{err:?}"
         );
-    }
-
-    fn run_filter(input: &[u8], opts: &ResolvedOptions) -> Vec<u8> {
-        let mut output = Cursor::new(Vec::new());
-        filter_to_writer(input, &mut output, opts, false).expect("filter should succeed");
-        output.into_inner()
     }
 
     #[derive(Default)]
@@ -1090,9 +1138,7 @@ mod tests {
             include_crc: true,
             order: MessageOrder::Preserve,
         };
-        let mut output = Cursor::new(Vec::new());
-        let err = filter_to_writer(&input, &mut output, &opts, false)
-            .expect_err("last-per should be rejected");
+        let err = filter_bytes(&input, &opts).expect_err("last-per should be rejected");
         assert!(err
             .to_string()
             .contains("including last-per-channel topics is not supported for non-indexed input"));
@@ -1166,9 +1212,7 @@ mod tests {
             include_crc: true,
             order: MessageOrder::Preserve,
         };
-        let mut output = Cursor::new(Vec::new());
-        let err = filter_to_writer(&input, &mut output, &opts, false)
-            .expect_err("invalid indexed summary should fail");
+        let err = filter_bytes(&input, &opts).expect_err("invalid indexed summary should fail");
         assert!(err.to_string().contains("mcap recover"));
     }
 
@@ -1190,9 +1234,7 @@ mod tests {
             include_crc: true,
             order: MessageOrder::Preserve,
         };
-        let mut output = Cursor::new(Vec::new());
-        let err = filter_to_writer(&input, &mut output, &opts, false)
-            .expect_err("invalid indexed summary should fail");
+        let err = filter_bytes(&input, &opts).expect_err("invalid indexed summary should fail");
         assert!(err.to_string().contains("mcap recover"));
     }
 
@@ -1214,9 +1256,7 @@ mod tests {
             include_crc: true,
             order: MessageOrder::Preserve,
         };
-        let mut output = Cursor::new(Vec::new());
-        let err = filter_to_writer(&input, &mut output, &opts, false)
-            .expect_err("invalid indexed summary should fail");
+        let err = filter_bytes(&input, &opts).expect_err("invalid indexed summary should fail");
         assert!(err.to_string().contains("mcap recover"));
     }
 
@@ -1312,7 +1352,11 @@ mod tests {
             "fixture should be chunk-indexed"
         );
         assert!(
-            super::common::summary_has_unindexed_messages(&input, &summary),
+            super::common::summary_has_unindexed_messages(
+                &mut MemorySource::new(input.clone()),
+                &summary
+            )
+            .expect("index completeness check"),
             "fixture should have a message outside the indexes (the gate the single path uses)"
         );
 
@@ -1377,7 +1421,11 @@ mod tests {
             "fixture should omit the statistics record"
         );
         assert!(
-            !super::common::summary_has_unindexed_messages(&input, &summary),
+            !super::common::summary_has_unindexed_messages(
+                &mut MemorySource::new(input.clone()),
+                &summary
+            )
+            .expect("index completeness check"),
             "a stats-less indexed file must not be treated as having unindexed messages"
         );
 
@@ -1414,7 +1462,7 @@ mod tests {
         };
         // The CLI is the writer of the output, so it stamps its own identity, not the source's.
         let output = run_filter(&input, &opts);
-        let library = crate::parse::read_header(&output)
+        let library = crate::parse::read_header_from_bytes(&output)
             .expect("read header")
             .expect("header present")
             .library;
@@ -1980,5 +2028,109 @@ mod tests {
         assert_eq!(stats.topic_counts["radar_a"], 100);
         assert_eq!(stats.metadata_count, 1);
         assert_eq!(stats.attachment_count, 1);
+    }
+
+    /// Wraps [`MemorySource`] and counts bytes returned from [`ByteSource::read_at`].
+    /// Reports `is_remote() == true` so rewrite remote-scan gating applies.
+    struct CountingRemoteSource {
+        inner: MemorySource,
+        bytes_read: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl ByteSource for CountingRemoteSource {
+        fn size(&self) -> anyhow::Result<Option<u64>> {
+            self.inner.size()
+        }
+
+        fn is_remote(&self) -> bool {
+            true
+        }
+
+        fn display_name(&self) -> String {
+            "memory://remote-fixture.mcap".into()
+        }
+
+        fn is_seekable(&self) -> bool {
+            true
+        }
+
+        fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> anyhow::Result<usize> {
+            let n = self.inner.read_into(offset, dest)?;
+            self.bytes_read
+                .fetch_add(n, std::sync::atomic::Ordering::SeqCst);
+            Ok(n)
+        }
+    }
+
+    #[test]
+    fn remote_indexed_filter_requires_allow_remote_scan() {
+        let input = write_filter_test_input(true, false);
+        let mut source = CountingRemoteSource {
+            inner: MemorySource::new(input),
+            bytes_read: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        };
+
+        let mut opts = include_all_options();
+        opts.include_topics = vec![regex::Regex::new("^camera_a$").expect("regex")];
+        opts.include_metadata = false;
+        opts.include_attachments = false;
+
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(
+            &mut source,
+            &mut output,
+            &opts,
+            false,
+            SourceOptions::default(),
+        )
+        .expect_err("indexed remote filter should require --allow-remote-scan");
+        assert!(err.to_string().contains("--allow-remote-scan"));
+        assert_eq!(
+            source.bytes_read.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the refusal must come before any range read"
+        );
+    }
+
+    #[test]
+    fn remote_indexed_filter_uses_range_reads_with_scan_flag() {
+        use std::sync::atomic::Ordering;
+
+        let input = write_filter_test_input(true, false);
+        let file_len = input.len();
+        let bytes_read = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut source = CountingRemoteSource {
+            inner: MemorySource::new(input),
+            bytes_read: bytes_read.clone(),
+        };
+
+        let mut opts = include_all_options();
+        opts.include_topics = vec![regex::Regex::new("^camera_a$").expect("regex")];
+        opts.include_metadata = false;
+        opts.include_attachments = false;
+
+        let mut output = Cursor::new(Vec::new());
+        filter_to_writer(
+            &mut source,
+            &mut output,
+            &opts,
+            false,
+            SourceOptions::new(true),
+        )
+        .expect("indexed remote filter with --allow-remote-scan should succeed");
+
+        let read = bytes_read.load(Ordering::SeqCst);
+        assert!(
+            read < file_len,
+            "indexed topic filter must not read the whole {file_len}-byte object; read {read}"
+        );
+
+        let stats = analyze_output(&output.into_inner());
+        assert_eq!(
+            stats.topic_counts.get("camera_a").copied().unwrap_or(0),
+            100
+        );
+        assert!(!stats.topic_counts.contains_key("camera_b"));
+        assert!(!stats.topic_counts.contains_key("radar_a"));
     }
 }
