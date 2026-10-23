@@ -262,7 +262,7 @@ Attachment records must not appear within a chunk.
 | 8 + N | data        | uint64 length-prefixed Bytes | Attachment data.                                                                                                         |
 | 4     | crc         | uint32                       | CRC32 checksum of preceding fields in the record. A value of zero indicates that CRC validation should not be performed. |
 
-The `media_type` field should use a registered media type where one exists. An MCAP file carried as an attachment should use `application/vnd.mcap`.
+The `media_type` field should use a registered media type where one exists.
 
 ### Metadata (op=0x0C)
 
