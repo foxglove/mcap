@@ -8,6 +8,7 @@ MCAP is a logging library and file format. It is commonly used in robotics appli
 
 - [File format specification](https://mcap.dev/spec)
   - [Kaitai Struct definition](./website/docs/spec/mcap.ksy)
+  - [Registered media type](https://www.iana.org/assignments/media-types/application/vnd.mcap): `application/vnd.mcap`
 - [Motivation](https://mcap.dev/files/evaluation.pdf)
 - [Support Matrix](https://mcap.dev/reference)
 
