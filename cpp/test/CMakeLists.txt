@@ -1,32 +1,7 @@
-cmake_minimum_required(VERSION 3.15)
-project(McapTest CXX)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-if (CMAKE_CONFIGURATION_TYPES)
-  foreach(OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES})
-    string(TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG)
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${CMAKE_BINARY_DIR}/bin)
-  endforeach()
-endif()
-
-list(APPEND CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR}/generators)
-
-if (MSVC)
-  add_compile_options(/W4 /WX
-    /wd4251 # suppress warning about having template instances (such as std::string) as public class members
-  )
-  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
-else()
-  add_compile_options(-Wall -Wextra -pedantic -Wshadow -Wpointer-arith -Werror)
-endif()
-
 find_package(Catch2 REQUIRED)
 find_package(nlohmann_json REQUIRED)
-find_package(mcap REQUIRED)
 
-set(MCAP_TEST_LIBS Catch2::Catch2 nlohmann_json::nlohmann_json mcap::mcap)
+set(MCAP_TEST_LIBS Catch2::Catch2 nlohmann_json::nlohmann_json mcap::mcap mcap_warnings)
 
 add_executable(streamed-reader-conformance streamed_reader_conformance.cpp)
 target_link_libraries(streamed-reader-conformance ${MCAP_TEST_LIBS})
@@ -39,7 +14,9 @@ target_link_libraries(streamed-writer-conformance ${MCAP_TEST_LIBS})
 
 add_executable(unit-tests unit_tests.cpp)
 target_link_libraries(unit-tests ${MCAP_TEST_LIBS})
+add_test(NAME unit-tests COMMAND unit-tests)
 
 add_executable(unit-tests-nocompress unit_tests.cpp)
 target_link_libraries(unit-tests-nocompress ${MCAP_TEST_LIBS})
 target_compile_definitions(unit-tests-nocompress PRIVATE MCAP_COMPRESSION_NO_LZ4 MCAP_COMPRESSION_NO_ZSTD)
+add_test(NAME unit-tests-nocompress COMMAND unit-tests-nocompress)
