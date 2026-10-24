@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "visibility.hpp"
 #include <cstdio>
+#include <map>
 #include <memory>
 #include <string>
 #include <unordered_set>
@@ -65,6 +66,22 @@ struct MCAP_PUBLIC McapWriterOptions {
    * This option is ignored if `noChunking=true`.
    */
   uint64_t chunkSize = DefaultChunkSize;
+  /**
+   * @brief Keep a separate Chunk for each Channel, so that every Chunk holds
+   * the messages of a single Channel. A reader interested in a few channels can
+   * then skip the Chunks of all others, which matters most for compressed
+   * files, where a Chunk can only be decompressed as a whole. Each Chunk is
+   * written once it reaches `chunkSize`, by `closeLastChunk()`, or on `close()`.
+   *
+   * Chunks of different channels overlap in time; indexed readers merge them by
+   * log time through the Chunk Index. One open Chunk per channel is held in
+   * memory, and the Chunk of a low-rate channel may stay open for a long time:
+   * call `closeLastChunk()` periodically to bound how much data is unwritten.
+   * Each channel's first Chunk repeats its Schema record, so that the Schema
+   * precedes the Channel whatever order the Chunks are written in.
+   * This option is ignored if `noChunking=true`.
+   */
+  bool chunkPerChannel = false;
   /**
    * @brief Compression algorithm to use when writing Chunks. This option is
    * ignored if `noChunking=true`.
@@ -442,7 +459,7 @@ public:
 
   /**
    * @brief finishes the current chunk in progress and writes it to the file, if a chunk
-   * is in progress.
+   * is in progress. With `chunkPerChannel`, writes the open chunk of every channel.
    */
   void closeLastChunk();
 
@@ -485,13 +502,7 @@ private:
   IWritable* output_ = nullptr;
   std::unique_ptr<FileWriter> fileOutput_;
   std::unique_ptr<StreamWriter> streamOutput_;
-  std::unique_ptr<BufferWriter> uncompressedChunk_;
-#ifndef MCAP_COMPRESSION_NO_LZ4
-  std::unique_ptr<LZ4Writer> lz4Chunk_;
-#endif
-#ifndef MCAP_COMPRESSION_NO_ZSTD
-  std::unique_ptr<ZStdWriter> zstdChunk_;
-#endif
+  std::unique_ptr<IChunkWriter> chunkWriter_;
   std::vector<Schema> schemas_;
   std::vector<Channel> channels_;
   std::vector<AttachmentIndex> attachmentIndex_;
@@ -506,8 +517,23 @@ private:
   uint64_t uncompressedSize_ = 0;
   bool opened_ = false;
 
+  // With `chunkPerChannel`, the open chunk of each channel. The chunk of the
+  // channel being written is swapped into the members above for the duration
+  // of the write, so the rest of the writer works on it unchanged.
+  struct ChannelChunk {
+    std::unique_ptr<IChunkWriter> chunkWriter;
+    std::unordered_map<ChannelId, MessageIndex> messageIndex;
+    Timestamp chunkStart = MaxTime;
+    Timestamp chunkEnd = 0;
+    uint64_t uncompressedSize = 0;
+  };
+  std::map<ChannelId, ChannelChunk> channelChunks_;
+
   IWritable& getOutput();
   IChunkWriter* getChunkWriter();
+  std::unique_ptr<IChunkWriter> makeChunkWriter() const;
+  void swapChunk(ChannelChunk& chunk);
+  Status writeMessage(const Message& message);
   void writeChunk(IWritable& output, IChunkWriter& chunkData);
 };
 

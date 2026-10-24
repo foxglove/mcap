@@ -7,8 +7,10 @@
 #include <array>
 #include <cstdio>
 #include <filesystem>
+#include <map>
 #include <numeric>
 #include <random>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -2128,5 +2130,118 @@ TEST_CASE("Multiple empty channels and schemas are preserved", "[reader][writer]
     REQUIRE(cmd_vel_channel != channels.end());
 
     reader.close();
+  }
+}
+
+TEST_CASE("chunkPerChannel", "[writer][reader]") {
+  Buffer buffer;
+
+  mcap::McapWriter writer;
+  mcap::McapWriterOptions opts("test");
+  opts.chunkPerChannel = true;
+  opts.chunkSize = 256;
+  opts.compression = mcap::Compression::None;
+  writer.open(buffer, opts);
+  mcap::Schema sharedSchema("shared", "schemaEncoding", "ab");
+  writer.addSchema(sharedSchema);
+  mcap::Schema otherSchema("other", "schemaEncoding", "cd");
+  writer.addSchema(otherSchema);
+  // A slow and a fast channel share a schema. The slow channel writes first, so
+  // its chunk would hold the only copy of the schema, yet it is written to the
+  // file after the fast channel's chunks.
+  mcap::Channel fast("fast", "messageEncoding", sharedSchema.id);
+  writer.addChannel(fast);
+  mcap::Channel medium("medium", "messageEncoding", otherSchema.id);
+  writer.addChannel(medium);
+  mcap::Channel slow("slow", "messageEncoding", sharedSchema.id);
+  writer.addChannel(slow);
+
+  std::vector<std::byte> data(32, std::byte(7));
+  std::map<mcap::ChannelId, uint32_t> written;
+  for (uint32_t step = 0; step < 100; ++step) {
+    if (step % 25 == 0) {
+      WriteMsg(writer, slow.id, written[slow.id]++, step, step, data);
+    }
+    WriteMsg(writer, fast.id, written[fast.id]++, step, step, data);
+    if (step % 2 == 0) {
+      WriteMsg(writer, medium.id, written[medium.id]++, step, step, data);
+    }
+  }
+  writer.close();
+
+  const auto onProblem = [](const mcap::Status& status) {
+    FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+  };
+
+  SECTION("every chunk holds a single channel") {
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    requireOk(reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan));
+    std::map<mcap::ChannelId, size_t> chunksPerChannel;
+    for (const auto& chunkIndex : reader.chunkIndexes()) {
+      REQUIRE(chunkIndex.messageIndexOffsets.size() == 1);
+      ++chunksPerChannel[chunkIndex.messageIndexOffsets.begin()->first];
+    }
+    REQUIRE(chunksPerChannel.size() == 3);
+    REQUIRE(chunksPerChannel[fast.id] > chunksPerChannel[slow.id]);
+    REQUIRE(reader.statistics()->messageCount == 100 + 50 + 4);
+    reader.close();
+  }
+
+  SECTION("log time order merges the channels") {
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    mcap::ReadMessageOptions readOpts;
+    readOpts.readOrder = mcap::ReadMessageOptions::ReadOrder::LogTimeOrder;
+    std::map<mcap::ChannelId, uint32_t> seen;
+    mcap::Timestamp lastTime = 0;
+    for (const auto& msgView : reader.readMessages(onProblem, readOpts)) {
+      REQUIRE(msgView.message.logTime >= lastTime);
+      lastTime = msgView.message.logTime;
+      REQUIRE(msgView.message.sequence == seen[msgView.message.channelId]++);
+    }
+    REQUIRE(seen == written);
+    reader.close();
+  }
+
+  SECTION("reading one topic only touches its chunks") {
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    mcap::ReadMessageOptions readOpts;
+    readOpts.topicFilter = [](std::string_view topic) {
+      return topic == "slow";
+    };
+    size_t count = 0;
+    for (const auto& msgView : reader.readMessages(onProblem, readOpts)) {
+      REQUIRE(msgView.channel->topic == "slow");
+      ++count;
+    }
+    REQUIRE(count == written[slow.id]);
+    reader.close();
+  }
+
+  SECTION("streamed in file order, schemas precede channels precede messages") {
+    mcap::TypedRecordReader reader{buffer, 8};
+    std::set<mcap::SchemaId> schemas;
+    std::set<mcap::ChannelId> channels;
+    size_t messages = 0;
+    reader.onSchema = [&](const mcap::SchemaPtr schema, mcap::ByteOffset,
+                          std::optional<mcap::ByteOffset>) {
+      schemas.insert(schema->id);
+    };
+    reader.onChannel = [&](const mcap::ChannelPtr channel, mcap::ByteOffset,
+                           std::optional<mcap::ByteOffset>) {
+      REQUIRE(schemas.count(channel->schemaId) == 1);
+      channels.insert(channel->id);
+    };
+    reader.onMessage = [&](const mcap::Message& message, mcap::ByteOffset,
+                           std::optional<mcap::ByteOffset>) {
+      REQUIRE(channels.count(message.channelId) == 1);
+      ++messages;
+    };
+    while (reader.next()) {
+      requireOk(reader.status());
+    }
+    REQUIRE(messages == 100 + 50 + 4);
   }
 }
