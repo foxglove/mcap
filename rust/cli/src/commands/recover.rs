@@ -1,4 +1,4 @@
-use std::io::{IsTerminal as _, Read, Seek, Write};
+use std::io::{IsTerminal as _, Seek, Write};
 
 use anyhow::{bail, Context, Result};
 use log::{info, warn};
@@ -7,6 +7,7 @@ use mcap::records::Record;
 use mcap::sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions};
 use mcap::{Compression, WriteOptions};
 
+use crate::byte_source::{self, ByteSource};
 use crate::cli::RecoverCommand;
 use crate::commands::CommandOutcome;
 use crate::context::CommandContext;
@@ -123,13 +124,20 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome>
     if let (Some(input), Some(output)) = (args.file.as_deref(), args.output.as_deref()) {
         source::ensure_distinct_local_input_output(input, output)?;
     }
-    let input = source::open_streaming_input(args.file.as_deref(), source_options)?;
+    // Recovery only scans forward, so stdin is read as it arrives rather than spooled; a path or
+    // URL opens as a random-access source. A remote needs the opt-in whether it is ranged or
+    // downloaded, checked before any request goes out.
+    let mut input: Box<dyn ByteSource> = match args.file.as_deref() {
+        Some(path) => byte_source::open_byte_source_for_scan(path, source_options)?,
+        None => Box::new(byte_source::SequentialSource::stdin()?),
+    };
     let compression = resolve_compression(&args.compression)?;
 
     let stats = if let Some(output) = &args.output {
         let file = std::fs::File::create(output)
             .with_context(|| format!("failed to open '{}' for writing", output.display()))?;
-        let (stats, file) = recover_to_sink(input, file, compression, args.chunk_size, false)?;
+        let (stats, file) =
+            recover_to_sink(input.as_mut(), file, compression, args.chunk_size, false)?;
         file.sync_all()
             .context("failed to flush output file contents")?;
         stats
@@ -139,7 +147,8 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome>
         }
         let stdout = std::io::stdout();
         let writer = mcap::write::NoSeek::new(stdout.lock());
-        let (stats, _) = recover_to_sink(input, writer, compression, args.chunk_size, true)?;
+        let (stats, _) =
+            recover_to_sink(input.as_mut(), writer, compression, args.chunk_size, true)?;
         stats
     };
 
@@ -205,8 +214,8 @@ fn compression_from_str(name: &str) -> Option<Compression> {
     }
 }
 
-fn recover_to_sink<R: Read, W: Write + Seek>(
-    input: R,
+fn recover_to_sink<W: Write + Seek>(
+    input: &mut dyn ByteSource,
     sink: W,
     compression: CompressionSelection,
     chunk_size: u64,
@@ -277,8 +286,8 @@ fn ensure_writer<'a, W: Write + Seek>(
 /// Streams every record from a (possibly damaged) MCAP, decoding chunks, and re-writes the records
 /// through the writer. The writer rebuilds chunks, indexes, the summary section, and CRCs, so the
 /// output is always a valid MCAP.
-fn recover_records<R: Read, W: Write + Seek>(
-    mut input: R,
+fn recover_records<W: Write + Seek>(
+    input: &mut dyn ByteSource,
     sink: W,
     compression: CompressionSelection,
     chunk_size: u64,
@@ -301,26 +310,26 @@ fn recover_records<R: Read, W: Write + Seek>(
     let mut saw_any_record = false;
     // Channels successfully registered with the writer; messages for other channels are dropped.
     let mut known_channels = std::collections::BTreeSet::new();
+    let mut pos = 0u64;
 
     while let Some(event) = reader.next_event() {
         match event {
             Ok(LinearReadEvent::ReadRequest(need)) => {
-                let read = {
-                    let dst = reader.insert(need);
-                    match input.read(dst) {
-                        Ok(read) => read,
-                        Err(err) if saw_any_record => {
-                            warn!("{err:#} -- stopping recovery scan");
-                            stats.truncated = true;
-                            break;
-                        }
-                        Err(err) => return Err(err).context("failed to read input"),
+                let buf = reader.insert(need);
+                let n = match input.read_into(pos, buf) {
+                    Ok(n) => n,
+                    Err(err) if saw_any_record => {
+                        warn!("{err:#} -- stopping recovery scan");
+                        stats.truncated = true;
+                        break;
                     }
+                    Err(err) => return Err(err).context("failed to read input"),
                 };
-                if read == 0 && !saw_any_record {
+                if n == 0 && !saw_any_record {
                     return Err(mcap::McapError::UnexpectedEof.into());
                 }
-                reader.notify_read(read);
+                reader.notify_read(n);
+                pos = pos.saturating_add(n as u64);
             }
             Ok(LinearReadEvent::Record { opcode, data }) => {
                 saw_any_record = true;
@@ -829,8 +838,9 @@ mod tests {
         input: &[u8],
         compression: super::CompressionSelection,
     ) -> (Vec<u8>, RecoverStats) {
+        let mut source = crate::byte_source::MemorySource::new(input.to_vec());
         let (stats, output) = recover_to_sink(
-            input,
+            &mut source,
             Cursor::new(Vec::new()),
             compression,
             1024 * 1024,
@@ -958,6 +968,86 @@ mod tests {
             .expect("header present")
             .library;
         assert_eq!(library, *crate::cli::LIBRARY_IDENTIFIER);
+    }
+
+    /// Reader that fails partway through its data, like a pipe whose writer died.
+    struct FailingReader {
+        data: Cursor<Vec<u8>>,
+        fail_at: u64,
+    }
+
+    impl std::io::Read for FailingReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let remaining = self.fail_at.saturating_sub(self.data.position());
+            if remaining == 0 {
+                return Err(std::io::Error::other("input stream failed"));
+            }
+            let limit = usize::try_from(remaining)
+                .unwrap_or(usize::MAX)
+                .min(buf.len());
+            self.data.read(&mut buf[..limit])
+        }
+    }
+
+    #[test]
+    fn sequential_input_failing_mid_stream_keeps_recovered_records() {
+        // Many small chunks, so a failure partway through the data section leaves complete
+        // chunks before it.
+        let mut input = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(256))
+                .compression(None)
+                .create(Cursor::new(&mut input))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("schema", "jsonschema", br#"{}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            for i in 0..300u32 {
+                writer
+                    .write_to_known_channel(
+                        &MessageHeader {
+                            channel_id,
+                            sequence: i,
+                            log_time: u64::from(i),
+                            publish_time: u64::from(i),
+                        },
+                        b"payload",
+                    )
+                    .expect("write");
+            }
+            writer.finish().expect("finish");
+        }
+        let summary = mcap::Summary::read(&input)
+            .expect("read summary")
+            .expect("summary present");
+        assert!(
+            summary.chunk_indexes.len() > 2,
+            "fixture should span many chunks"
+        );
+        let fail_at = summary.chunk_indexes[summary.chunk_indexes.len() / 2].chunk_start_offset;
+
+        let mut source = crate::byte_source::SequentialSource::new(
+            FailingReader {
+                data: Cursor::new(input),
+                fail_at,
+            },
+            "<pipe>",
+        );
+        let target = super::resolve_compression("none").expect("compression");
+        let (stats, output) =
+            recover_to_sink(&mut source, Cursor::new(Vec::new()), target, 1024, false)
+                .expect("a mid-stream read error is lossy, not fatal");
+        assert!(stats.truncated);
+        assert!(stats.is_lossy());
+        let (messages, _, _) = count_output_records(&output.into_inner());
+        assert!(
+            messages > 0 && messages < 300,
+            "expected a partial recovery, got {messages} of 300 messages"
+        );
     }
 
     #[test]
