@@ -125,12 +125,12 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome>
         source::ensure_distinct_local_input_output(input, output)?;
     }
     // Recovery only scans forward, so stdin is read as it arrives rather than spooled; a path or
-    // URL opens as a random-access source (remotes ranged, or downloaded with the opt-in).
+    // URL opens as a random-access source. A remote needs the opt-in whether it is ranged or
+    // downloaded, checked before any request goes out.
     let mut input: Box<dyn ByteSource> = match args.file.as_deref() {
-        Some(path) => byte_source::open_byte_source(path, source_options)?,
+        Some(path) => byte_source::open_byte_source_for_scan(path, source_options)?,
         None => Box::new(byte_source::SequentialSource::stdin()?),
     };
-    source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
     let compression = resolve_compression(&args.compression)?;
 
     let stats = if let Some(output) = &args.output {

@@ -10,16 +10,15 @@ use anyhow::{bail, Context, Result};
 use tempfile::NamedTempFile;
 
 use crate::source::{
-    is_remote_url, open_remote_range_reader, read_remote_input_to_writer, redacted_display,
-    remote_or_local_extension, remote_scan_opt_in_suffix, require_remote_scan_allowed,
-    RemoteRangeReader, SourceOptions, PLEASE_SUPPLY_FILE,
+    is_remote_url, materialize_input, open_remote_range_reader, redacted_display,
+    remote_scan_opt_in_suffix, require_remote_scan_allowed, RemoteRangeReader, SourceOptions,
+    PLEASE_SUPPLY_FILE,
 };
 
 /// Byte-oriented input with optional random access.
 pub trait ByteSource {
     /// File size in bytes, or `None` when unknown (streaming inputs without a known length).
     fn size(&self) -> Result<Option<u64>>;
-    fn is_remote(&self) -> bool;
     fn display_name(&self) -> String;
 
     /// Read up to `dest.len()` bytes at `offset` into `dest`, returning the count (0 at EOF).
@@ -105,10 +104,6 @@ impl LocalFileSource {
 impl ByteSource for LocalFileSource {
     fn size(&self) -> Result<Option<u64>> {
         Ok(Some(self.size))
-    }
-
-    fn is_remote(&self) -> bool {
-        false
     }
 
     fn display_name(&self) -> String {
@@ -215,10 +210,6 @@ impl ByteSource for RemoteRangeSource {
         Ok(Some(self.inner.size()))
     }
 
-    fn is_remote(&self) -> bool {
-        true
-    }
-
     fn display_name(&self) -> String {
         self.inner.display_url().to_string()
     }
@@ -288,10 +279,6 @@ impl<R: Read> ByteSource for SequentialSource<R> {
         Ok(None)
     }
 
-    fn is_remote(&self) -> bool {
-        false
-    }
-
     fn display_name(&self) -> String {
         self.name.clone()
     }
@@ -342,10 +329,6 @@ impl ByteSource for MemorySource {
         Ok(Some(self.data.len() as u64))
     }
 
-    fn is_remote(&self) -> bool {
-        false
-    }
-
     fn display_name(&self) -> String {
         "<memory>".to_string()
     }
@@ -373,6 +356,19 @@ pub fn open_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dyn B
     Ok(Box::new(LocalFileSource::open_path(path)?))
 }
 
+/// Opens `path` for a command that always reads the whole file. A remote URL needs the
+/// `--allow-remote-scan` opt-in, checked here before any request goes out, so a refused command
+/// never contacts the server.
+pub fn open_byte_source_for_scan(
+    path: &Path,
+    options: SourceOptions,
+) -> Result<Box<dyn ByteSource>> {
+    if is_remote_url(path) {
+        require_remote_scan_allowed(path, options)?;
+    }
+    open_byte_source(path, options)
+}
+
 fn open_remote_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dyn ByteSource>> {
     match open_remote_range_reader(path)? {
         Some(reader) => Ok(Box::new(RemoteRangeSource::new(reader))),
@@ -388,19 +384,9 @@ fn open_remote_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dy
 }
 
 fn spool_remote_to_local(path: &Path, options: SourceOptions) -> Result<LocalFileSource> {
-    require_remote_scan_allowed(path, options)?;
-    let suffix = remote_or_local_extension(path)
-        .filter(|extension| !extension.is_empty())
-        .map(|extension| format!(".{extension}"));
-    let mut builder = tempfile::Builder::new();
-    builder.prefix("mcap-cli-remote-bytesource-");
-    if let Some(suffix) = suffix.as_deref() {
-        builder.suffix(suffix);
-    }
-    let mut temp_file = builder
-        .tempfile()
-        .context("failed to create temporary remote input file")?;
-    read_remote_input_to_writer(path, temp_file.as_file_mut())?;
+    let temp_file = materialize_input(path, options)?
+        .into_temp_file()
+        .context("remote input was not downloaded to a temporary file")?;
     LocalFileSource::from_temp_file(temp_file, PathBuf::from(redacted_display(path)))
 }
 
@@ -576,7 +562,6 @@ mod tests {
         std::fs::write(&path, &bytes).expect("write fixture");
 
         let mut local = LocalFileSource::open_path(&path).expect("open local");
-        assert!(!local.is_remote());
         assert_eq!(local.size().expect("size"), Some(bytes.len() as u64));
 
         let mut memory = MemorySource::new(bytes);

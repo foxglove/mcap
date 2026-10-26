@@ -9,11 +9,10 @@ use crate::context::CommandContext;
 use crate::source;
 
 pub fn run(ctx: &CommandContext, args: DoctorCommand) -> Result<()> {
+    // Doctor always walks the full file, so remote inputs need an explicit opt-in even when
+    // range requests are available.
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
-    let mut input = byte_source::open_byte_source(&args.file, source_options)?;
-    // Doctor always walks the full file, so remote inputs need an explicit opt-in
-    // even when range requests are available.
-    source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
+    let mut input = byte_source::open_byte_source_for_scan(&args.file, source_options)?;
 
     let diagnosis = diagnose_byte_source(input.as_mut(), args.strict_message_order)?;
     for warning in &diagnosis.warnings {
@@ -1103,10 +1102,6 @@ mod tests {
             self.inner.size()
         }
 
-        fn is_remote(&self) -> bool {
-            false
-        }
-
         fn display_name(&self) -> String {
             self.inner.display_name()
         }
@@ -1128,10 +1123,6 @@ mod tests {
     impl crate::byte_source::ByteSource for FailingSource {
         fn size(&self) -> anyhow::Result<Option<u64>> {
             self.inner.size()
-        }
-
-        fn is_remote(&self) -> bool {
-            false
         }
 
         fn display_name(&self) -> String {

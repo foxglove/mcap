@@ -123,6 +123,11 @@ pub struct MaterializedInput {
 }
 
 impl MaterializedInput {
+    /// The downloaded copy of a remote input, or `None` for a local path.
+    pub(crate) fn into_temp_file(self) -> Option<NamedTempFile> {
+        self.temp_file
+    }
+
     pub fn path(&self) -> &Path {
         if let Some(temp_file) = &self.temp_file {
             temp_file.path()
@@ -1499,22 +1504,6 @@ pub(crate) fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -
         "remote input {display} requires opt-in because this command must download or scan remote data; {}",
         remote_scan_opt_in_suffix()
     );
-}
-
-/// Errors when a remote [`ByteSource`](crate::byte_source::ByteSource) would need a full linear
-/// scan without `--allow-remote-scan`.
-pub(crate) fn require_remote_scan_for_linear(
-    source: &dyn crate::byte_source::ByteSource,
-    options: SourceOptions,
-) -> Result<()> {
-    if source.is_remote() && !options.allow_remote_scan {
-        bail!(
-            "{}: remote file requires a full scan; {}",
-            source.display_name(),
-            remote_scan_opt_in_suffix()
-        );
-    }
-    Ok(())
 }
 
 fn read_summary_from_remote(
@@ -3298,6 +3287,27 @@ mod tests {
             }
         }
         messages
+    }
+
+    #[test]
+    fn opening_a_remote_for_a_scan_without_opt_in_makes_no_request() {
+        let body: &'static [u8] = Box::leak(linear_mcap_without_summary(10).into_boxed_slice());
+        let (url, requests) = serve_http_counting(body, true);
+        let err = crate::byte_source::open_byte_source_for_scan(
+            Path::new(&url),
+            super::SourceOptions::new(false),
+        )
+        .err()
+        .expect("remote scan should need the opt-in");
+        assert!(
+            err.to_string().contains("requires opt-in"),
+            "unexpected error: {err:#}"
+        );
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            0,
+            "refused before any request"
+        );
     }
 
     #[test]
