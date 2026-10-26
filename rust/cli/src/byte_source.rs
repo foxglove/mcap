@@ -18,7 +18,7 @@ use crate::source::{
 /// Byte-oriented input with optional random access.
 pub trait ByteSource {
     /// File size in bytes, or `None` when unknown (streaming inputs without a known length).
-    fn size(&self) -> Result<Option<u64>>;
+    fn size(&self) -> Option<u64>;
     fn display_name(&self) -> String;
 
     /// Read up to `dest.len()` bytes at `offset` into `dest`, returning the count (0 at EOF).
@@ -30,7 +30,7 @@ pub trait ByteSource {
     fn read_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>> {
         // Clamp before allocating: `len` often comes from a record length field in the file,
         // which a damaged file can set near u64::MAX.
-        let len = match self.size()? {
+        let len = match self.size() {
             Some(size) => {
                 len.min(usize::try_from(size.saturating_sub(offset)).unwrap_or(usize::MAX))
             }
@@ -102,8 +102,8 @@ impl LocalFileSource {
 }
 
 impl ByteSource for LocalFileSource {
-    fn size(&self) -> Result<Option<u64>> {
-        Ok(Some(self.size))
+    fn size(&self) -> Option<u64> {
+        Some(self.size)
     }
 
     fn display_name(&self) -> String {
@@ -206,8 +206,8 @@ impl RemoteRangeSource {
 }
 
 impl ByteSource for RemoteRangeSource {
-    fn size(&self) -> Result<Option<u64>> {
-        Ok(Some(self.inner.size()))
+    fn size(&self) -> Option<u64> {
+        Some(self.inner.size())
     }
 
     fn display_name(&self) -> String {
@@ -277,8 +277,8 @@ impl<R: Read> SequentialSource<R> {
 }
 
 impl<R: Read> ByteSource for SequentialSource<R> {
-    fn size(&self) -> Result<Option<u64>> {
-        Ok(None)
+    fn size(&self) -> Option<u64> {
+        None
     }
 
     fn display_name(&self) -> String {
@@ -327,8 +327,8 @@ impl MemorySource {
 
 #[cfg(test)]
 impl ByteSource for MemorySource {
-    fn size(&self) -> Result<Option<u64>> {
-        Ok(Some(self.data.len() as u64))
+    fn size(&self) -> Option<u64> {
+        Some(self.data.len() as u64)
     }
 
     fn display_name(&self) -> String {
@@ -481,7 +481,7 @@ mod tests {
     #[test]
     fn sequential_source_serves_in_order_reads_and_refuses_seeks() {
         let mut source = SequentialSource::new(Cursor::new(vec![1u8, 2, 3, 4, 5]), "<pipe>");
-        assert_eq!(source.size().expect("size"), None);
+        assert_eq!(source.size(), None);
         assert_eq!(source.display_name(), "<pipe>");
 
         let mut dest = [0u8; 2];
@@ -564,7 +564,7 @@ mod tests {
         std::fs::write(&path, &bytes).expect("write fixture");
 
         let mut local = LocalFileSource::open_path(&path).expect("open local");
-        assert_eq!(local.size().expect("size"), Some(bytes.len() as u64));
+        assert_eq!(local.size(), Some(bytes.len() as u64));
 
         let mut memory = MemorySource::new(bytes);
         let expected = record_sizes(&mut memory);

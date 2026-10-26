@@ -14,7 +14,7 @@ pub fn run(ctx: &CommandContext, args: DoctorCommand) -> Result<()> {
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let mut input = byte_source::open_byte_source_for_scan(&args.file, source_options)?;
 
-    let diagnosis = diagnose_byte_source(input.as_mut(), args.strict_message_order)?;
+    let diagnosis = diagnose_byte_source(input.as_mut(), args.strict_message_order);
     for warning in &diagnosis.warnings {
         eprintln!("Warning: {warning}");
     }
@@ -76,22 +76,20 @@ struct Doctor {
     duplicate_channel_warning_ids: BTreeSet<u16>,
 }
 
-fn diagnose_byte_source(
-    source: &mut dyn ByteSource,
-    strict_message_order: bool,
-) -> Result<Diagnosis> {
+/// Every failure, including a read that cannot complete, becomes a finding in the diagnosis.
+fn diagnose_byte_source(source: &mut dyn ByteSource, strict_message_order: bool) -> Diagnosis {
     let mut doctor = Doctor::new(strict_message_order);
-    doctor.scan_top_level(source)?;
+    doctor.scan_top_level(source);
     doctor.finalize_record_presence();
-    doctor.validate_chunk_indexes(source)?;
+    doctor.validate_chunk_indexes(source);
     doctor.validate_statistics();
-    Ok(doctor.diagnosis)
+    doctor.diagnosis
 }
 
 #[cfg(test)]
 fn diagnose_mcap(mcap: &[u8], strict_message_order: bool) -> Diagnosis {
     let mut source = byte_source::MemorySource::new(mcap.to_vec());
-    diagnose_byte_source(&mut source, strict_message_order).expect("diagnose should not I/O-fail")
+    diagnose_byte_source(&mut source, strict_message_order)
 }
 
 impl Doctor {
@@ -130,9 +128,9 @@ impl Doctor {
         self.diagnosis.errors.push(message.into());
     }
 
-    fn scan_top_level(&mut self, source: &mut dyn ByteSource) -> Result<()> {
+    fn scan_top_level(&mut self, source: &mut dyn ByteSource) {
         let record_length_limit = source
-            .size()?
+            .size()
             .and_then(|size| usize::try_from(size).ok())
             .unwrap_or(usize::MAX);
         let mut reader = mcap::sans_io::LinearReader::new_with_options(
@@ -189,7 +187,6 @@ impl Doctor {
                 }
             }
         }
-        Ok(())
     }
 
     fn handle_top_level_record(
@@ -580,7 +577,7 @@ impl Doctor {
         }
     }
 
-    fn validate_chunk_indexes(&mut self, source: &mut dyn ByteSource) -> Result<()> {
+    fn validate_chunk_indexes(&mut self, source: &mut dyn ByteSource) {
         let chunk_indexes: Vec<(u64, mcap::records::ChunkIndex)> = self
             .chunk_indexes
             .iter()
@@ -619,8 +616,8 @@ impl Doctor {
             let Some(scanned) = self.scanned_chunks.get(&chunk_offset).cloned() else {
                 // Only an index that points where the scan saw no chunk costs a read: the
                 // nine-byte record header, to name what is there.
-                match read_record_header_at_offset(source, chunk_offset) {
-                    Ok((opcode, _)) if opcode != mcap::records::op::CHUNK => {
+                match read_opcode_at_offset(source, chunk_offset) {
+                    Ok(opcode) if opcode != mcap::records::op::CHUNK => {
                         self.error(format!(
                             "Chunk index points to offset {} but the record at this offset is a {}",
                             chunk_offset,
@@ -682,7 +679,6 @@ impl Doctor {
                 ));
             }
         }
-        Ok(())
     }
 
     fn validate_statistics(&mut self) {
@@ -736,18 +732,13 @@ impl Doctor {
     }
 }
 
-/// Reads a record's nine-byte prefix at `offset` and returns its opcode and body length.
-fn read_record_header_at_offset(source: &mut dyn ByteSource, offset: u64) -> Result<(u8, u64)> {
+/// Reads the opcode of the record whose nine-byte prefix starts at `offset`.
+fn read_opcode_at_offset(source: &mut dyn ByteSource, offset: u64) -> Result<u8> {
     let header = source.read_at(offset, 9)?;
     if header.len() < 9 {
         anyhow::bail!("record header extends beyond file");
     }
-    let length = u64::from_le_bytes(
-        header[1..9]
-            .try_into()
-            .expect("slice length for record len"),
-    );
-    Ok((header[0], length))
+    Ok(header[0])
 }
 
 fn opcode_name(opcode: u8) -> Cow<'static, str> {
@@ -1098,7 +1089,7 @@ mod tests {
     }
 
     impl crate::byte_source::ByteSource for CountingSource {
-        fn size(&self) -> anyhow::Result<Option<u64>> {
+        fn size(&self) -> Option<u64> {
             self.inner.size()
         }
 
@@ -1121,7 +1112,7 @@ mod tests {
     }
 
     impl crate::byte_source::ByteSource for FailingSource {
-        fn size(&self) -> anyhow::Result<Option<u64>> {
+        fn size(&self) -> Option<u64> {
             self.inner.size()
         }
 
@@ -1155,8 +1146,7 @@ mod tests {
             inner: crate::byte_source::MemorySource::new(mcap),
             fail_at: fail_at as u64,
         };
-        let diagnosis = super::diagnose_byte_source(&mut source, false)
-            .expect("a read failure is a finding, not a diagnose failure");
+        let diagnosis = super::diagnose_byte_source(&mut source, false);
 
         let parse_error = diagnosis
             .errors
@@ -1180,8 +1170,7 @@ mod tests {
             inner: crate::byte_source::MemorySource::new(mcap.clone()),
             bytes_read: 0,
         };
-        let diagnosis =
-            super::diagnose_byte_source(&mut source, false).expect("diagnose should not fail");
+        let diagnosis = super::diagnose_byte_source(&mut source, false);
         assert!(diagnosis.errors.is_empty(), "{:?}", diagnosis.errors);
         assert!(
             first_record_offset(&mcap, op::CHUNK_INDEX).is_some(),
