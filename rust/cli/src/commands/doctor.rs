@@ -621,13 +621,13 @@ impl Doctor {
                     }
                     Ok(_) => {
                         self.error(format!(
-                            "Chunk index points to offset {} but the scan found no chunk record starting there",
+                            "Chunk index points to offset {} but encountered an error parsing the chunk at that offset",
                             chunk_offset
                         ));
                     }
                     Err(err) => {
                         self.error(format!(
-                            "Chunk index points to offset {} but encountered error reading at that offset: {err}",
+                            "Chunk index points to offset {} but encountered an error reading at that offset: {err}",
                             chunk_offset
                         ));
                     }
@@ -1037,7 +1037,7 @@ mod tests {
         assert!(
             diagnosis.errors.iter().any(|err| {
                 err.contains(&format!("Chunk index points to offset {payload_offset}"))
-                    && err.contains("found no chunk record starting there")
+                    && err.contains("encountered an error parsing the chunk at that offset")
             }),
             "{:?}",
             diagnosis.errors
