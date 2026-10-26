@@ -491,21 +491,26 @@ impl Doctor {
                 Ok(record) => record,
                 Err(mcap::McapError::BadChunkCrc { saved, calculated }) => {
                     // ChunkReader checks the CRC after yielding the last record, so every record
-                    // has been examined by now. Whether they all read cleanly says which is more
-                    // likely wrong: the CRC field or the data it covers.
-                    let records = if unreadable_records == 0 {
-                        "every record inside it was read, which points at a stale CRC field"
-                            .to_string()
-                    } else {
-                        format!(
-                            "{unreadable_records} records inside it could not be read, which \
-                             points at corrupted data"
-                        )
+                    // has been examined by now. Parsing only checks framing: a damaged payload
+                    // byte parses cleanly, and payloads are most of a chunk, so clean parsing
+                    // must not be read as a stale CRC field.
+                    let records = match unreadable_records {
+                        0 => "every record inside it parsed, but the CRC does not confirm that \
+                              the payloads are intact"
+                            .to_string(),
+                        1 => "1 record inside it could not be read, which points at corrupted \
+                              data"
+                            .to_string(),
+                        n => format!(
+                            "{n} records inside it could not be read, which points at corrupted \
+                             data"
+                        ),
                     };
                     self.error(format!(
                         "Chunk at offset {start_offset} has a CRC mismatch (stored {saved:08X}, \
-                         computed {calculated:08X}); {records}. `mcap recover` rewrites the chunk \
-                         with a recomputed CRC."
+                         computed {calculated:08X}); {records}. `mcap recover` writes a new CRC \
+                         from the current bytes; run it only if you accept the payloads as they \
+                         are."
                     ));
                     continue;
                 }
@@ -1352,8 +1357,14 @@ mod tests {
         assert_eq!(diagnosis.errors.len(), 1, "{:?}", diagnosis.errors);
         let error = &diagnosis.errors[0];
         assert!(error.contains("has a CRC mismatch"), "{error}");
-        assert!(error.contains("every record inside it was read"), "{error}");
-        assert!(error.contains("mcap recover"), "{error}");
+        assert!(
+            error.contains("every record inside it parsed, but the CRC does not confirm"),
+            "{error}"
+        );
+        assert!(
+            error.contains("run it only if you accept the payloads as they are"),
+            "{error}"
+        );
     }
 
     #[test]
@@ -1371,7 +1382,7 @@ mod tests {
             .find(|err| err.contains("has a CRC mismatch"))
             .expect("chunk crc mismatch reported");
         assert!(
-            crc_error.contains("1 records inside it could not be read"),
+            crc_error.contains("1 record inside it could not be read"),
             "{crc_error}"
         );
     }

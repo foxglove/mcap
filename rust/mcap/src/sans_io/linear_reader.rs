@@ -1376,6 +1376,7 @@ mod tests {
             .expect("record should exist")
     }
 
+    #[cfg(feature = "lz4")]
     #[test]
     fn a_bad_chunk_crc_checked_first_skips_a_compressed_chunk() {
         let mut file = basic_chunked_file(Some(Compression::Lz4)).unwrap();
