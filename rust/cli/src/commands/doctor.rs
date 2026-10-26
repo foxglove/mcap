@@ -11,8 +11,8 @@ use crate::source;
 pub fn run(ctx: &CommandContext, args: DoctorCommand) -> Result<()> {
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let mut input = byte_source::open_byte_source(&args.file, source_options)?;
-    // Doctor always walks the full file (and may re-read indexed chunks), so remote
-    // inputs need an explicit opt-in even when range requests are available.
+    // Doctor always walks the full file, so remote inputs need an explicit opt-in
+    // even when range requests are available.
     source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
 
     let diagnosis = diagnose_byte_source(input.as_mut(), args.strict_message_order)?;
