@@ -1015,6 +1015,9 @@ impl<W: Write + Seek> Writer<W> {
     ///
     /// Before calling this method call [`Self::start_attachment`].
     pub fn put_attachment_bytes(&mut self, bytes: &[u8]) -> McapResult<()> {
+        if let Some(WriteMode::Failed(_)) = self.writer {
+            return Err(McapError::AttemptedWriteAfterFailure);
+        }
         let Some(WriteMode::Attachment(writer)) = &mut self.writer else {
             return Err(McapError::AttachmentNotInProgress);
         };
@@ -1034,6 +1037,9 @@ impl<W: Write + Seek> Writer<W> {
     /// been written. The attachment stays open, so you can write the remaining bytes and call
     /// this again.
     pub fn finish_attachment(&mut self) -> McapResult<()> {
+        if let Some(WriteMode::Failed(_)) = self.writer {
+            return Err(McapError::AttemptedWriteAfterFailure);
+        }
         let Some(WriteMode::Attachment(writer)) = &self.writer else {
             return Err(McapError::AttachmentNotInProgress);
         };
@@ -3409,9 +3415,15 @@ mod tests {
         let mut writer = Writer::new(FullDisk::new(budget)).unwrap();
         writer.start_attachment(4, attachment_header()).unwrap();
         assert_matches!(writer.put_attachment_bytes(b"1234"), Err(McapError::Io(_)));
+        // The attachment calls report the failure like every other write, not a missing
+        // attachment, which would send the caller back to start_attachment.
         assert_matches!(
             writer.put_attachment_bytes(b"1234"),
-            Err(McapError::AttachmentNotInProgress)
+            Err(McapError::AttemptedWriteAfterFailure)
+        );
+        assert_matches!(
+            writer.finish_attachment(),
+            Err(McapError::AttemptedWriteAfterFailure)
         );
         assert_failed(&mut writer);
         writer.into_inner();
