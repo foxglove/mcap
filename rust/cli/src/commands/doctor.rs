@@ -152,13 +152,10 @@ impl Doctor {
             match event {
                 Err(err) => {
                     self.error(format!("Failed to read next token: {err:#}"));
-                    // Stop scanning after an event-level reader error. At this point the
-                    // underlying stream state may be desynchronized (bad magic, CRC mismatch,
-                    // mid-record corruption), so continuing to call `next_event()` is not
-                    // reliable. We still keep previously collected diagnostics and run the
-                    // post-scan cross-checks below.
-                    self.scan_stopped_early = true;
-                    break;
+                    // The reader decides whether it can go on. A CRC mismatch is reported once
+                    // and reading continues; after an error with no record boundary to resume
+                    // from it returns `None`, which ends this loop.
+                    continue;
                 }
                 Ok(mcap::sans_io::LinearReadEvent::ReadRequest(need)) => {
                     let buf = reader.insert(need);
@@ -192,6 +189,11 @@ impl Doctor {
                     self.handle_top_level_record(record, record_offset, 9 + data.len() as u64);
                 }
             }
+        }
+        if reader.failed() {
+            // The reader ended on an error it could not resume from, before the end of the
+            // file.
+            self.scan_stopped_early = true;
         }
     }
 
@@ -472,6 +474,7 @@ impl Doctor {
         let mut min_log_time = None::<u64>;
         let mut max_log_time = None::<u64>;
         let mut chunk_message_count = 0u64;
+        let mut unreadable_records = 0u64;
 
         let chunk_reader = match mcap::read::ChunkReader::new(header.clone(), data) {
             Ok(reader) => reader,
@@ -486,7 +489,28 @@ impl Doctor {
         for nested_record in chunk_reader {
             let nested_record = match nested_record {
                 Ok(record) => record,
+                Err(mcap::McapError::BadChunkCrc { saved, calculated }) => {
+                    // ChunkReader checks the CRC after yielding the last record, so every record
+                    // has been examined by now. Whether they all read cleanly says which is more
+                    // likely wrong: the CRC field or the data it covers.
+                    let records = if unreadable_records == 0 {
+                        "every record inside it was read, which points at a stale CRC field"
+                            .to_string()
+                    } else {
+                        format!(
+                            "{unreadable_records} records inside it could not be read, which \
+                             points at corrupted data"
+                        )
+                    };
+                    self.error(format!(
+                        "Chunk at offset {start_offset} has a CRC mismatch (stored {saved:08X}, \
+                         computed {calculated:08X}); {records}. `mcap recover` rewrites the chunk \
+                         with a recomputed CRC."
+                    ));
+                    continue;
+                }
                 Err(err) => {
+                    unreadable_records += 1;
                     self.error(format!(
                         "failed to parse nested chunk record at {start_offset}: {err:#}"
                     ));
@@ -1289,6 +1313,101 @@ mod tests {
         mcap[crc_field..crc_field + 4].copy_from_slice(&[0; 4]);
     }
 
+    #[test]
+    fn a_reader_error_it_cannot_resume_from_stops_the_scan_without_presence_claims() {
+        let mcap = write_mcap(|opts| opts, None, &[10, 20, 30]);
+        // Cut the file off inside its last chunk.
+        let chunk_offset = first_record_offset(&mcap, op::CHUNK).expect("chunk record");
+        let truncated = &mcap[..chunk_offset + 9 + 24];
+
+        let diagnosis = diagnose_mcap(truncated, false);
+        assert!(
+            diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("Failed to read next token")),
+            "{:?}",
+            diagnosis.errors
+        );
+        assert!(
+            !diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("does not contain a")),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    #[test]
+    fn reports_a_chunk_crc_mismatch_and_keeps_scanning() {
+        let mut mcap = uncompressed_single_chunk_mcap();
+        let chunk_offset = first_record_offset(&mcap, op::CHUNK).expect("chunk record");
+        // ChunkHeader: message_start_time, message_end_time, uncompressed_size (8 each), then
+        // uncompressed_crc.
+        mcap[chunk_offset + 9 + 24] ^= 0xFF;
+        zero_data_section_crc(&mut mcap);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        assert_eq!(diagnosis.errors.len(), 1, "{:?}", diagnosis.errors);
+        let error = &diagnosis.errors[0];
+        assert!(error.contains("has a CRC mismatch"), "{error}");
+        assert!(error.contains("every record inside it was read"), "{error}");
+        assert!(error.contains("mcap recover"), "{error}");
+    }
+
+    #[test]
+    fn a_chunk_crc_mismatch_names_records_it_could_not_read() {
+        let mut mcap = uncompressed_single_chunk_mcap();
+        let chunk_offset = first_record_offset(&mcap, op::CHUNK).expect("chunk record");
+        let schema_offset = chunk_records_offset(&mcap, chunk_offset);
+        corrupt_schema_data_length(&mut mcap, schema_offset);
+        zero_data_section_crc(&mut mcap);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        let crc_error = diagnosis
+            .errors
+            .iter()
+            .find(|err| err.contains("has a CRC mismatch"))
+            .expect("chunk crc mismatch reported");
+        assert!(
+            crc_error.contains("1 records inside it could not be read"),
+            "{crc_error}"
+        );
+    }
+
+    #[test]
+    fn reports_a_bad_data_section_crc_and_still_checks_the_summary() {
+        let mut mcap = write_mcap(|opts| opts, None, &[10, 20, 30]);
+        let data_end = first_record_offset(&mcap, op::DATA_END).expect("data end record");
+        mcap[data_end + 9] ^= 0xFF;
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        assert_eq!(diagnosis.errors.len(), 1, "{:?}", diagnosis.errors);
+        assert!(
+            diagnosis.errors[0].contains("Data section CRC failed"),
+            "{:?}",
+            diagnosis.errors
+        );
+        // The scan went on past DataEnd: the summary was read and found consistent, and the
+        // Footer was seen.
+        assert!(
+            !diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("does not contain a")),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    /// Zeroes the data section CRC (zero means "not computed") so a chunk edited by a test is
+    /// reported for its own CRC alone.
+    fn zero_data_section_crc(mcap: &mut [u8]) {
+        let data_end = first_record_offset(mcap, op::DATA_END).expect("data end record");
+        mcap[data_end + 9..data_end + 13].copy_from_slice(&[0; 4]);
+    }
+
     /// Offset of the first record inside an uncompressed chunk's records field.
     fn chunk_records_offset(mcap: &[u8], chunk_offset: usize) -> usize {
         // ChunkHeader: message_start_time, message_end_time, uncompressed_size (8 each),
@@ -1307,8 +1426,7 @@ mod tests {
     fn zero_chunk_and_data_section_crcs(mcap: &mut [u8], chunk_offset: usize) {
         let crc_field = chunk_offset + 9 + 24;
         mcap[crc_field..crc_field + 4].copy_from_slice(&[0; 4]);
-        let data_end = first_record_offset(mcap, op::DATA_END).expect("data end record");
-        mcap[data_end + 9..data_end + 13].copy_from_slice(&[0; 4]);
+        zero_data_section_crc(mcap);
     }
 
     fn corrupt_first_schema_data_length(mcap: &mut [u8]) {
