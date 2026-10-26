@@ -289,6 +289,32 @@ where
     body
 }
 
+/// One message record on channel 1 with `payload`, as the bytes a chunk holds.
+fn message_record(log_time: u64, payload: &[u8]) -> Vec<u8> {
+    let mut body = write_body(&MessageHeader {
+        channel_id: 1,
+        sequence: 1,
+        log_time,
+        publish_time: log_time,
+    });
+    body.extend_from_slice(payload);
+    let mut records = Vec::new();
+    append_record(&mut records, op::MESSAGE, &body);
+    records
+}
+
+/// An indexed MCAP with one zstd chunk holding `records`, with `compressed` as its payload.
+#[cfg(feature = "zstd")]
+fn zstd_chunk_mcap(records: &[u8], compressed: Vec<u8>, uncompressed_size: u64) -> Vec<u8> {
+    write_indexed_mcap(&[BuiltChunk {
+        log_time: 7,
+        compression: "zstd".into(),
+        uncompressed_size,
+        uncompressed_crc: crc32fast::hash(records),
+        compressed,
+    }])
+}
+
 struct ChunkSpec {
     log_time: u64,
     payload: &'static [u8],
@@ -975,7 +1001,7 @@ fn decoding_stops_at_the_declared_uncompressed_size() {
     // One zstd frame holding two message records and a content checksum, in a chunk that
     // declares only the first record's length. The readers decode that much and never feed the
     // decoder the rest, so the second record is dropped and the checksum is not verified. See
-    // `Decompressors::decompress_chunk` for why.
+    // `Decompressor::decompress_chunk` for why.
     let mut records = Vec::new();
     let mut first_record_len = 0;
     for (log_time, payload) in [(7, b"first".as_slice()), (8, b"second".as_slice())] {
@@ -1018,6 +1044,76 @@ fn decoding_stops_at_the_declared_uncompressed_size() {
         read_indexed(&mcap, None::<TestDecoder>).expect("indexed"),
         expected,
         "indexed"
+    );
+}
+
+#[cfg(feature = "zstd")]
+#[test]
+fn zstd_window_above_the_streaming_limit_is_rejected_by_both_readers() {
+    // ZSTD_decompressDCtx, which the indexed reader uses for a chunk in memory, does not apply
+    // the window limit that ZSTD_decompressStream enforces. Both readers must give the same
+    // answer for a frame whose window is above it.
+    let records = message_record(7, b"one");
+    let mut compressed = zstd::stream::encode_all(Cursor::new(&records[..]), 0).expect("compress");
+    // A streamed frame is not single-segment, so byte 5 is its window descriptor. Claim a
+    // 256 MiB window, twice the streaming limit. The frame still decodes, since the window only
+    // bounds how far back a match may reach.
+    assert_eq!(compressed[4] & 0x20, 0, "expected a window descriptor");
+    compressed[5] = (28 - 10) << 3;
+    assert!(
+        zstd::decode_all(Cursor::new(&compressed[..])).is_err(),
+        "a streaming decode should reject the window"
+    );
+    let mcap = zstd_chunk_mcap(&records, compressed, records.len() as u64);
+
+    let linear = read_linear(&mcap, None).expect_err("linear should reject the window");
+    let indexed =
+        read_indexed(&mcap, None::<TestDecoder>).expect_err("indexed should reject the window");
+    let messages = [linear, indexed].map(|err| match err {
+        McapError::DecompressionError(message) => message,
+        other => panic!("expected a decompression error, got {other}"),
+    });
+    assert!(
+        messages[0].contains("too much memory"),
+        "unexpected error: {}",
+        messages[0]
+    );
+    assert_eq!(messages[0], messages[1], "the readers should agree");
+}
+
+#[cfg(feature = "zstd")]
+#[test]
+fn zstd_chunk_declaring_more_than_the_frame_holds_is_an_error() {
+    // The one-shot decode fills less than the declared size, so ZstdDecoder::decompress_chunk
+    // streams the chunk again, and that ends with the frame exhausted and bytes still owed.
+    let records = message_record(7, b"one");
+    let compressed = zstd::stream::encode_all(Cursor::new(&records[..]), 0).expect("compress");
+    let mcap = zstd_chunk_mcap(&records, compressed, records.len() as u64 + 1);
+
+    assert_no_progress(read_linear(&mcap, None).expect_err("linear should fail"));
+    assert_no_progress(read_indexed(&mcap, None::<TestDecoder>).expect_err("indexed should fail"));
+}
+
+#[cfg(feature = "zstd")]
+#[test]
+fn zstd_chunk_with_bytes_after_the_frame_decodes() {
+    // Bytes after the frame make the one-shot decode fail, since it reads every frame in the
+    // chunk, so ZstdDecoder::decompress_chunk streams the chunk again and stops at the declared
+    // size without seeing them.
+    let records = message_record(7, b"one");
+    let mut compressed = zstd::stream::encode_all(Cursor::new(&records[..]), 0).expect("compress");
+    compressed.extend(std::iter::repeat(0xA5u8).take(8));
+    assert!(
+        zstd::decode_all(Cursor::new(&compressed[..])).is_err(),
+        "a full decode should reject the trailing bytes"
+    );
+    let mcap = zstd_chunk_mcap(&records, compressed, records.len() as u64);
+    let expected = vec![(1, 7, b"one".to_vec())];
+
+    assert_eq!(read_linear(&mcap, None).expect("linear"), expected);
+    assert_eq!(
+        read_indexed(&mcap, None::<TestDecoder>).expect("indexed"),
+        expected
     );
 }
 
