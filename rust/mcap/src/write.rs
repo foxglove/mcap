@@ -1295,9 +1295,9 @@ impl<W: Write + Seek> Writer<W> {
     ///
     /// If an I/O error occurs while writing the summary section or footer, the file is not a
     /// complete MCAP, and the error is returned. The write is not retried: every later call to
-    /// this method, including the one made on drop, returns
-    /// [`McapError::AttemptedWriteAfterFailure`]. Use [`Self::into_inner()`] to get the underlying
-    /// stream back.
+    /// this method or to a write method, including the `finish()` made on drop, returns
+    /// [`McapError::AttemptedWriteAfterFailure`] instead of panicking. Use
+    /// [`Self::into_inner()`] to get the underlying stream back.
     pub fn finish(&mut self) -> McapResult<Summary> {
         if let Some(summary) = &self.finished_summary {
             // We already called finish().
