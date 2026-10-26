@@ -290,6 +290,7 @@ where
 }
 
 /// One message record on channel 1 with `payload`, as the bytes a chunk holds.
+#[cfg(feature = "zstd")]
 fn message_record(log_time: u64, payload: &[u8]) -> Vec<u8> {
     let mut body = write_body(&MessageHeader {
         channel_id: 1,
