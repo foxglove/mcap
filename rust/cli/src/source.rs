@@ -3301,12 +3301,11 @@ mod tests {
     }
 
     #[test]
-    fn remote_linear_scan_uses_one_request_per_read_ahead_window() {
-        // 600 x 1 KiB messages, several windows' worth: about one request per window, not per
-        // record.
+    fn remote_linear_scan_of_a_file_within_the_window_costs_one_request() {
+        // 600 x 1 KiB messages fit in the default window, so the first miss fetches the whole
+        // file and every later read is served from the window.
         let body: &'static [u8] = Box::leak(linear_mcap_without_summary(600).into_boxed_slice());
-        let window = crate::byte_source::REMOTE_READ_AHEAD_BYTES;
-        assert!(body.len() > 2 * window);
+        assert!(body.len() < crate::byte_source::REMOTE_READ_AHEAD_BYTES);
         let (url, requests) = serve_http_counting(body, true);
         let mut source =
             crate::byte_source::open_byte_source(Path::new(&url), super::SourceOptions::new(true))
@@ -3315,10 +3314,10 @@ mod tests {
 
         assert_eq!(count_remote_messages(source.as_mut()), 600);
         let scan_requests = requests.load(Ordering::SeqCst) - after_open;
-        let minimum = body.len().div_ceil(window);
-        assert!(
-            scan_requests >= minimum && scan_requests <= minimum + 2,
-            "expected about {minimum} window fills for {} bytes, got {scan_requests}",
+        assert_eq!(
+            scan_requests,
+            1,
+            "expected one window fill for {} bytes",
             body.len()
         );
     }

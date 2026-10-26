@@ -119,11 +119,12 @@ impl ByteSource for LocalFileSource {
         if dest.is_empty() || offset >= self.size {
             return Ok(0);
         }
-        let available = (self.size - offset) as usize;
+        let available = usize::try_from(self.size - offset).unwrap_or(usize::MAX);
         let to_read = dest.len().min(available);
         let dest = &mut dest[..to_read];
         let result = if self.pos == Some(offset) {
-            // Sequential: read through the buffer, one syscall per fill instead of per record.
+            // Sequential: read through the buffer, one syscall per buffer fill instead of one per
+            // call.
             self.reader.read_exact(dest)
         } else {
             // Random access: seek (discarding the buffer) and read straight into `dest`, so a small
@@ -147,9 +148,12 @@ impl ByteSource for LocalFileSource {
 
 /// Read-ahead window for sequential remote reads. Each range read is one HTTP request and the
 /// sans-io readers ask for a record's prefix and body separately, so an unbuffered scan costs
-/// about two requests per record. Sized like the tail prefetched at open, so an open remote
-/// source holds at most one window of bytes.
-pub(crate) const REMOTE_READ_AHEAD_BYTES: usize = 256 * 1024;
+/// about two requests per record. Object stores charge tens of milliseconds per request before
+/// the first byte arrives, so the window has to be large enough that transfer time, not request
+/// latency, dominates a scan. 8 MiB is the byte-range size AWS recommends for S3 and the part
+/// size its own clients default to; measurements in Durner et al., "Exploiting Cloud Object
+/// Storage for High-Performance Analytics" (PVLDB 2023) put the throughput plateau at 8-16 MiB.
+pub(crate) const REMOTE_READ_AHEAD_BYTES: usize = 8 * 1024 * 1024;
 
 /// Remote object that supports byte-range reads.
 pub struct RemoteRangeSource {

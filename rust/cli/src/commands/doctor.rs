@@ -160,7 +160,16 @@ impl Doctor {
                 }
                 Ok(mcap::sans_io::LinearReadEvent::ReadRequest(need)) => {
                     let buf = reader.insert(need);
-                    let n = source.read_into(pos, buf)?;
+                    let n = match source.read_into(pos, buf) {
+                        Ok(n) => n,
+                        Err(err) => {
+                            // Report the failure as a finding so the ones gathered before it
+                            // still reach the user, then stop: nothing past this offset can be
+                            // read.
+                            self.error(format!("Failed to read file at offset {pos}: {err:#}"));
+                            break;
+                        }
+                    };
                     reader.notify_read(n);
                     pos = pos.saturating_add(n as u64);
                 }
@@ -1107,6 +1116,70 @@ mod tests {
             self.bytes_read += n as u64;
             Ok(n)
         }
+    }
+
+    /// Fails every `read_into` at or past `fail_at`, standing in for a disk or network error
+    /// partway through the scan.
+    struct FailingSource {
+        inner: crate::byte_source::MemorySource,
+        fail_at: u64,
+    }
+
+    impl crate::byte_source::ByteSource for FailingSource {
+        fn size(&self) -> anyhow::Result<Option<u64>> {
+            self.inner.size()
+        }
+
+        fn is_remote(&self) -> bool {
+            false
+        }
+
+        fn display_name(&self) -> String {
+            self.inner.display_name()
+        }
+
+        fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> anyhow::Result<usize> {
+            if offset >= self.fail_at {
+                anyhow::bail!("simulated read failure");
+            }
+            self.inner.read_into(offset, dest)
+        }
+    }
+
+    #[test]
+    fn read_failure_is_reported_after_earlier_findings() {
+        let mut mcap = write_mcap(
+            |opts| {
+                opts.use_chunks(false)
+                    .repeat_channels(false)
+                    .repeat_schemas(false)
+            },
+            None,
+            &[10],
+        );
+        corrupt_first_schema_data_length(&mut mcap);
+        let fail_at = first_record_offset(&mcap, op::MESSAGE).expect("message should exist");
+
+        let mut source = FailingSource {
+            inner: crate::byte_source::MemorySource::new(mcap),
+            fail_at: fail_at as u64,
+        };
+        let diagnosis = super::diagnose_byte_source(&mut source, false)
+            .expect("a read failure is a finding, not a diagnose failure");
+
+        let parse_error = diagnosis
+            .errors
+            .iter()
+            .position(|err| err.contains("Failed to parse top-level record"));
+        let read_error = diagnosis.errors.iter().position(|err| {
+            err.contains(&format!("Failed to read file at offset {fail_at}"))
+                && err.contains("simulated read failure")
+        });
+        assert!(
+            matches!((parse_error, read_error), (Some(parse), Some(read)) if parse < read),
+            "{:?}",
+            diagnosis.errors
+        );
     }
 
     #[test]
