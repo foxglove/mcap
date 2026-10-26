@@ -36,6 +36,14 @@ When adding a command that can complete despite losing data, return `CommandOutc
 
 Remote inputs (HTTP(S) and object-store URLs: `s3://`, `gs://`, and Azure `az://`/`abfs://`) are handled in `source.rs` via `object_store`. Bounded, indexed reads — a summary-section read, or a single attachment/metadata range read under the no-opt-in caps — are allowed without a flag. Any command that would scan or download an entire remote file requires the global `--allow-remote-scan` flag; gate new whole-file remote reads behind `SourceOptions::allow_remote_scan` accordingly.
 
+### Bounded-memory reads
+
+CLI-specific reading choices, on top of the root `AGENTS.md` principle:
+
+- Default to `mcap::sans_io` (`LinearReader`, `IndexedReader`, `SummaryReader`) — one caller-driven code path for every input: local file (seek + read), stdin, and remote range reads.
+- Use the `mcap::read` slice API (`MessageStream`, `LinearReader`, `read::attachment`/`metadata`, `Summary::stream_chunk`) only when the whole file is already one `&[u8]` — a small input, or a memory-mapped local file.
+- Spooling to a temp file is the CLI's alone (the libraries never do it); use it when an operation needs random access over a non-seekable or reordered stream, e.g. sorting into an order the file isn't stored in. Don't spool onto a tmpfs such as `/tmp` — it is RAM/swap-backed, so it keeps the data in memory and defeats the spill.
+
 ### Output and logging
 
 Results go to stdout; diagnostics and warnings go to stderr. Use the `render` helpers for tabular output so column alignment and byte/time formatting stay consistent.
