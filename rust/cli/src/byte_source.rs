@@ -254,13 +254,15 @@ pub struct SequentialSource<R> {
     name: String,
 }
 
-impl SequentialSource<std::io::Stdin> {
+impl SequentialSource<std::io::StdinLock<'static>> {
+    /// Holds the stdin lock for the life of the source, so the two reads per record do not each
+    /// take and release the mutex. Nothing else in the process reads stdin.
     pub fn stdin() -> Result<Self> {
         let stdin = std::io::stdin();
         if stdin.is_terminal() {
             bail!("{PLEASE_SUPPLY_FILE}");
         }
-        Ok(Self::new(stdin, "<stdin>"))
+        Ok(Self::new(stdin.lock(), "<stdin>"))
     }
 }
 
