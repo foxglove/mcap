@@ -62,6 +62,9 @@ struct Doctor {
     /// read of the data section.
     scanned_chunks: BTreeMap<u64, ScannedChunk>,
     in_summary_section: bool,
+    /// Set when the scan stops before the end of the file, so checks that need the whole file
+    /// (the DataEnd and Footer presence checks) do not report what the scan never reached.
+    scan_stopped_early: bool,
     saw_data_end: bool,
     saw_footer: bool,
     saw_top_level_message: bool,
@@ -105,6 +108,7 @@ impl Doctor {
             chunk_indexes: BTreeMap::new(),
             scanned_chunks: BTreeMap::new(),
             in_summary_section: false,
+            scan_stopped_early: false,
             saw_data_end: false,
             saw_footer: false,
             saw_top_level_message: false,
@@ -153,6 +157,7 @@ impl Doctor {
                     // mid-record corruption), so continuing to call `next_event()` is not
                     // reliable. We still keep previously collected diagnostics and run the
                     // post-scan cross-checks below.
+                    self.scan_stopped_early = true;
                     break;
                 }
                 Ok(mcap::sans_io::LinearReadEvent::ReadRequest(need)) => {
@@ -164,6 +169,7 @@ impl Doctor {
                             // still reach the user, then stop: nothing past this offset can be
                             // read.
                             self.error(format!("Failed to read file at offset {pos}: {err:#}"));
+                            self.scan_stopped_early = true;
                             break;
                         }
                     };
@@ -283,6 +289,11 @@ impl Doctor {
     }
 
     fn finalize_record_presence(&mut self) {
+        if self.scan_stopped_early {
+            // The scan never reached the end of the file, so it cannot say whether these
+            // records are missing. The error that stopped it is already reported.
+            return;
+        }
         if !self.saw_data_end {
             self.error("File does not contain a DataEnd record");
         }
@@ -1158,6 +1169,15 @@ mod tests {
         });
         assert!(
             matches!((parse_error, read_error), (Some(parse), Some(read)) if parse < read),
+            "{:?}",
+            diagnosis.errors
+        );
+        // The scan never reached the end of the file, so it cannot claim records are missing.
+        assert!(
+            !diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("does not contain a")),
             "{:?}",
             diagnosis.errors
         );
