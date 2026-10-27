@@ -436,13 +436,8 @@ impl LinearReader {
 
     /// Yields the next event the caller should take to progress through the file.
     ///
-    /// Most errors end the reader: once `next_event` has returned one, every later call returns
-    /// `None`, since the input left no record boundary to resume from. A CRC mismatch is
-    /// different: the record it was found in is intact, so it is reported once and reading goes
-    /// on. After [`McapError::BadChunkCrc`] reading continues with the record after the chunk,
-    /// whose records are skipped if they were not yielded already; after
-    /// [`McapError::BadDataCrc`] or [`McapError::BadSummaryCrc`] the next call yields the
-    /// DataEnd or Footer record itself.
+    /// Some errors are non-terminal: the reader may yield more events after returning one.
+    /// Callers should keep calling `next_event` until it returns `None`.
     pub fn next_event(&mut self) -> Option<McapResult<LinearReadEvent<'_>>> {
         if matches!(self.currently_reading, Failed) {
             return None;
