@@ -1,10 +1,15 @@
 import struct
 import zlib
-from io import BytesIO
 from typing import IO, Optional, Union
 
 from .exceptions import EndOfFile
 from .opcode import Opcode
+
+_U8 = struct.Struct("<B")
+_U16 = struct.Struct("<H")
+_U32 = struct.Struct("<I")
+_U64 = struct.Struct("<Q")
+_RECORD_PREFIX = struct.Struct("<BQ")
 
 
 class ReadDataStream:
@@ -38,20 +43,16 @@ class ReadDataStream:
             raise RuntimeError("requested checksum where calculate_crc == false")
 
     def read1(self) -> int:
-        [value] = struct.unpack("<B", self.read(1))
-        return value
+        return _U8.unpack(self.read(1))[0]
 
     def read2(self) -> int:
-        [value] = struct.unpack("<H", self.read(2))
-        return value
+        return _U16.unpack(self.read(2))[0]
 
     def read4(self) -> int:
-        [value] = struct.unpack("<I", self.read(4))
-        return value
+        return _U32.unpack(self.read(4))[0]
 
     def read8(self) -> int:
-        [value] = struct.unpack("<Q", self.read(8))
-        return value
+        return _U64.unpack(self.read(8))[0]
 
     def read_prefixed_string(self) -> str:
         length = self.read4()
@@ -59,46 +60,49 @@ class ReadDataStream:
 
 
 class RecordBuilder:
+    """Accumulates serialized records in a bytearray: appends are amortized O(1) and
+    a record's length is patched in with a slice assignment, with no seek/tell.
+    """
+
     def __init__(self) -> None:
-        self._buffer = BytesIO()
+        self.buffer = bytearray()
+        self._record_start_offset = 0
 
     @property
     def count(self) -> int:
-        return self._buffer.tell()
+        return len(self.buffer)
 
     def start_record(self, opcode: Opcode):
-        self._record_start_offset = self._buffer.tell()
-        self._buffer.write(struct.pack("<BQ", opcode, 0))  # placeholder size
+        self._record_start_offset = len(self.buffer)
+        self.buffer += _RECORD_PREFIX.pack(opcode, 0)  # placeholder size
 
     def finish_record(self):
-        pos = self._buffer.tell()
-        length = pos - self._record_start_offset - 9
-        self._buffer.seek(self._record_start_offset + 1)
-        self._buffer.write(struct.pack("<Q", length))
-        self._buffer.seek(pos)
+        start = self._record_start_offset
+        length = len(self.buffer) - start - 9
+        self.buffer[start + 1 : start + 9] = _U64.pack(length)
 
-    def end(self):
-        buf = self._buffer.getvalue()
-        self._buffer.close()
-        self._buffer = BytesIO()
+    def end(self) -> bytearray:
+        """Returns the buffer itself, not a copy, and starts a new one."""
+        buf = self.buffer
+        self.buffer = bytearray()
         return buf
 
     def write(self, data: Union[bytes, bytearray, memoryview]):
-        self._buffer.write(data)
+        self.buffer += data
 
     def write_prefixed_string(self, value: str):
         bytes = value.encode()
         self.write4(len(bytes))
-        self.write(bytes)
+        self.buffer += bytes
 
     def write1(self, value: int):
-        self.write(struct.pack("<B", value))
+        self.buffer += _U8.pack(value)
 
     def write2(self, value: int):
-        self.write(struct.pack("<H", value))
+        self.buffer += _U16.pack(value)
 
     def write4(self, value: int):
-        self.write(struct.pack("<I", value))
+        self.buffer += _U32.pack(value)
 
     def write8(self, value: int):
-        self.write(struct.pack("<Q", value))
+        self.buffer += _U64.pack(value)

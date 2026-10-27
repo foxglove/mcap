@@ -23,7 +23,7 @@ ONE_MESSAGE_MCAP = (
 )
 
 
-def produce_corrupted_mcap(filename: Path, to_corrupt: str) -> bytes:
+def produce_corrupted_mcap(filename: Path, to_corrupt: str) -> bytearray:
     builder = RecordBuilder()
     corrupted = False
     with open(filename, "rb") as f:

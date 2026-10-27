@@ -1,9 +1,17 @@
+import struct
 import zlib
 from dataclasses import dataclass, field
+from itertools import chain
 from typing import Dict, List, Tuple
 
 from .data_stream import ReadDataStream, RecordBuilder
 from .opcode import Opcode
+
+# A message record header: opcode, length, channel id, sequence, log time, publish time.
+MESSAGE_RECORD = struct.Struct("<BQHIQQ")  # cspell:disable-line
+# The same without the opcode and length, as read from inside a record.
+MESSAGE_FIELDS = struct.Struct("<HIQQ")  # cspell:disable-line
+MESSAGE_FIELDS_SIZE = MESSAGE_FIELDS.size
 
 
 @dataclass
@@ -306,28 +314,27 @@ class Message(McapRecord):
     sequence: int
 
     def write(self, stream: RecordBuilder):
-        stream.start_record(Opcode.MESSAGE)
-        stream.write2(self.channel_id)
-        stream.write4(self.sequence)
-        stream.write8(self.log_time)
-        stream.write8(self.publish_time)
-        stream.write(self.data)
-        stream.finish_record()
+        data = self.data
+        # Byte count, not len(): len() counts elements for numpy and array.array.
+        stream.write(
+            MESSAGE_RECORD.pack(
+                Opcode.MESSAGE,
+                MESSAGE_FIELDS_SIZE + memoryview(data).nbytes,  # cspell:disable-line
+                self.channel_id,
+                self.sequence,
+                self.log_time,
+                self.publish_time,
+            )
+        )
+        stream.write(data)
 
     @staticmethod
     def read(stream: ReadDataStream, length: int):
-        channel_id = stream.read2()
-        sequence = stream.read4()
-        log_time = stream.read8()
-        publish_time = stream.read8()
-        data = stream.read(length - 22)
-        return Message(
-            channel_id=channel_id,
-            log_time=log_time,
-            data=data,
-            publish_time=publish_time,
-            sequence=sequence,
+        channel_id, sequence, log_time, publish_time = MESSAGE_FIELDS.unpack(
+            stream.read(MESSAGE_FIELDS_SIZE)
         )
+        data = stream.read(length - MESSAGE_FIELDS_SIZE)
+        return Message(channel_id, log_time, data, publish_time, sequence)
 
 
 @dataclass
@@ -339,9 +346,11 @@ class MessageIndex(McapRecord):
         stream.start_record(Opcode.MESSAGE_INDEX)
         stream.write2(self.channel_id)
         stream.write4(len(self.records) * 16)
-        for timestamp, offset in self.records:
-            stream.write8(timestamp)
-            stream.write8(offset)
+        stream.write(
+            struct.pack(
+                f"<{2 * len(self.records)}Q", *chain.from_iterable(self.records)
+            )
+        )
         stream.finish_record()
 
     @staticmethod
