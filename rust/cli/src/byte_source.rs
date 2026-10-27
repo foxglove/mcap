@@ -2,6 +2,12 @@
 //! range requests (see [`open_byte_source`]), plus a forward-only [`SequentialSource`] for
 //! stdin and other streams that commands read exactly once, in order.
 
+mod drivers;
+
+pub use drivers::{
+    for_each_linear_record, read_summary, service_indexed_chunk, try_for_each_linear_record,
+};
+
 use std::fs::File;
 use std::io::{BufReader, IsTerminal as _, Read, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
@@ -371,6 +377,39 @@ pub fn open_byte_source_for_scan(
     open_byte_source(path, options)
 }
 
+/// Opens `path` for a command that reads the whole input through random access, such as the
+/// rewrite engine. A remote URL is downloaded to a tempfile first, under the `--allow-remote-scan`
+/// opt-in checked from the path before any request goes out, exactly like the whole-file loads
+/// this replaces. Reading such inputs by range instead is separate work.
+pub fn open_materialized_byte_source(
+    path: &Path,
+    options: SourceOptions,
+) -> Result<Box<dyn ByteSource>> {
+    if is_remote_url(path) {
+        return Ok(Box::new(spool_remote_to_local(path, options)?));
+    }
+    Ok(Box::new(LocalFileSource::open_path(path)?))
+}
+
+/// Spools stdin to a tempfile and opens it as a random-access [`ByteSource`], for commands that
+/// may seek. Commands that only scan forward should use [`SequentialSource::stdin`] instead.
+pub fn open_stdin_byte_source() -> Result<Box<dyn ByteSource>> {
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        bail!("{PLEASE_SUPPLY_FILE}");
+    }
+    let mut temp_file = tempfile::Builder::new()
+        .prefix("mcap-cli-stdin-input-")
+        .tempfile()
+        .context("failed to create temporary file for stdin input")?;
+    std::io::copy(&mut stdin.lock(), temp_file.as_file_mut())
+        .context("failed to read input from stdin")?;
+    Ok(Box::new(LocalFileSource::from_temp_file(
+        temp_file,
+        PathBuf::from("<stdin>"),
+    )?))
+}
+
 fn open_remote_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dyn ByteSource>> {
     match open_remote_range_reader(path)? {
         Some(reader) => Ok(Box::new(RemoteRangeSource::new(reader))),
@@ -584,5 +623,47 @@ mod tests {
             .collect();
         assert_eq!(opcodes.first(), Some(&mcap::records::op::HEADER));
         assert_eq!(opcodes.last(), Some(&mcap::records::op::FOOTER));
+    }
+
+    #[test]
+    fn memory_source_summary_reader_finds_channel() {
+        let bytes = write_summary_mcap();
+        let mut source = MemorySource::new(bytes);
+        let summary = read_summary(&mut source)
+            .expect("summary read")
+            .expect("summary should exist");
+        assert!(summary.channels.values().any(|ch| ch.topic == "/demo"));
+        assert!(!summary.chunk_indexes.is_empty());
+    }
+
+    /// Rewrites the length field of the record after the header to claim far more than the file
+    /// holds.
+    fn claim_oversized_second_record(bytes: &mut [u8]) {
+        let prefix = mcap::MAGIC.len();
+        let header_len =
+            u64::from_le_bytes(bytes[prefix + 1..prefix + 9].try_into().expect("8 bytes")) as usize;
+        let next = prefix + 9 + header_len;
+        bytes[next + 1..next + 9].copy_from_slice(&(1u64 << 46).to_le_bytes());
+    }
+
+    #[test]
+    fn linear_scan_rejects_a_record_longer_than_the_file() {
+        let mut bytes = write_summary_mcap();
+        claim_oversized_second_record(&mut bytes);
+        let err = for_each_linear_record(
+            &mut MemorySource::new(bytes),
+            mcap::sans_io::LinearReaderOptions::default(),
+            |_opcode, _data| Ok(()),
+        )
+        .expect_err("a record longer than the file must be rejected, not allocated");
+        // The fixture's second record is a chunk, which the reader checks against the same limit
+        // but reports with its own variant.
+        assert!(
+            err.chain().any(|cause| matches!(
+                cause.downcast_ref::<mcap::McapError>(),
+                Some(mcap::McapError::ChunkTooLarge(_))
+            )),
+            "{err:#}"
+        );
     }
 }

@@ -1,11 +1,14 @@
 //! Low-level helpers shared by the single-input rewrite pipeline ([`super::single`]) and the
 //! multi-input merge pipeline ([`super::merge`]): the writer builder and output-sink selection,
-//! input slicing, summary/index inspection, and the index-or-scan traversals for metadata and
-//! attachments.
+//! summary/index inspection against a [`ByteSource`], and the index-or-scan traversals for
+//! metadata and attachments.
 use std::io::{IsTerminal as _, Seek, Write};
+use std::ops::ControlFlow;
 use std::path::Path;
 
 use anyhow::{bail, Context, Result};
+
+use crate::byte_source::{self, ByteSource};
 
 /// Output encoding for a rewritten MCAP. Both the single-input and merge pipelines build one of
 /// these and hand it to [`create_writer`] so the writer is configured identically.
@@ -98,14 +101,21 @@ pub(crate) fn open_output(output: Option<&Path>) -> Result<(OutputSink, bool)> {
 }
 
 /// Reads the leading [`Header`](mcap::records::Header) record, if present. Used to carry the input
-/// profile onto the output.
-pub(crate) fn read_header(input: &[u8]) -> Result<Option<mcap::records::Header>> {
-    let mut reader = mcap::read::LinearReader::new(input)?;
-    match reader.next() {
-        Some(Ok(mcap::records::Record::Header(header))) => Ok(Some(header)),
-        Some(Ok(_)) | None => Ok(None),
-        Some(Err(err)) => Err(err.into()),
-    }
+/// profile onto the output. Stops after the first record, and takes a leading chunk whole rather
+/// than decompressing it.
+pub(crate) fn read_header(source: &mut dyn ByteSource) -> Result<Option<mcap::records::Header>> {
+    let mut header = None;
+    byte_source::try_for_each_linear_record(
+        source,
+        mcap::sans_io::LinearReaderOptions::default().with_emit_chunks(true),
+        |opcode, data| {
+            if let mcap::records::Record::Header(found) = mcap::parse_record(opcode, data)? {
+                header = Some(found);
+            }
+            Ok(ControlFlow::Break(()))
+        },
+    )?;
+    Ok(header)
 }
 
 fn incomplete_indexed_summary_error() -> anyhow::Error {
@@ -114,23 +124,73 @@ fn incomplete_indexed_summary_error() -> anyhow::Error {
     )
 }
 
+fn is_unknown_schema_error(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<mcap::McapError>()
+            .is_some_and(|e| matches!(e, mcap::McapError::UnknownSchema(_, _)))
+    })
+}
+
+/// Whether the summary section contains any ChunkIndex records. Used when summary parsing fails
+/// with [`mcap::McapError::UnknownSchema`] to distinguish "not chunk-indexed → linear" from
+/// "chunk-indexed but incomplete → error".
+fn summary_section_has_chunk_indexes(source: &mut dyn ByteSource) -> Result<bool> {
+    let tail_len = crate::parse::FOOTER_RECORD_AND_END_MAGIC_LEN;
+    let Some(footer_start) = source
+        .size()
+        .filter(|size| *size >= (mcap::MAGIC.len() + tail_len) as u64)
+        .map(|size| size - tail_len as u64)
+    else {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    };
+    let tail = source.read_at(footer_start, tail_len)?;
+    if tail.len() != tail_len || !tail.ends_with(mcap::MAGIC) {
+        return Err(mcap::McapError::BadMagic.into());
+    }
+    let body = &tail[9..tail_len - mcap::MAGIC.len()];
+    let declared_len = u64::from_le_bytes(tail[1..9].try_into().expect("8-byte length"));
+    if tail[0] != mcap::records::op::FOOTER || declared_len != body.len() as u64 {
+        return Err(mcap::McapError::BadFooter.into());
+    }
+    let footer = match mcap::parse_record(tail[0], body)? {
+        mcap::records::Record::Footer(footer) => footer,
+        _ => return Err(mcap::McapError::BadFooter.into()),
+    };
+    if footer.summary_start == 0 {
+        return Ok(false);
+    }
+    if footer.summary_start > footer_start {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+    let summary_len = usize::try_from(footer_start - footer.summary_start)
+        .context("summary section is too large")?;
+    let summary = source.read_at(footer.summary_start, summary_len)?;
+    if summary.len() != summary_len {
+        return Err(mcap::McapError::UnexpectedEof.into());
+    }
+    let parsed = crate::parse::parsed_mcap_from_summary_section(None, &summary)?;
+    Ok(!parsed.chunk_indexes.is_empty())
+}
+
 /// Reads a summary only when it is usable for indexed reads. Returns `None` when there is no
 /// summary, no chunk indexes, or (via [`mcap::McapError::UnknownSchema`]) a summary that does not
 /// claim to be chunk-indexed. Returns an error for a summary that claims chunk indexes but is
 /// missing the channel/schema records an indexed read needs.
-pub(crate) fn read_indexed_summary(input: &[u8]) -> Result<Option<mcap::Summary>> {
-    match mcap::Summary::read(input) {
+pub(crate) fn read_indexed_summary(source: &mut dyn ByteSource) -> Result<Option<mcap::Summary>> {
+    match byte_source::read_summary(source) {
         Ok(Some(summary)) if summary.chunk_indexes.is_empty() => Ok(None),
         Ok(Some(summary)) if summary_supports_indexed_read(&summary) => Ok(Some(summary)),
         Ok(Some(_)) => Err(incomplete_indexed_summary_error()),
         Ok(None) => Ok(None),
-        Err(mcap::McapError::UnknownSchema(_, _))
-            if !crate::parse::summary_section_has_chunk_indexes(input)? =>
-        {
-            Ok(None)
+        Err(err) if is_unknown_schema_error(&err) => {
+            if !summary_section_has_chunk_indexes(source)? {
+                Ok(None)
+            } else {
+                Err(incomplete_indexed_summary_error())
+            }
         }
-        Err(mcap::McapError::UnknownSchema(_, _)) => Err(incomplete_indexed_summary_error()),
-        Err(err) => Err(err.into()),
+        Err(err) => Err(err),
     }
 }
 
@@ -164,11 +224,14 @@ pub(crate) fn summary_supports_indexed_read(summary: &mcap::Summary) -> bool {
 /// `false` result means an index-only read could miss records, so the caller must use a linear
 /// scan. See [`summary_has_unindexed_messages`] for the variant that keeps the fast path for
 /// stats-less inputs.
-pub(crate) fn summary_indexes_all_messages(input: &[u8], summary: &mcap::Summary) -> bool {
+pub(crate) fn summary_indexes_all_messages(
+    source: &mut dyn ByteSource,
+    summary: &mcap::Summary,
+) -> Result<bool> {
     let Some(stats) = summary.stats.as_ref() else {
-        return false;
+        return Ok(false);
     };
-    indexed_message_count(input, summary) == Some(stats.message_count)
+    Ok(indexed_message_count(source, summary)? == Some(stats.message_count))
 }
 
 /// Whether the summary *proves* at least one message lives outside the chunk message indexes: the
@@ -176,21 +239,27 @@ pub(crate) fn summary_indexes_all_messages(input: &[u8], summary: &mcap::Summary
 /// Returns `false` when statistics are absent, so a well-formed stats-less indexed file keeps the
 /// indexed fast path (an index-only read of it is correct and cheaper, and `--last-per-channel`
 /// requires it).
-pub(crate) fn summary_has_unindexed_messages(input: &[u8], summary: &mcap::Summary) -> bool {
+pub(crate) fn summary_has_unindexed_messages(
+    source: &mut dyn ByteSource,
+    summary: &mcap::Summary,
+) -> Result<bool> {
     let Some(stats) = summary.stats.as_ref() else {
-        return false;
+        return Ok(false);
     };
-    match indexed_message_count(input, summary) {
-        Some(indexed_messages) => indexed_messages != stats.message_count,
+    match indexed_message_count(source, summary)? {
+        Some(indexed_messages) => Ok(indexed_messages != stats.message_count),
         // An unparsable message index can't be trusted; fall back to a lossless scan.
-        None => true,
+        None => Ok(true),
     }
 }
 
 /// Sums the messages reachable through the chunk message indexes, or `None` if a message-index
 /// record can't be parsed. Offsets are de-duplicated so a shared message-index record is counted
 /// once.
-fn indexed_message_count(input: &[u8], summary: &mcap::Summary) -> Option<u64> {
+fn indexed_message_count(
+    source: &mut dyn ByteSource,
+    summary: &mcap::Summary,
+) -> Result<Option<u64>> {
     let mut offsets = std::collections::HashSet::new();
     let mut indexed_messages = 0u64;
     for offset in summary
@@ -199,26 +268,24 @@ fn indexed_message_count(input: &[u8], summary: &mcap::Summary) -> Option<u64> {
         .flat_map(|chunk| chunk.message_index_offsets.values())
     {
         if offsets.insert(*offset) {
-            let count = message_index_count(input, *offset).ok()?;
+            let Some(count) = message_index_count(source, *offset).ok() else {
+                return Ok(None);
+            };
             indexed_messages = indexed_messages.saturating_add(count as u64);
         }
     }
-    Some(indexed_messages)
+    Ok(Some(indexed_messages))
 }
 
 /// Number of bytes per message-index entry (a `(log_time, offset)` pair of `uint64`s).
 const MESSAGE_INDEX_ENTRY_SIZE: usize = 16;
 
-fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
-    let start = usize::try_from(offset).with_context(|| {
-        format!("message index offset out of range for this platform: {offset}")
-    })?;
-    let header_end = start
-        .checked_add(9)
-        .ok_or_else(|| anyhow::anyhow!("message index header overflows at offset {offset}"))?;
-    let header = input
-        .get(start..header_end)
-        .ok_or_else(|| anyhow::anyhow!("message index header out of bounds at offset {offset}"))?;
+fn message_index_count(source: &mut dyn ByteSource, offset: u64) -> Result<usize> {
+    // Opcode (1) + length (8) is enough to know the body size; then fetch the body.
+    let header = source.read_at(offset, 9)?;
+    if header.len() < 9 {
+        bail!("message index header out of bounds at offset {offset}");
+    }
     let opcode = header[0];
     if opcode != mcap::records::op::MESSAGE_INDEX {
         bail!("expected MessageIndex record at offset {offset}");
@@ -226,13 +293,10 @@ fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
     let length = u64::from_le_bytes(header[1..9].try_into().expect("slice has length 8"));
     let length = usize::try_from(length)
         .with_context(|| format!("message index length out of range at offset {offset}"))?;
-    let body_start = header_end;
-    let body_end = body_start
-        .checked_add(length)
-        .ok_or_else(|| anyhow::anyhow!("message index length overflows at offset {offset}"))?;
-    let body = input
-        .get(body_start..body_end)
-        .ok_or_else(|| anyhow::anyhow!("message index body out of bounds at offset {offset}"))?;
+    let body = source.read_at(offset + 9, length)?;
+    if body.len() != length {
+        bail!("message index body out of bounds at offset {offset}");
+    }
 
     if body.len() < 6 {
         bail!("message index body too short at offset {offset}");
@@ -250,38 +314,12 @@ fn message_index_count(input: &[u8], offset: u64) -> Result<usize> {
     Ok(byte_len / MESSAGE_INDEX_ENTRY_SIZE)
 }
 
-/// Bounds-checks a `[offset, offset + length)` slice of the input, used to hand chunk bytes to an
-/// [`mcap::sans_io::IndexedReader`] on demand.
-fn checked_slice(input: &[u8], offset: u64, length: usize) -> Result<&[u8]> {
-    let start = usize::try_from(offset)
-        .with_context(|| format!("chunk offset out of range for this platform: {offset}"))?;
-    let end = start
-        .checked_add(length)
-        .ok_or_else(|| anyhow::anyhow!("chunk read overflow at offset {offset}"))?;
-    input.get(start..end).ok_or_else(|| {
-        anyhow::anyhow!("chunk read out of bounds at offset {offset} length {length}")
-    })
-}
-
-/// Fulfills an [`mcap::sans_io::IndexedReader`] `ReadChunkRequest` by handing the reader the
-/// requested slice of the input. Shared by every indexed read loop (single-input and merge).
-pub(crate) fn service_chunk_request(
-    reader: &mut mcap::sans_io::IndexedReader,
-    input: &[u8],
-    offset: u64,
-    length: usize,
-) -> Result<()> {
-    let chunk_data = checked_slice(input, offset, length)?;
-    reader.insert_chunk_record_data(offset, chunk_data)?;
-    Ok(())
-}
-
 /// Visits every metadata record in the input, preferring the summary index and falling back to a
 /// top-level scan when the summary does not index every record (index records are optional, and
 /// statistics may be absent), so no records are dropped. Metadata is never inside a chunk, so the
 /// scan does not decompress.
 pub(crate) fn for_each_metadata<F>(
-    input: &[u8],
+    source: &mut dyn ByteSource,
     summary: Option<&mcap::Summary>,
     mut visit: F,
 ) -> Result<()>
@@ -294,7 +332,14 @@ where
             let mut indexes = summary.metadata_indexes.clone();
             indexes.sort_by_key(|index| index.offset);
             for index in &indexes {
-                let metadata = mcap::read::metadata(input, index).with_context(|| {
+                let length = usize::try_from(index.length).with_context(|| {
+                    format!(
+                        "metadata '{}' length out of range at offset {}",
+                        index.name, index.offset
+                    )
+                })?;
+                let bytes = source.read_at(index.offset, length)?;
+                let metadata = crate::parse::parse_metadata_record(&bytes).with_context(|| {
                     format!(
                         "failed to read metadata '{}' at offset {}",
                         index.name, index.offset
@@ -306,23 +351,30 @@ where
         }
     }
 
-    for record in mcap::read::LinearReader::new(input)? {
-        if let mcap::records::Record::Metadata(metadata) = record? {
-            visit(metadata)?;
-        }
-    }
-    Ok(())
+    byte_source::for_each_linear_record(
+        source,
+        mcap::sans_io::LinearReaderOptions::default().with_emit_chunks(true),
+        |opcode, data| {
+            if opcode == mcap::records::op::METADATA {
+                if let mcap::records::Record::Metadata(metadata) = mcap::parse_record(opcode, data)?
+                {
+                    visit(metadata)?;
+                }
+            }
+            Ok(())
+        },
+    )
 }
 
 /// Visits every attachment in the input, using the same index-or-scan strategy as
 /// [`for_each_metadata`]. Attachments are never inside a chunk, so the scan does not decompress.
 pub(crate) fn for_each_attachment<F>(
-    input: &[u8],
+    source: &mut dyn ByteSource,
     summary: Option<&mcap::Summary>,
     mut visit: F,
 ) -> Result<()>
 where
-    F: FnMut(mcap::Attachment) -> Result<()>,
+    F: FnMut(mcap::Attachment<'static>) -> Result<()>,
 {
     if let Some(summary) = summary {
         let indexed_count = summary.stats.as_ref().map(|stats| stats.attachment_count);
@@ -330,30 +382,46 @@ where
             let mut indexes = summary.attachment_indexes.clone();
             indexes.sort_by_key(|index| index.offset);
             for index in &indexes {
-                let attachment = mcap::read::attachment(input, index).with_context(|| {
+                let length = usize::try_from(index.length).with_context(|| {
                     format!(
-                        "failed to read attachment '{}' at offset {}",
+                        "attachment '{}' length out of range at offset {}",
                         index.name, index.offset
                     )
                 })?;
+                let bytes = source.read_at(index.offset, length)?;
+                let attachment =
+                    crate::parse::parse_attachment_record(&bytes).with_context(|| {
+                        format!(
+                            "failed to read attachment '{}' at offset {}",
+                            index.name, index.offset
+                        )
+                    })?;
                 visit(attachment)?;
             }
             return Ok(());
         }
     }
 
-    for record in mcap::read::LinearReader::new(input)? {
-        if let mcap::records::Record::Attachment { header, data, .. } = record? {
-            visit(mcap::Attachment {
-                log_time: header.log_time,
-                create_time: header.create_time,
-                name: header.name,
-                media_type: header.media_type,
-                data: std::borrow::Cow::Borrowed(data.as_ref()),
-            })?;
-        }
-    }
-    Ok(())
+    byte_source::for_each_linear_record(
+        source,
+        mcap::sans_io::LinearReaderOptions::default().with_emit_chunks(true),
+        |opcode, data| {
+            if opcode == mcap::records::op::ATTACHMENT {
+                if let mcap::records::Record::Attachment { header, data, .. } =
+                    mcap::parse_record(opcode, data)?
+                {
+                    visit(mcap::Attachment {
+                        log_time: header.log_time,
+                        create_time: header.create_time,
+                        name: header.name,
+                        media_type: header.media_type,
+                        data: std::borrow::Cow::Owned(data.into_owned()),
+                    })?;
+                }
+            }
+            Ok(())
+        },
+    )
 }
 
 /// Flips the last byte of the first message inside the file's first chunk, which must be
@@ -400,6 +468,7 @@ pub(crate) fn corrupt_first_chunk_message(bytes: &mut [u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::byte_source::MemorySource;
 
     /// Builds a well-formed MessageIndex record whose entry array holds `entry_count` entries.
     fn message_index_record(entry_count: usize) -> Vec<u8> {
@@ -416,22 +485,26 @@ mod tests {
 
     #[test]
     fn message_index_count_counts_entries() {
-        assert_eq!(message_index_count(&message_index_record(0), 0).unwrap(), 0);
-        assert_eq!(message_index_count(&message_index_record(3), 0).unwrap(), 3);
+        let mut source = MemorySource::new(message_index_record(0));
+        assert_eq!(message_index_count(&mut source, 0).unwrap(), 0);
+        let mut source = MemorySource::new(message_index_record(3));
+        assert_eq!(message_index_count(&mut source, 0).unwrap(), 3);
     }
 
     #[test]
     fn message_index_count_honors_a_nonzero_offset() {
         let mut buf = vec![0xAAu8; 5]; // arbitrary leading bytes
         buf.extend_from_slice(&message_index_record(2));
-        assert_eq!(message_index_count(&buf, 5).unwrap(), 2);
+        let mut source = MemorySource::new(buf);
+        assert_eq!(message_index_count(&mut source, 5).unwrap(), 2);
     }
 
     #[test]
     fn message_index_count_rejects_wrong_opcode() {
         let mut record = message_index_record(1);
         record[0] = mcap::records::op::MESSAGE;
-        let err = message_index_count(&record, 0).unwrap_err();
+        let mut source = MemorySource::new(record);
+        let err = message_index_count(&mut source, 0).unwrap_err();
         assert!(err.to_string().contains("expected MessageIndex record"));
     }
 
@@ -445,7 +518,8 @@ mod tests {
         let mut record = vec![mcap::records::op::MESSAGE_INDEX];
         record.extend_from_slice(&(body.len() as u64).to_le_bytes());
         record.extend_from_slice(&body);
-        let err = message_index_count(&record, 0).unwrap_err();
+        let mut source = MemorySource::new(record);
+        let err = message_index_count(&mut source, 0).unwrap_err();
         assert!(err.to_string().contains("misaligned"));
     }
 
@@ -454,32 +528,15 @@ mod tests {
         let mut record = message_index_record(1); // byte_len 16, body 22, length 22
                                                   // Shrink the declared record length so the body no longer equals 6 + byte_len.
         record[1..9].copy_from_slice(&14u64.to_le_bytes());
-        let err = message_index_count(&record, 0).unwrap_err();
+        let mut source = MemorySource::new(record);
+        let err = message_index_count(&mut source, 0).unwrap_err();
         assert!(err.to_string().contains("length mismatch"));
     }
 
     #[test]
     fn message_index_count_rejects_out_of_bounds_header() {
-        let err = message_index_count(&[], 0).unwrap_err();
+        let mut source = MemorySource::new(Vec::new());
+        let err = message_index_count(&mut source, 0).unwrap_err();
         assert!(err.to_string().contains("out of bounds"));
-    }
-
-    #[test]
-    fn checked_slice_returns_the_requested_range() {
-        assert_eq!(
-            checked_slice(&[0u8, 1, 2, 3, 4], 1, 2).unwrap().to_vec(),
-            vec![1u8, 2]
-        );
-    }
-
-    #[test]
-    fn checked_slice_rejects_out_of_bounds() {
-        let err = checked_slice(&[0u8, 1], 0, 5).unwrap_err();
-        assert!(err.to_string().contains("out of bounds"));
-    }
-
-    #[test]
-    fn checked_slice_rejects_overflow() {
-        assert!(checked_slice(&[0u8, 1, 2], u64::MAX, 1).is_err());
     }
 }
