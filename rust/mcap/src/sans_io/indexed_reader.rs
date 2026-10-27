@@ -1,7 +1,7 @@
-use binrw::BinRead;
+use binrw::{BinRead, BinReaderExt};
 
 use crate::{
-    records::{op, ChunkIndex, MessageHeader},
+    records::{op, ChunkHeader, ChunkIndex, MessageHeader},
     sans_io::{
         check_len,
         decompressor::{Decompressor, Decompressors},
@@ -112,23 +112,32 @@ pub struct IndexedReader {
     // Reused across chunks. Starts with the built-in decoders. `Mutex` makes `IndexedReader`
     // `Sync` (`Box<dyn Decompressor>` is only `Send`); see `unpoisoned`.
     decompressors: Mutex<Decompressors>,
-    /// If Some(limit), the reader will return an error on any non-chunk record with length > `limit`.
-    /// If used in conjunction with `prevalidate_chunk_crcs`, the reader will return an error on any
-    /// chunk record where the compressed OR decompressed length are > `limit`.
+    /// If Some(limit), the reader rejects records larger than `limit`, and chunks whose
+    /// compressed or decompressed data exceeds `limit`.
     pub record_length_limit: Option<usize>,
+    /// Whether to validate the uncompressed CRC before yielding messages from a chunk.
+    pub validate_chunk_crcs: bool,
 }
 
 fn chunk_request(
     index: &ChunkIndex,
     record_length_limit: Option<usize>,
 ) -> Option<McapResult<IndexedReadEvent<'static>>> {
-    let Some(length) = check_len(index.compressed_size, record_length_limit) else {
+    let header_length = index
+        .compressed_data_offset()
+        .expect("chunk data offset checked in new()")
+        - index.chunk_start_offset;
+    if header_length.checked_add(index.compressed_size) != Some(index.chunk_length) {
+        return Some(Err(McapError::BadIndex));
+    }
+    if check_len(index.compressed_size, record_length_limit).is_none() {
         return Some(Err(McapError::ChunkTooLarge(index.compressed_size)));
+    }
+    let Some(length) = check_len(index.chunk_length, None) else {
+        return Some(Err(McapError::ChunkTooLarge(index.chunk_length)));
     };
     Some(Ok(IndexedReadEvent::ReadChunkRequest {
-        offset: index
-            .compressed_data_offset()
-            .expect("chunk data offset checked in new()"),
+        offset: index.chunk_start_offset,
         length,
     }))
 }
@@ -245,6 +254,7 @@ impl IndexedReader {
             },
             decompressors: Mutex::new(Decompressors::builtin()),
             record_length_limit: options.record_length_limit,
+            validate_chunk_crcs: options.validate_chunk_crcs,
         })
     }
 
@@ -332,29 +342,43 @@ impl IndexedReader {
         )
     }
 
-    /// Call to insert new compressed records into this reader. `offset` must be a valid file
-    /// offset to the start of the compressed data in a chunk. `compressed_data` must be a slice
-    /// containing the entire compressed data for that chunk.
+    /// Call to insert a complete chunk record into this reader. `offset` must be a valid file
+    /// offset to the start of the chunk record. `chunk_data` must contain the opcode, record length,
+    /// chunk header, and compressed data, as requested by [`IndexedReadEvent::ReadChunkRequest`].
     /// Chunk contents can be inserted into this reader in a different order than they are requested
     /// from `next_event`. Inserting the same chunk contents twice will result in an error.
-    pub fn insert_chunk_record_data(
-        &mut self,
-        offset: u64,
-        compressed_data: &[u8],
-    ) -> McapResult<()> {
+    pub fn insert_chunk_record_data(&mut self, offset: u64, chunk_data: &[u8]) -> McapResult<()> {
         let chunk_indexes = &self.chunk_indexes[self.cur_chunk_index..];
         // linear search through our chunk indexes to figure out which one it is. In the common case,
         // the first chunk index will be right.
-        let Some((i, chunk_index)) = chunk_indexes.iter().enumerate().find(|(_, chunk_index)| {
-            let chunk_start_offset = chunk_index
-                .compressed_data_offset()
-                .expect("chunk data start offset checked in new()");
-            chunk_start_offset == offset
-        }) else {
+        let Some((i, chunk_index)) = chunk_indexes
+            .iter()
+            .enumerate()
+            .find(|(_, chunk_index)| chunk_index.chunk_start_offset == offset)
+        else {
             return Err(McapError::UnexpectedChunkDataInserted);
         };
-        if compressed_data.len() != chunk_index.compressed_size as usize {
+        if chunk_data.len() != chunk_index.chunk_length as usize || chunk_data.len() < 9 {
             return Err(McapError::UnexpectedChunkDataInserted);
+        }
+        let mut cursor = std::io::Cursor::new(chunk_data);
+        let opcode: u8 = cursor.read_le()?;
+        let record_length: u64 = cursor.read_le()?;
+        if opcode != op::CHUNK || record_length != (chunk_data.len() - 9) as u64 {
+            return Err(McapError::BadIndex);
+        }
+        let header: ChunkHeader = cursor.read_le()?;
+        let compressed_data = &chunk_data[cursor.position() as usize..];
+        if header.compressed_size != compressed_data.len() as u64
+            || header.compressed_size != chunk_index.compressed_size
+            || header.compression != chunk_index.compression
+        {
+            return Err(McapError::BadIndex);
+        }
+        if header.uncompressed_size != chunk_index.uncompressed_size {
+            return Err(McapError::DecompressionError(
+                "chunk header and index uncompressed sizes disagree".into(),
+            ));
         }
         let uncompressed_size = chunk_index.uncompressed_size as usize;
         let slot_idx = find_or_make_chunk_slot(&mut self.chunk_slots, offset);
@@ -381,6 +405,15 @@ impl IndexedReader {
                 &mut slot.buf,
                 uncompressed_size,
             )?;
+        }
+        if self.validate_chunk_crcs && header.uncompressed_crc != 0 {
+            let calculated = crc32fast::hash(&slot.buf);
+            if header.uncompressed_crc != calculated {
+                return Err(McapError::BadChunkCrc {
+                    saved: header.uncompressed_crc,
+                    calculated,
+                });
+            }
         }
         // index the current chunk slot
         // before starting, check if all existing message indexes have been exhausted and clear them
@@ -534,7 +567,7 @@ pub enum ReadOrder {
     File,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct IndexedReaderOptions {
     /// If Some, only messages with a log time greater or equal to this value will be yielded.
     ///
@@ -564,11 +597,35 @@ pub struct IndexedReaderOptions {
     /// reader will also return an error on any chunk record where the compressed OR decompressed
     /// length are > `limit`.
     pub record_length_limit: Option<usize>,
+    /// Validate chunk CRCs before yielding any messages. Defaults to true.
+    /// A zero CRC in a chunk header means no CRC was recorded and is not checked.
+    pub validate_chunk_crcs: bool,
+}
+
+impl Default for IndexedReaderOptions {
+    #[allow(deprecated)]
+    fn default() -> Self {
+        Self {
+            start: None,
+            end: None,
+            bounds: LogTimeBounds::default(),
+            order: ReadOrder::default(),
+            include_topics: None,
+            record_length_limit: None,
+            validate_chunk_crcs: true,
+        }
+    }
 }
 
 impl IndexedReaderOptions {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Enable or disable chunk CRC validation (enabled by default).
+    pub fn with_validate_chunk_crcs(mut self, validate_chunk_crcs: bool) -> Self {
+        self.validate_chunk_crcs = validate_chunk_crcs;
+        self
     }
 
     /// Configure the reader to yield messages in the specified order (defaults to log-time order).
@@ -873,6 +930,88 @@ mod tests {
         assert!(saw_request, "expected a chunk read request");
     }
 
+    fn insert_first_chunk(options: IndexedReaderOptions, mcap: &[u8]) -> McapResult<()> {
+        let summary = crate::Summary::read(mcap)?.expect("summary");
+        let mut reader = IndexedReader::new_with_options(&summary, options)?;
+        match reader.next_event().expect("chunk request")? {
+            IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                assert_eq!(offset, summary.chunk_indexes[0].chunk_start_offset);
+                assert_eq!(length as u64, summary.chunk_indexes[0].chunk_length);
+                reader.insert_chunk_record_data(offset, &mcap[offset as usize..][..length])
+            }
+            _ => panic!("expected chunk request"),
+        }
+    }
+
+    fn test_chunk_crc(compression: Option<crate::Compression>) {
+        let original = make_mcap(compression, &[&[(1, 10)]]);
+        let summary = crate::Summary::read(&original).unwrap().unwrap();
+        let start = summary.chunk_indexes[0].chunk_start_offset as usize;
+        // Opcode + record length + start/end times + uncompressed size.
+        let crc_offset = start + 9 + 24;
+        let saved = u32::from_le_bytes(original[crc_offset..crc_offset + 4].try_into().unwrap());
+        assert_ne!(saved, 0, "fixture must have a recorded CRC");
+        assert!(insert_first_chunk(IndexedReaderOptions::default(), &original).is_ok());
+
+        let mut corrupted = original.clone();
+        let bad_crc = saved ^ 1;
+        corrupted[crc_offset..crc_offset + 4].copy_from_slice(&bad_crc.to_le_bytes());
+        assert!(matches!(
+            insert_first_chunk(IndexedReaderOptions::default(), &corrupted),
+            Err(McapError::BadChunkCrc { saved: found, calculated })
+                if found == bad_crc && calculated == saved
+        ));
+        assert!(insert_first_chunk(
+            IndexedReaderOptions::default().with_validate_chunk_crcs(false),
+            &corrupted,
+        )
+        .is_ok());
+        corrupted[crc_offset..crc_offset + 4].copy_from_slice(&0u32.to_le_bytes());
+        assert!(insert_first_chunk(IndexedReaderOptions::default(), &corrupted).is_ok());
+    }
+
+    #[test]
+    fn test_uncompressed_chunk_crc() {
+        test_chunk_crc(None);
+    }
+
+    #[cfg(feature = "zstd")]
+    #[test]
+    fn test_zstd_chunk_crc() {
+        test_chunk_crc(Some(crate::Compression::Zstd));
+    }
+
+    #[cfg(feature = "lz4")]
+    #[test]
+    fn test_lz4_chunk_crc() {
+        test_chunk_crc(Some(crate::Compression::Lz4));
+    }
+
+    #[test]
+    fn test_corrupt_chunk_payload_rejected_before_messages() {
+        let mut mcap = make_mcap(None, &[&[(1, 10)]]);
+        let summary = crate::Summary::read(&mcap).unwrap().unwrap();
+        let index = &summary.chunk_indexes[0];
+        let last = (index.chunk_start_offset + index.chunk_length - 1) as usize;
+        mcap[last] ^= 1;
+        assert!(matches!(
+            insert_first_chunk(IndexedReaderOptions::default(), &mcap),
+            Err(McapError::BadChunkCrc { .. })
+        ));
+    }
+
+    #[test]
+    fn test_invalid_chunk_record_length() {
+        let mut mcap = make_mcap(None, &[&[(1, 10)]]);
+        let summary = crate::Summary::read(&mcap).unwrap().unwrap();
+        let start = summary.chunk_indexes[0].chunk_start_offset as usize;
+        mcap[start + 1] ^= 1;
+        assert!(matches!(
+            insert_first_chunk(IndexedReaderOptions::default(), &mcap),
+            Err(McapError::BadIndex)
+        ));
+    }
+
     fn read_mcap(options: IndexedReaderOptions, mcap: &[u8]) -> Vec<(u16, u64)> {
         let summary = crate::Summary::read(mcap)
             .expect("summary reading should succeed")
@@ -930,10 +1069,8 @@ mod tests {
                 Some(Err(err)) => panic!("indexed reader failed: {err}"),
                 Some(Ok(IndexedReadEvent::ReadChunkRequest { .. })) => {
                     let chunk_index = &my_chunk_indexes[cur_chunk_index];
-                    let offset = chunk_index
-                        .compressed_data_offset()
-                        .expect("chunk data start offset checked in new()");
-                    let len = chunk_index.compressed_size as usize;
+                    let offset = chunk_index.chunk_start_offset;
+                    let len = chunk_index.chunk_length as usize;
                     let chunk_buf = &mcap[offset as usize..][..len];
                     indexed_reader
                         .insert_chunk_record_data(offset, chunk_buf)
