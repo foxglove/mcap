@@ -281,37 +281,34 @@ fn indexed_message_count(
 const MESSAGE_INDEX_ENTRY_SIZE: usize = 16;
 
 fn message_index_count(source: &mut dyn ByteSource, offset: u64) -> Result<usize> {
-    // Opcode (1) + length (8) is enough to know the body size; then fetch the body.
-    let header = source.read_at(offset, 9)?;
-    if header.len() < 9 {
+    // Opcode (1), record length (8), channel ID (2), entry-array byte length (4). The entries
+    // themselves are not read: the count follows from the byte length, as it did when the
+    // memory mapping made slicing the body free.
+    const PREFIX_LEN: usize = 15;
+    let prefix = source.read_at(offset, PREFIX_LEN)?;
+    if prefix.len() < PREFIX_LEN {
         bail!("message index header out of bounds at offset {offset}");
     }
-    let opcode = header[0];
-    if opcode != mcap::records::op::MESSAGE_INDEX {
+    if prefix[0] != mcap::records::op::MESSAGE_INDEX {
         bail!("expected MessageIndex record at offset {offset}");
     }
-    let length = u64::from_le_bytes(header[1..9].try_into().expect("slice has length 8"));
-    let length = usize::try_from(length)
-        .with_context(|| format!("message index length out of range at offset {offset}"))?;
-    let body = source.read_at(offset + 9, length)?;
-    if body.len() != length {
-        bail!("message index body out of bounds at offset {offset}");
-    }
-
-    if body.len() < 6 {
-        bail!("message index body too short at offset {offset}");
-    }
-    let byte_len = u32::from_le_bytes(body[2..6].try_into().expect("slice has length 4")) as usize;
-    if !byte_len.is_multiple_of(MESSAGE_INDEX_ENTRY_SIZE) {
+    let length = u64::from_le_bytes(prefix[1..9].try_into().expect("slice has length 8"));
+    let byte_len = u64::from(u32::from_le_bytes(
+        prefix[11..15].try_into().expect("slice has length 4"),
+    ));
+    if !byte_len.is_multiple_of(MESSAGE_INDEX_ENTRY_SIZE as u64) {
         bail!("message index entries are misaligned at offset {offset}");
     }
-    let expected_len = 6usize
-        .checked_add(byte_len)
-        .ok_or_else(|| anyhow::anyhow!("message index byte length overflows at offset {offset}"))?;
-    if body.len() != expected_len {
+    if length != 6 + byte_len {
         bail!("message index length mismatch at offset {offset}");
     }
-    Ok(byte_len / MESSAGE_INDEX_ENTRY_SIZE)
+    if source
+        .size()
+        .is_some_and(|size| offset.saturating_add(9 + length) > size)
+    {
+        bail!("message index body out of bounds at offset {offset}");
+    }
+    Ok((byte_len / MESSAGE_INDEX_ENTRY_SIZE as u64) as usize)
 }
 
 /// Visits every metadata record in the input, preferring the summary index and falling back to a
