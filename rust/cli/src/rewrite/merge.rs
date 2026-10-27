@@ -66,6 +66,9 @@ struct IndexedInputMessageReader {
 struct MaterializedInputMessages {
     messages: Vec<PendingMessage>,
     next: usize,
+    /// Whether the scan that filled `messages` met an attachment record, so the attachment pass
+    /// over this input can be skipped when it did not.
+    saw_attachment: bool,
 }
 
 enum MergeMessageStream {
@@ -213,7 +216,7 @@ fn merge_inputs<W: Write + Seek>(
         .map(|source| byte_source::read_summary(source.as_mut()).unwrap_or(None))
         .collect::<Vec<_>>();
 
-    merge_messages(
+    let has_attachments = merge_messages(
         inputs,
         sources,
         &summaries,
@@ -223,6 +226,9 @@ fn merge_inputs<W: Write + Seek>(
     )?;
 
     for (idx, input) in inputs.iter().enumerate() {
+        if !has_attachments[idx] {
+            continue;
+        }
         write_attachments(
             &mut writer,
             sources[idx].as_mut(),
@@ -380,6 +386,7 @@ impl MaterializedInputMessages {
         let mut channels = mcap::read::ChannelAccumulator::default();
         let mut messages = Vec::new();
         let mut input_order = 0usize;
+        let mut saw_attachment = false;
 
         byte_source::for_each_linear_record(
             source,
@@ -411,6 +418,7 @@ impl MaterializedInputMessages {
                         ));
                         input_order += 1;
                     }
+                    mcap::records::Record::Attachment { .. } => saw_attachment = true,
                     _ => {}
                 }
                 Ok(())
@@ -420,7 +428,11 @@ impl MaterializedInputMessages {
 
         messages.sort_by_key(|message| (message.log_time, message.input_order));
 
-        Ok(Self { messages, next: 0 })
+        Ok(Self {
+            messages,
+            next: 0,
+            saw_attachment,
+        })
     }
 
     fn next_message(&mut self) -> Option<PendingMessage> {
@@ -446,7 +458,7 @@ fn merge_messages<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
     coalesce_channels: CoalesceChannels,
     allow_duplicate_metadata: bool,
-) -> Result<()> {
+) -> Result<Vec<bool>> {
     let mut id_maps = IdMaps {
         next_output_channel_id: 1,
         ..IdMaps::default()
@@ -483,6 +495,17 @@ fn merge_messages<W: Write + Seek>(
         ));
     }
 
+    // Inputs the attachment pass must visit: an indexed input's summary makes that lookup cheap
+    // or shows there is nothing to find, while a scanned input is re-read in full, so it is only
+    // visited when its scan met an attachment record.
+    let has_attachments = streams
+        .iter()
+        .map(|stream| match stream {
+            MergeMessageStream::Indexed(_) => true,
+            MergeMessageStream::Materialized(messages) => messages.saw_attachment,
+        })
+        .collect::<Vec<_>>();
+
     let mut heap = BinaryHeap::<PendingMessage>::new();
     for (input_idx, stream) in streams.iter_mut().enumerate() {
         if let Some(message) = stream.next_message(sources[input_idx].as_mut())? {
@@ -516,7 +539,7 @@ fn merge_messages<W: Write + Seek>(
         }
     }
 
-    Ok(())
+    Ok(has_attachments)
 }
 
 fn ensure_output_channel_id<W: Write + Seek>(
