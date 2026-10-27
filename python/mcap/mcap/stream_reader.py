@@ -15,12 +15,15 @@ except ImportError:
 
 from .data_stream import ReadDataStream
 from .exceptions import (
+    EndOfFile,
     InvalidMagic,
     RecordLengthLimitExceeded,
     UnsupportedCompressionError,
 )
 from .opcode import Opcode
 from .records import (
+    MESSAGE_FIELDS,
+    MESSAGE_FIELDS_SIZE,
     Attachment,
     AttachmentIndex,
     Channel,
@@ -41,6 +44,14 @@ from .records import (
 
 MAGIC_SIZE = 8
 
+# Opcode and record length. Every record starts with this prefix.
+_RECORD_PREFIX = struct.Struct("<BQ")
+_RECORD_PREFIX_SIZE = _RECORD_PREFIX.size
+# Plain ints: comparing against an IntEnum member goes through Enum.__eq__ on every record.
+_OPCODE_CHANNEL = int(Opcode.CHANNEL)
+_OPCODE_MESSAGE = int(Opcode.MESSAGE)
+_OPCODE_SCHEMA = int(Opcode.SCHEMA)
+
 
 class CRCValidationError(ValueError):
     def __init__(self, expected: int, actual: int, record: McapRecord):
@@ -56,30 +67,50 @@ class CRCValidationError(ValueError):
 
 
 def breakup_chunk(chunk: Chunk, validate_crc: bool = False) -> List[McapRecord]:
-    stream, stream_length = get_chunk_data_stream(chunk, validate_crc=validate_crc)
+    """Parses the records inside a chunk."""
+    return _parse_chunk_records(_get_chunk_data(chunk, validate_crc=validate_crc))
+
+
+def _parse_chunk_records(data: bytes) -> List[McapRecord]:
+    """Parses a chunk's decompressed contents. This is the hot loop of every reader, so
+    messages are unpacked in place rather than through ``Message.read``."""
     records: List[McapRecord] = []
-    while stream.count < stream_length:
-        opcode = stream.read1()
-        length = stream.read8()
-        if opcode == Opcode.CHANNEL:
-            channel = Channel.read(stream)
-            records.append(channel)
-        elif opcode == Opcode.MESSAGE:
-            message = Message.read(stream, length)
-            records.append(message)
-        elif opcode == Opcode.SCHEMA:
-            schema = Schema.read(stream)
-            records.append(schema)
-        else:
-            # Unknown chunk record type
-            stream.read(length)
+    append = records.append
+    prefix_unpack = _RECORD_PREFIX.unpack_from
+    fields_unpack = MESSAGE_FIELDS.unpack_from
+    pos = 0
+    end = len(data)
+    while pos < end:
+        if end - pos < _RECORD_PREFIX_SIZE:
+            raise EndOfFile()
+        opcode, length = prefix_unpack(data, pos)
+        pos += _RECORD_PREFIX_SIZE
+        record_end = pos + length
+        if record_end > end:
+            raise EndOfFile()
+        if opcode == _OPCODE_MESSAGE:
+            channel_id, sequence, log_time, publish_time = fields_unpack(data, pos)
+            append(
+                Message(
+                    channel_id,
+                    log_time,
+                    data[pos + MESSAGE_FIELDS_SIZE : record_end],
+                    publish_time,
+                    sequence,
+                )
+            )
+        elif opcode == _OPCODE_CHANNEL:
+            append(Channel.read(ReadDataStream(BytesIO(data[pos:record_end]))))
+        elif opcode == _OPCODE_SCHEMA:
+            append(Schema.read(ReadDataStream(BytesIO(data[pos:record_end]))))
+        # Unknown chunk record types are skipped.
+        pos = record_end
 
     return records
 
 
-def get_chunk_data_stream(
-    chunk: Chunk, validate_crc: bool = False
-) -> Tuple[ReadDataStream, int]:
+def _get_chunk_data(chunk: Chunk, validate_crc: bool = False) -> bytes:
+    """Returns the decompressed contents of a chunk, validating the CRC if requested."""
     if chunk.compression == "zstd":
         if zstandard is None:
             raise UnsupportedCompressionError("zstandard")
@@ -99,7 +130,13 @@ def get_chunk_data_stream(
                 actual=calculated_crc,
                 record=chunk,
             )
+    return data
 
+
+def get_chunk_data_stream(
+    chunk: Chunk, validate_crc: bool = False
+) -> Tuple[ReadDataStream, int]:
+    data = _get_chunk_data(chunk, validate_crc=validate_crc)
     return ReadDataStream(BytesIO(data)), len(data)
 
 
@@ -168,8 +205,9 @@ class StreamReader:
             # Can't validate the data_end crc if we skip magic.
             if self._validate_crcs and not self._skip_magic:
                 checksum_before_read = self._stream.checksum()
-            opcode = self._stream.read1()
-            length = self._stream.read8()
+            opcode, length = _RECORD_PREFIX.unpack(
+                self._stream.read(_RECORD_PREFIX_SIZE)
+            )
             if self._record_size_limit is not None and length > self._record_size_limit:
                 raise RecordLengthLimitExceeded(opcode, length, self._record_size_limit)
             count = self._stream.count
@@ -200,6 +238,17 @@ class StreamReader:
                 read_magic(self._stream)
 
     def _read_record(self, opcode: int, length: int) -> Optional[McapRecord]:
+        # Messages first: in an unchunked file they are almost every record.
+        if opcode == _OPCODE_MESSAGE:
+            body = self._stream.read(length)
+            if len(body) < MESSAGE_FIELDS_SIZE:
+                raise EndOfFile()
+            channel_id, sequence, log_time, publish_time = MESSAGE_FIELDS.unpack_from(
+                body
+            )
+            return Message(
+                channel_id, log_time, body[MESSAGE_FIELDS_SIZE:], publish_time, sequence
+            )
         if opcode == Opcode.ATTACHMENT:
             return Attachment.read(self._stream)
         if opcode == Opcode.ATTACHMENT_INDEX:
@@ -216,8 +265,6 @@ class StreamReader:
             return Footer.read(self._stream)
         if opcode == Opcode.HEADER:
             return Header.read(self._stream)
-        if opcode == Opcode.MESSAGE:
-            return Message.read(self._stream, length)
         if opcode == Opcode.MESSAGE_INDEX:
             return MessageIndex.read(self._stream)
         if opcode == Opcode.METADATA:

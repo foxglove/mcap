@@ -27,15 +27,15 @@ from ._chunk_builder import ChunkBuilder
 from .data_stream import RecordBuilder
 from .opcode import Opcode
 from .records import (
+    MESSAGE_FIELDS_SIZE,
+    MESSAGE_RECORD,
     Attachment,
     AttachmentIndex,
     Channel,
-    Chunk,
     ChunkIndex,
     DataEnd,
     Footer,
     Header,
-    Message,
     Metadata,
     MetadataIndex,
     Schema,
@@ -44,6 +44,7 @@ from .records import (
 )
 
 MCAP0_MAGIC = struct.pack("<8B", 137, 77, 67, 65, 80, 48, 13, 10)
+_OPCODE_MESSAGE = int(Opcode.MESSAGE)
 LIBRARY_IDENTIFIER = f"mcap-python/{__version__}"
 
 
@@ -138,6 +139,8 @@ class Writer:
         elif self.__compression == CompressionType.ZSTD:
             if zstandard is None:
                 raise UnsupportedCompressionError("zstandard")
+            # One compressor for the whole file: its context is reused across chunks.
+            self.__zstd_compressor = zstandard.ZstdCompressor()
 
     def add_attachment(
         self, create_time: int, log_time: int, name: str, media_type: str, data: bytes
@@ -196,30 +199,39 @@ class Writer:
             user-understood epoch (i.e unix epoch, robot boot time, etc.).
         :param data: Message data, to be decoded according to the schema of the channel.
         """
-        message = Message(
-            channel_id=channel_id,
-            log_time=log_time,
-            data=data,
-            publish_time=publish_time,
-            sequence=sequence,
-        )
-        if self.__statistics.message_count == 0:
-            self.__statistics.message_start_time = log_time
-        else:
-            self.__statistics.message_start_time = min(
-                log_time, self.__statistics.message_start_time
+        # Hot path: keep per-message work to one header pack and a few comparisons.
+        statistics = self.__statistics
+        if statistics.message_count == 0:
+            statistics.message_start_time = log_time
+        elif log_time < statistics.message_start_time:
+            statistics.message_start_time = log_time
+        if log_time > statistics.message_end_time:
+            statistics.message_end_time = log_time
+        statistics.channel_message_counts[channel_id] += 1
+        statistics.message_count += 1
+        chunk_builder = self.__chunk_builder
+        if chunk_builder is not None:
+            chunk_size = chunk_builder.add_message_fields(
+                channel_id, sequence, log_time, publish_time, data
             )
-        self.__statistics.message_end_time = max(
-            log_time, self.__statistics.message_end_time
-        )
-        self.__statistics.channel_message_counts[message.channel_id] += 1
-        self.__statistics.message_count += 1
-        if self.__chunk_builder:
-            self.__chunk_builder.add_message(message)
-            self.__maybe_finalize_chunk()
+            if chunk_size > self.__chunk_size:
+                self.__finalize_chunk()
         else:
-            message.write(self.__record_builder)
-            self.__flush()
+            # Unchunked: flush anything buffered (a channel, say), then write the record
+            # straight to the stream.
+            if self.__record_builder.count:
+                self.__flush()
+            # Byte count, not len(): len() counts elements for numpy and array.array.
+            header = MESSAGE_RECORD.pack(
+                _OPCODE_MESSAGE,
+                MESSAGE_FIELDS_SIZE + memoryview(data).nbytes,  # cspell:disable-line
+                channel_id,
+                sequence,
+                log_time,
+                publish_time,
+            )
+            self.__write_data(header)
+            self.__write_data(data)
 
     def add_metadata(self, name: str, data: Dict[str, str]):
         """
@@ -432,7 +444,10 @@ class Writer:
         self.__flush()
 
     def __flush(self):
-        data = self.__record_builder.end()
+        self.__write_data(self.__record_builder.end())
+
+    def __write_data(self, data: Union[bytes, bytearray]):
+        """Writes to the data section, keeping its CRC up to date."""
         if self.__enable_data_crcs:
             self.__data_section_crc = zlib.crc32(data, self.__data_section_crc)
         self.__stream.write(data)
@@ -449,37 +464,49 @@ class Writer:
         chunk_data = self.__chunk_builder.end()
         if self.__compression == CompressionType.LZ4:
             compression = "lz4"
-            compressed_data: bytes = lz4.frame.compress(chunk_data)  # type: ignore
+            compressed_data = lz4.frame.compress(chunk_data)  # type: ignore
         elif self.__compression == CompressionType.ZSTD:
             compression = "zstd"
-            compressed_data: bytes = zstandard.compress(chunk_data)  # type: ignore
+            compressed_data = self.__zstd_compressor.compress(chunk_data)
         else:
             compression = ""
             compressed_data = chunk_data
-        chunk = Chunk(
-            compression=compression,
-            data=compressed_data,
-            message_start_time=self.__chunk_builder.message_start_time,
-            message_end_time=self.__chunk_builder.message_end_time,
-            uncompressed_crc=zlib.crc32(chunk_data) if self.__enable_crcs else 0,
-            uncompressed_size=len(chunk_data),
-        )
+        message_start_time = self.__chunk_builder.message_start_time
+        message_end_time = self.__chunk_builder.message_end_time
+        uncompressed_size = len(chunk_data)
+        uncompressed_crc = zlib.crc32(chunk_data) if self.__enable_crcs else 0
 
         self.__flush()
         chunk_start_offset = self.__stream.tell()
-        chunk.write(self.__record_builder)
-        chunk_size = self.__record_builder.count
+        # The chunk record is written as its header through the record builder and its
+        # data straight to the stream, so the (large) data is not copied into the builder.
+        record_builder = self.__record_builder
+        compression_bytes = compression.encode()
+        header_length = 8 + 8 + 8 + 4 + 4 + len(compression_bytes) + 8
+        record_builder.write(
+            struct.pack("<BQ", Opcode.CHUNK, header_length + len(compressed_data))
+        )
+        record_builder.write8(message_start_time)
+        record_builder.write8(message_end_time)
+        record_builder.write8(uncompressed_size)
+        record_builder.write4(uncompressed_crc)
+        record_builder.write4(len(compression_bytes))
+        record_builder.write(compression_bytes)
+        record_builder.write8(len(compressed_data))
+        chunk_size = record_builder.count + len(compressed_data)
+        self.__flush()
+        self.__write_data(compressed_data)
 
         chunk_index = ChunkIndex(
-            message_start_time=chunk.message_start_time,
-            message_end_time=chunk.message_end_time,
+            message_start_time=message_start_time,
+            message_end_time=message_end_time,
             chunk_start_offset=chunk_start_offset,
             chunk_length=chunk_size,
             message_index_offsets={},
             message_index_length=0,
-            compression=chunk.compression,
+            compression=compression,
             compressed_size=len(compressed_data),
-            uncompressed_size=chunk.uncompressed_size,
+            uncompressed_size=uncompressed_size,
         )
 
         self.__flush()
