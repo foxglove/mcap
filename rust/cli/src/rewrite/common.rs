@@ -282,8 +282,7 @@ const MESSAGE_INDEX_ENTRY_SIZE: usize = 16;
 
 fn message_index_count(source: &mut dyn ByteSource, offset: u64) -> Result<usize> {
     // Opcode (1), record length (8), channel ID (2), entry-array byte length (4). The entries
-    // themselves are not read: the count follows from the byte length, as it did when the
-    // memory mapping made slicing the body free.
+    // themselves are not read: the count follows from the byte length.
     const PREFIX_LEN: usize = 15;
     let prefix = source.read_at(offset, PREFIX_LEN)?;
     if prefix.len() < PREFIX_LEN {
