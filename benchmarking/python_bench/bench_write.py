@@ -27,7 +27,9 @@ def load_blob(path):
     if len(blob) != BLOB_SIZE:
         print(f"Blob file {path} is not exactly {BLOB_SIZE} bytes", file=sys.stderr)
         sys.exit(1)
-    return memoryview(blob)
+    # Keep this a bytes object so that slices of it are bytes, as Writer.add_message is
+    # typed to take. A memoryview would skip the per-message copy a real caller pays.
+    return blob
 
 
 def peak_rss_kb() -> int:
