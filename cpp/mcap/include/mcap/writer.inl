@@ -519,7 +519,10 @@ void McapWriter::terminate() {
   statistics_.messageStartTime = 0;
   statistics_.messageEndTime = 0;
   writtenSchemas_.clear();
-  currentMessageIndex_.clear();
+  // Clear records: Keep currentMessageIndex_ sized to channels_
+  for (auto& messageIndex : currentMessageIndex_) {
+    messageIndex.records.clear();
+  }
   currentChunkStart_ = MaxTime;
   currentChunkEnd_ = 0;
   compression_ = Compression::None;
@@ -540,6 +543,7 @@ void McapWriter::addSchema(Schema& schema) {
 void McapWriter::addChannel(Channel& channel) {
   channel.id = uint16_t(channels_.size() + 1);
   channels_.push_back(channel);
+  currentMessageIndex_.push_back(MessageIndex{channel.id, {}});
   ++statistics_.channelCount;
 }
 
@@ -551,7 +555,8 @@ Status McapWriter::write(const Message& message) {
   auto& channelMessageCounts = statistics_.channelMessageCounts;
 
   // Write out Channel if we have not yet done so
-  if (channelMessageCounts.find(message.channelId) == channelMessageCounts.end()) {
+  auto channelMessageCountIt = channelMessageCounts.find(message.channelId);
+  if (channelMessageCountIt == channelMessageCounts.end()) {
     const size_t channelIndex = message.channelId - 1;
     if (channelIndex >= channels_.size()) {
       const auto msg = internal::StrCat("invalid channel id ", message.channelId);
@@ -578,7 +583,7 @@ Status McapWriter::write(const Message& message) {
     uncompressedSize_ += write(output, channel);
 
     // Update channel statistics
-    channelMessageCounts.emplace(message.channelId, 0);
+    channelMessageCountIt = channelMessageCounts.emplace(message.channelId, 0).first;
   }
 
   auto* chunkWriter = getChunkWriter();
@@ -599,13 +604,13 @@ Status McapWriter::write(const Message& message) {
       statistics_.messageEndTime = std::max(statistics_.messageEndTime, message.logTime);
     }
     ++statistics_.messageCount;
-    channelMessageCounts[message.channelId] += 1;
+    ++channelMessageCountIt->second;
   }
 
   if (chunkWriter != nullptr) {
     if (!options_.noMessageIndex) {
       // Update the message index
-      auto& messageIndex = currentMessageIndex_[message.channelId];
+      auto& messageIndex = currentMessageIndex_[message.channelId - 1];
       messageIndex.channelId = message.channelId;
       messageIndex.records.emplace_back(message.logTime, messageOffset);
     }
@@ -799,11 +804,11 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
     const uint64_t messageIndexOffset = output.size();
     if (!options_.noMessageIndex) {
       // Write the message index records
-      for (auto& [channelId, messageIndex] : currentMessageIndex_) {
+      for (auto& messageIndex : currentMessageIndex_) {
         // currentMessageIndex_ contains entries for every channel ever seen, not just in this
         // chunk. Only write message index records for channels with messages in this chunk.
         if (messageIndex.records.size() > 0) {
-          chunkIndexRecord.messageIndexOffsets.emplace(channelId, output.size());
+          chunkIndexRecord.messageIndexOffsets.emplace(messageIndex.channelId, output.size());
           write(output, messageIndex);
           // reset this message index for the next chunk. This allows us to re-use
           // allocations vs. the alternative strategy of allocating a fresh set of MessageIndex
@@ -828,7 +833,7 @@ void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
     chunkIndexRecord.uncompressedSize = uncompressedSize;
   } else if (!options_.noMessageIndex) {
     // Write the message index records
-    for (auto& [channelId, messageIndex] : currentMessageIndex_) {
+    for (auto& messageIndex : currentMessageIndex_) {
       // currentMessageIndex_ contains entries for every channel ever seen, not just in this
       // chunk. Only write message index records for channels with messages in this chunk.
       if (messageIndex.records.size() > 0) {
