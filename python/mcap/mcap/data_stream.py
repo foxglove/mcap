@@ -61,7 +61,7 @@ class ReadDataStream:
 
 class RecordBuilder:
     """Accumulates serialized records in a bytearray: appends are amortized O(1) and
-    a record's length is patched in with a slice assignment, with no seek/tell.
+    a record's length is patched in with a slice assignment.
     """
 
     def __init__(self) -> None:
@@ -82,7 +82,7 @@ class RecordBuilder:
         self.buffer[start + 1 : start + 9] = _U64.pack(length)
 
     def end(self) -> bytearray:
-        """Returns the buffer itself, not a copy, and starts a new one."""
+        """Hands over the buffer and starts a new one."""
         buf = self.buffer
         self.buffer = bytearray()
         return buf

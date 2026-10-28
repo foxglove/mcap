@@ -72,8 +72,8 @@ def breakup_chunk(chunk: Chunk, validate_crc: bool = False) -> List[McapRecord]:
 
 
 def _parse_chunk_records(data: bytes) -> List[McapRecord]:
-    """Parses a chunk's decompressed contents. This is the hot loop of every reader, so
-    messages are unpacked in place rather than through ``Message.read``."""
+    """Parses a chunk's decompressed contents: the hot loop of every reader, so messages
+    are unpacked in place."""
     records: List[McapRecord] = []
     append = records.append
     prefix_unpack = _RECORD_PREFIX.unpack_from

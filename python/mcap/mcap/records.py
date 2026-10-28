@@ -9,7 +9,7 @@ from .opcode import Opcode
 
 # A message record header: opcode, length, channel id, sequence, log time, publish time.
 MESSAGE_RECORD = struct.Struct("<BQHIQQ")  # cspell:disable-line
-# The same without the opcode and length, as read from inside a record.
+# The fields that follow the opcode and length inside a record.
 MESSAGE_FIELDS = struct.Struct("<HIQQ")  # cspell:disable-line
 MESSAGE_FIELDS_SIZE = MESSAGE_FIELDS.size
 

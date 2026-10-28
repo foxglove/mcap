@@ -54,8 +54,8 @@ class ChunkBuilder:
         publish_time: int,
         data: bytes,
     ) -> int:
-        """Appends a message record built from its fields, without a Message object.
-        Returns the size of the chunk so far."""
+        """Appends a message record built from its fields and returns the size of the
+        chunk so far."""
         if self.num_messages == 0:
             self.message_start_time = log_time
         elif log_time < self.message_start_time:

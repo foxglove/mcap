@@ -478,8 +478,8 @@ class Writer:
 
         self.__flush()
         chunk_start_offset = self.__stream.tell()
-        # The chunk record is written as its header through the record builder and its
-        # data straight to the stream, so the (large) data is not copied into the builder.
+        # The chunk header goes through the record builder and the (large) data straight
+        # to the stream.
         record_builder = self.__record_builder
         compression_bytes = compression.encode()
         header_length = 8 + 8 + 8 + 4 + 4 + len(compression_bytes) + 8
