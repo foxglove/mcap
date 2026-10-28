@@ -119,6 +119,57 @@ pub fn try_for_each_linear_record(
     Ok(())
 }
 
+/// Visit the body of every top-level record with the given opcode, in file order.
+///
+/// Unlike [`for_each_linear_record`], records of other opcodes are seeked over by their declared
+/// length rather than read, so scanning for a record kind that is never inside a chunk (metadata,
+/// attachments) costs one small read per top-level record instead of a read of the whole file.
+pub fn for_each_top_level_record_of(
+    source: &mut dyn ByteSource,
+    wanted: u8,
+    mut visit: impl FnMut(&[u8]) -> Result<()>,
+) -> Result<()> {
+    /// Opcode (1) and record length (8).
+    const PREFIX_LEN: usize = 9;
+
+    let magic = source.read_at(0, mcap::MAGIC.len())?;
+    if magic.as_slice() != mcap::MAGIC {
+        return Err(mcap::McapError::BadMagic.into());
+    }
+    let limit = record_length_limit(source);
+    let mut pos = mcap::MAGIC.len() as u64;
+    loop {
+        let prefix = source.read_at(pos, PREFIX_LEN)?;
+        if prefix.len() < PREFIX_LEN {
+            return Err(mcap::McapError::UnexpectedEof.into());
+        }
+        let opcode = prefix[0];
+        let len = u64::from_le_bytes(
+            prefix[1..PREFIX_LEN]
+                .try_into()
+                .expect("slice has length 8"),
+        );
+        let body_start = pos.saturating_add(PREFIX_LEN as u64);
+        if opcode == wanted {
+            let body_len = usize::try_from(len)
+                .ok()
+                .filter(|body_len| limit.is_none_or(|limit| *body_len <= limit));
+            let Some(body_len) = body_len else {
+                return Err(mcap::McapError::RecordTooLarge { opcode, len }.into());
+            };
+            let body = source.read_at(body_start, body_len)?;
+            if body.len() < body_len {
+                return Err(mcap::McapError::UnexpectedEof.into());
+            }
+            visit(&body)?;
+        }
+        if opcode == mcap::records::op::FOOTER {
+            return Ok(());
+        }
+        pos = body_start.saturating_add(len);
+    }
+}
+
 fn resolve_seek(from: SeekFrom, pos: u64, size: Option<u64>) -> Result<u64> {
     let target = match from {
         SeekFrom::Start(offset) => offset as i128,

@@ -313,7 +313,7 @@ fn message_index_count(source: &mut dyn ByteSource, offset: u64) -> Result<usize
 /// Visits every metadata record in the input, preferring the summary index and falling back to a
 /// top-level scan when the summary does not index every record (index records are optional, and
 /// statistics may be absent), so no records are dropped. Metadata is never inside a chunk, so the
-/// scan does not decompress.
+/// scan seeks over chunks instead of reading them.
 pub(crate) fn for_each_metadata<F>(
     source: &mut dyn ByteSource,
     summary: Option<&mcap::Summary>,
@@ -347,23 +347,19 @@ where
         }
     }
 
-    byte_source::for_each_linear_record(
-        source,
-        mcap::sans_io::LinearReaderOptions::default().with_emit_chunks(true),
-        |opcode, data| {
-            if opcode == mcap::records::op::METADATA {
-                if let mcap::records::Record::Metadata(metadata) = mcap::parse_record(opcode, data)?
-                {
-                    visit(metadata)?;
-                }
-            }
-            Ok(())
-        },
-    )
+    byte_source::for_each_top_level_record_of(source, mcap::records::op::METADATA, |data| {
+        if let mcap::records::Record::Metadata(metadata) =
+            mcap::parse_record(mcap::records::op::METADATA, data)?
+        {
+            visit(metadata)?;
+        }
+        Ok(())
+    })
 }
 
 /// Visits every attachment in the input, using the same index-or-scan strategy as
-/// [`for_each_metadata`]. Attachments are never inside a chunk, so the scan does not decompress.
+/// [`for_each_metadata`]. Attachments are never inside a chunk, so the scan seeks over chunks
+/// instead of reading them.
 pub(crate) fn for_each_attachment<F>(
     source: &mut dyn ByteSource,
     summary: Option<&mcap::Summary>,
@@ -398,26 +394,20 @@ where
         }
     }
 
-    byte_source::for_each_linear_record(
-        source,
-        mcap::sans_io::LinearReaderOptions::default().with_emit_chunks(true),
-        |opcode, data| {
-            if opcode == mcap::records::op::ATTACHMENT {
-                if let mcap::records::Record::Attachment { header, data, .. } =
-                    mcap::parse_record(opcode, data)?
-                {
-                    visit(mcap::Attachment {
-                        log_time: header.log_time,
-                        create_time: header.create_time,
-                        name: header.name,
-                        media_type: header.media_type,
-                        data: std::borrow::Cow::Owned(data.into_owned()),
-                    })?;
-                }
-            }
-            Ok(())
-        },
-    )
+    byte_source::for_each_top_level_record_of(source, mcap::records::op::ATTACHMENT, |data| {
+        if let mcap::records::Record::Attachment { header, data, .. } =
+            mcap::parse_record(mcap::records::op::ATTACHMENT, data)?
+        {
+            visit(mcap::Attachment {
+                log_time: header.log_time,
+                create_time: header.create_time,
+                name: header.name,
+                media_type: header.media_type,
+                data: std::borrow::Cow::Owned(data.into_owned()),
+            })?;
+        }
+        Ok(())
+    })
 }
 
 /// Flips the last byte of the first message inside the file's first chunk, which must be

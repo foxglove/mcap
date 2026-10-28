@@ -5,7 +5,8 @@
 mod drivers;
 
 pub use drivers::{
-    for_each_linear_record, read_summary, service_indexed_chunk, try_for_each_linear_record,
+    for_each_linear_record, for_each_top_level_record_of, read_summary, service_indexed_chunk,
+    try_for_each_linear_record,
 };
 
 use std::fs::File;
