@@ -266,11 +266,16 @@ fn indexed_message_count(
     let mut indexed_messages = 0u64;
     for chunk in &summary.chunk_indexes {
         // The message-index records for a chunk follow it, and the chunk index gives their total
-        // length, so one read covers every channel's record prefix. An offset outside that region
-        // (a non-conforming writer) is read on its own.
+        // length, so one read covers every channel's record prefix. The region holds the entries
+        // too, 16 bytes per message, so only a small one is read whole; the prefixes of a larger
+        // region, or of an offset outside it (a non-conforming writer), are read one by one.
         let region_start = chunk.chunk_start_offset.saturating_add(chunk.chunk_length);
         let region_len = usize::try_from(chunk.message_index_length).unwrap_or(usize::MAX);
-        let region = source.read_at(region_start, region_len)?;
+        let region = if region_len <= MESSAGE_INDEX_REGION_READ_LIMIT {
+            source.read_at(region_start, region_len)?
+        } else {
+            Vec::new()
+        };
         for offset in chunk.message_index_offsets.values() {
             if !offsets.insert(*offset) {
                 continue;
@@ -297,9 +302,11 @@ fn indexed_message_count(
 
 /// Number of bytes per message-index entry (a `(log_time, offset)` pair of `uint64`s).
 const MESSAGE_INDEX_ENTRY_SIZE: usize = 16;
-/// Opcode (1), record length (8), channel ID (2), entry-array byte length (4). The entries
-/// themselves are not read: the count follows from the byte length.
+/// Opcode (1), record length (8), channel ID (2), entry-array byte length (4). The count follows
+/// from the byte length, so the entries are never parsed.
 const MESSAGE_INDEX_PREFIX_LEN: usize = 15;
+/// A region this small costs one read; a larger one is read as one prefix per channel.
+const MESSAGE_INDEX_REGION_READ_LIMIT: usize = 64 * 1024;
 
 /// Number of entries in the message-index record whose prefix starts `prefix`, or `None` when the
 /// prefix is not a well-formed message-index record at `offset` in a file of `size` bytes.
