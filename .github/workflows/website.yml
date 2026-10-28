@@ -8,7 +8,7 @@ on:
 
 jobs:
   docs-home:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -36,7 +36,7 @@ jobs:
           retention-days: 1
 
   docs-cpp:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
 
@@ -51,7 +51,7 @@ jobs:
           retention-days: 1
 
   docs-python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
 
@@ -68,13 +68,13 @@ jobs:
           retention-days: 1
 
   docs-swift:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-swift
         with:
-          swift-version: "6.1"
+          swift-version: "6.4.1"
 
       - run: mkdir __docs__
 
@@ -97,7 +97,7 @@ jobs:
           retention-days: 1
 
   docs-deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     if: ${{ !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' }}
     needs:
       - docs-home
