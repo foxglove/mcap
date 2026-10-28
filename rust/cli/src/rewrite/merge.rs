@@ -173,7 +173,8 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
     let mut sources = Vec::with_capacity(opts.files.len());
     let mut inputs = Vec::with_capacity(opts.files.len());
     for path in &opts.files {
-        let source = byte_source::open_materialized_byte_source(path, source_options)?;
+        let source = byte_source::open_materialized_byte_source(path, source_options)
+            .map_err(|err| explain_open_file_limit(err, sources.len(), opts.files.len()))?;
         inputs.push(InputRef {
             name: source::redacted_display(path),
         });
@@ -182,6 +183,27 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
 
     let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
     merge_inputs(&inputs, &mut sources, sink, &opts, disable_seeking)
+}
+
+/// Every input stays open for the whole merge, so a merge of more inputs than the process's
+/// open-file limit fails on the open that crosses it. Name the cause and the remedy instead of
+/// reporting a bare "too many open files" against one input.
+fn explain_open_file_limit(err: anyhow::Error, opened: usize, total: usize) -> anyhow::Error {
+    /// `EMFILE` on Linux and macOS; the limit is a POSIX notion, so other targets never match.
+    const EMFILE: i32 = 24;
+    let is_file_limit = cfg!(unix)
+        && err.chain().any(|cause| {
+            cause
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|io| io.raw_os_error() == Some(EMFILE))
+        });
+    if !is_file_limit {
+        return err;
+    }
+    err.context(format!(
+        "merge keeps every input open and the open-file limit was reached after {opened} of \
+         {total} inputs; raise the limit (`ulimit -n`) above {total} or merge in batches"
+    ))
 }
 
 fn merge_inputs<W: Write + Seek>(
@@ -977,6 +999,21 @@ mod tests {
             allow_duplicate_metadata: false,
             coalesce_channels: CoalesceChannels::Auto,
         }
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn open_file_limit_is_explained_through_the_context_chain() {
+        let io = std::io::Error::from_raw_os_error(24);
+        let err = anyhow::Error::from(io).context("couldn't open 'x.mcap'");
+        let explained = explain_open_file_limit(err, 61, 100).to_string();
+        assert!(explained.contains("after 61 of 100 inputs"), "{explained}");
+
+        let other = anyhow::anyhow!("couldn't open 'x.mcap'");
+        assert_eq!(
+            explain_open_file_limit(other, 0, 2).to_string(),
+            "couldn't open 'x.mcap'"
+        );
     }
 
     #[test]
