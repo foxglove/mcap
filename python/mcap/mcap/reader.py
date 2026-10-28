@@ -3,6 +3,7 @@
 import io
 import warnings
 from abc import ABC, abstractmethod
+from bisect import bisect_left
 from typing import (
     IO,
     Any,
@@ -17,7 +18,6 @@ from typing import (
     Union,
 )
 
-from ._message_queue import make_message_queue
 from .data_stream import ReadDataStream, RecordBuilder
 from .decoder import DecoderFactory
 from .exceptions import DecoderNotFoundError, McapError
@@ -36,7 +36,13 @@ from .records import (
     Schema,
     Statistics,
 )
-from .stream_reader import MAGIC_SIZE, StreamReader, breakup_chunk, read_magic
+from .stream_reader import (
+    MAGIC_SIZE,
+    StreamReader,
+    _get_chunk_data,
+    _parse_chunk_records,
+    read_magic,
+)
 from .summary import Summary
 
 
@@ -166,6 +172,10 @@ class DecodedMessageTuple(NamedTuple):
     channel: Channel
     message: Message
     decoded_message: Any
+
+
+# (sort key..., (schema, channel, message)); see SeekingReader._read_chunk_messages.
+_KeyedMessage = Tuple[int, int, int, Tuple[Optional[Schema], Channel, Message]]
 
 
 class McapReader(ABC):
@@ -380,45 +390,125 @@ class SeekingReader(McapReader):
             )
             return
 
-        message_queue = make_message_queue(
-            log_time_order=log_time_order, reverse=reverse
-        )
-        for chunk_index in _chunks_matching_topics(
+        chunk_indexes = _chunks_matching_topics(
             summary, topics, starting_at, ending_before
-        ):
-            message_queue.push(chunk_index)
-        while message_queue:
-            next_item = message_queue.pop()
-            if isinstance(next_item, ChunkIndex):
-                self._stream.seek(next_item.chunk_start_offset + 1 + 8, io.SEEK_SET)
-                chunk = Chunk.read(ReadDataStream(self._stream))
-                for index, record in enumerate(
-                    breakup_chunk(chunk, validate_crc=self._validate_crcs)
-                ):
-                    if isinstance(record, Message):
-                        channel = summary.channels[record.channel_id]
-                        if topics is not None and channel.topic not in topics:
-                            continue
-                        if starting_at is not None and record.log_time < starting_at:
-                            continue
-                        if (
-                            ending_before is not None
-                            and record.log_time >= ending_before
-                        ):
-                            continue
-                        if channel.schema_id == 0:
-                            schema = None
-                        else:
-                            schema = summary.schemas[channel.schema_id]
-                        message_queue.push(
-                            (
-                                (schema, channel, record),
-                                next_item.chunk_start_offset,
-                                index,
-                            )
-                        )
+        )
+        if not log_time_order:
+            if reverse:
+                raise ValueError("reverse is only valid with log_time_order=True")
+            # `held` keeps the previous chunk alive, see _read_chunk_messages.
+            for chunk_index in chunk_indexes:
+                items, held = self._read_chunk_messages(
+                    chunk_index, summary, topics, starting_at, ending_before, False
+                )
+                for keyed in items:
+                    yield keyed[3]
+            return
+
+        # Chunks are visited in order of their first (or, in reverse, last) message. A
+        # message can be yielded once no chunk still to be read can hold an earlier one,
+        # which is any message logged strictly before the next chunk's start time. Files
+        # whose chunks do not overlap in time therefore cost one sort of an already
+        # sorted list per chunk and hold one chunk's messages at a time; overlapping
+        # chunks accumulate in `pending`, which Python's sort merges as two sorted runs.
+        if reverse:
+            chunk_indexes.sort(
+                key=lambda ci: (
+                    -ci.message_end_time,
+                    -(ci.chunk_start_offset + ci.chunk_length),
+                )
+            )
+        else:
+            chunk_indexes.sort(
+                key=lambda ci: (ci.message_start_time, ci.chunk_start_offset)
+            )
+        pending: List[_KeyedMessage] = []
+        # `held` keeps the previous chunk alive, see _read_chunk_messages.
+        last = len(chunk_indexes) - 1
+        for i, chunk_index in enumerate(chunk_indexes):
+            items, held = self._read_chunk_messages(
+                chunk_index, summary, topics, starting_at, ending_before, reverse
+            )
+            items.sort()
+            if pending:
+                pending.extend(items)
+                pending.sort()
             else:
-                yield next_item[0]
+                pending = items
+            if i == last:
+                ready_count = len(pending)
+            else:
+                next_index = chunk_indexes[i + 1]
+                # A one-element tuple sorts before every key with the same time.
+                if reverse:
+                    bound = (-next_index.message_end_time,)
+                else:
+                    bound = (next_index.message_start_time,)
+                ready_count = bisect_left(pending, bound)
+            if ready_count == len(pending):
+                ready, pending = pending, []
+            else:
+                ready = pending[:ready_count]
+                del pending[:ready_count]
+            for keyed in ready:
+                yield keyed[3]
+
+    def _read_chunk_messages(
+        self,
+        chunk_index: ChunkIndex,
+        summary: Summary,
+        topics: Optional[Iterable[str]],
+        starting_at: Optional[int],
+        ending_before: Optional[int],
+        reverse: bool,
+    ) -> Tuple[List[_KeyedMessage], bytes]:
+        """Reads one chunk and returns its matching messages in file order, each under a
+        sort key of (log time, chunk offset, record index), negated when reversed, so that
+        a plain tuple sort orders them the way ``iter_messages`` promises.
+
+        The chunk's buffer is returned too so the caller can keep it alive until the
+        next chunk is read; freeing it first lets glibc trim the heap top and fault the
+        next buffer in page by page."""
+        self._stream.seek(chunk_index.chunk_start_offset + 1 + 8, io.SEEK_SET)
+        chunk = Chunk.read(ReadDataStream(self._stream))
+        data = _get_chunk_data(chunk, validate_crc=self._validate_crcs)
+        records = _parse_chunk_records(data)
+        channels = summary.channels
+        schemas = summary.schemas
+        # Per channel: the (schema, channel) pair, or False when the topic is filtered out.
+        resolved: Dict[int, Any] = {}
+        chunk_offset = chunk_index.chunk_start_offset
+        if reverse:
+            chunk_offset = -chunk_offset
+        out: List[_KeyedMessage] = []
+        append = out.append
+        for index, record in enumerate(records):
+            if not isinstance(record, Message):
+                continue
+            log_time = record.log_time
+            if starting_at is not None and log_time < starting_at:
+                continue
+            if ending_before is not None and log_time >= ending_before:
+                continue
+            channel_id = record.channel_id
+            pair = resolved.get(channel_id)
+            if pair is None:
+                channel = channels[channel_id]
+                if topics is not None and channel.topic not in topics:
+                    resolved[channel_id] = False
+                    continue
+                if channel.schema_id == 0:
+                    schema = None
+                else:
+                    schema = schemas[channel.schema_id]
+                pair = resolved[channel_id] = (schema, channel)
+            elif pair is False:
+                continue
+            if reverse:
+                append((-log_time, chunk_offset, -index, (pair[0], pair[1], record)))
+            else:
+                append((log_time, chunk_offset, index, (pair[0], pair[1], record)))
+        return out, data
 
     def get_header(self) -> Header:
         """Reads the Header record from the beginning of the MCAP file."""
@@ -583,15 +673,16 @@ class NonSeekingReader(McapReader):
         if isinstance(topics, str):
             topics = [topics]
         if not log_time_order:
-            for t in self._iter_messages_internal(topics, starting_at, ending_before):
-                yield t
+            yield from self._iter_messages_internal(topics, starting_at, ending_before)
         else:
-            for t in sorted(
-                self._iter_messages_internal(topics, starting_at, ending_before),
-                key=lambda tup: tup[2].log_time,
-                reverse=reverse,
-            ):
-                yield t
+            messages = list(
+                self._iter_messages_internal(topics, starting_at, ending_before)
+            )
+            # Checking order is cheaper than a keyed sort, and most files are in order.
+            log_times = [tup[2].log_time for tup in messages]
+            if log_times != sorted(log_times, reverse=reverse):
+                messages.sort(key=lambda tup: tup[2].log_time, reverse=reverse)
+            yield from messages
 
     def _iter_messages_internal(
         self,
@@ -600,21 +691,15 @@ class NonSeekingReader(McapReader):
         ending_before: Optional[int] = None,
     ) -> Iterator[Tuple[Optional[Schema], Channel, Message]]:
         self._check_spent()
+        channels = self._channels
+        schemas = self._schemas
         for record in self._stream_reader.records:
-            if isinstance(record, Schema):
-                self._schemas[record.id] = record
-            if isinstance(record, Channel):
-                if record.schema_id != 0 and record.schema_id not in self._schemas:
-                    raise McapError(
-                        f"no schema record found with id {record.schema_id}"
-                    )
-                self._channels[record.id] = record
             if isinstance(record, Message):
-                if record.channel_id not in self._channels:
+                channel = channels.get(record.channel_id)
+                if channel is None:
                     raise McapError(
                         f"no channel record found with id {record.channel_id}"
                     )
-                channel = self._channels[record.channel_id]
                 if topics is not None and channel.topic not in topics:
                     continue
                 if starting_at is not None and record.log_time < starting_at:
@@ -624,8 +709,16 @@ class NonSeekingReader(McapReader):
                 if channel.schema_id == 0:
                     schema = None
                 else:
-                    schema = self._schemas[channel.schema_id]
+                    schema = schemas[channel.schema_id]
                 yield (schema, channel, record)
+            elif isinstance(record, Schema):
+                schemas[record.id] = record
+            elif isinstance(record, Channel):
+                if record.schema_id != 0 and record.schema_id not in schemas:
+                    raise McapError(
+                        f"no schema record found with id {record.schema_id}"
+                    )
+                channels[record.id] = record
 
     def get_summary(self) -> Optional[Summary]:
         """Returns a Summary object containing records from the (optional) summary section."""
