@@ -9,7 +9,7 @@ on:
 
 jobs:
   cpp:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -91,7 +91,7 @@ jobs:
       - run: ./test/build/Debug/bin/unit-tests
 
   go:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: go
@@ -123,7 +123,7 @@ jobs:
           echo "go/mcap/version.go Version ($source_version) matches release tag"
 
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     defaults:
       run:
         working-directory: python
@@ -199,7 +199,7 @@ jobs:
           packages-dir: python/mcap-ros2-support/dist
 
   rust:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -236,7 +236,7 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.RUST_CRATES_IO_TOKEN }}
 
   swift:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -253,13 +253,13 @@ jobs:
           echo "Swift mcapVersion ($source_version) matches release tag"
       - uses: ./.github/actions/setup-swift
         with:
-          swift-version: "6.1"
+          swift-version: "6.4.1"
       - run: docker run -t --rm -v $(pwd):/work -w /work ghcr.io/realm/swiftlint:0.62.2
       - run: docker run -t --rm -v $(pwd):/work ghcr.io/nicklockwood/swiftformat:0.58.6 --lint /work
       - run: swift build
       - run: swift test
   typescript:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
 
     permissions:
       contents: read
@@ -321,7 +321,7 @@ jobs:
         run: yarn workspace @mcap/browser npm publish --provenance --access public
 
   typescript-examples:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -354,19 +354,19 @@ jobs:
       matrix:
         include:
           - os: linux
-            image: ubuntu-latest
+            image: ubuntu-26.04
             arch: amd64
             target: x86_64-unknown-linux-musl
             build: cargo zigbuild
             exe: ""
           - os: linux
-            image: ubuntu-latest
+            image: ubuntu-26.04
             arch: arm64
             target: aarch64-unknown-linux-musl
             build: cargo zigbuild
             exe: ""
           - os: linux
-            image: ubuntu-latest
+            image: ubuntu-26.04
             arch: arm
             target: armv7-unknown-linux-musleabihf
             build: cargo zigbuild
@@ -458,7 +458,7 @@ jobs:
           draft: false
 
   conformance-lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -473,7 +473,7 @@ jobs:
       - run: yarn workspace @foxglove/mcap-conformance build
 
   conformance-cpp:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -493,7 +493,7 @@ jobs:
       - run: yarn test:conformance --runner cpp-
 
   conformance-go:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -517,7 +517,7 @@ jobs:
       - run: yarn test:conformance --runner go-
 
   conformance-python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -534,7 +534,7 @@ jobs:
       - run: yarn test:conformance --runner py-
 
   conformance-typescript:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -549,7 +549,7 @@ jobs:
       - run: yarn test:conformance --runner ts-
 
   conformance-kaitai-struct:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -564,7 +564,7 @@ jobs:
       - run: yarn test:conformance --runner ksy-
 
   conformance-swift:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -576,14 +576,14 @@ jobs:
           cache: yarn
       - uses: ./.github/actions/setup-swift
         with:
-          swift-version: "6.1"
+          swift-version: "6.4.1"
       - run: swift build
       - run: yarn install --immutable
       - run: yarn test:conformance:generate-inputs --verify
       - run: yarn test:conformance --runner swift-
 
   conformance-rust:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
@@ -600,7 +600,7 @@ jobs:
       - run: yarn test:conformance --runner rust-
 
   spellcheck:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
         with:
