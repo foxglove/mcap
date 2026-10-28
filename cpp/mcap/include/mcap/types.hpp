@@ -178,6 +178,14 @@ using SchemaPtr = std::shared_ptr<Schema>;
 using ChannelPtr = std::shared_ptr<Channel>;
 
 /**
+ * @brief A non-owning pointer and size describing a region of memory.
+ */
+struct MCAP_PUBLIC ByteSpan {
+  const std::byte* data;
+  std::size_t size;
+};
+
+/**
  * @brief A single Message published to a Channel.
  */
 struct MCAP_PUBLIC Message {
@@ -207,6 +215,28 @@ struct MCAP_PUBLIC Message {
    * iterator is advanced.
    */
   const std::byte* data = nullptr;
+};
+
+/**
+ * @brief A single Message published to a Channel, excluding its payload.
+ */
+struct MCAP_PUBLIC MessageHeader {
+  ChannelId channelId;
+  /**
+   * @brief An optional sequence number. If non-zero, sequence numbers should be
+   * unique per channel and increasing over time.
+   */
+  uint32_t sequence;
+  /**
+   * @brief Nanosecond timestamp when this message was recorded or received for
+   * recording.
+   */
+  Timestamp logTime;
+  /**
+   * @brief Nanosecond timestamp when this message was initially published. If
+   * not available, this should be set to `logTime`.
+   */
+  Timestamp publishTime;
 };
 
 /**
@@ -265,6 +295,16 @@ struct MCAP_PUBLIC Attachment {
 };
 
 /**
+ * @brief An Attachment, excluding its payload and CRC.
+ */
+struct MCAP_PUBLIC AttachmentHeader {
+  Timestamp logTime;
+  Timestamp createTime;
+  std::string name;
+  std::string mediaType;
+};
+
+/**
  * @brief Attachment Index records are found in the Summary section, providing
  * summary information for a single Attachment.
  */
@@ -279,19 +319,23 @@ struct MCAP_PUBLIC AttachmentIndex {
 
   AttachmentIndex() = default;
   AttachmentIndex(const Attachment& attachment, ByteOffset fileOffset)
+      : AttachmentIndex(AttachmentHeader{attachment.logTime, attachment.createTime, attachment.name,
+                                         attachment.mediaType},
+                        attachment.dataSize, fileOffset) {}
+  AttachmentIndex(const AttachmentHeader& header, uint64_t _dataSize, ByteOffset fileOffset)
       : offset(fileOffset)
       , length(9 +
-               /* name */ 4 + attachment.name.size() +
+               /* name */ 4 + header.name.size() +
                /* log_time */ 8 +
                /* create_time */ 8 +
-               /* media_type */ 4 + attachment.mediaType.size() +
-               /* data */ 8 + attachment.dataSize +
+               /* media_type */ 4 + header.mediaType.size() +
+               /* data */ 8 + _dataSize +
                /* crc */ 4)
-      , logTime(attachment.logTime)
-      , createTime(attachment.createTime)
-      , dataSize(attachment.dataSize)
-      , name(attachment.name)
-      , mediaType(attachment.mediaType) {}
+      , logTime(header.logTime)
+      , createTime(header.createTime)
+      , dataSize(_dataSize)
+      , name(header.name)
+      , mediaType(header.mediaType) {}
 };
 
 /**

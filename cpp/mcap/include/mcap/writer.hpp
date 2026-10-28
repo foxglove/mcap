@@ -412,6 +412,21 @@ public:
   Status write(const Message& message);
 
   /**
+   * @brief Write a message to the output stream, gathering its payload from a
+   * list of buffers.
+   *
+   * The payload written is the concatenation of the spans in `payload`, in
+   * the given order.
+   *
+   * @param header Message header fields to add.
+   * @param payload Pointer to an array of spans making up the message
+   *   payload.
+   * @param payloadCount Number of spans in `payload`.
+   * @return A non-zero error code on failure.
+   */
+  Status write(const MessageHeader& header, const ByteSpan* payload, std::size_t payloadCount);
+
+  /**
    * @brief Write an attachment to the output stream.
    *
    * @param attachment Attachment to add. The `attachment.crc` will be
@@ -419,6 +434,23 @@ public:
    * @return A non-zero error code on failure.
    */
   Status write(Attachment& attachment);
+
+  /**
+   * @brief Write an attachment to the output stream, gathering its payload
+   * from a list of buffers.
+   *
+   * The payload written is the concatenation of the spans in `payload`, in
+   * the given order. A CRC covering `header` and `payload` is calculated
+   * and written to the output if configuration options allow CRC
+   * calculation.
+   *
+   * @param header Attachment header fields to add.
+   * @param payload Pointer to an array of spans making up the attachment
+   *   payload.
+   * @param payloadCount Number of spans in `payload`.
+   * @return A non-zero error code on failure.
+   */
+  Status write(const AttachmentHeader& header, const ByteSpan* payload, std::size_t payloadCount);
 
   /**
    * @brief Write a metadata record to the output stream.
@@ -458,7 +490,11 @@ public:
   static uint64_t write(IWritable& output, const Channel& channel);
   static uint64_t getRecordSize(const Message& message);
   static uint64_t write(IWritable& output, const Message& message);
+  static uint64_t write(IWritable& output, const MessageHeader& header, const ByteSpan* payload,
+                        std::size_t payloadCount);
   static uint64_t write(IWritable& output, const Attachment& attachment);
+  static uint64_t write(IWritable& output, const AttachmentHeader& header, const ByteSpan* payload,
+                        std::size_t payloadCount, uint32_t crc);
   static uint64_t write(IWritable& output, const Metadata& metadata);
   static uint64_t write(IWritable& output, const Chunk& chunk);
   static uint64_t write(IWritable& output, const MessageIndex& index);
@@ -509,6 +545,8 @@ private:
   IWritable& getOutput();
   IChunkWriter* getChunkWriter();
   void writeChunk(IWritable& output, IChunkWriter& chunkData);
+  Status writeAttachment(const AttachmentHeader& header, const ByteSpan* payload,
+                         std::size_t payloadCount, uint32_t& crc);
 };
 
 }  // namespace mcap
