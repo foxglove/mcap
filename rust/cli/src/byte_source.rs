@@ -65,8 +65,6 @@ pub struct LocalFileSource {
     pos: Option<u64>,
     path: PathBuf,
     size: u64,
-    // Keeps a spool tempfile alive for stdin / non-range remote fallbacks.
-    _temp_file: Option<NamedTempFile>,
 }
 
 impl LocalFileSource {
@@ -82,28 +80,30 @@ impl LocalFileSource {
             pos: Some(0),
             path: path.to_path_buf(),
             size,
-            _temp_file: None,
         })
     }
 
+    /// Takes over the spool's own descriptor and unlinks its path at once: the data stays
+    /// readable through the open descriptor, no path is resolved a second time, and a spooled
+    /// input holds one descriptor like any other.
     fn from_temp_file(mut temp_file: NamedTempFile, display_path: PathBuf) -> Result<Self> {
         temp_file
             .as_file_mut()
             .flush()
             .context("failed to flush temporary input file")?;
-        let file = temp_file
-            .reopen()
-            .context("failed to reopen temporary input file")?;
+        let mut file = temp_file.into_file();
         let size = file
             .metadata()
             .context("failed to stat temporary input file")?
             .len();
+        // The spool left the cursor at the end.
+        file.seek(SeekFrom::Start(0))
+            .context("failed to rewind temporary input file")?;
         Ok(Self {
             reader: BufReader::with_capacity(LOCAL_FILE_BUFFER_BYTES, file),
             pos: Some(0),
             path: display_path,
             size,
-            _temp_file: Some(temp_file),
         })
     }
 }

@@ -200,9 +200,12 @@ fn explain_open_file_limit(err: anyhow::Error, opened: usize, total: usize) -> a
     if !is_file_limit {
         return err;
     }
+    // Headroom for the descriptors the process holds besides its inputs (the standard streams and
+    // the output file), so following the advice at the boundary does not fail again.
+    let suggested = total.saturating_add(16);
     err.context(format!(
         "merge keeps every input open and the open-file limit was reached after {opened} of \
-         {total} inputs; raise the limit (`ulimit -n`) above {total} or merge in batches"
+         {total} inputs; raise the limit (`ulimit -n`) to at least {suggested} or merge in batches"
     ))
 }
 
