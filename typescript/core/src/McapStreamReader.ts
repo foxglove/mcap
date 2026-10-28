@@ -73,6 +73,8 @@ export default class McapStreamReader {
   #validateCrcs;
   #noMagicPrefix;
   #doneReading = false;
+  #ended = false;
+  #header: TypedMcapRecords["Header"] | undefined;
   #generator = this.#read();
   #channelsById = new Map<number, TypedMcapRecords["Channel"]>();
 
@@ -108,7 +110,24 @@ export default class McapStreamReader {
     if (this.#doneReading) {
       throw new Error("Already done reading");
     }
+    if (this.#ended) {
+      throw new Error("Already ended");
+    }
     this.#appendOrShift(data);
+  }
+
+  /**
+   * Tell the reader that no more data will be appended. Once the records already received have
+   * been returned, `nextRecord()` throws if the input stopped before the Footer record and
+   * trailing magic bytes were complete. Without this call an input that ends early looks the same
+   * as one that is still arriving: `nextRecord()` returns undefined and `done()` stays false.
+   *
+   * With `noMagicPrefix`, the input is a fragment of a file rather than a whole one, so an input
+   * that ends on a record boundary is accepted: `nextRecord()` returns undefined and `done()`
+   * becomes true. An input that ends partway through a record still throws.
+   */
+  end(): void {
+    this.#ended = true;
   }
 
   #appendOrShift(data: Uint8Array): void {
@@ -201,34 +220,58 @@ export default class McapStreamReader {
     return result.value;
   }
 
+  /** Builds an error whose message names the library that wrote the file, once the Header is known. */
+  #errorWithLibrary(message: string): Error {
+    return new Error(
+      `${message} ${this.#header ? `[library=${this.#header.library}]` : "[no header]"}`,
+    );
+  }
+
+  /**
+   * Parses the input one record at a time, yielding without a value whenever it needs more bytes.
+   * Each place it waits knows what it is waiting for, so once end() has been called it can report
+   * exactly where the input stopped.
+   */
   *#read(): Generator<TypedMcapRecord | undefined, TypedMcapRecord | undefined, void> {
     if (!this.#noMagicPrefix) {
       let magic: McapMagic | undefined;
       while (((magic = parseMagic(this.#reader)), !magic)) {
+        if (this.#ended) {
+          const received = this.#reader.bytesRemaining();
+          throw this.#errorWithLibrary(
+            `Input ended before the leading MCAP magic was complete (${received} of ${MCAP_MAGIC.length} bytes received)`,
+          );
+        }
         yield;
       }
-    }
-
-    let header: TypedMcapRecords["Header"] | undefined;
-
-    function errorWithLibrary(message: string): Error {
-      return new Error(`${message} ${header ? `[library=${header.library}]` : "[no header]"}`);
     }
 
     for (;;) {
       let record;
       while (((record = parseRecord(this.#reader, this.#validateCrcs)), !record)) {
+        if (this.#ended) {
+          const remaining = this.#reader.bytesRemaining();
+          if (this.#noMagicPrefix && remaining === 0) {
+            // A fragment of a file that ends on a record boundary is complete.
+            return undefined;
+          }
+          const detail =
+            remaining === 0
+              ? "at a record boundary"
+              : `with ${remaining} bytes of an incomplete record remaining`;
+          throw this.#errorWithLibrary(`Input ended before the MCAP Footer record ${detail}`);
+        }
         yield;
       }
 
       switch (record.type) {
         case "Header":
-          if (header) {
+          if (this.#header) {
             throw new Error(
-              `Duplicate Header record: library=${header.library} profile=${header.profile} vs. library=${record.library} profile=${record.profile}`,
+              `Duplicate Header record: library=${this.#header.library} profile=${this.#header.profile} vs. library=${record.library} profile=${record.profile}`,
             );
           }
-          header = record;
+          this.#header = record;
           yield record;
           break;
         case "Unknown":
@@ -259,14 +302,14 @@ export default class McapStreamReader {
           if (record.compression !== "" && buffer.byteLength > 0) {
             const decompress = this.#decompressHandlers[record.compression];
             if (!decompress) {
-              throw errorWithLibrary(`Unsupported compression ${record.compression}`);
+              throw this.#errorWithLibrary(`Unsupported compression ${record.compression}`);
             }
             buffer = decompress(buffer, record.uncompressedSize);
           }
           if (this.#validateCrcs && record.uncompressedCrc !== 0) {
             const chunkCrc = crc32(buffer);
             if (chunkCrc !== record.uncompressedCrc) {
-              throw errorWithLibrary(
+              throw this.#errorWithLibrary(
                 `Incorrect chunk CRC ${chunkCrc} (expected ${record.uncompressedCrc})`,
               );
             }
@@ -288,7 +331,9 @@ export default class McapStreamReader {
               case "MetadataIndex":
               case "SummaryOffset":
               case "DataEnd":
-                throw errorWithLibrary(`${chunkRecord.type} record not allowed inside a chunk`);
+                throw this.#errorWithLibrary(
+                  `${chunkRecord.type} record not allowed inside a chunk`,
+                );
               case "Unknown":
               case "Schema":
               case "Channel":
@@ -298,25 +343,41 @@ export default class McapStreamReader {
             }
           }
           if (chunkReader.bytesRemaining() !== 0) {
-            throw errorWithLibrary(`${chunkReader.bytesRemaining()} bytes remaining in chunk`);
+            throw this.#errorWithLibrary(
+              `${chunkReader.bytesRemaining()} bytes remaining in chunk`,
+            );
           }
           break;
         }
-        case "Footer":
+        case "Footer": {
+          let magic: McapMagic | undefined;
           try {
-            let magic;
             while (((magic = parseMagic(this.#reader)), !magic)) {
+              if (this.#ended) {
+                break;
+              }
               yield;
             }
           } catch (error) {
-            throw errorWithLibrary((error as Error).message);
+            throw this.#errorWithLibrary((error as Error).message);
+          }
+          if (!magic) {
+            const received = this.#reader.bytesRemaining();
+            if (this.#noMagicPrefix && received === 0) {
+              // A fragment of a file may end with its footer and no trailing magic.
+              return record;
+            }
+            throw this.#errorWithLibrary(
+              `Input ended before the trailing MCAP magic was complete (${received} of ${MCAP_MAGIC.length} bytes received)`,
+            );
           }
           if (this.#reader.bytesRemaining() !== 0) {
-            throw errorWithLibrary(
+            throw this.#errorWithLibrary(
               `${this.#reader.bytesRemaining()} bytes remaining after MCAP footer and trailing magic`,
             );
           }
           return record;
+        }
       }
     }
   }
