@@ -19,7 +19,7 @@ from mcap.exceptions import (
 from mcap.reader import McapReader, NonSeekingReader, SeekingReader, make_reader
 from mcap.records import Channel, Message, Schema
 from mcap.stream_reader import StreamReader
-from mcap.writer import IndexType, Writer
+from mcap.writer import CompressionType, IndexType, Writer
 
 DEMO_MCAP = (
     Path(__file__).parent.parent.parent.parent / "testdata" / "mcap" / "demo.mcap"
@@ -533,3 +533,28 @@ def test_custom_record():
     )
     records = [r for r in stream_reader.records]
     assert len(records) == 10
+
+
+def test_seeking_reader_orders_overlapping_chunks():
+    buffer = BytesIO()
+    writer = Writer(buffer, compression=CompressionType.NONE)
+    writer.start()
+    channel_id = writer.register_channel("/t", "json", 0)
+    # Three chunks spanning [1, 5], [3, 7] and [2, 5]: each overlaps the one before it,
+    # and the two messages at time 5 sit in different chunks.
+    for chunk, times in enumerate(([1, 5], [3, 7], [5, 2])):
+        for t in times:
+            writer.add_message(channel_id, t, f"{chunk}:{t}".encode(), t)
+        writer.flush()
+    writer.finish()
+
+    def read(**kwargs: Any) -> List[bytes]:
+        buffer.seek(0)
+        return [m.data for _, _, m in SeekingReader(buffer).iter_messages(**kwargs)]
+
+    # Payloads are "chunk:time". Ties on time are broken by chunk position in the file.
+    forward = [b"0:1", b"2:2", b"1:3", b"0:5", b"2:5", b"1:7"]
+    assert read() == forward
+    assert read(reverse=True) == forward[::-1]
+    file_order = [b"0:1", b"0:5", b"1:3", b"1:7", b"2:5", b"2:2"]
+    assert read(log_time_order=False) == file_order
