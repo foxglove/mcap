@@ -255,20 +255,38 @@ pub(crate) fn summary_has_unindexed_messages(
 
 /// Sums the messages reachable through the chunk message indexes, or `None` if a message-index
 /// record can't be parsed. Offsets are de-duplicated so a shared message-index record is counted
-/// once.
+/// once. Only I/O failures are errors; a malformed index is `None`, so the caller falls back to a
+/// scan.
 fn indexed_message_count(
     source: &mut dyn ByteSource,
     summary: &mcap::Summary,
 ) -> Result<Option<u64>> {
+    let size = source.size();
     let mut offsets = std::collections::HashSet::new();
     let mut indexed_messages = 0u64;
-    for offset in summary
-        .chunk_indexes
-        .iter()
-        .flat_map(|chunk| chunk.message_index_offsets.values())
-    {
-        if offsets.insert(*offset) {
-            let Some(count) = message_index_count(source, *offset).ok() else {
+    for chunk in &summary.chunk_indexes {
+        // The message-index records for a chunk follow it, and the chunk index gives their total
+        // length, so one read covers every channel's record prefix. An offset outside that region
+        // (a non-conforming writer) is read on its own.
+        let region_start = chunk.chunk_start_offset.saturating_add(chunk.chunk_length);
+        let region_len = usize::try_from(chunk.message_index_length).unwrap_or(usize::MAX);
+        let region = source.read_at(region_start, region_len)?;
+        for offset in chunk.message_index_offsets.values() {
+            if !offsets.insert(*offset) {
+                continue;
+            }
+            let in_region = offset
+                .checked_sub(region_start)
+                .and_then(|rel| usize::try_from(rel).ok())
+                .and_then(|rel| region.get(rel..rel.checked_add(MESSAGE_INDEX_PREFIX_LEN)?));
+            let count = match in_region {
+                Some(prefix) => message_index_count(prefix, *offset, size),
+                None => {
+                    let prefix = source.read_at(*offset, MESSAGE_INDEX_PREFIX_LEN)?;
+                    message_index_count(&prefix, *offset, size)
+                }
+            };
+            let Some(count) = count else {
                 return Ok(None);
             };
             indexed_messages = indexed_messages.saturating_add(count as u64);
@@ -279,35 +297,28 @@ fn indexed_message_count(
 
 /// Number of bytes per message-index entry (a `(log_time, offset)` pair of `uint64`s).
 const MESSAGE_INDEX_ENTRY_SIZE: usize = 16;
+/// Opcode (1), record length (8), channel ID (2), entry-array byte length (4). The entries
+/// themselves are not read: the count follows from the byte length.
+const MESSAGE_INDEX_PREFIX_LEN: usize = 15;
 
-fn message_index_count(source: &mut dyn ByteSource, offset: u64) -> Result<usize> {
-    // Opcode (1), record length (8), channel ID (2), entry-array byte length (4). The entries
-    // themselves are not read: the count follows from the byte length.
-    const PREFIX_LEN: usize = 15;
-    let prefix = source.read_at(offset, PREFIX_LEN)?;
-    if prefix.len() < PREFIX_LEN {
-        bail!("message index header out of bounds at offset {offset}");
-    }
+/// Number of entries in the message-index record whose prefix starts `prefix`, or `None` when the
+/// prefix is not a well-formed message-index record at `offset` in a file of `size` bytes.
+fn message_index_count(prefix: &[u8], offset: u64, size: Option<u64>) -> Option<usize> {
+    let prefix = prefix.get(..MESSAGE_INDEX_PREFIX_LEN)?;
     if prefix[0] != mcap::records::op::MESSAGE_INDEX {
-        bail!("expected MessageIndex record at offset {offset}");
+        return None;
     }
     let length = u64::from_le_bytes(prefix[1..9].try_into().expect("slice has length 8"));
     let byte_len = u64::from(u32::from_le_bytes(
         prefix[11..15].try_into().expect("slice has length 4"),
     ));
-    if !byte_len.is_multiple_of(MESSAGE_INDEX_ENTRY_SIZE as u64) {
-        bail!("message index entries are misaligned at offset {offset}");
+    if !byte_len.is_multiple_of(MESSAGE_INDEX_ENTRY_SIZE as u64) || length != 6 + byte_len {
+        return None;
     }
-    if length != 6 + byte_len {
-        bail!("message index length mismatch at offset {offset}");
+    if size.is_some_and(|size| offset.saturating_add(9 + length) > size) {
+        return None;
     }
-    if source
-        .size()
-        .is_some_and(|size| offset.saturating_add(9 + length) > size)
-    {
-        bail!("message index body out of bounds at offset {offset}");
-    }
-    Ok((byte_len / MESSAGE_INDEX_ENTRY_SIZE as u64) as usize)
+    Some((byte_len / MESSAGE_INDEX_ENTRY_SIZE as u64) as usize)
 }
 
 /// Visits every metadata record in the input, preferring the summary index and falling back to a
@@ -366,7 +377,7 @@ pub(crate) fn for_each_attachment<F>(
     mut visit: F,
 ) -> Result<()>
 where
-    F: FnMut(mcap::Attachment<'static>) -> Result<()>,
+    F: FnMut(&mcap::Attachment<'_>) -> Result<()>,
 {
     if let Some(summary) = summary {
         let indexed_count = summary.stats.as_ref().map(|stats| stats.attachment_count);
@@ -388,7 +399,7 @@ where
                             index.name, index.offset
                         )
                     })?;
-                visit(attachment)?;
+                visit(&attachment)?;
             }
             return Ok(());
         }
@@ -398,12 +409,12 @@ where
         if let mcap::records::Record::Attachment { header, data, .. } =
             mcap::parse_record(mcap::records::op::ATTACHMENT, data)?
         {
-            visit(mcap::Attachment {
+            visit(&mcap::Attachment {
                 log_time: header.log_time,
                 create_time: header.create_time,
                 name: header.name,
                 media_type: header.media_type,
-                data: std::borrow::Cow::Owned(data.into_owned()),
+                data,
             })?;
         }
         Ok(())
@@ -454,7 +465,6 @@ pub(crate) fn corrupt_first_chunk_message(bytes: &mut [u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::byte_source::MemorySource;
 
     /// Builds a well-formed MessageIndex record whose entry array holds `entry_count` entries.
     fn message_index_record(entry_count: usize) -> Vec<u8> {
@@ -471,27 +481,29 @@ mod tests {
 
     #[test]
     fn message_index_count_counts_entries() {
-        let mut source = MemorySource::new(message_index_record(0));
-        assert_eq!(message_index_count(&mut source, 0).unwrap(), 0);
-        let mut source = MemorySource::new(message_index_record(3));
-        assert_eq!(message_index_count(&mut source, 0).unwrap(), 3);
+        assert_eq!(
+            message_index_count(&message_index_record(0), 0, None),
+            Some(0)
+        );
+        assert_eq!(
+            message_index_count(&message_index_record(3), 0, None),
+            Some(3)
+        );
     }
 
     #[test]
-    fn message_index_count_honors_a_nonzero_offset() {
-        let mut buf = vec![0xAAu8; 5]; // arbitrary leading bytes
-        buf.extend_from_slice(&message_index_record(2));
-        let mut source = MemorySource::new(buf);
-        assert_eq!(message_index_count(&mut source, 5).unwrap(), 2);
+    fn message_index_count_checks_the_record_against_the_file_size() {
+        let record = message_index_record(2);
+        let end = 5 + record.len() as u64; // record placed at offset 5
+        assert_eq!(message_index_count(&record, 5, Some(end)), Some(2));
+        assert_eq!(message_index_count(&record, 5, Some(end - 1)), None);
     }
 
     #[test]
     fn message_index_count_rejects_wrong_opcode() {
         let mut record = message_index_record(1);
         record[0] = mcap::records::op::MESSAGE;
-        let mut source = MemorySource::new(record);
-        let err = message_index_count(&mut source, 0).unwrap_err();
-        assert!(err.to_string().contains("expected MessageIndex record"));
+        assert_eq!(message_index_count(&record, 0, None), None);
     }
 
     #[test]
@@ -504,9 +516,7 @@ mod tests {
         let mut record = vec![mcap::records::op::MESSAGE_INDEX];
         record.extend_from_slice(&(body.len() as u64).to_le_bytes());
         record.extend_from_slice(&body);
-        let mut source = MemorySource::new(record);
-        let err = message_index_count(&mut source, 0).unwrap_err();
-        assert!(err.to_string().contains("misaligned"));
+        assert_eq!(message_index_count(&record, 0, None), None);
     }
 
     #[test]
@@ -514,15 +524,11 @@ mod tests {
         let mut record = message_index_record(1); // byte_len 16, body 22, length 22
                                                   // Shrink the declared record length so the body no longer equals 6 + byte_len.
         record[1..9].copy_from_slice(&14u64.to_le_bytes());
-        let mut source = MemorySource::new(record);
-        let err = message_index_count(&mut source, 0).unwrap_err();
-        assert!(err.to_string().contains("length mismatch"));
+        assert_eq!(message_index_count(&record, 0, None), None);
     }
 
     #[test]
-    fn message_index_count_rejects_out_of_bounds_header() {
-        let mut source = MemorySource::new(Vec::new());
-        let err = message_index_count(&mut source, 0).unwrap_err();
-        assert!(err.to_string().contains("out of bounds"));
+    fn message_index_count_rejects_a_short_prefix() {
+        assert_eq!(message_index_count(&[], 0, None), None);
     }
 }

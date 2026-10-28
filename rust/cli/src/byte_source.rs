@@ -124,10 +124,20 @@ impl ByteSource for LocalFileSource {
         let available = usize::try_from(self.size - offset).unwrap_or(usize::MAX);
         let to_read = dest.len().min(available);
         let dest = &mut dest[..to_read];
-        let result = if self.pos == Some(offset) {
+        // A forward skip shorter than the read-ahead buffer (a record body a top-level walk seeks
+        // over) counts as sequential: `seek_relative` keeps the buffer when the target is inside
+        // it and refills from the target otherwise, so a walk over small records costs one
+        // syscall pair per buffer rather than per record.
+        let buffered_skip = self.pos.and_then(|pos| {
+            let skip = offset.checked_sub(pos)?;
+            (skip <= LOCAL_FILE_BUFFER_BYTES as u64).then_some(skip as i64)
+        });
+        let result = if let Some(skip) = buffered_skip {
             // Sequential: read through the buffer, one syscall per buffer fill instead of one per
             // call.
-            self.reader.read_exact(dest)
+            self.reader
+                .seek_relative(skip)
+                .and_then(|()| self.reader.read_exact(dest))
         } else {
             // Random access: seek (discarding the buffer) and read straight into `dest`, so a small
             // footer or index read does not pull in a full buffer of read-ahead.

@@ -298,7 +298,7 @@ fn write_attachments<W: Write + Seek>(
     summary: Option<&mcap::Summary>,
 ) -> Result<()> {
     common::for_each_attachment(source, summary, |attachment| {
-        writer.attach(&attachment).with_context(|| {
+        writer.attach(attachment).with_context(|| {
             format!(
                 "failed to write attachment '{}' from '{}'",
                 attachment.name, input.name
@@ -392,6 +392,11 @@ impl MaterializedInputMessages {
             source,
             mcap::sans_io::LinearReaderOptions::default().with_validate_chunk_crcs(true),
             |opcode, data| {
+                // Noted here and read by the attachment pass, so its payload is not parsed twice.
+                if opcode == mcap::records::op::ATTACHMENT {
+                    saw_attachment = true;
+                    return Ok(());
+                }
                 match mcap::parse_record(opcode, data)
                     .with_context(|| format!("failed reading messages from '{name}'"))?
                 {
@@ -402,13 +407,11 @@ impl MaterializedInputMessages {
                         channels.add_channel(channel)?;
                     }
                     mcap::records::Record::Message { header, data } => {
-                        let Some(channel) = channels.get(header.channel_id) else {
-                            return Err(mcap::McapError::UnknownChannel(
-                                header.sequence,
-                                header.channel_id,
-                            )
-                            .into());
-                        };
+                        let channel = crate::parse::message_channel(
+                            channels.get(header.channel_id),
+                            header.channel_id,
+                            header.sequence,
+                        )?;
                         messages.push(PendingMessage::new(
                             input_idx,
                             input_order,
@@ -418,7 +421,6 @@ impl MaterializedInputMessages {
                         ));
                         input_order += 1;
                     }
-                    mcap::records::Record::Attachment { .. } => saw_attachment = true,
                     _ => {}
                 }
                 Ok(())
