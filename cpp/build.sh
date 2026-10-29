@@ -10,26 +10,21 @@ CONAN_SETTINGS=(-s compiler.cppstd=17)
 # -s below, so the detected profile's default standard does not matter.
 conan profile detect 2>/dev/null || true
 
-# `conan editable add` is idempotent, but remove any stale entry first so a moved
-# checkout does not leave the editable pointing at an old path.
-conan editable remove -r "mcap/2.2.0" 2>/dev/null || true
-conan editable add mcap
-
-conan_install() {
-  conan install "$1" -of "$2" "${CONAN_SETTINGS[@]}" -s build_type="$3" --build=missing
-}
-
+# Builds one configuration in build/<build_type>. `conan build` installs
+# dependencies, generates and builds; `&:` scopes the options to this recipe.
 conan_build() {
-  conan build "$1" -of "$2" "${CONAN_SETTINGS[@]}" -s build_type="$3" --build=editable
+  local build_type=$1
+  shift
+  conan build . "${CONAN_SETTINGS[@]}" -s build_type="$build_type" "$@" --build=missing
 }
 
-conan_install test test/build/Debug Debug
+conan_build Debug -o "&:build_tests=True"
 
 if [ "$1" != "--build-tests-only" ]; then
-  conan_install bench bench/build/Release Release
-  conan_install examples examples/build/Release Release
-  conan_build examples examples/build/Release Release
-  conan_build bench bench/build/Release Release
-fi
+  conan_build Release -o "&:build_examples=True" -o "&:build_bench=True"
 
-conan_build test test/build/Debug Debug
+  # Packages into the Conan cache and builds test_package against it. This
+  # checks the Conan package only; the cpp-cmake CI job covers the plain
+  # CMake install.
+  conan create . "${CONAN_SETTINGS[@]}" --build=missing
+fi

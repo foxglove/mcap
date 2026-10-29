@@ -22,16 +22,10 @@ The tag version must match the `rust/cli/Cargo.toml` version; CI fails the relea
 
 ## C++
 
-1. Update the version in all relevant files
-   - cpp/bench/conanfile.py
-   - cpp/build-docs.sh
-   - cpp/build.sh
-   - cpp/docs/conanfile.py
-   - cpp/examples/conanfile.py
-   - cpp/mcap/conanfile.py
-   - cpp/mcap/include/mcap/types.hpp (`MCAP_LIBRARY_VERSION`)
-   - cpp/test/conanfile.py
+1. Update `MCAP_LIBRARY_VERSION` in cpp/mcap/include/mcap/types.hpp. This is the only place the version is written down; cpp/CMakeLists.txt and cpp/conanfile.py read it from there.
 2. Tag a release matching the version number `releases/cpp/vX.Y.Z`
+
+The tag version must match `MCAP_LIBRARY_VERSION`; CI fails the release if they differ.
 
 ## Python
 
