@@ -326,29 +326,7 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
   opened_ = true;
   chunkSize_ = options.noChunking ? 0 : options.chunkSize;
   compression_ = chunkSize_ > 0 ? options.compression : Compression::None;
-  switch (compression_) {
-    case Compression::None:
-    default:
-      uncompressedChunk_ = std::make_unique<BufferWriter>(chunkSize_);
-      break;
-#ifndef MCAP_COMPRESSION_NO_LZ4
-    case Compression::Lz4:
-      lz4Chunk_ = std::make_unique<LZ4Writer>(options.compressionLevel, chunkSize_);
-      break;
-#endif
-#ifndef MCAP_COMPRESSION_NO_ZSTD
-    case Compression::Zstd:
-      zstdChunk_ = std::make_unique<ZStdWriter>(options.compressionLevel, chunkSize_);
-      break;
-#endif
-  }
-  auto* chunkWriter = getChunkWriter();
-  if (chunkWriter) {
-    // The chunk CRC is computed in a single pass over the buffered chunk data
-    // in writeChunk() rather than incrementally on every write, so the
-    // streaming CRC stays disabled here even when chunk CRCs are enabled.
-    chunkWriter->crcEnabled = false;
-  }
+  chunkWriter_ = makeChunkWriter();
   writer.crcEnabled = options.enableDataCRC;
   output_ = &writer;
   writeMagic(writer);
@@ -383,6 +361,15 @@ void McapWriter::closeLastChunk() {
   auto* chunkWriter = getChunkWriter();
   if (chunkWriter && !chunkWriter->empty()) {
     writeChunk(fileOutput, *chunkWriter);
+  }
+  // Channel chunks, in channel id order
+  for (auto& entry : channelChunks_) {
+    auto& chunk = entry.second;
+    if (chunk.chunkWriter && !chunk.chunkWriter->empty()) {
+      swapChunk(chunk);
+      writeChunk(fileOutput, *chunkWriter_);
+      swapChunk(chunk);
+    }
   }
 }
 
@@ -500,13 +487,8 @@ void McapWriter::terminate() {
   output_ = nullptr;
   fileOutput_.reset();
   streamOutput_.reset();
-  uncompressedChunk_.reset();
-#ifndef MCAP_COMPRESSION_NO_LZ4
-  lz4Chunk_.reset();
-#endif
-#ifndef MCAP_COMPRESSION_NO_ZSTD
-  zstdChunk_.reset();
-#endif
+  chunkWriter_.reset();
+  channelChunks_.clear();
 
   attachmentIndex_.clear();
   metadataIndex_.clear();
@@ -544,6 +526,21 @@ void McapWriter::addChannel(Channel& channel) {
 }
 
 Status McapWriter::write(const Message& message) {
+  if (!output_ || !options_.chunkPerChannel || chunkSize_ == 0 || message.channelId == 0 ||
+      message.channelId > channels_.size()) {
+    return writeMessage(message);
+  }
+  auto& chunk = channelChunks_[message.channelId];
+  if (!chunk.chunkWriter) {
+    chunk.chunkWriter = makeChunkWriter();
+  }
+  swapChunk(chunk);
+  const auto status = writeMessage(message);
+  swapChunk(chunk);
+  return status;
+}
+
+Status McapWriter::writeMessage(const Message& message) {
   if (!output_) {
     return StatusCode::NotOpen;
   }
@@ -560,9 +557,12 @@ Status McapWriter::write(const Message& message) {
 
     const auto& channel = channels_[channelIndex];
 
-    // Check if the Schema record needs to be written
+    // Check if the Schema record needs to be written. With chunkPerChannel, it
+    // is repeated in the first chunk of every channel using it, since chunks of
+    // different channels may be written in any order.
     if ((channel.schemaId != 0) &&
-        (writtenSchemas_.find(channel.schemaId) == writtenSchemas_.end())) {
+        (options_.chunkPerChannel ||
+         writtenSchemas_.find(channel.schemaId) == writtenSchemas_.end())) {
       const size_t schemaIndex = channel.schemaId - 1;
       if (schemaIndex >= schemas_.size()) {
         const auto msg = internal::StrCat("invalid schema id ", channel.schemaId);
@@ -714,39 +714,47 @@ IWritable& McapWriter::getOutput() {
   if (chunkSize_ == 0) {
     return *output_;
   }
-  switch (compression_) {
-    default:
-    case Compression::None:
-      return *uncompressedChunk_;
-#ifndef MCAP_COMPRESSION_NO_ZSTD
-    case Compression::Zstd:
-      return *zstdChunk_;
-#endif
-#ifndef MCAP_COMPRESSION_NO_LZ4
-    case Compression::Lz4:
-      return *lz4Chunk_;
-#endif
-  }
+  return *chunkWriter_;
 }
 
 IChunkWriter* McapWriter::getChunkWriter() {
   if (chunkSize_ == 0) {
     return nullptr;
   }
+  return chunkWriter_.get();
+}
 
+std::unique_ptr<IChunkWriter> McapWriter::makeChunkWriter() const {
+  std::unique_ptr<IChunkWriter> chunkWriter;
   switch (compression_) {
     case Compression::None:
     default:
-      return uncompressedChunk_.get();
+      chunkWriter = std::make_unique<BufferWriter>(chunkSize_);
+      break;
 #ifndef MCAP_COMPRESSION_NO_LZ4
     case Compression::Lz4:
-      return lz4Chunk_.get();
+      chunkWriter = std::make_unique<LZ4Writer>(options_.compressionLevel, chunkSize_);
+      break;
 #endif
 #ifndef MCAP_COMPRESSION_NO_ZSTD
     case Compression::Zstd:
-      return zstdChunk_.get();
+      chunkWriter = std::make_unique<ZStdWriter>(options_.compressionLevel, chunkSize_);
+      break;
 #endif
   }
+  // The chunk CRC is computed in a single pass over the buffered chunk data
+  // in writeChunk() rather than incrementally on every write, so the
+  // streaming CRC stays disabled here even when chunk CRCs are enabled.
+  chunkWriter->crcEnabled = false;
+  return chunkWriter;
+}
+
+void McapWriter::swapChunk(ChannelChunk& chunk) {
+  std::swap(chunkWriter_, chunk.chunkWriter);
+  std::swap(currentMessageIndex_, chunk.messageIndex);
+  std::swap(currentChunkStart_, chunk.chunkStart);
+  std::swap(currentChunkEnd_, chunk.chunkEnd);
+  std::swap(uncompressedSize_, chunk.uncompressedSize);
 }
 
 void McapWriter::writeChunk(IWritable& output, IChunkWriter& chunkData) {
