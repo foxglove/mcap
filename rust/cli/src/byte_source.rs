@@ -2,6 +2,13 @@
 //! range requests (see [`open_byte_source`]), plus a forward-only [`SequentialSource`] for
 //! stdin and other streams that commands read exactly once, in order.
 
+mod drivers;
+
+pub use drivers::{
+    for_each_linear_record, for_each_top_level_record_of, read_summary, service_indexed_chunk,
+    try_for_each_linear_record,
+};
+
 use std::fs::File;
 use std::io::{BufReader, IsTerminal as _, Read, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
@@ -58,8 +65,6 @@ pub struct LocalFileSource {
     pos: Option<u64>,
     path: PathBuf,
     size: u64,
-    // Keeps a spool tempfile alive for stdin / non-range remote fallbacks.
-    _temp_file: Option<NamedTempFile>,
 }
 
 impl LocalFileSource {
@@ -75,28 +80,30 @@ impl LocalFileSource {
             pos: Some(0),
             path: path.to_path_buf(),
             size,
-            _temp_file: None,
         })
     }
 
+    /// Takes over the spool's own descriptor and unlinks its path at once: the data stays
+    /// readable through the open descriptor, no path is resolved a second time, and a spooled
+    /// input holds one descriptor like any other.
     fn from_temp_file(mut temp_file: NamedTempFile, display_path: PathBuf) -> Result<Self> {
         temp_file
             .as_file_mut()
             .flush()
             .context("failed to flush temporary input file")?;
-        let file = temp_file
-            .reopen()
-            .context("failed to reopen temporary input file")?;
+        let mut file = temp_file.into_file();
         let size = file
             .metadata()
             .context("failed to stat temporary input file")?
             .len();
+        // The spool left the cursor at the end.
+        file.seek(SeekFrom::Start(0))
+            .context("failed to rewind temporary input file")?;
         Ok(Self {
             reader: BufReader::with_capacity(LOCAL_FILE_BUFFER_BYTES, file),
             pos: Some(0),
             path: display_path,
             size,
-            _temp_file: Some(temp_file),
         })
     }
 }
@@ -117,10 +124,20 @@ impl ByteSource for LocalFileSource {
         let available = usize::try_from(self.size - offset).unwrap_or(usize::MAX);
         let to_read = dest.len().min(available);
         let dest = &mut dest[..to_read];
-        let result = if self.pos == Some(offset) {
+        // A forward skip shorter than the read-ahead buffer (a record body a top-level walk seeks
+        // over) counts as sequential: `seek_relative` keeps the buffer when the target is inside
+        // it and refills from the target otherwise, so a walk over small records costs one
+        // syscall pair per buffer rather than per record.
+        let buffered_skip = self.pos.and_then(|pos| {
+            let skip = offset.checked_sub(pos)?;
+            (skip <= LOCAL_FILE_BUFFER_BYTES as u64).then_some(skip as i64)
+        });
+        let result = if let Some(skip) = buffered_skip {
             // Sequential: read through the buffer, one syscall per buffer fill instead of one per
             // call.
-            self.reader.read_exact(dest)
+            self.reader
+                .seek_relative(skip)
+                .and_then(|()| self.reader.read_exact(dest))
         } else {
             // Random access: seek (discarding the buffer) and read straight into `dest`, so a small
             // footer or index read does not pull in a full buffer of read-ahead.
@@ -371,6 +388,39 @@ pub fn open_byte_source_for_scan(
     open_byte_source(path, options)
 }
 
+/// Opens `path` for a command that reads the whole input through random access, such as the
+/// rewrite engine. A remote URL is downloaded to a tempfile first, under the `--allow-remote-scan`
+/// opt-in checked from the path before any request goes out, exactly like the whole-file loads
+/// this replaces. Reading such inputs by range instead is separate work.
+pub fn open_materialized_byte_source(
+    path: &Path,
+    options: SourceOptions,
+) -> Result<Box<dyn ByteSource>> {
+    if is_remote_url(path) {
+        return Ok(Box::new(spool_remote_to_local(path, options)?));
+    }
+    Ok(Box::new(LocalFileSource::open_path(path)?))
+}
+
+/// Spools stdin to a tempfile and opens it as a random-access [`ByteSource`], for commands that
+/// may seek. Commands that only scan forward should use [`SequentialSource::stdin`] instead.
+pub fn open_stdin_byte_source() -> Result<Box<dyn ByteSource>> {
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        bail!("{PLEASE_SUPPLY_FILE}");
+    }
+    let mut temp_file = tempfile::Builder::new()
+        .prefix("mcap-cli-stdin-input-")
+        .tempfile()
+        .context("failed to create temporary file for stdin input")?;
+    std::io::copy(&mut stdin.lock(), temp_file.as_file_mut())
+        .context("failed to read input from stdin")?;
+    Ok(Box::new(LocalFileSource::from_temp_file(
+        temp_file,
+        PathBuf::from("<stdin>"),
+    )?))
+}
+
 fn open_remote_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dyn ByteSource>> {
     match open_remote_range_reader(path)? {
         Some(reader) => Ok(Box::new(RemoteRangeSource::new(reader))),
@@ -584,5 +634,47 @@ mod tests {
             .collect();
         assert_eq!(opcodes.first(), Some(&mcap::records::op::HEADER));
         assert_eq!(opcodes.last(), Some(&mcap::records::op::FOOTER));
+    }
+
+    #[test]
+    fn memory_source_summary_reader_finds_channel() {
+        let bytes = write_summary_mcap();
+        let mut source = MemorySource::new(bytes);
+        let summary = read_summary(&mut source)
+            .expect("summary read")
+            .expect("summary should exist");
+        assert!(summary.channels.values().any(|ch| ch.topic == "/demo"));
+        assert!(!summary.chunk_indexes.is_empty());
+    }
+
+    /// Rewrites the length field of the record after the header to claim far more than the file
+    /// holds.
+    fn claim_oversized_second_record(bytes: &mut [u8]) {
+        let prefix = mcap::MAGIC.len();
+        let header_len =
+            u64::from_le_bytes(bytes[prefix + 1..prefix + 9].try_into().expect("8 bytes")) as usize;
+        let next = prefix + 9 + header_len;
+        bytes[next + 1..next + 9].copy_from_slice(&(1u64 << 46).to_le_bytes());
+    }
+
+    #[test]
+    fn linear_scan_rejects_a_record_longer_than_the_file() {
+        let mut bytes = write_summary_mcap();
+        claim_oversized_second_record(&mut bytes);
+        let err = for_each_linear_record(
+            &mut MemorySource::new(bytes),
+            mcap::sans_io::LinearReaderOptions::default(),
+            |_opcode, _data| Ok(()),
+        )
+        .expect_err("a record longer than the file must be rejected, not allocated");
+        // The fixture's second record is a chunk, which the reader checks against the same limit
+        // but reports with its own variant.
+        assert!(
+            err.chain().any(|cause| matches!(
+                cause.downcast_ref::<mcap::McapError>(),
+                Some(mcap::McapError::ChunkTooLarge(_))
+            )),
+            "{err:#}"
+        );
     }
 }
