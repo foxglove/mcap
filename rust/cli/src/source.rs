@@ -100,19 +100,20 @@ impl InputData {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct SourceOptions {
     pub allow_remote_scan: bool,
-    pub scan_data_without_statistics: bool,
+    /// Read MessageIndex records referenced by Summary ChunkIndex records.
+    pub read_message_indexes: bool,
 }
 
 impl SourceOptions {
     pub fn new(allow_remote_scan: bool) -> Self {
         Self {
             allow_remote_scan,
-            ..Self::default()
+            read_message_indexes: false,
         }
     }
 
-    pub fn scan_data_without_statistics(mut self, scan_data_without_statistics: bool) -> Self {
-        self.scan_data_without_statistics = scan_data_without_statistics;
+    pub fn read_message_indexes(mut self, read_message_indexes: bool) -> Self {
+        self.read_message_indexes = read_message_indexes;
         self
     }
 }
@@ -259,16 +260,21 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
                     .map_err(|err| remote_read_error(path, err))?
                 {
                     let header = read_header_from_seekable(&mut reader)?;
-                    let parsed = parse::parsed_mcap_from_summary_section(header, &summary_bytes)
-                        .map_err(|err| {
-                            remote_read_error(path, classify_remote_summary_error(&reader, err))
-                        })?;
-                    if parsed.statistics.is_some()
-                        || !options.scan_data_without_statistics
-                        || !options.allow_remote_scan
-                    {
-                        return Ok(parsed);
+                    let mut parsed =
+                        parse::parsed_mcap_from_summary_section(header, &summary_bytes).map_err(
+                            |err| {
+                                remote_read_error(path, classify_remote_summary_error(&reader, err))
+                            },
+                        )?;
+                    if options.read_message_indexes {
+                        let _ = collect_remote_message_index_time_ranges(
+                            &mut reader,
+                            &mut parsed,
+                            options,
+                        );
                     }
+                    parse::add_chunk_index_time_ranges(&mut parsed);
+                    return Ok(parsed);
                 }
                 if !options.allow_remote_scan {
                     bail!(
@@ -290,12 +296,47 @@ pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<Parse
     }
 
     let mcap = load_path(path, options)?;
-    let parsed = parse::parse_mcap_with_scan_fallback(&mcap, options.scan_data_without_statistics);
-    if is_remote_url(path) {
-        parsed.map_err(|err| remote_read_error(path, err))
+    let mut parsed = parse::parse_mcap(&mcap)?;
+    if options.read_message_indexes && parsed.summary_available && !parsed.chunk_indexes.is_empty()
+    {
+        let _ = parse::collect_channel_time_ranges_from_indexes(&mcap, &mut parsed);
+        parse::add_chunk_index_time_ranges(&mut parsed);
     } else {
-        parsed
+        parse::add_chunk_index_time_ranges(&mut parsed);
     }
+    Ok(parsed)
+}
+
+fn collect_remote_message_index_time_ranges(
+    reader: &mut RemoteRangeReader,
+    parsed: &mut ParsedMcap,
+    options: SourceOptions,
+) -> Result<()> {
+    let total_bytes = parsed
+        .chunk_indexes
+        .iter()
+        .map(|chunk| chunk.message_index_length)
+        .try_fold(0u64, u64::checked_add)
+        .context("remote message index length overflows")?;
+    require_remote_indexed_read_budget(total_bytes, options, "remote message indexes")?;
+
+    for chunk in &parsed.chunk_indexes {
+        let Some(first_offset) = chunk.message_index_offsets.values().min().copied() else {
+            continue;
+        };
+        if chunk.message_index_length == 0 {
+            continue;
+        }
+        let length = usize::try_from(chunk.message_index_length)
+            .context("message index length is too large for this platform")?;
+        let bytes = reader.read_range(first_offset, length)?;
+        let mut ranges = BTreeMap::new();
+        parse::collect_message_indexes_from_bytes(&bytes, &mut ranges)?;
+        for (channel_id, range) in ranges {
+            parsed.channel_message_time_ranges.insert(channel_id, range);
+        }
+    }
+    Ok(())
 }
 
 pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
@@ -3117,6 +3158,62 @@ mod tests {
             .expect("summary should be present");
 
         assert!(remote.summary().channels.contains_key(&channel_id));
+    }
+
+    #[test]
+    fn remote_info_reads_message_indexes_without_scan_opt_in() {
+        let mut buffer = Vec::new();
+        let (early_channel, late_channel) = {
+            let mut writer = mcap::WriteOptions::new()
+                .compression(None)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let early_channel = writer
+                .add_channel(schema_id, "/early", "json", &BTreeMap::new())
+                .expect("early channel");
+            let late_channel = writer
+                .add_channel(schema_id, "/late", "json", &BTreeMap::new())
+                .expect("late channel");
+            for (channel_id, sequence, log_time) in [
+                (early_channel, 0, 10),
+                (early_channel, 1, 20),
+                (late_channel, 0, 1_000),
+                (late_channel, 1, 1_200),
+            ] {
+                writer
+                    .write_to_known_channel(
+                        &records::MessageHeader {
+                            channel_id,
+                            sequence,
+                            log_time,
+                            publish_time: log_time,
+                        },
+                        br#"{"k":"v"}"#,
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish writer");
+            (early_channel, late_channel)
+        };
+        let body: &'static [u8] = Box::leak(buffer.into_boxed_slice());
+        let url = serve_http(body, true);
+        let parsed = super::parse_mcap_from_path(
+            Path::new(&url),
+            super::SourceOptions::default().read_message_indexes(true),
+        )
+        .expect("remote indexed info read");
+
+        assert_eq!(
+            parsed.channel_message_time_ranges.get(&early_channel),
+            Some(&(10, 20))
+        );
+        assert_eq!(
+            parsed.channel_message_time_ranges.get(&late_channel),
+            Some(&(1_000, 1_200))
+        );
     }
 
     #[test]
