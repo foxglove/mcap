@@ -1133,8 +1133,16 @@ mod tests {
             self.inner.size()
         }
 
+        fn is_remote(&self) -> bool {
+            self.inner.is_remote()
+        }
+
         fn display_name(&self) -> String {
             self.inner.display_name()
+        }
+
+        fn is_seekable(&self) -> bool {
+            self.inner.is_seekable()
         }
 
         fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> anyhow::Result<usize> {
@@ -1156,8 +1164,16 @@ mod tests {
             self.inner.size()
         }
 
+        fn is_remote(&self) -> bool {
+            self.inner.is_remote()
+        }
+
         fn display_name(&self) -> String {
             self.inner.display_name()
+        }
+
+        fn is_seekable(&self) -> bool {
+            self.inner.is_seekable()
         }
 
         fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> anyhow::Result<usize> {

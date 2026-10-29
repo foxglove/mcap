@@ -2,6 +2,13 @@
 //! range requests (see [`open_byte_source`]), plus a forward-only [`SequentialSource`] for
 //! stdin and other streams that commands read exactly once, in order.
 
+mod drivers;
+
+pub use drivers::{
+    for_each_linear_record, read_header, read_summary, service_indexed_chunk,
+    try_for_each_linear_record,
+};
+
 use std::fs::File;
 use std::io::{BufReader, IsTerminal as _, Read, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
@@ -19,7 +26,10 @@ use crate::source::{
 pub trait ByteSource {
     /// File size in bytes, or `None` when unknown (streaming inputs without a known length).
     fn size(&self) -> Option<u64>;
+    fn is_remote(&self) -> bool;
     fn display_name(&self) -> String;
+    /// Whether random access is available.
+    fn is_seekable(&self) -> bool;
 
     /// Read up to `dest.len()` bytes at `offset` into `dest`, returning the count (0 at EOF).
     /// Sans-io drivers use this to fill `reader.insert(need)` without an extra allocation.
@@ -106,8 +116,16 @@ impl ByteSource for LocalFileSource {
         Some(self.size)
     }
 
+    fn is_remote(&self) -> bool {
+        false
+    }
+
     fn display_name(&self) -> String {
         self.path.display().to_string()
+    }
+
+    fn is_seekable(&self) -> bool {
+        true
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -210,8 +228,16 @@ impl ByteSource for RemoteRangeSource {
         Some(self.inner.size())
     }
 
+    fn is_remote(&self) -> bool {
+        true
+    }
+
     fn display_name(&self) -> String {
         self.inner.display_url().to_string()
+    }
+
+    fn is_seekable(&self) -> bool {
+        true
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -281,8 +307,16 @@ impl<R: Read> ByteSource for SequentialSource<R> {
         None
     }
 
+    fn is_remote(&self) -> bool {
+        false
+    }
+
     fn display_name(&self) -> String {
         self.name.clone()
+    }
+
+    fn is_seekable(&self) -> bool {
+        false
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -331,8 +365,16 @@ impl ByteSource for MemorySource {
         Some(self.data.len() as u64)
     }
 
+    fn is_remote(&self) -> bool {
+        false
+    }
+
     fn display_name(&self) -> String {
         "<memory>".to_string()
+    }
+
+    fn is_seekable(&self) -> bool {
+        true
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -369,6 +411,25 @@ pub fn open_byte_source_for_scan(
         require_remote_scan_allowed(path, options)?;
     }
     open_byte_source(path, options)
+}
+
+/// Spools stdin to a tempfile and opens it as a random-access [`ByteSource`], for commands that
+/// may seek. Commands that only scan forward should use [`SequentialSource::stdin`] instead.
+pub fn open_stdin_byte_source() -> Result<Box<dyn ByteSource>> {
+    let stdin = std::io::stdin();
+    if stdin.is_terminal() {
+        bail!("{PLEASE_SUPPLY_FILE}");
+    }
+    let mut temp_file = tempfile::Builder::new()
+        .prefix("mcap-cli-stdin-input-")
+        .tempfile()
+        .context("failed to create temporary file for stdin input")?;
+    std::io::copy(&mut stdin.lock(), temp_file.as_file_mut())
+        .context("failed to read input from stdin")?;
+    Ok(Box::new(LocalFileSource::from_temp_file(
+        temp_file,
+        PathBuf::from("<stdin>"),
+    )?))
 }
 
 fn open_remote_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dyn ByteSource>> {
@@ -584,5 +645,75 @@ mod tests {
             .collect();
         assert_eq!(opcodes.first(), Some(&mcap::records::op::HEADER));
         assert_eq!(opcodes.last(), Some(&mcap::records::op::FOOTER));
+    }
+
+    #[test]
+    fn memory_source_summary_reader_finds_channel() {
+        let bytes = write_summary_mcap();
+        let mut source = MemorySource::new(bytes);
+        let summary = read_summary(&mut source, SourceOptions::default())
+            .expect("summary read")
+            .expect("summary should exist");
+        assert!(summary.channels.values().any(|ch| ch.topic == "/demo"));
+        assert!(!summary.chunk_indexes.is_empty());
+    }
+
+    #[test]
+    fn local_file_source_matches_memory_summary() {
+        let bytes = write_summary_mcap();
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let path = dir.path().join("demo.mcap");
+        std::fs::write(&path, &bytes).expect("write fixture");
+
+        let mut local = LocalFileSource::open_path(&path).expect("open local");
+        assert!(local.is_seekable());
+        assert!(!local.is_remote());
+        assert_eq!(local.size(), Some(bytes.len() as u64));
+
+        let summary = read_summary(&mut local, SourceOptions::default())
+            .expect("summary read")
+            .expect("summary should exist");
+        assert!(summary.channels.values().any(|ch| ch.topic == "/demo"));
+    }
+
+    #[test]
+    fn for_each_linear_record_visits_opcodes() {
+        let bytes = write_summary_mcap();
+        let mut source = MemorySource::new(bytes);
+        let mut opcodes = Vec::new();
+        for_each_linear_record(
+            &mut source,
+            mcap::sans_io::LinearReaderOptions::default(),
+            |opcode, _data| {
+                opcodes.push(opcode);
+                Ok(())
+            },
+        )
+        .expect("linear scan");
+        assert_eq!(opcodes.first(), Some(&mcap::records::op::HEADER));
+        assert_eq!(opcodes.last(), Some(&mcap::records::op::FOOTER));
+    }
+
+    #[test]
+    fn service_indexed_chunk_feeds_messages() {
+        let bytes = write_summary_mcap();
+        let mut source = MemorySource::new(bytes);
+        let summary = read_summary(&mut source, SourceOptions::default())
+            .expect("summary read")
+            .expect("summary should exist");
+        let mut reader = mcap::sans_io::IndexedReader::new(&summary).expect("indexed reader");
+        let mut messages = 0usize;
+        while let Some(event) = reader.next_event() {
+            match event.expect("indexed event") {
+                mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                    service_indexed_chunk(&mut reader, &mut source, offset, length)
+                        .expect("service chunk");
+                }
+                mcap::sans_io::IndexedReadEvent::Message { .. } => {
+                    messages += 1;
+                }
+            }
+        }
+        assert_eq!(messages, 1);
     }
 }
