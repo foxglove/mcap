@@ -98,7 +98,7 @@ Now we can create a topic and add some messages to it:
 ```python
 writer.create_topic(
     rosbag2_py.TopicMetadata(
-        name="/chatter", type="std_msgs/msg/String", serialization_format="cdr"
+        id=0, name="/chatter", type="std_msgs/msg/String", serialization_format="cdr"
     )
 )
 
@@ -109,6 +109,10 @@ for i in range(10):
     timestamp = start_time + (i * 100)
     writer.write("/chatter", serialize_message(msg), timestamp)
 ```
+
+:::info
+`TopicMetadata` takes a topic `id` since ROS 2 Jazzy. On ROS 2 Humble, leave out `id=0`.
+:::
 
 Finally, we delete the writer to close the MCAP:
 
