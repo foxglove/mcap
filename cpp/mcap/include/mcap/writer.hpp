@@ -499,7 +499,7 @@ private:
   std::vector<ChunkIndex> chunkIndex_;
   Statistics statistics_{};
   std::unordered_set<SchemaId> writtenSchemas_;
-  std::unordered_map<ChannelId, MessageIndex> currentMessageIndex_;
+  std::vector<MessageIndex> currentMessageIndex_;
   Timestamp currentChunkStart_ = MaxTime;
   Timestamp currentChunkEnd_ = 0;
   Compression compression_ = Compression::None;
