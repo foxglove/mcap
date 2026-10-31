@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include <cstring>
+#include <type_traits>
 
 // Do not compile on systems with non-8-bit bytes
 static_assert(std::numeric_limits<unsigned char>::digits == 8);
@@ -21,6 +22,24 @@ constexpr uint64_t FooterLength = /* opcode */ 1 +
                                   /* summary offset start */ 8 +
                                   /* summary crc */ 4 +
                                   /* magic bytes */ sizeof(Magic);
+
+// The C++ standard does not guarantee std::pair's member order or padding.
+// Returns whether Pair's members are laid out as two consecutive fields without
+// padding in declaration order (first then second), i.e. identical to how a
+// flat struct of the same two types would be laid out.
+template <typename Pair>
+constexpr bool isPackedPair() {
+  using First = typename Pair::first_type;
+  using Second = typename Pair::second_type;
+
+  // offsetof requires a standard-layout type
+  if constexpr (std::is_standard_layout_v<Pair>) {
+    return offsetof(Pair, first) == 0 && offsetof(Pair, second) == sizeof(First) &&
+           sizeof(Pair) == sizeof(First) + sizeof(Second);
+  } else {
+    return false;
+  }
+}
 
 inline std::string ToHex(uint8_t byte) {
   std::string result{2, '\0'};

@@ -1015,9 +1015,17 @@ uint64_t McapWriter::write(IWritable& output, const MessageIndex& index) {
   write(output, index.channelId);
 
   write(output, recordsSize);
-  for (const auto& [timestamp, offset] : index.records) {
-    write(output, timestamp);
-    write(output, offset);
+
+  // Write index.records all at once if its memory layout matches the wire format exactly.
+  if constexpr (internal::isPackedPair<std::pair<Timestamp, ByteOffset>>()) {
+    if (!index.records.empty()) {
+      output.write(reinterpret_cast<const std::byte*>(index.records.data()), recordsSize);
+    }
+  } else {
+    for (const auto& [timestamp, offset] : index.records) {
+      write(output, timestamp);
+      write(output, offset);
+    }
   }
 
   return 9 + recordSize;
