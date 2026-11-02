@@ -96,8 +96,8 @@ def write_example_message(writer: CdrWriter):
     # geometry_msgs/TransformStamped[] transforms
     writer.write_uint32(1)
     # std_msgs/Header header
-    writer.write_uint32(1490149580)  # uint32 sec
-    writer.write_uint32(117017840)  # uint32 nsec
+    writer.write_int32(1490149580)  # int32 sec
+    writer.write_uint32(117017840)  # uint32 nanosec
     writer.write_string("base_link")  # string frame_id
     writer.write_string("radar")  # string child_frame_id
     # geometry_msgs/Transform transform
