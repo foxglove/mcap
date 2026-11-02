@@ -416,13 +416,11 @@ class SeekingReader(McapReader):
                             ((schema, channel, record), chunk_start_offset, index)
                         )
                 if log_time_order:
-                    # Queued together so that the queue can keep them as one sorted
-                    # run rather than heaping each message on its own.
+                    # A chunk's messages are queued together as one sorted run.
                     message_queue.push_chunk_messages(chunk_start_offset, messages)
                 else:
                     # In file order there is nothing to merge, so a chunk's messages
-                    # go straight out. Queuing them would hold every message in the
-                    # file until the last chunk index had been read.
+                    # are yielded as soon as the chunk is read.
                     for message in messages:
                         yield message[0]
             else:

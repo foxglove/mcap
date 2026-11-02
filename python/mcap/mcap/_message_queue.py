@@ -64,8 +64,7 @@ class _MessageRun:
 
     Messages in a chunk are usually written in log time order already, so ``sort()``
     here is a single linear pass, since the built-in sort detects an ordered run.
-    Keeping them as one run lets the queue heap hold one entry per chunk rather than
-    one per message.
+    Keeping them as one run lets the queue heap hold one entry per chunk.
 
     The attributes are read and written by the owning :py:class:`LogTimeOrderQueue`.
     """
@@ -136,12 +135,12 @@ class _MessageQueue(ABC):
 class LogTimeOrderQueue(_MessageQueue):
     """A priority queue over chunk indices and messages, ordered by log time.
 
-    Messages arrive one chunk at a time, so rather than heap every message the queue
-    keeps each chunk's messages as a sorted run and heaps the runs. The heap then holds
-    one entry per pending chunk index and per run not yet drained, so it is sized by
-    the number of chunks in flight rather than by the number of messages. While a run
-    holds the smallest keys in the queue its messages are handed out with no heap work
-    at all, which covers the whole of a file whose chunks do not overlap in time.
+    Messages arrive one chunk at a time, and the queue keeps each chunk's messages as
+    a sorted run and heaps the runs. The heap holds one entry per pending chunk index
+    and per run not yet drained, so it is sized by the number of chunks in flight.
+    While a run holds the smallest keys in the queue its messages are handed out with
+    no heap work at all, which covers the whole of a file whose chunks do not overlap
+    in time.
     """
 
     def __init__(self, reverse: bool = False):
@@ -192,12 +191,12 @@ class LogTimeOrderQueue(_MessageQueue):
 
     def pop(self) -> QueueItem:
         q = self._q
-        self._length -= 1
         drain = self._drain
         if drain:
             self._drain = drain - 1
             run = q[0][2]
             item = run.next()
+            self._length -= 1
             if drain == 1:
                 # The run's lead is spent. Either it is empty, or it has to compete
                 # for the root again with an up to date key.
@@ -208,6 +207,7 @@ class LogTimeOrderQueue(_MessageQueue):
             return item
 
         entry = q[0][2]
+        self._length -= 1
         if type(entry) is not _MessageRun:
             heapq.heappop(q)
             return entry
