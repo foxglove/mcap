@@ -93,11 +93,6 @@ fn parse_mcap_from_summary(
     )?))
 }
 
-pub(crate) fn summary_section_has_chunk_indexes(mcap: &[u8]) -> Result<bool> {
-    Ok(parse_mcap_from_summary(mcap, None)?
-        .is_some_and(|summary| !summary.chunk_indexes.is_empty()))
-}
-
 pub(crate) fn parsed_mcap_from_summary_section(
     header: Option<records::Header>,
     summary: &[u8],
@@ -459,7 +454,8 @@ pub(crate) fn parse_metadata_record(bytes: &[u8]) -> Result<mcap::records::Metad
     Ok(metadata)
 }
 
-pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'static>> {
+/// The payload borrows from `bytes`; nothing is copied.
+pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'_>> {
     let mut reader = mcap::read::LinearReader::sans_magic(bytes);
     let attachment = match reader.next().ok_or(mcap::McapError::BadIndex)?? {
         mcap::records::Record::Attachment { header, data, .. } => mcap::Attachment {
@@ -467,7 +463,7 @@ pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'
             create_time: header.create_time,
             name: header.name,
             media_type: header.media_type,
-            data: Cow::Owned(data.into_owned()),
+            data,
         },
         _ => return Err(mcap::McapError::BadIndex.into()),
     };
