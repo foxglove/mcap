@@ -94,9 +94,9 @@ class LogTimeOrderQueue:
     Messages arrive one chunk at a time, and the queue keeps each chunk's messages as
     a sorted run and heaps the runs. The heap holds one entry per pending chunk index
     and per run not yet drained, so it is sized by the number of chunks in flight.
-    While a run holds the smallest keys in the queue its messages are handed out with
-    no heap work at all, which covers the whole of a file whose chunks do not overlap
-    in time; :py:meth:`take_leading_run` hands those messages out in one piece.
+    :py:meth:`pop` merges one item at a time; :py:meth:`take_leading_run` hands out
+    in one piece the messages at the root that sort before everything else queued,
+    which is a whole run at a time for a file whose chunks do not overlap in time.
     """
 
     def __init__(self, reverse: bool = False):
@@ -104,12 +104,8 @@ class LogTimeOrderQueue:
         self._reverse = reverse
         self._counter = itertools.count()
         self._length = 0
-        # How many messages the run at the root of the heap may hand out with no
-        # comparison, because they already hold the smallest keys in the queue.
-        self._drain = 0
 
     def push(self, chunk_index: ChunkIndex) -> None:
-        self._settle_root()
         key = _chunk_index_key(chunk_index, self._reverse)
         heapq.heappush(self._q, (key, next(self._counter), chunk_index))
         self._length += 1
@@ -120,21 +116,8 @@ class LogTimeOrderQueue:
         if not entries:
             return
         run = _MessageRun(entries)
-        self._settle_root()
         heapq.heappush(self._q, (run.head_key(), next(self._counter), run))
         self._length += len(entries)
-
-    def _settle_root(self) -> None:
-        """Bring the root's key up to date before a push can compare against it.
-
-        While a run is draining, the root's stored key describes a message that has
-        already been handed out. ``heappop`` and ``heapreplace`` never read the root's
-        own key, but ``heappush`` does, so it has to be corrected first.
-        """
-        if self._drain:
-            self._drain = 0
-            run = self._q[0][2]
-            heapq.heapreplace(self._q, (run.head_key(), next(self._counter), run))
 
     def _limit(self) -> Optional[SortKey]:
         """The smallest key the queue holds outside the root, or None if there is none.
@@ -161,7 +144,6 @@ class LogTimeOrderQueue:
         q = self._q
         if not q:
             return None
-        self._settle_root()
         run = q[0][2]
         if type(run) is not _MessageRun:
             return None
@@ -185,49 +167,18 @@ class LogTimeOrderQueue:
         return taken
 
     def pop(self) -> Union[ChunkIndex, MessagePayload]:
+        """Remove and return the chunk index or message with the smallest key."""
         q = self._q
-        drain = self._drain
-        if drain:
-            self._drain = drain - 1
-            run = q[0][2]
-            item = run.next()
-            self._length -= 1
-            if drain == 1:
-                # The run's lead is spent. Either it is empty, or it has to compete
-                # for the root again with an up to date key.
-                if run:
-                    heapq.heapreplace(q, (run.head_key(), next(self._counter), run))
-                else:
-                    heapq.heappop(q)
-            return item
-
         entry = q[0][2]
         self._length -= 1
         if type(entry) is not _MessageRun:
             heapq.heappop(q)
             return entry
-
         item = entry.next()
-        if not entry:
-            heapq.heappop(q)
-            return item
-
-        limit = self._limit()
-        if limit is None or entry.tail_key < limit:
-            # The rest of the run wins outright; hand it out without touching the heap.
-            self._drain = len(entry)
-        elif entry.skip_probes:
-            entry.skip_probes -= 1
+        if entry:
             heapq.heapreplace(q, (entry.head_key(), next(self._counter), entry))
         else:
-            ahead = entry.count_below(limit)
-            if ahead > 1:
-                self._drain = ahead
-            else:
-                # This run and the rest of the queue are trading message for message,
-                # so stop measuring for a while and just merge.
-                entry.skip_probes = _PROBE_BACKOFF
-                heapq.heapreplace(q, (entry.head_key(), next(self._counter), entry))
+            heapq.heappop(q)
         return item
 
     def __len__(self) -> int:
