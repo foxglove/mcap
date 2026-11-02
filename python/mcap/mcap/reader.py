@@ -678,10 +678,7 @@ class NonSeekingReader(McapReader):
             messages = list(
                 self._iter_messages_internal(topics, starting_at, ending_before)
             )
-            # Checking order is cheaper than a keyed sort, and most files are in order.
-            log_times = [tup[2].log_time for tup in messages]
-            if log_times != sorted(log_times, reverse=reverse):
-                messages.sort(key=lambda tup: tup[2].log_time, reverse=reverse)
+            messages.sort(key=lambda tup: tup[2].log_time, reverse=reverse)
             yield from messages
 
     def _iter_messages_internal(

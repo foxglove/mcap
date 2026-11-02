@@ -47,7 +47,7 @@ MAGIC_SIZE = 8
 # Opcode and record length. Every record starts with this prefix.
 _RECORD_PREFIX = struct.Struct("<BQ")
 _RECORD_PREFIX_SIZE = _RECORD_PREFIX.size
-# Plain ints: comparing against an IntEnum member goes through Enum.__eq__ on every record.
+# Plain ints: Enum.__eq__ is too slow for a per-record comparison.
 _OPCODE_CHANNEL = int(Opcode.CHANNEL)
 _OPCODE_MESSAGE = int(Opcode.MESSAGE)
 _OPCODE_SCHEMA = int(Opcode.SCHEMA)
