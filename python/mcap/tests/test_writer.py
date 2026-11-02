@@ -1,13 +1,15 @@
+import array
 import contextlib
 import json
 import zlib
 from io import BytesIO
 from tempfile import TemporaryFile
-from typing import List
+from typing import List, cast
 
 import lz4.frame
 import pytest
 
+from mcap.reader import make_reader
 from mcap.records import Chunk, ChunkIndex, Header, Statistics
 from mcap.stream_reader import StreamReader
 from mcap.writer import LIBRARY_IDENTIFIER, CompressionType, Writer
@@ -129,3 +131,19 @@ def test_out_of_order_messages():
     chunk_index = next(r for r in records if isinstance(r, ChunkIndex))
     assert chunk_index.message_start_time == 0
     assert chunk_index.message_end_time == 100
+
+
+@pytest.mark.parametrize("use_chunking", [True, False])
+def test_write_multi_byte_element_buffer(use_chunking: bool):
+    # The writer measures any buffer in bytes, so a buffer whose elements are wider
+    # than one byte gets the right record length even though len() counts elements.
+    payload = array.array("d", [1.0, 2.0, 3.0])
+    output = BytesIO()
+    writer = Writer(output, use_chunking=use_chunking)
+    writer.start()
+    channel_id = writer.register_channel("/t", "raw", 0)
+    writer.add_message(channel_id, 1, cast(bytes, payload), 1)
+    writer.finish()
+    output.seek(0)
+    [(_, _, message)] = make_reader(output).iter_messages()
+    assert message.data == payload.tobytes()  # cspell:disable-line
