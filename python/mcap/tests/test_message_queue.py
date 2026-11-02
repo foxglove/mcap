@@ -1,5 +1,5 @@
 import random
-from typing import List, Union
+from typing import Dict, List, Tuple, Union
 
 from mcap._message_queue import KeyedMessage, LogTimeOrderQueue, MessagePayload
 from mcap.records import Channel, ChunkIndex, Message, Schema
@@ -168,29 +168,73 @@ def test_interleaved_run_is_not_taken():
     assert sequences(results) == [0, 1, 2]
 
 
+def merge_through_queue(
+    seed: int, reverse: bool, use_bulk: bool, time_range: int
+) -> Tuple[List[MessagePayload], List[KeyedMessage], int, int]:
+    """Push 50 overlapping chunks and drain them the way SeekingReader does.
+
+    Every chunk index is pushed up front, a chunk's messages are pushed when its
+    index comes out, and when ``use_bulk`` is set the leading messages are taken in
+    bulk whenever they can be. Returns the payloads in the order they came out, the
+    keyed messages in expected order, and how many messages came out each way.
+    """
+    rng = random.Random(seed)
+    mq = LogTimeOrderQueue(reverse)
+    chunks: Dict[int, List[KeyedMessage]] = {}
+    expected: List[KeyedMessage] = []
+    for chunk in range(50):
+        chunk_offset = 1000 * (chunk + 1)
+        entries = [
+            keyed_message(rng.randint(0, time_range), chunk_offset, index, reverse)
+            for index in range(rng.randint(1, 40))
+        ]
+        times = [keyed[3][2].log_time for keyed in entries]
+        chunk_index = dummy_chunk_index(min(times), max(times), chunk_offset)
+        # Chunks sit back to back, so in reverse each chunk index shares its offset
+        # with the next chunk's messages and only the tiebreak separates the keys.
+        chunk_index.chunk_length = 1000
+        chunks[chunk_offset] = entries
+        expected.extend(entries)
+        mq.push(chunk_index)
+    out: List[MessagePayload] = []
+    taken_in_bulk = 0
+    popped = 0
+    while mq:
+        run = mq.take_leading_run() if use_bulk else None
+        if run is not None:
+            out.extend(keyed[3] for keyed in run)
+            taken_in_bulk += len(run)
+            continue
+        item = mq.pop()
+        if isinstance(item, ChunkIndex):
+            mq.push_chunk_messages(list(chunks[item.chunk_start_offset]))
+        else:
+            out.append(item)
+            popped += 1
+    expected.sort()
+    return out, expected, taken_in_bulk, popped
+
+
 def test_overlapping_runs_merge_in_key_order():
-    """runs from chunks that overlap in time are merged, in both directions."""
-    rng = random.Random(7)
-    for reverse in (False, True):
-        mq = LogTimeOrderQueue(reverse)
-        expected: List[KeyedMessage] = []
-        for chunk in range(50):
-            chunk_offset = 1000 * (chunk + 1)
-            entries = [
-                keyed_message(rng.randint(0, 30), chunk_offset, index, reverse)
-                for index in range(rng.randint(1, 40))
-            ]
-            expected.extend(entries)
-            mq.push_chunk_messages(entries)
-            # Interleave draining with pushing, as the reader does.
-            for _ in range(rng.randint(0, 5)):
-                if mq:
-                    mq.pop()
-        mq2 = LogTimeOrderQueue(reverse)
-        expected.sort()
-        for keyed in expected:
-            mq2.push_chunk_messages([keyed])
-        assert sequences(drain(mq2)) == [keyed[3][2].sequence for keyed in expected]
+    """runs from chunks that overlap in time are merged, in both directions.
+
+    A narrow time range makes most keys tie on log time, so chunks interleave
+    message for message; a wide one leaves gaps, so runs lead by whole prefixes.
+    """
+    for time_range in (30, 1000, 10**6):
+        for reverse in (False, True):
+            for use_bulk in (True, False):
+                out, expected, taken_in_bulk, popped = merge_through_queue(
+                    7, reverse, use_bulk, time_range
+                )
+                # Messages in different chunks can share a log time and a record
+                # index, so compare identities rather than fields.
+                assert [id(payload) for payload in out] == [
+                    id(keyed[3]) for keyed in expected
+                ], (time_range, reverse, use_bulk)
+                assert popped > 0
+                if use_bulk:
+                    assert taken_in_bulk > 0
 
 
 def test_pop_on_empty_queue_keeps_length_at_zero():
