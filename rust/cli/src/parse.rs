@@ -7,7 +7,6 @@ use mcap::records::{self, Record};
 use mcap::sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions};
 
 const FOOTER_RECORD_LEN: usize = 1 + 8 + 8 + 8 + 4;
-const RECORD_PREFIX_LEN: u64 = 1 + 8;
 pub(crate) const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = FOOTER_RECORD_LEN + mcap::MAGIC.len();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -213,7 +212,8 @@ where
             }
             LinearReadEvent::Record { opcode, data } => {
                 let record_offset = next_record_offset;
-                let record_length = RECORD_PREFIX_LEN + data.len() as u64;
+                let record_length =
+                    crate::byte_source::RECORD_PREFIX_LEN as u64 + data.len() as u64;
                 next_record_offset += record_length;
                 process(
                     mcap::parse_record(opcode, data)?,

@@ -804,9 +804,12 @@ fn opcode_name(opcode: u8) -> Cow<'static, str> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use std::collections::BTreeMap;
+    use std::rc::Rc;
 
     use super::diagnose_mcap;
+    use crate::byte_source::InstrumentedSource;
     use mcap::records::op;
 
     fn write_mcap(
@@ -1122,52 +1125,6 @@ mod tests {
         );
     }
 
-    /// Counts the bytes handed out by `read_into`, which the default `read_at` also goes through.
-    struct CountingSource {
-        inner: crate::byte_source::MemorySource,
-        bytes_read: u64,
-    }
-
-    impl crate::byte_source::ByteSource for CountingSource {
-        fn size(&self) -> Option<u64> {
-            self.inner.size()
-        }
-
-        fn display_name(&self) -> String {
-            self.inner.display_name()
-        }
-
-        fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> anyhow::Result<usize> {
-            let n = self.inner.read_into(offset, dest)?;
-            self.bytes_read += n as u64;
-            Ok(n)
-        }
-    }
-
-    /// Fails every `read_into` at or past `fail_at`, standing in for a disk or network error
-    /// partway through the scan.
-    struct FailingSource {
-        inner: crate::byte_source::MemorySource,
-        fail_at: u64,
-    }
-
-    impl crate::byte_source::ByteSource for FailingSource {
-        fn size(&self) -> Option<u64> {
-            self.inner.size()
-        }
-
-        fn display_name(&self) -> String {
-            self.inner.display_name()
-        }
-
-        fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> anyhow::Result<usize> {
-            if offset >= self.fail_at {
-                anyhow::bail!("simulated read failure");
-            }
-            self.inner.read_into(offset, dest)
-        }
-    }
-
     #[test]
     fn read_failure_is_reported_after_earlier_findings() {
         let mut mcap = write_mcap(
@@ -1182,10 +1139,15 @@ mod tests {
         corrupt_first_schema_data_length(&mut mcap);
         let fail_at = first_record_offset(&mcap, op::MESSAGE).expect("message should exist");
 
-        let mut source = FailingSource {
-            inner: crate::byte_source::MemorySource::new(mcap),
-            fail_at: fail_at as u64,
-        };
+        // Every read at or past the first message fails, standing in for a disk or network
+        // error partway through the scan.
+        let fail_at = fail_at as u64;
+        let mut source = InstrumentedSource::new(mcap, move |offset, _: &[u8]| {
+            if offset >= fail_at {
+                anyhow::bail!("simulated read failure");
+            }
+            Ok(())
+        });
         let diagnosis = super::diagnose_byte_source(&mut source, false);
 
         let parse_error = diagnosis
@@ -1283,10 +1245,14 @@ mod tests {
     #[test]
     fn chunk_index_validation_reads_the_file_once() {
         let mcap = write_mcap(|opts| opts, None, &[10, 20, 30, 40]);
-        let mut source = CountingSource {
-            inner: crate::byte_source::MemorySource::new(mcap.clone()),
-            bytes_read: 0,
-        };
+        let bytes_read = Rc::new(Cell::new(0u64));
+        let mut source = InstrumentedSource::new(mcap.clone(), {
+            let bytes_read = Rc::clone(&bytes_read);
+            move |_, bytes: &[u8]| {
+                bytes_read.set(bytes_read.get() + bytes.len() as u64);
+                Ok(())
+            }
+        });
         let diagnosis = super::diagnose_byte_source(&mut source, false);
         assert!(diagnosis.errors.is_empty(), "{:?}", diagnosis.errors);
         assert!(
@@ -1294,7 +1260,7 @@ mod tests {
             "fixture should have chunk indexes to validate"
         );
         assert_eq!(
-            source.bytes_read,
+            bytes_read.get(),
             mcap.len() as u64,
             "validating chunk indexes should not re-read the data section"
         );
