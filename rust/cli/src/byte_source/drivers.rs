@@ -4,12 +4,66 @@ use std::io::SeekFrom;
 use std::ops::ControlFlow;
 
 use anyhow::{bail, Context, Result};
+use mcap::records::{op, Footer, Record};
 use mcap::sans_io::{
     IndexedReader, LinearReadEvent, LinearReader, LinearReaderOptions, SummaryReadEvent,
     SummaryReader, SummaryReaderOptions,
 };
+use mcap::McapError;
 
 use super::ByteSource;
+
+/// Opcode (1) and little-endian body length (8) that start every record.
+pub const RECORD_PREFIX_LEN: usize = 1 + 8;
+
+/// Splits a record prefix off the front of `bytes`: the opcode, the declared body length, and
+/// the bytes after the prefix. `None` when `bytes` is shorter than a prefix.
+fn split_record_prefix(bytes: &[u8]) -> Option<(u8, u64, &[u8])> {
+    let (prefix, rest) = bytes.split_at_checked(RECORD_PREFIX_LEN)?;
+    let len = u64::from_le_bytes(prefix[1..].try_into().expect("8-byte length"));
+    Some((prefix[0], len, rest))
+}
+
+/// Parses one serialized record (prefix followed by its body) from the start of `bytes`.
+pub fn parse_record_bytes(bytes: &[u8]) -> Result<Record<'_>> {
+    let (opcode, body_len, rest) = split_record_prefix(bytes)
+        .context("record is shorter than its opcode and length prefix")?;
+    let body = usize::try_from(body_len)
+        .ok()
+        .and_then(|len| rest.get(..len))
+        .with_context(|| format!("record body of {body_len} bytes is truncated"))?;
+    Ok(mcap::parse_record(opcode, body)?)
+}
+
+/// Reads the footer record at the end of `source` and checks the trailing magic. Returns the
+/// footer's offset and the footer. Errors are [`McapError`]s: `UnexpectedEof` when the size is
+/// unknown or too small to hold a footer, `BadMagic` when the trailing magic is wrong, and
+/// `BadFooter` when the record before the magic is not a well-formed footer.
+pub fn read_footer(source: &mut dyn ByteSource) -> Result<(u64, Footer)> {
+    let tail_len = crate::parse::FOOTER_RECORD_AND_END_MAGIC_LEN;
+    let footer_start = source
+        .size()
+        .filter(|size| *size >= (mcap::MAGIC.len() + tail_len) as u64)
+        .map(|size| size - tail_len as u64)
+        .ok_or(McapError::UnexpectedEof)?;
+    let tail = source.read_at(footer_start, tail_len)?;
+    if tail.len() != tail_len {
+        return Err(McapError::UnexpectedEof.into());
+    }
+    let (record, magic) = tail.split_at(tail_len - mcap::MAGIC.len());
+    if magic != mcap::MAGIC {
+        return Err(McapError::BadMagic.into());
+    }
+    let (opcode, len, body) =
+        split_record_prefix(record).expect("tail is longer than a record prefix");
+    if opcode != op::FOOTER || len != body.len() as u64 {
+        return Err(McapError::BadFooter.into());
+    }
+    match mcap::parse_record(opcode, body)? {
+        Record::Footer(footer) => Ok((footer_start, footer)),
+        _ => Err(McapError::BadFooter.into()),
+    }
+}
 
 /// The largest record a source can hold: its size, when known. A reader given this limit rejects
 /// a damaged length field instead of trying to allocate for it, which the slice-backed readers
@@ -58,13 +112,7 @@ pub fn service_indexed_chunk(
     offset: u64,
     length: usize,
 ) -> Result<()> {
-    let data = source.read_at(offset, length)?;
-    if data.len() != length {
-        bail!(
-            "short read for chunk at offset {offset}: expected {length} bytes, got {}",
-            data.len()
-        );
-    }
+    let data = source.read_exact_at(offset, length)?;
     reader
         .insert_chunk_record_data(offset, &data)
         .context("failed to insert chunk data into indexed reader")?;
@@ -129,41 +177,32 @@ pub fn for_each_top_level_record_of(
     wanted: u8,
     mut visit: impl FnMut(&[u8]) -> Result<()>,
 ) -> Result<()> {
-    /// Opcode (1) and record length (8).
-    const PREFIX_LEN: usize = 9;
-
     let magic = source.read_at(0, mcap::MAGIC.len())?;
     if magic.as_slice() != mcap::MAGIC {
-        return Err(mcap::McapError::BadMagic.into());
+        return Err(McapError::BadMagic.into());
     }
     let limit = record_length_limit(source);
     let mut pos = mcap::MAGIC.len() as u64;
     loop {
-        let prefix = source.read_at(pos, PREFIX_LEN)?;
-        if prefix.len() < PREFIX_LEN {
-            return Err(mcap::McapError::UnexpectedEof.into());
-        }
-        let opcode = prefix[0];
-        let len = u64::from_le_bytes(
-            prefix[1..PREFIX_LEN]
-                .try_into()
-                .expect("slice has length 8"),
-        );
-        let body_start = pos.saturating_add(PREFIX_LEN as u64);
+        let prefix = source.read_at(pos, RECORD_PREFIX_LEN)?;
+        let Some((opcode, len, _)) = split_record_prefix(&prefix) else {
+            return Err(McapError::UnexpectedEof.into());
+        };
+        let body_start = pos.saturating_add(RECORD_PREFIX_LEN as u64);
         if opcode == wanted {
             let body_len = usize::try_from(len)
                 .ok()
                 .filter(|body_len| limit.is_none_or(|limit| *body_len <= limit));
             let Some(body_len) = body_len else {
-                return Err(mcap::McapError::RecordTooLarge { opcode, len }.into());
+                return Err(McapError::RecordTooLarge { opcode, len }.into());
             };
             let body = source.read_at(body_start, body_len)?;
             if body.len() < body_len {
-                return Err(mcap::McapError::UnexpectedEof.into());
+                return Err(McapError::UnexpectedEof.into());
             }
             visit(&body)?;
         }
-        if opcode == mcap::records::op::FOOTER {
+        if opcode == op::FOOTER {
             return Ok(());
         }
         pos = body_start.saturating_add(len);

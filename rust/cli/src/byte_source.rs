@@ -5,8 +5,8 @@
 mod drivers;
 
 pub use drivers::{
-    for_each_linear_record, for_each_top_level_record_of, read_summary, service_indexed_chunk,
-    try_for_each_linear_record,
+    for_each_linear_record, for_each_top_level_record_of, parse_record_bytes, read_footer,
+    read_summary, service_indexed_chunk, try_for_each_linear_record, RECORD_PREFIX_LEN,
 };
 
 use std::fs::File;
@@ -51,6 +51,18 @@ pub trait ByteSource {
         buf.truncate(n);
         Ok(buf)
     }
+
+    /// Read exactly `[offset, offset+len)` into a new buffer, failing on a short read.
+    fn read_exact_at(&mut self, offset: u64, len: usize) -> Result<Vec<u8>> {
+        let bytes = self.read_at(offset, len)?;
+        if bytes.len() != len {
+            bail!(
+                "short read at offset {offset}: expected {len} bytes, got {}",
+                bytes.len()
+            );
+        }
+        Ok(bytes)
+    }
 }
 
 /// Read-ahead buffer for sequential reads. Sans-io readers request one record at a time, so
@@ -71,6 +83,12 @@ impl LocalFileSource {
     pub(crate) fn open_path(path: &Path) -> Result<Self> {
         let file =
             File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))?;
+        Self::from_file(file, path)
+    }
+
+    /// Wraps an already-open descriptor. The caller keeps the descriptor for later work through
+    /// `into_file`, so everything it does sees the same file the source read.
+    pub(crate) fn from_file(file: File, path: &Path) -> Result<Self> {
         let size = file
             .metadata()
             .with_context(|| format!("couldn't stat '{}'", path.display()))?
@@ -81,6 +99,11 @@ impl LocalFileSource {
             path: path.to_path_buf(),
             size,
         })
+    }
+
+    /// Gives the descriptor back. Its cursor is wherever the last read left it.
+    pub(crate) fn into_file(self) -> File {
+        self.reader.into_inner()
     }
 
     /// Takes over the spool's own descriptor and unlinks its path at once: the data stays
@@ -442,6 +465,41 @@ fn spool_remote_to_local(path: &Path, options: SourceOptions) -> Result<LocalFil
     LocalFileSource::from_temp_file(temp_file, PathBuf::from(redacted_display(path)))
 }
 
+/// Test double over [`MemorySource`] that hands every read's offset and bytes to `on_read` before
+/// returning them. An error from the hook fails the read.
+#[cfg(test)]
+pub(crate) struct InstrumentedSource<F> {
+    inner: MemorySource,
+    on_read: F,
+}
+
+#[cfg(test)]
+impl<F: FnMut(u64, &[u8]) -> Result<()>> InstrumentedSource<F> {
+    pub(crate) fn new(data: impl Into<Vec<u8>>, on_read: F) -> Self {
+        Self {
+            inner: MemorySource::new(data),
+            on_read,
+        }
+    }
+}
+
+#[cfg(test)]
+impl<F: FnMut(u64, &[u8]) -> Result<()>> ByteSource for InstrumentedSource<F> {
+    fn size(&self) -> Option<u64> {
+        self.inner.size()
+    }
+
+    fn display_name(&self) -> String {
+        self.inner.display_name()
+    }
+
+    fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
+        let n = self.inner.read_into(offset, dest)?;
+        (self.on_read)(offset, &dest[..n])?;
+        Ok(n)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -472,6 +530,47 @@ mod tests {
             writer.finish().expect("finish");
         }
         buffer
+    }
+
+    #[test]
+    fn read_footer_returns_footer_and_its_offset() {
+        let mcap = write_summary_mcap();
+        let mut source = MemorySource::new(mcap.clone());
+        let (footer_start, footer) = read_footer(&mut source).expect("read footer");
+        assert_eq!(
+            footer_start,
+            (mcap.len() - crate::parse::FOOTER_RECORD_AND_END_MAGIC_LEN) as u64
+        );
+        assert_eq!(footer, mcap::read::footer(&mcap).expect("slice footer"));
+    }
+
+    #[test]
+    fn read_footer_rejects_bad_trailing_magic() {
+        let mut mcap = write_summary_mcap();
+        *mcap.last_mut().expect("non-empty") ^= 0xff;
+        let err = read_footer(&mut MemorySource::new(mcap)).expect_err("bad magic");
+        assert!(
+            matches!(
+                err.downcast_ref::<mcap::McapError>(),
+                Some(mcap::McapError::BadMagic)
+            ),
+            "{err:#}"
+        );
+    }
+
+    #[test]
+    fn read_footer_rejects_record_that_is_not_a_footer() {
+        let mut mcap = write_summary_mcap();
+        let footer_start = mcap.len() - crate::parse::FOOTER_RECORD_AND_END_MAGIC_LEN;
+        mcap[footer_start] = mcap::records::op::DATA_END;
+        let err = read_footer(&mut MemorySource::new(mcap)).expect_err("bad footer");
+        assert!(
+            matches!(
+                err.downcast_ref::<mcap::McapError>(),
+                Some(mcap::McapError::BadFooter)
+            ),
+            "{err:#}"
+        );
     }
 
     #[test]

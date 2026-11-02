@@ -136,27 +136,7 @@ fn is_unknown_schema_error(err: &anyhow::Error) -> bool {
 /// with [`mcap::McapError::UnknownSchema`] to distinguish "not chunk-indexed → linear" from
 /// "chunk-indexed but incomplete → error".
 fn summary_section_has_chunk_indexes(source: &mut dyn ByteSource) -> Result<bool> {
-    let tail_len = crate::parse::FOOTER_RECORD_AND_END_MAGIC_LEN;
-    let Some(footer_start) = source
-        .size()
-        .filter(|size| *size >= (mcap::MAGIC.len() + tail_len) as u64)
-        .map(|size| size - tail_len as u64)
-    else {
-        return Err(mcap::McapError::UnexpectedEof.into());
-    };
-    let tail = source.read_at(footer_start, tail_len)?;
-    if tail.len() != tail_len || !tail.ends_with(mcap::MAGIC) {
-        return Err(mcap::McapError::BadMagic.into());
-    }
-    let body = &tail[9..tail_len - mcap::MAGIC.len()];
-    let declared_len = u64::from_le_bytes(tail[1..9].try_into().expect("8-byte length"));
-    if tail[0] != mcap::records::op::FOOTER || declared_len != body.len() as u64 {
-        return Err(mcap::McapError::BadFooter.into());
-    }
-    let footer = match mcap::parse_record(tail[0], body)? {
-        mcap::records::Record::Footer(footer) => footer,
-        _ => return Err(mcap::McapError::BadFooter.into()),
-    };
+    let (footer_start, footer) = byte_source::read_footer(source)?;
     if footer.summary_start == 0 {
         return Ok(false);
     }
