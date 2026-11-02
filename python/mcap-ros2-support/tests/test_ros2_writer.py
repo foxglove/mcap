@@ -1,6 +1,8 @@
+import struct
 from array import array
 from io import BytesIO
 
+import pytest
 from mcap_ros2.decoder import DecoderFactory
 from mcap_ros2.writer import Writer as Ros2Writer
 
@@ -200,3 +202,32 @@ def test_write_array_field_named_items():
     output.seek(0)
     for msg in read_ros2_messages(output):
         assert list(msg.decoded_message.items) == [10, 20, 30]
+
+
+@pytest.mark.parametrize("builtin", ["Time", "Duration"])
+@pytest.mark.parametrize("sec,nanosec", [(-2, 300_000_000), (2**31 - 1, 999_999_999)])
+def test_builtin_time_signed_seconds(builtin: str, sec: int, nanosec: int):
+    # Schemas that reference builtin_interfaces/Time or Duration without a nested
+    # definition use the built-in fallback, which must declare `sec` as int32.
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    schema = ros_writer.register_msgdef(
+        "test_msgs/Stamped", f"builtin_interfaces/{builtin} stamp"
+    )
+    ros_writer.write_message(
+        topic="/stamped",
+        schema=schema,
+        message={"stamp": {"sec": sec, "nanosec": nanosec}},
+        log_time=0,
+        publish_time=0,
+        sequence=0,
+    )
+    ros_writer.finish()
+
+    output.seek(0)
+    (msg,) = read_ros2_messages(output)
+    assert msg.message.data == b"\x00\x01\x00\x00" + struct.pack("<iI", sec, nanosec)
+    assert (msg.decoded_message.stamp.sec, msg.decoded_message.stamp.nanosec) == (
+        sec,
+        nanosec,
+    )
