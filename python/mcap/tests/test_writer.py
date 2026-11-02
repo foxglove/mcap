@@ -134,7 +134,7 @@ def test_out_of_order_messages():
 
 
 @pytest.mark.parametrize("use_chunking", [True, False])
-def test_write_multibyte_element_buffer(use_chunking: bool):
+def test_write_multi_byte_element_buffer(use_chunking: bool):
     # The writer measures any buffer in bytes, so a buffer whose elements are wider
     # than one byte gets the right record length even though len() counts elements.
     payload = array.array("d", [1.0, 2.0, 3.0])
@@ -146,4 +146,4 @@ def test_write_multibyte_element_buffer(use_chunking: bool):
     writer.finish()
     output.seek(0)
     [(_, _, message)] = make_reader(output).iter_messages()
-    assert message.data == payload.tobytes()
+    assert message.data == payload.tobytes()  # cspell:disable-line
