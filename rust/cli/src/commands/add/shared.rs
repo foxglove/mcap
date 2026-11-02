@@ -420,6 +420,14 @@ fn parse_existing_layout(source: &mut dyn ByteSource) -> Result<ExistingLayout> 
 
 /// Parses a serialized data end record; `offset` is only used in error messages.
 fn parse_data_end(record_bytes: &[u8], offset: u64) -> Result<records::DataEnd> {
+    // Check the opcode before parsing: the caller reads only a data end record's length, so a
+    // longer record at this offset would fail as truncated without naming its opcode.
+    if record_bytes.first() != Some(&op::DATA_END) {
+        bail!(
+            "expected data end record at offset {offset}, found opcode {:02x}",
+            record_bytes.first().copied().unwrap_or_default()
+        );
+    }
     match byte_source::parse_record_bytes(record_bytes)
         .context("failed to parse data end record")?
     {
