@@ -3,7 +3,6 @@
 import io
 import warnings
 from abc import ABC, abstractmethod
-from bisect import bisect_left
 from typing import (
     IO,
     Any,
@@ -18,6 +17,7 @@ from typing import (
     Union,
 )
 
+from ._message_queue import KeyedMessage, LogTimeOrderQueue
 from .data_stream import ReadDataStream, RecordBuilder
 from .decoder import DecoderFactory
 from .exceptions import DecoderNotFoundError, McapError
@@ -172,10 +172,6 @@ class DecodedMessageTuple(NamedTuple):
     channel: Channel
     message: Message
     decoded_message: Any
-
-
-# (sort key..., (schema, channel, message)); see SeekingReader._read_chunk_messages.
-_KeyedMessage = Tuple[int, int, int, Tuple[Optional[Schema], Channel, Message]]
 
 
 class McapReader(ABC):
@@ -405,53 +401,29 @@ class SeekingReader(McapReader):
                     yield keyed[3]
             return
 
-        # Chunks are visited in order of their first (or, in reverse, last) message. A
-        # message can be yielded once no chunk still to be read can hold an earlier one,
-        # which is any message logged strictly before the next chunk's start time. Files
-        # whose chunks do not overlap in time therefore cost one sort of an already
-        # sorted list per chunk and hold one chunk's messages at a time; overlapping
-        # chunks accumulate in `pending`, which Python's sort merges as two sorted runs.
-        if reverse:
-            chunk_indexes.sort(
-                key=lambda ci: (
-                    -ci.message_end_time,
-                    -(ci.chunk_start_offset + ci.chunk_length),
-                )
-            )
-        else:
-            chunk_indexes.sort(
-                key=lambda ci: (ci.message_start_time, ci.chunk_start_offset)
-            )
-        pending: List[_KeyedMessage] = []
+        # Each chunk's messages go into the queue as one run sorted by (log time, chunk
+        # offset, record index), and the queue merges the runs of chunks that overlap
+        # in time. The messages at the head of the queue that sort before everything
+        # else in it come back out as one list, which is a whole run at a time for a
+        # file whose chunks do not overlap.
+        queue = LogTimeOrderQueue(reverse)
+        for chunk_index in chunk_indexes:
+            queue.push(chunk_index)
         # `held` keeps the previous chunk alive, see _read_chunk_messages.
-        last = len(chunk_indexes) - 1
-        for i, chunk_index in enumerate(chunk_indexes):
-            items, held = self._read_chunk_messages(
-                chunk_index, summary, topics, starting_at, ending_before, reverse
-            )
-            items.sort()
-            if pending:
-                pending.extend(items)
-                pending.sort()
+        while queue:
+            run = queue.take_leading_run()
+            if run is not None:
+                for keyed in run:
+                    yield keyed[3]
+                continue
+            item = queue.pop()
+            if isinstance(item, ChunkIndex):
+                items, held = self._read_chunk_messages(
+                    item, summary, topics, starting_at, ending_before, reverse
+                )
+                queue.push_chunk_messages(items)
             else:
-                pending = items
-            if i == last:
-                ready_count = len(pending)
-            else:
-                next_index = chunk_indexes[i + 1]
-                # A one-element tuple sorts before every key with the same time.
-                if reverse:
-                    bound = (-next_index.message_end_time,)
-                else:
-                    bound = (next_index.message_start_time,)
-                ready_count = bisect_left(pending, bound)
-            if ready_count == len(pending):
-                ready, pending = pending, []
-            else:
-                ready = pending[:ready_count]
-                del pending[:ready_count]
-            for keyed in ready:
-                yield keyed[3]
+                yield item
 
     def _read_chunk_messages(
         self,
@@ -461,7 +433,7 @@ class SeekingReader(McapReader):
         starting_at: Optional[int],
         ending_before: Optional[int],
         reverse: bool,
-    ) -> Tuple[List[_KeyedMessage], bytes]:
+    ) -> Tuple[List[KeyedMessage], bytes]:
         """Reads one chunk and returns its matching messages in file order, each under a
         sort key of (log time, chunk offset, record index), negated when reversed, so that
         a plain tuple sort orders them the way ``iter_messages`` promises.
@@ -479,7 +451,7 @@ class SeekingReader(McapReader):
         chunk_offset = chunk_index.chunk_start_offset
         if reverse:
             chunk_offset = -chunk_offset
-        out: List[_KeyedMessage] = []
+        out: List[KeyedMessage] = []
         append = out.append
         for index, record in enumerate(records):
             if not isinstance(record, Message):

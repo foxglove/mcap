@@ -1,17 +1,12 @@
 import heapq
 import itertools
-from abc import ABC, abstractmethod
 from bisect import bisect_left
-from collections import deque
-from typing import Any, Deque, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 from .records import Channel, ChunkIndex, Message, Schema
 
-MessageTuple = Tuple[Tuple[Optional[Schema], Channel, Message], int, int]
-QueueItem = Union[ChunkIndex, MessageTuple]
-
-# Items are ordered by (log time, chunk offset, message offset). A ChunkIndex has no
-# message offset, so these sentinels stand in for one and give it a definite place among
+# Items are ordered by (log time, chunk offset, record index). A ChunkIndex has no
+# record index, so these sentinels stand in for one and give it a definite place among
 # messages it would otherwise only tie with. That matters in reverse, where a chunk index
 # is ordered on the offset one past its own last byte: for chunks written back to back,
 # with no message index between them, that is exactly the next chunk's start offset, so a
@@ -22,14 +17,16 @@ QueueItem = Union[ChunkIndex, MessageTuple]
 _CHUNK_TIEBREAK = -1
 _CHUNK_TIEBREAK_REVERSE = 1
 
-# (log time, chunk offset, message offset), negated component-wise when reversed so that
+# (log time, chunk offset, record index), negated component-wise when reversed so that
 # a min-heap yields descending log time order.
 SortKey = Tuple[int, int, int]
 
-# (log time, message offset, item), negated when reversed. Sorting a chunk's messages on
-# this orders them exactly as their SortKeys would, because every message in a chunk
-# shares one chunk offset.
-_RunEntry = Tuple[int, int, MessageTuple]
+MessagePayload = Tuple[Optional[Schema], Channel, Message]
+
+# A message under its sort key. Every message of one chunk shares a chunk offset and
+# has its own record index, so a plain tuple sort orders a chunk's messages exactly as
+# their keys do and never reaches the payload.
+KeyedMessage = Tuple[int, int, int, MessagePayload]
 
 
 def _chunk_index_key(chunk_index: ChunkIndex, reverse: bool) -> SortKey:
@@ -46,15 +43,8 @@ def _chunk_index_key(chunk_index: ChunkIndex, reverse: bool) -> SortKey:
     )
 
 
-def _message_key(item: MessageTuple, reverse: bool) -> SortKey:
-    log_time = item[0][2].log_time
-    if reverse:
-        return (-log_time, -item[1], -item[2])
-    return (log_time, item[1], item[2])
-
-
 # How many times a run that failed to gain a lead is passed over before its lead is
-# measured again. Measuring costs two binary searches, which is wasted on a file whose
+# measured again. Measuring costs a binary search, which is wasted on a file whose
 # chunks interleave message for message, and that is the shape this backs off from.
 _PROBE_BACKOFF = 32
 
@@ -69,70 +59,36 @@ class _MessageRun:
     The attributes are read and written by the owning :py:class:`LogTimeOrderQueue`.
     """
 
-    __slots__ = ("entries", "pos", "chunk_offset", "tail_key", "skip_probes")
+    __slots__ = ("entries", "pos", "tail_key", "skip_probes")
 
-    def __init__(self, chunk_offset: int, entries: List[_RunEntry]):
+    def __init__(self, entries: List[KeyedMessage]):
         entries.sort()
         self.entries = entries
         self.pos = 0
-        self.chunk_offset = chunk_offset
-        tail = entries[-1]
-        self.tail_key: SortKey = (tail[0], chunk_offset, tail[1])
+        self.tail_key: SortKey = entries[-1][:3]
         self.skip_probes = 0
 
     def __len__(self) -> int:
         return len(self.entries) - self.pos
 
     def head_key(self) -> SortKey:
-        entry = self.entries[self.pos]
-        return (entry[0], self.chunk_offset, entry[1])
+        return self.entries[self.pos][:3]
 
     def count_below(self, limit: SortKey) -> int:
         """How many of the remaining messages sort before ``limit``.
 
-        Every remaining message shares one chunk offset, so the answer comes from a
-        binary search over log time and, where log times tie with ``limit``, over
-        message offset.
+        The entries carry their full keys, and a key sorts before every entry that
+        shares it, so this is one binary search.
         """
-        entries = self.entries
-        pos = self.pos
-        # Messages with a strictly smaller log time are all below the limit.
-        cut = bisect_left(entries, (limit[0],), pos)
-        if self.chunk_offset < limit[1]:
-            # Ties on log time are settled by chunk offset, in this run's favour.
-            cut = bisect_left(entries, (limit[0] + 1,), cut)
-        elif self.chunk_offset == limit[1]:
-            cut = bisect_left(entries, (limit[0], limit[2]), cut)
-        return cut - pos
+        return bisect_left(self.entries, limit, self.pos) - self.pos
 
-    def next(self) -> MessageTuple:
+    def next(self) -> MessagePayload:
         entry = self.entries[self.pos]
         self.pos += 1
-        return entry[2]
+        return entry[3]
 
 
-class _MessageQueue(ABC):
-    @abstractmethod
-    def push(self, item: QueueItem) -> None:
-        raise NotImplementedError()
-
-    @abstractmethod
-    def push_chunk_messages(
-        self, chunk_start_offset: int, messages: List[MessageTuple]
-    ) -> None:
-        """Add every message read out of one chunk, in the order they appear in it."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def pop(self) -> QueueItem:
-        raise NotImplementedError()
-
-    @abstractmethod
-    def __len__(self) -> int:
-        raise NotImplementedError()
-
-
-class LogTimeOrderQueue(_MessageQueue):
+class LogTimeOrderQueue:
     """A priority queue over chunk indices and messages, ordered by log time.
 
     Messages arrive one chunk at a time, and the queue keeps each chunk's messages as
@@ -140,7 +96,7 @@ class LogTimeOrderQueue(_MessageQueue):
     and per run not yet drained, so it is sized by the number of chunks in flight.
     While a run holds the smallest keys in the queue its messages are handed out with
     no heap work at all, which covers the whole of a file whose chunks do not overlap
-    in time.
+    in time; :py:meth:`take_leading_run` hands those messages out in one piece.
     """
 
     def __init__(self, reverse: bool = False):
@@ -152,27 +108,18 @@ class LogTimeOrderQueue(_MessageQueue):
         # comparison, because they already hold the smallest keys in the queue.
         self._drain = 0
 
-    def push(self, item: QueueItem) -> None:
-        if isinstance(item, ChunkIndex):
-            key = _chunk_index_key(item, self._reverse)
-        else:
-            key = _message_key(item, self._reverse)
+    def push(self, chunk_index: ChunkIndex) -> None:
         self._settle_root()
-        heapq.heappush(self._q, (key, next(self._counter), item))
+        key = _chunk_index_key(chunk_index, self._reverse)
+        heapq.heappush(self._q, (key, next(self._counter), chunk_index))
         self._length += 1
 
-    def push_chunk_messages(
-        self, chunk_start_offset: int, messages: List[MessageTuple]
-    ) -> None:
-        if not messages:
+    def push_chunk_messages(self, entries: List[KeyedMessage]) -> None:
+        """Add every message read out of one chunk, keyed as the queue is: negated
+        component-wise when the queue is reversed. The list is sorted in place."""
+        if not entries:
             return
-        if self._reverse:
-            chunk_offset = -chunk_start_offset
-            entries = [(-m[0][2].log_time, -m[2], m) for m in messages]
-        else:
-            chunk_offset = chunk_start_offset
-            entries = [(m[0][2].log_time, m[2], m) for m in messages]
-        run = _MessageRun(chunk_offset, entries)
+        run = _MessageRun(entries)
         self._settle_root()
         heapq.heappush(self._q, (run.head_key(), next(self._counter), run))
         self._length += len(entries)
@@ -189,7 +136,55 @@ class LogTimeOrderQueue(_MessageQueue):
             run = self._q[0][2]
             heapq.heapreplace(self._q, (run.head_key(), next(self._counter), run))
 
-    def pop(self) -> QueueItem:
+    def _limit(self) -> Optional[SortKey]:
+        """The smallest key the queue holds outside the root, or None if there is none.
+
+        The root's two children each bound their own subtree, so the smaller of them
+        is the smallest key the rest of the queue can offer.
+        """
+        q = self._q
+        size = len(q)
+        if size == 1:
+            return None
+        if size == 2 or q[1][0] < q[2][0]:
+            return q[1][0]
+        return q[2][0]
+
+    def take_leading_run(self) -> Optional[List[KeyedMessage]]:
+        """Remove and return the messages at the root of the queue that sort before
+        everything else in it, as one list.
+
+        Returns None when the root is a chunk index, and when the root run leads by at
+        most one message, which is the interleaved shape that :py:meth:`pop` merges one
+        message at a time.
+        """
+        q = self._q
+        if not q:
+            return None
+        self._settle_root()
+        run = q[0][2]
+        if type(run) is not _MessageRun:
+            return None
+        limit = self._limit()
+        if limit is None or run.tail_key < limit:
+            # The whole run wins outright.
+            heapq.heappop(q)
+            taken = run.entries[run.pos :]
+        else:
+            if run.skip_probes:
+                run.skip_probes -= 1
+                return None
+            ahead = run.count_below(limit)
+            if ahead <= 1:
+                run.skip_probes = _PROBE_BACKOFF
+                return None
+            taken = run.entries[run.pos : run.pos + ahead]
+            run.pos += ahead
+            heapq.heapreplace(q, (run.head_key(), next(self._counter), run))
+        self._length -= len(taken)
+        return taken
+
+    def pop(self) -> Union[ChunkIndex, MessagePayload]:
         q = self._q
         drain = self._drain
         if drain:
@@ -217,16 +212,7 @@ class LogTimeOrderQueue(_MessageQueue):
             heapq.heappop(q)
             return item
 
-        # The root's two children each bound their own subtree, so the smaller of them
-        # is the smallest key the rest of the queue can offer.
-        size = len(q)
-        if size == 1:
-            limit = None
-        elif size == 2 or q[1][0] < q[2][0]:
-            limit = q[1][0]
-        else:
-            limit = q[2][0]
-
+        limit = self._limit()
         if limit is None or entry.tail_key < limit:
             # The rest of the run wins outright; hand it out without touching the heap.
             self._drain = len(entry)
@@ -236,7 +222,6 @@ class LogTimeOrderQueue(_MessageQueue):
         else:
             ahead = entry.count_below(limit)
             if ahead > 1:
-                entry.skip_probes = 0
                 self._drain = ahead
             else:
                 # This run and the rest of the queue are trading message for message,
@@ -247,39 +232,3 @@ class LogTimeOrderQueue(_MessageQueue):
 
     def __len__(self) -> int:
         return self._length
-
-
-class InsertOrderQueue(_MessageQueue):
-    def __init__(self):
-        self._q: Deque[QueueItem] = deque()
-
-    def push(self, item: QueueItem) -> None:
-        self._q.append(item)
-
-    def push_chunk_messages(
-        self, chunk_start_offset: int, messages: List[MessageTuple]
-    ) -> None:
-        self._q.extend(messages)
-
-    def pop(self) -> QueueItem:
-        return self._q.popleft()  # cspell:disable-line
-
-    def __len__(self) -> int:
-        return len(self._q)
-
-
-def make_message_queue(
-    log_time_order: bool = True, reverse: bool = False
-) -> _MessageQueue:
-    """Create a queue of MCAP messages and chunk indices.
-
-    :param log_time_order: if True, this queue acts as a priority queue, ordered by log time.
-        if False, ``pop()`` returns elements in insert order.
-    :param reverse: if True, order elements in descending log time order rather than ascending.
-        only valid if ``log_time_order`` is True, otherwise throws a ValueError.
-    """
-    if log_time_order:
-        return LogTimeOrderQueue(reverse)
-    if reverse:
-        raise ValueError("reverse is only valid with log_time_order=True")
-    return InsertOrderQueue()
