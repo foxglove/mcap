@@ -467,8 +467,7 @@ class SeekingReader(McapReader):
         a plain tuple sort orders them the way ``iter_messages`` promises.
 
         The chunk's buffer is returned too so the caller can keep it alive until the
-        next chunk is read; freeing it first lets glibc trim the heap top and fault the
-        next buffer in page by page."""
+        next chunk is read."""
         self._stream.seek(chunk_index.chunk_start_offset + 1 + 8, io.SEEK_SET)
         chunk = Chunk.read(ReadDataStream(self._stream))
         data = _get_chunk_data(chunk, validate_crc=self._validate_crcs)
