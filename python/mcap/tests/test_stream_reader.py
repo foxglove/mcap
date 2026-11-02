@@ -8,7 +8,7 @@ from mcap.stream_reader import StreamReader, breakup_chunk
 from mcap.writer import CompressionType, Writer
 
 
-def write_chunk() -> Chunk:
+def test_breakup_chunk_raises_on_truncated_last_record():
     output = BytesIO()
     writer = Writer(output, compression=CompressionType.NONE)
     writer.start()
@@ -20,11 +20,7 @@ def write_chunk() -> Chunk:
     writer.finish()
     output.seek(0)
     records = StreamReader(output, emit_chunks=True).records
-    return next(r for r in records if isinstance(r, Chunk))
-
-
-def test_breakup_chunk_raises_on_truncated_last_record():
-    chunk = write_chunk()
+    chunk = next(r for r in records if isinstance(r, Chunk))
     messages = [r for r in breakup_chunk(chunk) if isinstance(r, Message)]
     assert [m.data for m in messages] == [b"first", b"second"]
 
