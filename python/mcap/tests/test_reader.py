@@ -596,7 +596,7 @@ def test_log_time_order_with_filters(tmpdir: Path):
     messages = [(f"/topic{i % 3}", ((i * 17) % 40) * 10) for i in range(400)]
     _write_ordering_mcap(filepath, messages)
 
-    filtered = _read(filepath, topics=["/topic1"], start_time=100, end_time=300)
+    filtered = _read(filepath, topics=["/topic1"], starting_at=100, ending_before=300)
     assert filtered  # the filter is not vacuous
     assert all(topic == "/topic1" for topic, _, _ in filtered)
     assert all(100 <= log_time < 300 for _, log_time, _ in filtered)
@@ -604,7 +604,7 @@ def test_log_time_order_with_filters(tmpdir: Path):
         log_time for _, log_time, _ in filtered
     )
     assert _read(
-        filepath, topics=["/topic1"], start_time=100, end_time=300, reverse=True
+        filepath, topics=["/topic1"], starting_at=100, ending_before=300, reverse=True
     ) == list(reversed(filtered))
 
 
