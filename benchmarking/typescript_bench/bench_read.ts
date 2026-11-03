@@ -39,20 +39,21 @@ async function main(): Promise<number> {
       decompressHandlers,
     });
 
+    // Half-open [startingAt, endingBefore) bounds, matching the other languages' benches.
     const readArgs: {
       topics?: string[];
-      startTime?: bigint;
-      endTime?: bigint;
+      startingAt?: bigint;
+      endingBefore?: bigint;
     } = {};
     if (filter === "topic") {
       readArgs.topics = ["/imu"];
     } else if (filter === "timerange") {
-      readArgs.startTime = 3000000000n;
-      readArgs.endTime = 5000000000n;
+      readArgs.startingAt = 3000000000n;
+      readArgs.endingBefore = 5000000000n;
     } else if (filter === "topic_timerange") {
       readArgs.topics = ["/lidar"];
-      readArgs.startTime = 4000000000n;
-      readArgs.endTime = 6000000000n;
+      readArgs.startingAt = 4000000000n;
+      readArgs.endingBefore = 6000000000n;
     }
 
     for await (const message of reader.readMessages(readArgs)) {
