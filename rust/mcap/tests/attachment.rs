@@ -10,6 +10,53 @@ use tempfile::tempfile;
 
 const DEFAULT_LIBRARY_LENGTH: u64 = mcap::LIBRARY_IDENTIFIER.len() as u64;
 
+#[test]
+fn attachment_without_crc_preserves_writer_options() {
+    for calculate_crcs in [false, true] {
+        let mut writer = mcap::WriteOptions::new()
+            .calculate_attachment_crcs(calculate_crcs)
+            .create(Cursor::new(Vec::new()))
+            .expect("writer");
+        for name in ["before", "unchecked", "after"] {
+            let attachment = mcap::Attachment {
+                log_time: 20,
+                create_time: 10,
+                name: name.into(),
+                media_type: "application/octet-stream".into(),
+                data: Cow::Borrowed(&[1, 2, 3]),
+            };
+            if name == "unchecked" {
+                writer.attach_without_crc(&attachment)
+            } else {
+                writer.attach(&attachment)
+            }
+            .expect("attachment");
+        }
+        writer.finish().expect("finish");
+        let output = writer.into_inner().into_inner();
+        let attachments: Vec<_> = mcap::read::LinearReader::new(&output)
+            .expect("reader")
+            .filter_map(|record| match record.expect("strict output parse") {
+                mcap::records::Record::Attachment { header, data, crc } => {
+                    Some((header, data, crc))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(attachments.len(), 3);
+        for ((header, data, crc), expected_name) in
+            attachments.iter().zip(["before", "unchecked", "after"])
+        {
+            assert_eq!(header.name, expected_name);
+            assert_eq!(header.log_time, 20);
+            assert_eq!(header.create_time, 10);
+            assert_eq!(header.media_type, "application/octet-stream");
+            assert_eq!(data.as_ref(), [1, 2, 3]);
+            assert_eq!(*crc != 0, calculate_crcs && expected_name != "unchecked");
+        }
+    }
+}
+
 fn attachment_body(data: &[u8]) -> Vec<u8> {
     let mut writer = mcap::Writer::new(Cursor::new(Vec::new())).expect("writer");
     writer

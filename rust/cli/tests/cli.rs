@@ -194,7 +194,7 @@ fn exit_code_3_on_lossy_recover() {
 }
 
 #[test]
-fn exit_code_0_on_recover_with_bad_attachment_crc() {
+fn exit_code_3_on_recover_with_bad_attachment_crc() {
     let mut writer = mcap::Writer::new(Cursor::new(Vec::new())).expect("writer");
     writer
         .attach(&mcap::Attachment {
@@ -206,27 +206,47 @@ fn exit_code_0_on_recover_with_bad_attachment_crc() {
         })
         .expect("attachment");
     writer.finish().expect("finish");
-    let mut input = writer.into_inner().into_inner();
-    let index = mcap::Summary::read(&input)
+    let original = writer.into_inner().into_inner();
+    let index = mcap::Summary::read(&original)
         .expect("summary")
         .expect("summary present")
         .attachment_indexes
         .remove(0);
-    input[(index.offset + index.length) as usize - 4] ^= 0xFF;
-
+    let end = (index.offset + index.length) as usize;
     let dir = TempDir::new().unwrap();
-    let input_path = write_temp(&dir, "bad-attachment-crc.mcap", &input);
-    let output_path = dir.path().join("recovered.mcap");
-    let output = mcap(&[
-        "recover",
-        path_str(&input_path),
-        "-o",
-        path_str(&output_path),
-    ]);
-    assert_eq!(output.status.code(), Some(0));
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(stderr.contains("Recovered 0 messages, 1 attachment, and 0 metadata records."));
-    assert!(!stderr.contains("Recovery was lossy"));
+    for damage in ["crc", "payload", "none", "unchecked"] {
+        let mut input = original.clone();
+        match damage {
+            "crc" => input[end - 4] ^= 0xFF,
+            "payload" => input[end - 5] ^= 0xFF,
+            "unchecked" => input[end - 4..end].fill(0),
+            _ => {}
+        }
+        let unverified = damage == "crc" || damage == "payload";
+        let input_path = write_temp(&dir, "attachment.mcap", &input);
+        let output_path = dir.path().join("recovered.mcap");
+        for to_file in [false, true] {
+            let output = if to_file {
+                mcap(&[
+                    "recover",
+                    path_str(&input_path),
+                    "-o",
+                    path_str(&output_path),
+                ])
+            } else {
+                mcap(&["recover", path_str(&input_path)])
+            };
+            assert_eq!(output.status.code(), Some(if unverified { 3 } else { 0 }));
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            assert!(stderr.contains("Recovered 0 messages, 1 attachment, and 0 metadata records."));
+            assert_eq!(stderr.contains("contents are unverified"), unverified);
+            assert!(!stderr.contains("discarded"));
+            assert!(!stderr.contains("Recovery was lossy"));
+            if !to_file {
+                assert!(looks_like_mcap(&output.stdout));
+            }
+        }
+    }
 }
 
 #[test]

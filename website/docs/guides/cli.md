@@ -343,6 +343,6 @@ offset  length  start        end          compression  compressed size  uncompre
 $ mcap recover damaged.mcap -o recovered.mcap
 ```
 
-By default (`--compression preserve`) the output keeps the input's compression; pass `--compression zstd|lz4|none` to choose a codec. The exit code reports how recovery went: `0` if every record was recovered, `3` if recovery was lossy (records were discarded or the file was truncated mid-record), and `1` if nothing could be recovered.
+By default (`--compression preserve`) the output keeps the input's compression; pass `--compression zstd|lz4|none` to choose a codec. The exit code reports how recovery went: `0` if every record was recovered without warnings, `3` if recovery found actual or possible data loss (discarded records, truncation, or an attachment CRC mismatch), and `1` if nothing could be recovered.
 
-Recovery recomputes chunk and attachment CRCs. An incorrect stored CRC alone does not cause data loss.
+When an attachment's nonzero CRC does not match its contents, recovery preserves its header and payload with a zero CRC, warns that the contents are unverified, and exits `3`. A zero CRC means validation is unavailable; it does not establish that the attachment is damaged. An input attachment that already has a zero CRC remains unchecked and does not cause a warning by itself.

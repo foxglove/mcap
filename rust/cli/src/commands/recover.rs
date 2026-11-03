@@ -31,8 +31,9 @@ enum CompressionSelection {
 //   (for example, a corrupt leading header means the output gets a default profile) but do not
 //   imply message/attachment/metadata loss by themselves.
 // - warn!: corrupt or malformed input records that are skipped, messages dropped because their
-//   channel could not be recovered, or an early stop caused by truncation/corrupt chunk payloads.
-//   Every warning corresponds to data loss and therefore to exit code 3.
+//   channel could not be recovered, attachments whose integrity is unknown after a CRC mismatch,
+//   or an early stop caused by truncation/corrupt chunk payloads.
+//   Every warning corresponds to actual or possible data loss and therefore to exit code 3.
 // - Err: output/write/setup failures, invalid CLI options, or inputs too broken to recover at all.
 //   These are handled by `main` as hard failures and exit 1.
 //
@@ -60,6 +61,8 @@ struct RecoverStats {
     chunks: RecordRecoveryStats,
     messages: RecordRecoveryStats,
     attachments: RecordRecoveryStats,
+    /// Attachments preserved after a nonzero CRC mismatch, with their output CRC omitted.
+    unverified_attachments: u64,
     metadata: RecordRecoveryStats,
     other_records: RecordRecoveryStats,
     /// Recovery stopped before a clean end (truncated mid-record, or a mid-stream decode error
@@ -118,7 +121,7 @@ impl RecoverStats {
 /// - 0: successful recovery, no data loss (`CommandOutcome::Success`)
 /// - 1: hard failure (`Err`, handled by `main`)
 /// - 2: command-line parsing error (owned by clap)
-/// - 3: successful recovery with warning-level data loss (`CommandOutcome::Warnings`)
+/// - 3: recovery with actual or possible data loss (`CommandOutcome::Warnings`)
 pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome> {
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     if let (Some(input), Some(output)) = (args.file.as_deref(), args.output.as_deref()) {
@@ -159,7 +162,14 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome>
         count(stats.metadata.recovered, "metadata record"),
     );
 
-    // A clean recovery exits 0; warning-level data loss reports `CommandOutcome::Warnings` (exit 3)
+    if stats.unverified_attachments > 0 {
+        eprintln!(
+            "Preserved {} whose contents are unverified; their output CRCs are zero.",
+            count(stats.unverified_attachments, "attachment"),
+        );
+    }
+
+    // A clean recovery exits 0; actual or possible loss reports `CommandOutcome::Warnings` (exit 3)
     // so `main` sets the exit code only after every output sink has been flushed and dropped.
     if stats.is_lossy() {
         let discarded: Vec<_> = stats
@@ -175,6 +185,9 @@ pub fn run(ctx: &CommandContext, args: RecoverCommand) -> Result<CommandOutcome>
             parts.push("stopped early (input truncated), so trailing data may be lost".to_string());
         }
         eprintln!("Recovery was lossy: {}.", parts.join("; "));
+        return Ok(CommandOutcome::Warnings);
+    }
+    if stats.unverified_attachments > 0 {
         return Ok(CommandOutcome::Warnings);
     }
     Ok(CommandOutcome::Success)
@@ -301,7 +314,6 @@ fn recover_records<W: Write + Seek>(
             .with_validate_chunk_crcs(false)
             .with_record_length_limit(RECOVER_RECORD_LENGTH_LIMIT),
     );
-    // The writer recomputes attachment CRCs from the recovered header and payload.
     let parse_options = mcap::ParseOptions::default().with_validate_attachment_crcs(false);
 
     let mut sink = Some(sink);
@@ -335,7 +347,22 @@ fn recover_records<W: Write + Seek>(
             }
             Ok(LinearReadEvent::Record { opcode, data }) => {
                 saw_any_record = true;
-                let record = match mcap::parse_record_with_options(opcode, data, &parse_options) {
+                let parsed = match mcap::parse_record(opcode, data) {
+                    Err(err @ mcap::McapError::BadAttachmentCrc { .. }) => {
+                        let mut record =
+                            mcap::parse_record_with_options(opcode, data, &parse_options)?;
+                        if let Record::Attachment { crc, .. } = &mut record {
+                            *crc = 0;
+                        }
+                        warn!(
+                            "{err}; preserving attachment without a CRC; contents are unverified"
+                        );
+                        stats.unverified_attachments += 1;
+                        Ok(record)
+                    }
+                    parsed => parsed,
+                };
+                let record = match parsed {
                     Ok(record) => record,
                     Err(err) => {
                         warn!("failed to parse record opcode 0x{opcode:02x}: {err:#}; skipping");
@@ -615,16 +642,20 @@ fn recover_record<W: Write + Seek>(
                 .context("failed to write recovered message")?;
             stats.messages.recovered += 1;
         }
-        Record::Attachment { header, data, .. } => {
-            writer
-                .attach(&mcap::Attachment {
-                    log_time: header.log_time,
-                    create_time: header.create_time,
-                    name: header.name,
-                    media_type: header.media_type,
-                    data,
-                })
-                .context("failed to write recovered attachment")?;
+        Record::Attachment { header, data, crc } => {
+            let attachment = mcap::Attachment {
+                log_time: header.log_time,
+                create_time: header.create_time,
+                name: header.name,
+                media_type: header.media_type,
+                data,
+            };
+            if crc == 0 {
+                writer.attach_without_crc(&attachment)
+            } else {
+                writer.attach(&attachment)
+            }
+            .context("failed to write recovered attachment")?;
             stats.attachments.recovered += 1;
         }
         Record::Metadata(metadata) => {
@@ -924,23 +955,24 @@ mod tests {
         (input, index)
     }
 
-    #[test]
-    fn recovers_attachment_with_invalid_crc() {
+    fn check_unverified_attachment_recovery(corrupt_payload: bool) {
         let (mut input, index) = attachment_input();
         let start = index.offset as usize + OPCODE_LEN_SIZE;
         let end = (index.offset + index.length) as usize;
-        let expected = match mcap::parse_record(op::ATTACHMENT, &input[start..end])
-            .expect("valid attachment")
-            .into_owned()
-        {
-            Record::Attachment { header, data, crc } => (header, data, crc),
-            _ => panic!("expected attachment"),
-        };
-        input[end - 4] ^= 0xFF;
+        input[if corrupt_payload { end - 5 } else { end - 4 }] ^= 0xFF;
         assert!(matches!(
             mcap::parse_record(op::ATTACHMENT, &input[start..end]),
             Err(mcap::McapError::BadAttachmentCrc { .. })
         ));
+        let options = mcap::ParseOptions::default().with_validate_attachment_crcs(false);
+        let expected =
+            match mcap::parse_record_with_options(op::ATTACHMENT, &input[start..end], &options)
+                .expect("structurally valid attachment")
+                .into_owned()
+            {
+                Record::Attachment { header, data, .. } => (header, data, 0),
+                _ => panic!("expected attachment"),
+            };
 
         let (output, stats) = recover_to_vec(&input, "preserve");
         let attachments: Vec<_> = mcap::read::LinearReader::new(&output)
@@ -954,7 +986,18 @@ mod tests {
         assert_eq!(attachments, [expected]);
         assert_eq!(stats.attachments.recovered, 1);
         assert_eq!(stats.attachments.discarded, 0);
+        assert_eq!(stats.unverified_attachments, 1);
         assert!(!stats.is_lossy());
+    }
+
+    #[test]
+    fn preserves_attachment_with_invalid_crc() {
+        check_unverified_attachment_recovery(false);
+    }
+
+    #[test]
+    fn preserves_attachment_with_corrupt_payload() {
+        check_unverified_attachment_recovery(true);
     }
 
     #[test]
@@ -983,11 +1026,82 @@ mod tests {
             let end = (summary.attachment_indexes[0].offset + summary.attachment_indexes[0].length)
                 as usize;
             let crc = u32::from_le_bytes(output[end - 4..end].try_into().expect("CRC"));
-            assert_ne!(crc, 0);
+            if zero_crc {
+                assert_eq!(crc, 0);
+            } else {
+                assert_ne!(crc, 0);
+            }
             assert_eq!(stats.attachments.recovered, 1);
             assert_eq!(stats.attachments.discarded, 0);
+            assert_eq!(stats.unverified_attachments, 0);
             assert!(!stats.is_lossy());
         }
+    }
+
+    #[test]
+    fn preserves_unverified_attachment_among_valid_records() {
+        let mut writer = mcap::Writer::new(Cursor::new(Vec::new())).expect("writer");
+        let channel = writer
+            .add_channel(0, "topic", "json", &BTreeMap::new())
+            .expect("channel");
+        writer
+            .write_to_known_channel(
+                &MessageHeader {
+                    channel_id: channel,
+                    sequence: 1,
+                    log_time: 10,
+                    publish_time: 10,
+                },
+                b"message",
+            )
+            .expect("message");
+        for name in ["before", "unverified", "after"] {
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 20,
+                    create_time: 10,
+                    name: name.into(),
+                    media_type: "application/octet-stream".into(),
+                    data: Cow::Borrowed(&[1, 2, 3]),
+                })
+                .expect("attachment");
+        }
+        writer
+            .write_metadata(&mcap::records::Metadata {
+                name: "metadata".into(),
+                metadata: BTreeMap::from([("key".into(), "value".into())]),
+            })
+            .expect("metadata");
+        writer.finish().expect("finish");
+        let mut input = writer.into_inner().into_inner();
+        let index = mcap::Summary::read(&input)
+            .expect("summary")
+            .expect("summary present")
+            .attachment_indexes
+            .remove(1);
+        input[(index.offset + index.length) as usize - 4] ^= 0xFF;
+
+        let (output, stats) = recover_to_vec(&input, "preserve");
+        assert_eq!(count_output_records(&output), (1, 3, 1));
+        let attachments: Vec<_> = mcap::read::LinearReader::new(&output)
+            .expect("reader")
+            .filter_map(|record| match record.expect("strict output parse") {
+                Record::Attachment { header, data, crc } => Some((header.name, data, crc)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(attachments.len(), 3);
+        for ((name, data, crc), expected_name) in
+            attachments.iter().zip(["before", "unverified", "after"])
+        {
+            assert_eq!(name, expected_name);
+            assert_eq!(data.as_ref(), [1, 2, 3]);
+            assert_eq!(*crc == 0, name == "unverified");
+        }
+        assert_eq!(stats.attachments.recovered, 3);
+        assert_eq!(stats.attachments.discarded, 0);
+        assert_eq!(stats.unverified_attachments, 1);
+        assert!(!stats.is_lossy());
     }
 
     #[test]
