@@ -6,7 +6,8 @@ mod drivers;
 
 pub use drivers::{
     for_each_linear_record, for_each_top_level_record_of, parse_record_bytes, read_footer,
-    read_summary, service_indexed_chunk, try_for_each_linear_record, RECORD_PREFIX_LEN,
+    read_header, read_summary, service_indexed_chunk, try_for_each_linear_record,
+    RECORD_PREFIX_LEN,
 };
 
 use std::fs::File;
@@ -26,7 +27,10 @@ use crate::source::{
 pub trait ByteSource {
     /// File size in bytes, or `None` when unknown (streaming inputs without a known length).
     fn size(&self) -> Option<u64>;
+    fn is_remote(&self) -> bool;
     fn display_name(&self) -> String;
+    /// Whether random access is available.
+    fn is_seekable(&self) -> bool;
 
     /// Read up to `dest.len()` bytes at `offset` into `dest`, returning the count (0 at EOF).
     /// Sans-io drivers use this to fill `reader.insert(need)` without an extra allocation.
@@ -136,8 +140,16 @@ impl ByteSource for LocalFileSource {
         Some(self.size)
     }
 
+    fn is_remote(&self) -> bool {
+        false
+    }
+
     fn display_name(&self) -> String {
         self.path.display().to_string()
+    }
+
+    fn is_seekable(&self) -> bool {
+        true
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -250,8 +262,16 @@ impl ByteSource for RemoteRangeSource {
         Some(self.inner.size())
     }
 
+    fn is_remote(&self) -> bool {
+        true
+    }
+
     fn display_name(&self) -> String {
         self.inner.display_url().to_string()
+    }
+
+    fn is_seekable(&self) -> bool {
+        true
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -321,8 +341,16 @@ impl<R: Read> ByteSource for SequentialSource<R> {
         None
     }
 
+    fn is_remote(&self) -> bool {
+        false
+    }
+
     fn display_name(&self) -> String {
         self.name.clone()
+    }
+
+    fn is_seekable(&self) -> bool {
+        false
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -371,8 +399,16 @@ impl ByteSource for MemorySource {
         Some(self.data.len() as u64)
     }
 
+    fn is_remote(&self) -> bool {
+        false
+    }
+
     fn display_name(&self) -> String {
         "<memory>".to_string()
+    }
+
+    fn is_seekable(&self) -> bool {
+        true
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -409,20 +445,6 @@ pub fn open_byte_source_for_scan(
         require_remote_scan_allowed(path, options)?;
     }
     open_byte_source(path, options)
-}
-
-/// Opens `path` for a command that reads the whole input through random access, such as the
-/// rewrite engine. A remote URL is downloaded to a tempfile first, under the `--allow-remote-scan`
-/// opt-in checked from the path before any request goes out, exactly like the whole-file loads
-/// this replaces. Reading such inputs by range instead is separate work.
-pub fn open_materialized_byte_source(
-    path: &Path,
-    options: SourceOptions,
-) -> Result<Box<dyn ByteSource>> {
-    if is_remote_url(path) {
-        return Ok(Box::new(spool_remote_to_local(path, options)?));
-    }
-    Ok(Box::new(LocalFileSource::open_path(path)?))
 }
 
 /// Spools stdin to a tempfile and opens it as a random-access [`ByteSource`], for commands that
@@ -489,8 +511,16 @@ impl<F: FnMut(u64, &[u8]) -> Result<()>> ByteSource for InstrumentedSource<F> {
         self.inner.size()
     }
 
+    fn is_remote(&self) -> bool {
+        self.inner.is_remote()
+    }
+
     fn display_name(&self) -> String {
         self.inner.display_name()
+    }
+
+    fn is_seekable(&self) -> bool {
+        self.inner.is_seekable()
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -739,7 +769,7 @@ mod tests {
     fn memory_source_summary_reader_finds_channel() {
         let bytes = write_summary_mcap();
         let mut source = MemorySource::new(bytes);
-        let summary = read_summary(&mut source)
+        let summary = read_summary(&mut source, SourceOptions::default())
             .expect("summary read")
             .expect("summary should exist");
         assert!(summary.channels.values().any(|ch| ch.topic == "/demo"));
@@ -775,5 +805,46 @@ mod tests {
             )),
             "{err:#}"
         );
+    }
+
+    #[test]
+    fn local_file_source_matches_memory_summary() {
+        let bytes = write_summary_mcap();
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let path = dir.path().join("demo.mcap");
+        std::fs::write(&path, &bytes).expect("write fixture");
+
+        let mut local = LocalFileSource::open_path(&path).expect("open local");
+        assert!(local.is_seekable());
+        assert!(!local.is_remote());
+        assert_eq!(local.size(), Some(bytes.len() as u64));
+
+        let summary = read_summary(&mut local, SourceOptions::default())
+            .expect("summary read")
+            .expect("summary should exist");
+        assert!(summary.channels.values().any(|ch| ch.topic == "/demo"));
+    }
+
+    #[test]
+    fn service_indexed_chunk_feeds_messages() {
+        let bytes = write_summary_mcap();
+        let mut source = MemorySource::new(bytes);
+        let summary = read_summary(&mut source, SourceOptions::default())
+            .expect("summary read")
+            .expect("summary should exist");
+        let mut reader = mcap::sans_io::IndexedReader::new(&summary).expect("indexed reader");
+        let mut messages = 0usize;
+        while let Some(event) = reader.next_event() {
+            match event.expect("indexed event") {
+                mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                    service_indexed_chunk(&mut reader, &mut source, offset, length)
+                        .expect("service chunk");
+                }
+                mcap::sans_io::IndexedReadEvent::Message { .. } => {
+                    messages += 1;
+                }
+            }
+        }
+        assert_eq!(messages, 1);
     }
 }

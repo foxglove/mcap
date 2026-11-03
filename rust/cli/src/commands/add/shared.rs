@@ -440,7 +440,10 @@ fn parse_data_end(record_bytes: &[u8], offset: u64) -> Result<records::DataEnd> 
 }
 
 fn collect_existing_summary(source: &mut dyn ByteSource) -> Result<ExistingSummaryData> {
-    if let Some(summary) = byte_source::read_summary(source).context("failed to read summary")? {
+    if let Some(summary) =
+        byte_source::read_summary(source, crate::source::SourceOptions::default())
+            .context("failed to read summary")?
+    {
         let mut data = ExistingSummaryData {
             statistics: summary.stats,
             channels: BTreeMap::new(),
@@ -899,7 +902,7 @@ mod tests {
                 metadata: BTreeMap::new(),
             }],
         )?;
-        let library = crate::parse::read_header(&output)
+        let library = crate::parse::read_header_from_bytes(&output)
             .expect("read header")
             .expect("header present")
             .library;
@@ -1112,6 +1115,37 @@ mod tests {
                 "read [{start}, {end}) overlaps the data section [{data_start}, {data_end})"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn read_existing_streams_data_section_of_summaryless_file() -> Result<()> {
+        let input = make_input_mcap(true, true, false, false)?;
+        // Length of every read.
+        let read_lens = Rc::new(RefCell::new(Vec::new()));
+        let mut source = InstrumentedSource::new(input, {
+            let read_lens = Rc::clone(&read_lens);
+            move |_offset, bytes: &[u8]| {
+                read_lens.borrow_mut().push(bytes.len() as u64);
+                Ok(())
+            }
+        });
+        let (layout, summary) = read_existing(&mut source)?;
+        assert_eq!(
+            summary.channels.len(),
+            1,
+            "channels are recovered from the scan"
+        );
+        assert_eq!(summary.schemas.len(), 1);
+        assert!(summary.chunk_indexes.is_empty());
+
+        // The scan reads the data section, but in record-sized pieces rather than one load.
+        let largest_read = read_lens.borrow().iter().copied().max().unwrap_or(0);
+        assert!(
+            largest_read < layout.old_data_end_offset,
+            "largest read of {largest_read} bytes loads the whole {}-byte data section",
+            layout.old_data_end_offset
+        );
         Ok(())
     }
 
