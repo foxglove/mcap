@@ -49,6 +49,20 @@ pub trait Decompressor: Send {
     /// Called after each chunk, not before the first. On failure the error is returned and the
     /// instance stays registered.
     fn reset(&mut self) -> McapResult<()>;
+    /// Decodes a chunk that is fully in memory.
+    ///
+    /// `src` holds the chunk's whole compressed payload and `dst` is its declared uncompressed
+    /// size. Fills `dst` and stops there, so input past that point is never seen: an oversize
+    /// frame is truncated silently and a compressor's trailing checksum goes unverified. The
+    /// chunk's `uncompressed_crc` is the integrity check, and it is in a header the indexed
+    /// reader, the caller of this method, never sees. When `src` runs out before `dst` is full,
+    /// return an error: `dst` holds whatever the buffer held before, and the reader would parse
+    /// that as records. The default streams through [`decompress`](Self::decompress) and
+    /// reports that case as no progress; override it when the format has a cheaper whole-buffer
+    /// path, keeping those semantics. [`reset`](Self::reset) is still called afterwards.
+    fn decompress_chunk(&mut self, src: &[u8], dst: &mut [u8]) -> McapResult<()> {
+        stream_chunk(self, src, dst)
+    }
     /// The chunk `compression` string this decompressor handles.
     ///
     /// Must be non-empty. An empty string means the chunk is not compressed, and registering this
@@ -87,15 +101,10 @@ impl Decompressors {
         Ok(())
     }
 
-    /// Decodes a chunk that is fully in memory into `dst`, then resets the decompressor.
+    /// Decodes a chunk that is fully in memory into `dst` through
+    /// [`Decompressor::decompress_chunk`], then resets the decompressor.
     ///
-    /// A `decompress` call that makes no progress is an error, since no more input can arrive.
     /// `reset` runs after a decompression error too, and the decompression error wins.
-    ///
-    /// Input past the point where `dst` is full is not passed on, per the [`Decompressor`]
-    /// contract and like the linear reader. An oversize frame is truncated silently and a
-    /// compressor's trailing checksum goes unverified; the chunk's `uncompressed_crc` is the
-    /// integrity check, and it is in a header the indexed reader never sees.
     pub(crate) fn decompress_chunk(
         &mut self,
         name: &str,
@@ -109,27 +118,9 @@ impl Decompressors {
         };
         dst.clear();
         dst.resize(uncompressed_size, 0);
-        let mut input_pos = 0;
-        let mut output_pos = 0;
-        let decompressed = (|| {
-            while output_pos < uncompressed_size {
-                let input = &src[input_pos..];
-                let output = &mut dst[output_pos..uncompressed_size];
-                let output_len = output.len();
-                let res = check_decompress_result(
-                    decompressor.decompress(input, output)?,
-                    input.len(),
-                    output_len,
-                )?;
-                if res.consumed == 0 && res.wrote == 0 {
-                    return Err(no_progress_error());
-                }
-                input_pos += res.consumed;
-                output_pos += res.wrote;
-            }
-            Ok(())
-        })();
-        decompressed.and(decompressor.reset())
+        decompressor
+            .decompress_chunk(src, dst)
+            .and(decompressor.reset())
     }
 
     /// Removes the decompressor named `name`, for a reader that streams a chunk across calls.
@@ -161,6 +152,35 @@ impl Decompressors {
             .iter()
             .position(|decompressor| decompressor.name() == name)
     }
+}
+
+/// The default [`Decompressor::decompress_chunk`]: streams `src` through
+/// [`Decompressor::decompress`] until `dst` is full.
+///
+/// A call that makes no progress is an error, since no more input can arrive.
+pub(crate) fn stream_chunk<D: Decompressor + ?Sized>(
+    decompressor: &mut D,
+    src: &[u8],
+    dst: &mut [u8],
+) -> McapResult<()> {
+    let mut input_pos = 0;
+    let mut output_pos = 0;
+    while output_pos < dst.len() {
+        let input = &src[input_pos..];
+        let output = &mut dst[output_pos..];
+        let output_len = output.len();
+        let res = check_decompress_result(
+            decompressor.decompress(input, output)?,
+            input.len(),
+            output_len,
+        )?;
+        if res.consumed == 0 && res.wrote == 0 {
+            return Err(no_progress_error());
+        }
+        input_pos += res.consumed;
+        output_pos += res.wrote;
+    }
+    Ok(())
 }
 
 /// Rejects a [`DecompressResult`] that reports more bytes than the buffers it was given.
