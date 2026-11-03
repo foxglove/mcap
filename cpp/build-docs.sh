@@ -7,11 +7,8 @@ CONAN_SETTINGS=(-s compiler.cppstd=17)
 # See build.sh: create a default profile only if one does not already exist.
 conan profile detect 2>/dev/null || true
 
-# See build.sh: remove any stale editable entry before re-adding.
-conan editable remove -r "mcap/2.2.0" 2>/dev/null || true
-conan editable add mcap
-conan install docs -of docs/build/Release "${CONAN_SETTINGS[@]}" -s build_type=Release --build=missing
-
-conan build docs -of docs/build/Release "${CONAN_SETTINGS[@]}" -s build_type=Release --build=editable
+# build_docs builds only the docs translation unit, in build/docs, which is
+# where .hdoc.toml looks.
+conan build . "${CONAN_SETTINGS[@]}" -s build_type=Release -o "&:build_docs=True" --build=missing
 
 hdoc --verbose
