@@ -7,12 +7,12 @@ maintained project. Older releases and archived repositories do not receive
 security updates; please upgrade before reporting issues against unmaintained
 versions.
 
-| Project | Supported |
-| --- | --- |
-| [foxglove/mcap](https://github.com/foxglove/mcap) (MCAP libraries and CLI, all language implementations in this repo) | Latest minor release only |
-| [foxglove/foxglove-sdk](https://github.com/foxglove/foxglove-sdk) | Latest minor release only |
-| Other actively maintained `foxglove/*` open source repositories | Latest release; best effort |
-| Archived repositories (`ws-protocol`, `rosbag`, `rosmsg`, `xmlrpc`, `nuscenes2bag`, and any repo GitHub marks as archived) | :x: Not supported |
+| Project                                                                                                                    | Supported                   |
+| -------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| [foxglove/mcap](https://github.com/foxglove/mcap) (MCAP libraries and CLI, all language implementations in this repo)      | Latest minor release only   |
+| [foxglove/foxglove-sdk](https://github.com/foxglove/foxglove-sdk)                                                          | Latest minor release only   |
+| Other actively maintained `foxglove/*` open source repositories                                                            | Latest release; best effort |
+| Archived repositories (`ws-protocol`, `rosbag`, `rosmsg`, `xmlrpc`, `nuscenes2bag`, and any repo GitHub marks as archived) | :x: Not supported           |
 
 ## Reporting a Vulnerability
 
