@@ -1060,9 +1060,33 @@ fn greedy_output_past_the_declared_size_is_an_error() {
         other => panic!("expected a decompression error, got {other}"),
     }
     // The output buffer is capped at the declared size, so the extra bytes the decoder would
-    // have written never land. The 4-byte buffer is not a valid record.
+    // have written never land. The 4-byte buffer holds a truncated record: its CRC does not
+    // match the recorded one, so the default reader fails validation on it.
+    let mut reader = indexed_reader(&mcap).expect("indexed reader");
+    reader
+        .add_decompressor(TestDecoder::greedy("xor"))
+        .expect("register");
+    assert!(
+        matches!(
+            drive_indexed(&mcap, &mut reader),
+            Err(McapError::BadChunkCrc { .. })
+        ),
+        "the truncated chunk must fail its recorded CRC"
+    );
+    // With validation off, the same truncated buffer surfaces as a records error instead.
+    let summary = Summary::read(&mcap)
+        .expect("summary")
+        .expect("file should contain a summary");
+    let mut reader = IndexedReader::new_with_options(
+        &summary,
+        crate::sans_io::IndexedReaderOptions::new().with_validate_chunk_crcs(false),
+    )
+    .expect("reader with validation off");
+    reader
+        .add_decompressor(TestDecoder::greedy("xor"))
+        .expect("register");
     assert!(matches!(
-        read_indexed(&mcap, Some(TestDecoder::greedy("xor"))),
+        drive_indexed(&mcap, &mut reader),
         Err(McapError::UnexpectedEoc)
     ));
 }
