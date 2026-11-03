@@ -60,7 +60,15 @@ Status FileWriter::open(std::string_view filename) {
 void FileWriter::handleWrite(const std::byte* data, uint64_t size) {
   assert(file_);
   errno = 0;
+  // file_ is owned exclusively by FileWriter rather than a handle shared with
+  // the caller, so fwrite()'s internal per-call lock protects nothing real here.
+#if defined(__GLIBC__) && defined(__USE_MISC)
+  const size_t written = fwrite_unlocked(data, 1, size, file_);
+#elif defined(_MSC_VER)
+  const size_t written = _fwrite_nolock(data, 1, size, file_);
+#else
   const size_t written = std::fwrite(data, 1, size, file_);
+#endif
   if (written != size) {
     const auto error = errno == 0 ? std::make_error_code(std::errc::io_error)
                                   : std::error_code(errno, std::generic_category());
