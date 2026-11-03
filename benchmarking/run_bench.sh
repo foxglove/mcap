@@ -174,6 +174,11 @@ for mode in $MODES; do
     outfile="${BENCH_DIR}/bench_${lang}_${mode}.mcap"
 
     for iter in $(seq 1 "$BENCH_ITERS"); do
+      # Every iteration writes a fresh file. Overwriting an existing file via
+      # O_TRUNC makes btrfs (and ext4 with auto_da_alloc) flush the new data
+      # on close(), which costs ~100 ms per 100 MB and lands inside the timed
+      # window of any bench that closes the file as part of finishing.
+      rm -f "$outfile"
       echo -n "  ${lang}/${mode} write iter ${iter}/${BENCH_ITERS}..."
       result=$(eval "$WRAPPER" "$write_cmd" "$outfile" "$mode" "$NUM_MESSAGES" "$PAYLOAD_SIZE" "$BLOB_FILE")
       echo "$result" >> "$RESULTS_FILE"
@@ -347,6 +352,7 @@ for mode in $MIXED_MODES; do
     outfile="${BENCH_DIR}/bench_${lang}_mixed_${mode}.mcap"
 
     for iter in $(seq 1 "$BENCH_ITERS"); do
+      rm -f "$outfile"  # fresh file each iteration; see the fixed-payload loop
       echo -n "  ${lang}/mixed-${mode} write iter ${iter}/${BENCH_ITERS}..."
       result=$(eval "$WRAPPER" "$write_cmd" "$outfile" "$mode" 0 mixed "$BLOB_FILE")
       echo "$result" >> "$MIXED_RESULTS_FILE"
