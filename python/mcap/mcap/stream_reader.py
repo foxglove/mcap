@@ -89,6 +89,8 @@ def _parse_chunk_records(data: bytes) -> List[McapRecord]:
         if record_end > end:
             raise EndOfFile()
         if opcode == _OPCODE_MESSAGE:
+            if length < MESSAGE_FIELDS_SIZE:
+                raise EndOfFile()
             channel_id, sequence, log_time, publish_time = fields_unpack(data, pos)
             append(
                 Message(

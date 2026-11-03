@@ -25,6 +25,8 @@ class ReadDataStream:
         return self._count
 
     def read(self, length: int) -> bytes:
+        if length < 0:
+            raise ValueError("read length must be non-negative")
         if length == 0:
             return b""
 
@@ -32,7 +34,7 @@ class ReadDataStream:
         self._count += len(data)
         if self._crc is not None:
             self._crc = zlib.crc32(data, self._crc)
-        if data == b"":
+        if len(data) != length:
             raise EndOfFile()
         return data
 
