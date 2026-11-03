@@ -533,7 +533,7 @@ class SeekingReader(McapReader):
     def iter_attachments(self) -> Iterator[Attachment]:
         """Iterates through attachment records in the MCAP."""
         summary = self.get_summary()
-        if summary is None:
+        if summary is None or len(summary.attachment_indexes) == 0:
             # no index available, use a non-seeking reader to read linearly through the stream.
             self._stream.seek(0, io.SEEK_SET)
             yield from NonSeekingReader(
@@ -559,7 +559,7 @@ class SeekingReader(McapReader):
     def iter_metadata(self) -> Iterator[Metadata]:
         """Iterates through metadata records in the MCAP."""
         summary = self.get_summary()
-        if summary is None:
+        if summary is None or len(summary.metadata_indexes) == 0:
             # fall back to a non-seeking reader
             self._stream.seek(0, io.SEEK_SET)
             yield from NonSeekingReader(
