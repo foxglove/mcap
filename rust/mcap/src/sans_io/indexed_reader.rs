@@ -378,6 +378,11 @@ impl IndexedReader {
             _ => unreachable!("parsing a chunk record yields a chunk"),
         };
         let compressed_data: &[u8] = compressed_data.as_ref();
+        // The header is the authority on the decompressed size, but it can disagree with a
+        // healthy index in a damaged file, so re-apply the record length limit before the
+        // decompressor allocates on its word.
+        check_len(header.uncompressed_size, self.record_length_limit)
+            .ok_or(McapError::ChunkTooLarge(header.uncompressed_size))?;
         let uncompressed_size = header.uncompressed_size as usize;
         let slot_idx = find_or_make_chunk_slot(&mut self.chunk_slots, offset);
 
@@ -1459,6 +1464,30 @@ mod tests {
             )
             .is_none(),
             "validation is off, so the corrupted chunk reads without error"
+        );
+    }
+
+    #[test]
+    fn test_corrupt_chunk_header_size_respects_record_length_limit() {
+        // A damaged chunk header can disagree with a healthy index: its uncompressed_size must
+        // not bypass the record length limit and make the decompressor allocate (or panic on a
+        // capacity overflow) before any validation sees it.
+        let mut mcap = make_mcap(None, &[&[(0, 1), (0, 2)]]);
+        let summary = crate::Summary::read(&mcap)
+            .expect("summary reading should succeed")
+            .expect("there should be a summary");
+        let chunk_index = &summary.chunk_indexes[0];
+        // opcode + record length + message start time + message end time
+        let size_at = chunk_index.chunk_start_offset as usize + 9 + 8 + 8;
+        mcap[size_at..size_at + 8].copy_from_slice(&u64::MAX.to_le_bytes());
+
+        let err = insert_error(
+            &mcap,
+            IndexedReaderOptions::new().with_record_length_limit(1024 * 1024),
+        );
+        assert!(
+            matches!(err, Some(McapError::ChunkTooLarge(size)) if size == u64::MAX),
+            "the corrupt header size must be rejected by the limit, got {err:?}"
         );
     }
 
