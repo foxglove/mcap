@@ -1060,11 +1060,12 @@ fn greedy_output_past_the_declared_size_is_an_error() {
         other => panic!("expected a decompression error, got {other}"),
     }
     // The output buffer is capped at the declared size, so the extra bytes the decoder would
-    // have written never land. The 4-byte buffer is not a valid record.
-    assert!(matches!(
-        read_indexed(&mcap, Some(TestDecoder::greedy("xor"))),
-        Err(McapError::UnexpectedEoc)
-    ));
+    // have written never land. CRC validation rejects the truncated output before parsing it.
+    let result = read_indexed(&mcap, Some(TestDecoder::greedy("xor")));
+    assert!(
+        matches!(result, Err(McapError::BadChunkCrc { .. })),
+        "{result:?}"
+    );
 }
 
 #[test]
