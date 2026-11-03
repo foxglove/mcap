@@ -985,6 +985,19 @@ impl<W: Write + Seek> Writer<W> {
         attachment_length: u64,
         header: AttachmentHeader,
     ) -> McapResult<()> {
+        self.start_attachment_impl(
+            attachment_length,
+            header,
+            self.options.calculate_attachment_crcs,
+        )
+    }
+
+    fn start_attachment_impl(
+        &mut self,
+        attachment_length: u64,
+        header: AttachmentHeader,
+        calculate_crc: bool,
+    ) -> McapResult<()> {
         self.finish_chunk()?;
         let Some(WriteMode::Raw(w)) = self.writer.take() else {
             unreachable!(
@@ -992,12 +1005,7 @@ impl<W: Write + Seek> Writer<W> {
             );
         };
 
-        match AttachmentWriter::new(
-            w,
-            attachment_length,
-            header,
-            self.options.calculate_attachment_crcs,
-        ) {
+        match AttachmentWriter::new(w, attachment_length, header, calculate_crc) {
             Ok(attachment) => {
                 self.writer = Some(WriteMode::Attachment(attachment));
                 Ok(())
@@ -1070,6 +1078,18 @@ impl<W: Write + Seek> Writer<W> {
     /// Write an attachment to the MCAP file. This finishes any current chunk before writing the
     /// attachment.
     pub fn attach(&mut self, attachment: &Attachment) -> McapResult<()> {
+        self.attach_impl(attachment, self.options.calculate_attachment_crcs)
+    }
+
+    /// Write an attachment with a zero CRC, without changing the writer's CRC options.
+    ///
+    /// Zero means the attachment is unchecked, not that it is damaged. This is useful when
+    /// preserving an attachment whose integrity could not be verified during recovery.
+    pub fn attach_without_crc(&mut self, attachment: &Attachment) -> McapResult<()> {
+        self.attach_impl(attachment, false)
+    }
+
+    fn attach_impl(&mut self, attachment: &Attachment, calculate_crc: bool) -> McapResult<()> {
         let header = records::AttachmentHeader {
             log_time: attachment.log_time,
             create_time: attachment.create_time,
@@ -1077,7 +1097,7 @@ impl<W: Write + Seek> Writer<W> {
             media_type: attachment.media_type.clone(),
         };
 
-        self.start_attachment(attachment.data.len() as _, header)?;
+        self.start_attachment_impl(attachment.data.len() as _, header, calculate_crc)?;
         self.put_attachment_bytes(&attachment.data[..])?;
         self.finish_attachment()?;
 
