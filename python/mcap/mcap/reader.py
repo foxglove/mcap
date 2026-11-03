@@ -378,9 +378,14 @@ class SeekingReader(McapReader):
             # No chunk indices available, so there is no index to search for messages.
             # use a non-seeking reader to read linearly through the stream.
             self._stream.seek(0, io.SEEK_SET)
-            yield from NonSeekingReader(self._stream).iter_messages(
+            yield from NonSeekingReader(
+                self._stream,
+                validate_crcs=self._validate_crcs,
+                record_size_limit=self._record_size_limit,
+            ).iter_messages(
                 topics,
                 log_time_order=log_time_order,
+                reverse=reverse,
                 starting_at=starting_at,
                 ending_before=ending_before,
             )
@@ -528,10 +533,14 @@ class SeekingReader(McapReader):
     def iter_attachments(self) -> Iterator[Attachment]:
         """Iterates through attachment records in the MCAP."""
         summary = self.get_summary()
-        if summary is None:
+        if summary is None or len(summary.attachment_indexes) == 0:
             # no index available, use a non-seeking reader to read linearly through the stream.
             self._stream.seek(0, io.SEEK_SET)
-            yield from NonSeekingReader(self._stream).iter_attachments()
+            yield from NonSeekingReader(
+                self._stream,
+                validate_crcs=self._validate_crcs,
+                record_size_limit=self._record_size_limit,
+            ).iter_attachments()
             return
         for attachment_index in summary.attachment_indexes:
             self._stream.seek(attachment_index.offset)
@@ -550,10 +559,14 @@ class SeekingReader(McapReader):
     def iter_metadata(self) -> Iterator[Metadata]:
         """Iterates through metadata records in the MCAP."""
         summary = self.get_summary()
-        if summary is None:
+        if summary is None or len(summary.metadata_indexes) == 0:
             # fall back to a non-seeking reader
             self._stream.seek(0, io.SEEK_SET)
-            yield from NonSeekingReader(self._stream).iter_metadata()
+            yield from NonSeekingReader(
+                self._stream,
+                validate_crcs=self._validate_crcs,
+                record_size_limit=self._record_size_limit,
+            ).iter_metadata()
             return
         for metadata_index in summary.metadata_indexes:
             self._stream.seek(metadata_index.offset)
