@@ -378,9 +378,14 @@ class SeekingReader(McapReader):
             # No chunk indices available, so there is no index to search for messages.
             # use a non-seeking reader to read linearly through the stream.
             self._stream.seek(0, io.SEEK_SET)
-            yield from NonSeekingReader(self._stream).iter_messages(
+            yield from NonSeekingReader(
+                self._stream,
+                validate_crcs=self._validate_crcs,
+                record_size_limit=self._record_size_limit,
+            ).iter_messages(
                 topics,
                 log_time_order=log_time_order,
+                reverse=reverse,
                 starting_at=starting_at,
                 ending_before=ending_before,
             )

@@ -18,7 +18,7 @@ from mcap.exceptions import (
 )
 from mcap.reader import McapReader, NonSeekingReader, SeekingReader, make_reader
 from mcap.records import Channel, Message, Schema
-from mcap.stream_reader import StreamReader
+from mcap.stream_reader import CRCValidationError, StreamReader
 from mcap.writer import CompressionType, IndexType, Writer
 
 DEMO_MCAP = (
@@ -429,6 +429,65 @@ def test_no_summary_seeking(tmpdir: Path):
         assert len(list(reader.iter_messages())) == 200
         assert len(list(reader.iter_attachments())) == 1
         assert len(list(reader.iter_metadata())) == 1
+
+
+def write_no_summary_ordered_mcap(filepath: Path, payload_size: int = 10):
+    with open(filepath, "wb") as f:
+        writer = Writer(
+            f,
+            enable_data_crcs=True,
+            index_types=IndexType.NONE,
+            repeat_channels=False,
+            repeat_schemas=False,
+            use_chunking=False,
+            use_statistics=False,
+            use_summary_offsets=False,
+        )
+        writer.start()
+        channel = writer.register_channel("/foo", "json", 0)
+        for log_time in range(10):
+            writer.add_message(channel, log_time, b"x" * payload_size, log_time)
+        writer.finish()
+
+
+def test_no_summary_seeking_reverse(tmpdir: Path):
+    """reverse is honored when there is no index and SeekingReader reads linearly."""
+    filepath = tmpdir / "no_summary_ordered.mcap"
+    write_no_summary_ordered_mcap(filepath)
+
+    with open(filepath, "rb") as f:
+        log_times = [m.log_time for _, _, m in SeekingReader(f).iter_messages()]
+    with open(filepath, "rb") as f:
+        reversed_log_times = [
+            m.log_time for _, _, m in SeekingReader(f).iter_messages(reverse=True)
+        ]
+    assert log_times == list(range(10))
+    assert reversed_log_times == list(reversed(range(10)))
+
+
+def test_no_summary_seeking_validates_crcs(tmpdir: Path):
+    """validate_crcs still applies when SeekingReader falls back to a linear read."""
+    filepath = tmpdir / "no_summary_ordered.mcap"
+    write_no_summary_ordered_mcap(filepath)
+    with open(filepath, "rb") as f:
+        data = bytearray(f.read())
+    # Flip one byte of a message payload so the data section CRC no longer matches.
+    payload_at = data.index(b"x" * 10)
+    data[payload_at] = ord("y")
+
+    assert len(list(SeekingReader(BytesIO(bytes(data))).iter_messages())) == 10
+    with pytest.raises(CRCValidationError):
+        list(SeekingReader(BytesIO(bytes(data)), validate_crcs=True).iter_messages())
+
+
+def test_no_summary_seeking_record_size_limit(tmpdir: Path):
+    """record_size_limit still applies when SeekingReader falls back to a linear read."""
+    filepath = tmpdir / "no_summary_ordered.mcap"
+    write_no_summary_ordered_mcap(filepath, payload_size=1000)
+
+    with open(filepath, "rb") as f:
+        with pytest.raises(RecordLengthLimitExceeded):
+            list(SeekingReader(f, record_size_limit=100).iter_messages())
 
 
 def test_no_summary_not_seeking(tmpdir: Path):
