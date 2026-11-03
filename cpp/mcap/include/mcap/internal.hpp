@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include <cstddef>
 #include <cstring>
 #include <type_traits>
 
@@ -23,10 +24,11 @@ constexpr uint64_t FooterLength = /* opcode */ 1 +
                                   /* summary crc */ 4 +
                                   /* magic bytes */ sizeof(Magic);
 
-// The C++ standard does not guarantee std::pair's member order or padding.
-// Returns whether Pair's members are laid out as two consecutive fields without
-// padding in declaration order (first then second), i.e. identical to how a
-// flat struct of the same two types would be laid out.
+// The C++ standard guarantees that std::pair declares `first` before `second`,
+// but not that it is standard-layout, nor that it has the same size and padding
+// as a flat struct of the same two types. Returns whether Pair's members are
+// laid out as two consecutive fields with no padding before, between, or after
+// them. Byte order is not checked.
 template <typename Pair>
 constexpr bool isPackedPair() {
   using First = typename Pair::first_type;

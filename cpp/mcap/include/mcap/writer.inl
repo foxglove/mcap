@@ -1068,7 +1068,10 @@ uint64_t McapWriter::write(IWritable& output, const Chunk& chunk) {
 }
 
 uint64_t McapWriter::write(IWritable& output, const MessageIndex& index) {
-  const uint32_t recordsSize = (uint32_t)(index.records.size()) * 16;
+  using Entry = decltype(index.records)::value_type;
+  static_assert(std::is_same_v<Entry, std::pair<Timestamp, ByteOffset>>);
+  constexpr uint32_t entrySize = sizeof(Timestamp) + sizeof(ByteOffset);
+  const uint32_t recordsSize = (uint32_t)(index.records.size()) * entrySize;
   const uint64_t recordSize = 2 + 4 + recordsSize;
 
   write(output, OpCode::MessageIndex);
@@ -1077,8 +1080,9 @@ uint64_t McapWriter::write(IWritable& output, const MessageIndex& index) {
 
   write(output, recordsSize);
 
-  // Write index.records all at once if its memory layout matches the wire format exactly.
-  if constexpr (internal::isPackedPair<std::pair<Timestamp, ByteOffset>>()) {
+  // Write index.records all at once if each entry occupies exactly the same bytes in memory as
+  // on the wire. This relies on the host being little-endian, as do the scalar write() overloads.
+  if constexpr (internal::isPackedPair<Entry>()) {
     if (!index.records.empty()) {
       output.write(reinterpret_cast<const std::byte*>(index.records.data()), recordsSize);
     }
