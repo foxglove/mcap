@@ -7,10 +7,12 @@ use crate::cli::{InfoCommand, TimeFormat};
 use crate::context::CommandContext;
 use crate::{parse, render, source};
 
+const NANOSECONDS_PER_SECOND: f64 = 1_000_000_000.0;
+
 pub fn run(ctx: &CommandContext, args: InfoCommand) -> Result<()> {
     let parsed = source::parse_mcap_from_path(
         &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()).scan_data_without_statistics(true),
+        source::SourceOptions::new(ctx.allow_remote_scan()).read_message_indexes(true),
     )?;
     print!("{}", render_info(&parsed, ctx.time_format()));
     Ok(())
@@ -167,7 +169,7 @@ fn metadata_count(parsed: &parse::ParsedMcap) -> u32 {
 
 fn render_channel_summary_rows(
     parsed: &parse::ParsedMcap,
-    duration_seconds: f64,
+    fallback_duration_seconds: f64,
 ) -> Vec<Vec<String>> {
     let mut rows = Vec::new();
     let max_channel_id_width = parsed
@@ -194,9 +196,15 @@ fn render_channel_summary_rows(
     for channel in parsed.channels.values() {
         let msg_col = if let Some(counts) = channel_message_counts {
             let count = counts.get(&channel.id).copied().unwrap_or_default();
-            if count > 1 && duration_seconds > 0.0 {
-                let max_hz = count as f64 / duration_seconds;
-                let min_hz = (count - 1) as f64 / duration_seconds;
+            let topic_duration_seconds = parsed
+                .channel_message_time_ranges
+                .get(&channel.id)
+                .map(|(start, end)| end.saturating_sub(*start) as f64 / NANOSECONDS_PER_SECOND)
+                .filter(|duration_seconds| *duration_seconds > 0.0)
+                .unwrap_or(fallback_duration_seconds);
+            if count > 1 && topic_duration_seconds > 0.0 {
+                let max_hz = count as f64 / topic_duration_seconds;
+                let min_hz = (count - 1) as f64 / topic_duration_seconds;
                 let delta = (max_hz - min_hz).max(f64::EPSILON);
                 let precision = ((-delta.log10()).ceil() as i32).max(0) as usize;
                 if precision > 2 {
@@ -654,5 +662,56 @@ mod tests {
         assert_eq!(rows[1][0], "\t(12) /beta");
         assert_eq!(rows[0][1], "  7 msgs");
         assert_eq!(rows[1][1], "123 msgs");
+    }
+
+    #[test]
+    fn channel_summary_uses_each_channel_time_range_for_frequency() {
+        let mut parsed = ParsedMcap {
+            statistics: Some(Statistics::default()),
+            ..ParsedMcap::default()
+        };
+        parsed.channels.insert(
+            1,
+            records::Channel {
+                id: 1,
+                schema_id: 0,
+                topic: "/camera".to_string(),
+                message_encoding: "json".to_string(),
+                metadata: BTreeMap::new(),
+            },
+        );
+        if let Some(stats) = &mut parsed.statistics {
+            stats.channel_message_counts.insert(1, 3);
+        }
+        parsed
+            .channel_message_time_ranges
+            .insert(1, (10, 1_000_000_010));
+
+        let rows = render_channel_summary_rows(&parsed, 0.0);
+        assert_eq!(rows[0][1], "3 msgs (2..3Hz)");
+    }
+
+    #[test]
+    fn channel_summary_without_topic_time_range_falls_back_to_file_duration() {
+        let mut parsed = ParsedMcap {
+            statistics: Some(Statistics::default()),
+            ..ParsedMcap::default()
+        };
+        parsed.channels.insert(
+            1,
+            records::Channel {
+                id: 1,
+                schema_id: 0,
+                topic: "/camera".to_string(),
+                message_encoding: "json".to_string(),
+                metadata: BTreeMap::new(),
+            },
+        );
+        if let Some(stats) = &mut parsed.statistics {
+            stats.channel_message_counts.insert(1, 2);
+        }
+
+        let rows = render_channel_summary_rows(&parsed, 100.0);
+        assert_eq!(rows[0][1], "2 msgs (0.01..0.02Hz)");
     }
 }

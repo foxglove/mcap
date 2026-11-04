@@ -92,6 +92,45 @@ fn build_single_topic_json_mcap(topic: &str, messages: &[(u32, u64, &[u8])]) -> 
     buffer
 }
 
+fn build_two_topic_mcap_with_independent_ranges() -> Vec<u8> {
+    let mut buffer = Vec::new();
+    {
+        let mut writer = mcap::WriteOptions::new()
+            .compression(None)
+            .create(Cursor::new(&mut buffer))
+            .expect("create writer");
+        let schema_id = writer
+            .add_schema("Example", "jsonschema", br#"{"type":"object"}"#)
+            .expect("add schema");
+        let early_channel = writer
+            .add_channel(schema_id, "/early", "json", &BTreeMap::new())
+            .expect("early channel");
+        let late_channel = writer
+            .add_channel(schema_id, "/late", "json", &BTreeMap::new())
+            .expect("late channel");
+        for (channel_id, sequence, log_time) in [
+            (early_channel, 0, 1_000_000_000),
+            (early_channel, 1, 2_000_000_000),
+            (late_channel, 0, 10_000_000_000),
+            (late_channel, 1, 12_000_000_000),
+        ] {
+            writer
+                .write_to_known_channel(
+                    &MessageHeader {
+                        channel_id,
+                        sequence,
+                        log_time,
+                        publish_time: log_time,
+                    },
+                    br#"{"n":1}"#,
+                )
+                .expect("write message");
+        }
+        writer.finish().expect("finish writer");
+    }
+    buffer
+}
+
 /// Run the `mcap` binary with `args` and capture its output.
 fn mcap(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_mcap"))
@@ -147,6 +186,27 @@ fn exit_code_0_on_valid_file() {
     let output = mcap(&["info", path_str(&path)]);
     assert!(output.status.success());
     assert!(stdout(&output).contains("messages:"));
+}
+
+#[test]
+fn info_uses_each_topic_message_index_time_range() {
+    let dir = TempDir::new().unwrap();
+    let path = write_temp(
+        &dir,
+        "ranges.mcap",
+        &build_two_topic_mcap_with_independent_ranges(),
+    );
+    let output = mcap(&["info", path_str(&path)]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let output = stdout(&output);
+    assert!(output.contains("/early"));
+    assert!(output.contains("/late"));
+    assert!(output.contains("2 msgs (1..2Hz)"));
+    assert!(output.contains("2 msgs (0.5..1.0Hz)"));
 }
 
 #[test]
