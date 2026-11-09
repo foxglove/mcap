@@ -3001,7 +3001,7 @@ mod tests {
     }
 
     #[test]
-    fn write_to_added_channel_id_does_not_compare_content() {
+    fn write_skips_content_checks_for_known_channel_id() {
         let file = std::io::Cursor::new(Vec::new());
         let mut writer = Writer::new(file).expect("failed to construct writer");
         let schema = Arc::new(crate::Schema {
