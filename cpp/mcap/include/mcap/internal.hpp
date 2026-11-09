@@ -1,7 +1,9 @@
 #pragma once
 
 #include "types.hpp"
+#include <cstddef>
 #include <cstring>
+#include <type_traits>
 
 // Do not compile on systems with non-8-bit bytes
 static_assert(std::numeric_limits<unsigned char>::digits == 8);
@@ -21,6 +23,25 @@ constexpr uint64_t FooterLength = /* opcode */ 1 +
                                   /* summary offset start */ 8 +
                                   /* summary crc */ 4 +
                                   /* magic bytes */ sizeof(Magic);
+
+// The C++ standard guarantees that std::pair declares `first` before `second`,
+// but not that it is standard-layout, nor that it has the same size and padding
+// as a flat struct of the same two types. Returns whether Pair's members are
+// laid out as two consecutive fields with no padding before, between, or after
+// them. Byte order is not checked.
+template <typename Pair>
+constexpr bool isPackedPair() {
+  using First = typename Pair::first_type;
+  using Second = typename Pair::second_type;
+
+  // offsetof requires a standard-layout type
+  if constexpr (std::is_standard_layout_v<Pair>) {
+    return offsetof(Pair, first) == 0 && offsetof(Pair, second) == sizeof(First) &&
+           sizeof(Pair) == sizeof(First) + sizeof(Second);
+  }
+
+  return false;
+}
 
 inline std::string ToHex(uint8_t byte) {
   std::string result{2, '\0'};
@@ -54,6 +75,14 @@ inline uint32_t KeyValueMapSize(const KeyValueMap& map) {
     size += 4 + key.size() + 4 + value.size();
   }
   return (uint32_t)(size);
+}
+
+inline uint64_t ByteSpanArraySize(const ByteSpan* payload, std::size_t payloadCount) {
+  uint64_t size = 0;
+  for (std::size_t i = 0; i < payloadCount; ++i) {
+    size += payload[i].size;
+  }
+  return size;
 }
 
 inline const std::string CompressionString(Compression compression) {

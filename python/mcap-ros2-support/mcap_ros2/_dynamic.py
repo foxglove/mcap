@@ -129,7 +129,7 @@ INT_TYPES = (
 TimeDefinition = MessageSpecification(
     "builtin_interfaces",
     "Time",
-    [Field(Type("uint32"), "sec"), Field(Type("uint32"), "nanosec")],
+    [Field(Type("int32"), "sec"), Field(Type("uint32"), "nanosec")],
     [],
 )
 

@@ -1,19 +1,20 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 
+use crate::byte_source::{self, ByteSource};
 use crate::cli::DoctorCommand;
 use crate::context::CommandContext;
 use crate::source;
 
 pub fn run(ctx: &CommandContext, args: DoctorCommand) -> Result<()> {
-    let mcap = source::load_path(
-        &args.file,
-        source::SourceOptions::new(ctx.allow_remote_scan()),
-    )?;
+    // Doctor always walks the full file, so remote inputs need an explicit opt-in even when
+    // range requests are available.
+    let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
+    let mut input = byte_source::open_byte_source_for_scan(&args.file, source_options)?;
 
-    let diagnosis = diagnose_mcap(&mcap, args.strict_message_order);
+    let diagnosis = diagnose_byte_source(input.as_mut(), args.strict_message_order);
     for warning in &diagnosis.warnings {
         eprintln!("Warning: {warning}");
     }
@@ -40,6 +41,13 @@ struct ParsedSchema {
     data: Vec<u8>,
 }
 
+#[derive(Debug, Clone)]
+struct ScannedChunk {
+    header: mcap::records::ChunkHeader,
+    /// Full record length including the opcode and length prefix.
+    record_length: u64,
+}
+
 #[derive(Debug)]
 struct Doctor {
     strict_message_order: bool,
@@ -50,7 +58,13 @@ struct Doctor {
     channel_ids_in_summary_section: BTreeSet<u16>,
     schema_ids_in_summary_section: BTreeSet<u16>,
     chunk_indexes: BTreeMap<u64, mcap::records::ChunkIndex>,
+    /// Chunk headers the scan saw, by record offset, so chunk index validation needs no second
+    /// read of the data section.
+    scanned_chunks: BTreeMap<u64, ScannedChunk>,
     in_summary_section: bool,
+    /// Set when the scan stops before the end of the file, so checks that need the whole file
+    /// (the DataEnd and Footer presence checks) do not report what the scan never reached.
+    scan_stopped_early: bool,
     saw_data_end: bool,
     saw_footer: bool,
     saw_top_level_message: bool,
@@ -65,13 +79,20 @@ struct Doctor {
     duplicate_channel_warning_ids: BTreeSet<u16>,
 }
 
-fn diagnose_mcap(mcap: &[u8], strict_message_order: bool) -> Diagnosis {
+/// Every failure, including a read that cannot complete, becomes a finding in the diagnosis.
+fn diagnose_byte_source(source: &mut dyn ByteSource, strict_message_order: bool) -> Diagnosis {
     let mut doctor = Doctor::new(strict_message_order);
-    doctor.scan_top_level(mcap);
+    doctor.scan_top_level(source);
     doctor.finalize_record_presence();
-    doctor.validate_chunk_indexes(mcap);
+    doctor.validate_chunk_indexes(source);
     doctor.validate_statistics();
     doctor.diagnosis
+}
+
+#[cfg(test)]
+fn diagnose_mcap(mcap: &[u8], strict_message_order: bool) -> Diagnosis {
+    let mut source = byte_source::MemorySource::new(mcap.to_vec());
+    diagnose_byte_source(&mut source, strict_message_order)
 }
 
 impl Doctor {
@@ -85,7 +106,9 @@ impl Doctor {
             channel_ids_in_summary_section: BTreeSet::new(),
             schema_ids_in_summary_section: BTreeSet::new(),
             chunk_indexes: BTreeMap::new(),
+            scanned_chunks: BTreeMap::new(),
             in_summary_section: false,
+            scan_stopped_early: false,
             saw_data_end: false,
             saw_footer: false,
             saw_top_level_message: false,
@@ -109,35 +132,46 @@ impl Doctor {
         self.diagnosis.errors.push(message.into());
     }
 
-    fn scan_top_level(&mut self, mcap: &[u8]) {
+    fn scan_top_level(&mut self, source: &mut dyn ByteSource) {
+        let record_length_limit = source
+            .size()
+            .and_then(|size| usize::try_from(size).ok())
+            .unwrap_or(usize::MAX);
         let mut reader = mcap::sans_io::LinearReader::new_with_options(
             mcap::sans_io::LinearReaderOptions::default()
                 .with_emit_chunks(true)
                 .with_validate_chunk_crcs(true)
                 .with_validate_data_section_crc(true)
                 .with_validate_summary_section_crc(true)
-                .with_record_length_limit(mcap.len()),
+                .with_record_length_limit(record_length_limit),
         );
-        let mut remaining = mcap;
+        let mut pos = 0u64;
         let mut next_record_offset = mcap::MAGIC.len() as u64;
 
         while let Some(event) = reader.next_event() {
             match event {
                 Err(err) => {
                     self.error(format!("Failed to read next token: {err:#}"));
-                    // Stop scanning after an event-level reader error. At this point the
-                    // underlying stream state may be desynchronized (bad magic, CRC mismatch,
-                    // mid-record corruption), so continuing to call `next_event()` is not
-                    // reliable. We still keep previously collected diagnostics and run the
-                    // post-scan cross-checks below.
-                    break;
+                    // The reader decides whether it can go on. A CRC mismatch is reported once
+                    // and reading continues; after an error with no record boundary to resume
+                    // from it returns `None`, which ends this loop.
+                    continue;
                 }
                 Ok(mcap::sans_io::LinearReadEvent::ReadRequest(need)) => {
-                    let read = need.min(remaining.len());
-                    let dst = reader.insert(read);
-                    dst.copy_from_slice(&remaining[..read]);
-                    reader.notify_read(read);
-                    remaining = &remaining[read..];
+                    let buf = reader.insert(need);
+                    let n = match source.read_into(pos, buf) {
+                        Ok(n) => n,
+                        Err(err) => {
+                            // Report the failure as a finding so the ones gathered before it
+                            // still reach the user, then stop: nothing past this offset can be
+                            // read.
+                            self.error(format!("Failed to read file at offset {pos}: {err:#}"));
+                            self.scan_stopped_early = true;
+                            break;
+                        }
+                    };
+                    reader.notify_read(n);
+                    pos = pos.saturating_add(n as u64);
                 }
                 Ok(mcap::sans_io::LinearReadEvent::Record { opcode, data }) => {
                     let record_offset = next_record_offset;
@@ -152,13 +186,23 @@ impl Doctor {
                             continue;
                         }
                     };
-                    self.handle_top_level_record(record, record_offset);
+                    self.handle_top_level_record(record, record_offset, 9 + data.len() as u64);
                 }
             }
         }
+        if reader.failed() {
+            // The reader ended on an error it could not resume from, before the end of the
+            // file.
+            self.scan_stopped_early = true;
+        }
     }
 
-    fn handle_top_level_record(&mut self, record: mcap::records::Record<'_>, offset: u64) {
+    fn handle_top_level_record(
+        &mut self,
+        record: mcap::records::Record<'_>,
+        offset: u64,
+        record_length: u64,
+    ) {
         match record {
             mcap::records::Record::Header(header) => {
                 if header.library.is_empty() {
@@ -190,6 +234,13 @@ impl Doctor {
                 self.examine_top_level_message(&header);
             }
             mcap::records::Record::Chunk { header, data } => {
+                self.scanned_chunks.insert(
+                    offset,
+                    ScannedChunk {
+                        header: header.clone(),
+                        record_length,
+                    },
+                );
                 self.examine_chunk(header, data.as_ref(), offset);
             }
             mcap::records::Record::MessageIndex(_) => {
@@ -240,6 +291,11 @@ impl Doctor {
     }
 
     fn finalize_record_presence(&mut self) {
+        if self.scan_stopped_early {
+            // The scan never reached the end of the file, so it cannot say whether these
+            // records are missing. The error that stopped it is already reported.
+            return;
+        }
         if !self.saw_data_end {
             self.error("File does not contain a DataEnd record");
         }
@@ -418,6 +474,7 @@ impl Doctor {
         let mut min_log_time = None::<u64>;
         let mut max_log_time = None::<u64>;
         let mut chunk_message_count = 0u64;
+        let mut unreadable_records = 0u64;
 
         let chunk_reader = match mcap::read::ChunkReader::new(header.clone(), data) {
             Ok(reader) => reader,
@@ -432,7 +489,33 @@ impl Doctor {
         for nested_record in chunk_reader {
             let nested_record = match nested_record {
                 Ok(record) => record,
+                Err(mcap::McapError::BadChunkCrc { saved, calculated }) => {
+                    // ChunkReader checks the CRC after yielding the last record, so every record
+                    // has been examined by now. Parsing only checks framing: a damaged payload
+                    // byte parses cleanly, and payloads are most of a chunk, so clean parsing
+                    // must not be read as a stale CRC field.
+                    let records = match unreadable_records {
+                        0 => "every record inside it parsed, but the CRC does not confirm that \
+                              the payloads are intact"
+                            .to_string(),
+                        1 => "1 record inside it could not be read, which points at corrupted \
+                              data"
+                            .to_string(),
+                        n => format!(
+                            "{n} records inside it could not be read, which points at corrupted \
+                             data"
+                        ),
+                    };
+                    self.error(format!(
+                        "Chunk at offset {start_offset} has a CRC mismatch (stored {saved:08X}, \
+                         computed {calculated:08X}); {records}. `mcap recover` writes a new CRC \
+                         from the current bytes; run it only if you accept the payloads as they \
+                         are."
+                    ));
+                    continue;
+                }
                 Err(err) => {
+                    unreadable_records += 1;
                     self.error(format!(
                         "failed to parse nested chunk record at {start_offset}: {err:#}"
                     ));
@@ -534,7 +617,7 @@ impl Doctor {
         }
     }
 
-    fn validate_chunk_indexes(&mut self, mcap: &[u8]) {
+    fn validate_chunk_indexes(&mut self, source: &mut dyn ByteSource) {
         let chunk_indexes: Vec<(u64, mcap::records::ChunkIndex)> = self
             .chunk_indexes
             .iter()
@@ -570,72 +653,70 @@ impl Doctor {
                 }
             }
 
-            match read_record_at_offset(mcap, chunk_offset) {
-                Ok(raw_record) => {
-                    if raw_record.opcode != mcap::records::op::CHUNK {
+            let Some(scanned) = self.scanned_chunks.get(&chunk_offset).cloned() else {
+                // Only an index that points where the scan saw no chunk costs a read: the
+                // nine-byte record header, to name what is there.
+                match read_opcode_at_offset(source, chunk_offset) {
+                    Ok(opcode) if opcode != mcap::records::op::CHUNK => {
                         self.error(format!(
                             "Chunk index points to offset {} but the record at this offset is a {}",
                             chunk_offset,
-                            opcode_name(raw_record.opcode)
+                            opcode_name(opcode)
                         ));
-                        continue;
                     }
-                    if chunk_index.chunk_length != 9 + raw_record.length {
+                    Ok(_) => {
                         self.error(format!(
-                            "Chunk index {} length mismatch: {} vs {}.",
-                            chunk_offset,
-                            chunk_index.chunk_length,
-                            9 + raw_record.length
-                        ));
-                        continue;
-                    }
-
-                    let parsed = mcap::parse_record(raw_record.opcode, raw_record.body);
-                    let Ok(mcap::records::Record::Chunk { header, .. }) = parsed else {
-                        self.error(format!(
-                            "Chunk index points to offset {} but encountered error parsing the chunk at that offset",
+                            "Chunk index points to offset {} but encountered an error parsing the chunk at that offset",
                             chunk_offset
                         ));
-                        continue;
-                    };
+                    }
+                    Err(err) => {
+                        self.error(format!(
+                            "Chunk index points to offset {} but encountered an error reading at that offset: {err}",
+                            chunk_offset
+                        ));
+                    }
+                }
+                continue;
+            };
+            if chunk_index.chunk_length != scanned.record_length {
+                self.error(format!(
+                    "Chunk index {} length mismatch: {} vs {}.",
+                    chunk_offset, chunk_index.chunk_length, scanned.record_length
+                ));
+                continue;
+            }
 
-                    if header.message_start_time != chunk_index.message_start_time {
-                        self.error(format!(
-                            "Chunk at offset {} has message start time {}, but its chunk index has message start time {}",
-                            chunk_offset, header.message_start_time, chunk_index.message_start_time
-                        ));
-                    }
-                    if header.message_end_time != chunk_index.message_end_time {
-                        self.error(format!(
-                            "Chunk at offset {} has message end time {}, but its chunk index has message end time {}",
-                            chunk_offset, header.message_end_time, chunk_index.message_end_time
-                        ));
-                    }
-                    if header.compression != chunk_index.compression {
-                        self.error(format!(
-                            "Chunk at offset {} has compression {:?}, but its chunk index has compression {:?}",
-                            chunk_offset, header.compression, chunk_index.compression
-                        ));
-                    }
-                    if header.compressed_size != chunk_index.compressed_size {
-                        self.error(format!(
-                            "Chunk at offset {} has data length {}, but its chunk index has compressed size {}",
-                            chunk_offset, header.compressed_size, chunk_index.compressed_size
-                        ));
-                    }
-                    if header.uncompressed_size != chunk_index.uncompressed_size {
-                        self.error(format!(
-                            "Chunk at offset {} has uncompressed size {}, but its chunk index has uncompressed size {}",
-                            chunk_offset, header.uncompressed_size, chunk_index.uncompressed_size
-                        ));
-                    }
-                }
-                Err(err) => {
-                    self.error(format!(
-                        "Chunk index points to offset {} but encountered error reading at that offset: {err}",
-                        chunk_offset
-                    ));
-                }
+            let header = scanned.header;
+            if header.message_start_time != chunk_index.message_start_time {
+                self.error(format!(
+                    "Chunk at offset {} has message start time {}, but its chunk index has message start time {}",
+                    chunk_offset, header.message_start_time, chunk_index.message_start_time
+                ));
+            }
+            if header.message_end_time != chunk_index.message_end_time {
+                self.error(format!(
+                    "Chunk at offset {} has message end time {}, but its chunk index has message end time {}",
+                    chunk_offset, header.message_end_time, chunk_index.message_end_time
+                ));
+            }
+            if header.compression != chunk_index.compression {
+                self.error(format!(
+                    "Chunk at offset {} has compression {:?}, but its chunk index has compression {:?}",
+                    chunk_offset, header.compression, chunk_index.compression
+                ));
+            }
+            if header.compressed_size != chunk_index.compressed_size {
+                self.error(format!(
+                    "Chunk at offset {} has data length {}, but its chunk index has compressed size {}",
+                    chunk_offset, header.compressed_size, chunk_index.compressed_size
+                ));
+            }
+            if header.uncompressed_size != chunk_index.uncompressed_size {
+                self.error(format!(
+                    "Chunk at offset {} has uncompressed size {}, but its chunk index has uncompressed size {}",
+                    chunk_offset, header.uncompressed_size, chunk_index.uncompressed_size
+                ));
             }
         }
     }
@@ -691,35 +772,13 @@ impl Doctor {
     }
 }
 
-struct RawRecordRef<'a> {
-    opcode: u8,
-    length: u64,
-    body: &'a [u8],
-}
-
-fn read_record_at_offset<'a>(mcap: &'a [u8], offset: u64) -> Result<RawRecordRef<'a>> {
-    let offset = usize::try_from(offset).context("record offset out of range")?;
-    if offset + 9 > mcap.len() {
+/// Reads the opcode of the record whose nine-byte prefix starts at `offset`.
+fn read_opcode_at_offset(source: &mut dyn ByteSource, offset: u64) -> Result<u8> {
+    let header = source.read_at(offset, 9)?;
+    if header.len() < 9 {
         anyhow::bail!("record header extends beyond file");
     }
-    let opcode = mcap[offset];
-    let length = u64::from_le_bytes(
-        mcap[offset + 1..offset + 9]
-            .try_into()
-            .expect("slice length for record len"),
-    );
-    let end = offset
-        .checked_add(9)
-        .and_then(|start| start.checked_add(usize::try_from(length).ok()?))
-        .context("record length overflow")?;
-    if end > mcap.len() {
-        anyhow::bail!("record extends beyond file");
-    }
-    Ok(RawRecordRef {
-        opcode,
-        length,
-        body: &mcap[offset + 9..end],
-    })
+    Ok(header[0])
 }
 
 fn opcode_name(opcode: u8) -> Cow<'static, str> {
@@ -745,9 +804,12 @@ fn opcode_name(opcode: u8) -> Cow<'static, str> {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use std::collections::BTreeMap;
+    use std::rc::Rc;
 
     use super::diagnose_mcap;
+    use crate::byte_source::InstrumentedSource;
     use mcap::records::op;
 
     fn write_mcap(
@@ -975,9 +1037,384 @@ mod tests {
         );
     }
 
+    #[test]
+    fn chunk_index_pointing_at_a_huge_record_length_is_reported_not_fatal() {
+        // A message payload that, read as a record header, is a Chunk with a length near
+        // u64::MAX. The fixture is otherwise valid, so only the chunk index is corrupted.
+        let mut payload = vec![op::CHUNK];
+        payload.extend_from_slice(&(u64::MAX - 1).to_le_bytes());
+        let mut mcap = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .compression(None)
+                .create(std::io::Cursor::new(&mut mcap))
+                .expect("create writer");
+            let schema_id = writer
+                .add_schema("test_schema", "raw", b"{}")
+                .expect("add schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "raw", &BTreeMap::new())
+                .expect("add channel");
+            writer
+                .write_to_known_channel(
+                    &mcap::records::MessageHeader {
+                        channel_id,
+                        sequence: 0,
+                        log_time: 10,
+                        publish_time: 10,
+                    },
+                    &payload,
+                )
+                .expect("write message");
+            writer.finish().expect("finish writer");
+        }
+
+        let payload_offset =
+            mcap.windows(payload.len())
+                .position(|window| window == payload)
+                .expect("uncompressed payload should be in the file") as u64;
+        set_chunk_index_start_offset(&mut mcap, payload_offset);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        assert!(
+            diagnosis.errors.iter().any(|err| {
+                err.contains(&format!("Chunk index points to offset {payload_offset}"))
+                    && err.contains("encountered an error parsing the chunk at that offset")
+            }),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    #[test]
+    fn chunk_index_pointing_at_another_record_names_its_type() {
+        let mut mcap = write_mcap(|opts| opts, None, &[10]);
+        let schema_offset = first_record_offset(&mcap, op::SCHEMA).expect("schema record") as u64;
+        set_chunk_index_start_offset(&mut mcap, schema_offset);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        assert!(
+            diagnosis.errors.iter().any(|err| {
+                err.contains(&format!("Chunk index points to offset {schema_offset}"))
+                    && err.contains("the record at this offset is a Schema")
+            }),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    #[test]
+    fn chunk_index_fields_are_checked_against_the_scanned_chunk_header() {
+        let mut mcap = write_mcap(|opts| opts, None, &[10]);
+        let chunk_index_offset =
+            first_record_offset(&mcap, op::CHUNK_INDEX).expect("chunk index should exist");
+        // ChunkIndex body starts with message_start_time.
+        let field = chunk_index_offset + 9;
+        mcap[field..field + 8].copy_from_slice(&999u64.to_le_bytes());
+        zero_summary_crc(&mut mcap);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        assert!(
+            diagnosis.errors.iter().any(|err| {
+                err.contains(
+                    "has message start time 0, but its chunk index has message start time 999",
+                )
+            }),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    #[test]
+    fn read_failure_is_reported_after_earlier_findings() {
+        let mut mcap = write_mcap(
+            |opts| {
+                opts.use_chunks(false)
+                    .repeat_channels(false)
+                    .repeat_schemas(false)
+            },
+            None,
+            &[10],
+        );
+        corrupt_first_schema_data_length(&mut mcap);
+        let fail_at = first_record_offset(&mcap, op::MESSAGE).expect("message should exist");
+
+        // Every read at or past the first message fails, standing in for a disk or network
+        // error partway through the scan.
+        let fail_at = fail_at as u64;
+        let mut source = InstrumentedSource::new(mcap, move |offset, _: &[u8]| {
+            if offset >= fail_at {
+                anyhow::bail!("simulated read failure");
+            }
+            Ok(())
+        });
+        let diagnosis = super::diagnose_byte_source(&mut source, false);
+
+        let parse_error = diagnosis
+            .errors
+            .iter()
+            .position(|err| err.contains("Failed to parse top-level record"));
+        let read_error = diagnosis.errors.iter().position(|err| {
+            err.contains(&format!("Failed to read file at offset {fail_at}"))
+                && err.contains("simulated read failure")
+        });
+        assert!(
+            matches!((parse_error, read_error), (Some(parse), Some(read)) if parse < read),
+            "{:?}",
+            diagnosis.errors
+        );
+        // The scan never reached the end of the file, so it cannot claim records are missing.
+        assert!(
+            !diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("does not contain a")),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    fn uncompressed_single_chunk_mcap() -> Vec<u8> {
+        write_mcap(
+            |opts| opts.compression(None).chunk_size(Some(1024 * 1024)),
+            None,
+            &[10, 20, 30],
+        )
+    }
+
+    #[test]
+    fn reports_a_nested_record_the_reader_cannot_skip_once() {
+        let mut mcap = uncompressed_single_chunk_mcap();
+        let chunk_offset = first_record_offset(&mcap, op::CHUNK).expect("chunk record");
+        let first_nested_record = chunk_records_offset(&mcap, chunk_offset);
+        // Claim far more bytes than the chunk holds for the first nested record.
+        mcap[first_nested_record + 1..first_nested_record + 9]
+            .copy_from_slice(&(u64::MAX / 2).to_le_bytes());
+        zero_chunk_and_data_section_crcs(&mut mcap, chunk_offset);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        let nested_errors = diagnosis
+            .errors
+            .iter()
+            .filter(|err| err.contains("failed to parse nested chunk record"))
+            .count();
+        assert_eq!(nested_errors, 1, "{:?}", diagnosis.errors);
+    }
+
+    #[test]
+    fn keeps_examining_a_chunk_after_a_nested_record_fails_to_parse() {
+        let mut mcap = uncompressed_single_chunk_mcap();
+        let chunk_offset = first_record_offset(&mcap, op::CHUNK).expect("chunk record");
+        let schema_offset = chunk_records_offset(&mcap, chunk_offset);
+        assert_eq!(
+            mcap[schema_offset],
+            op::SCHEMA,
+            "the chunk opens with the schema"
+        );
+        corrupt_schema_data_length(&mut mcap, schema_offset);
+        zero_chunk_and_data_section_crcs(&mut mcap, chunk_offset);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        let nested_errors = diagnosis
+            .errors
+            .iter()
+            .filter(|err| err.contains("failed to parse nested chunk record"))
+            .count();
+        assert_eq!(nested_errors, 1, "{:?}", diagnosis.errors);
+        // The channel after the bad schema was still examined: it names a schema the scan
+        // never saw.
+        assert!(
+            diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("unknown Schema")),
+            "{:?}",
+            diagnosis.errors
+        );
+        // And the messages after the channel were checked against it.
+        assert!(
+            !diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("before a channel record")),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    #[test]
+    fn chunk_index_validation_reads_the_file_once() {
+        let mcap = write_mcap(|opts| opts, None, &[10, 20, 30, 40]);
+        let bytes_read = Rc::new(Cell::new(0u64));
+        let mut source = InstrumentedSource::new(mcap.clone(), {
+            let bytes_read = Rc::clone(&bytes_read);
+            move |_, bytes: &[u8]| {
+                bytes_read.set(bytes_read.get() + bytes.len() as u64);
+                Ok(())
+            }
+        });
+        let diagnosis = super::diagnose_byte_source(&mut source, false);
+        assert!(diagnosis.errors.is_empty(), "{:?}", diagnosis.errors);
+        assert!(
+            first_record_offset(&mcap, op::CHUNK_INDEX).is_some(),
+            "fixture should have chunk indexes to validate"
+        );
+        assert_eq!(
+            bytes_read.get(),
+            mcap.len() as u64,
+            "validating chunk indexes should not re-read the data section"
+        );
+    }
+
+    fn set_chunk_index_start_offset(mcap: &mut [u8], start_offset: u64) {
+        let chunk_index_offset =
+            first_record_offset(mcap, op::CHUNK_INDEX).expect("chunk index should exist");
+        // ChunkIndex body: message_start_time, message_end_time, chunk_start_offset, ...
+        let field = chunk_index_offset + 9 + 16;
+        mcap[field..field + 8].copy_from_slice(&start_offset.to_le_bytes());
+        zero_summary_crc(mcap);
+    }
+
+    /// Footer body: summary_start, summary_offset_start, summary_crc. A zero CRC is "not
+    /// computed", so the scan reaches a corrupted summary record without a CRC error.
+    fn zero_summary_crc(mcap: &mut [u8]) {
+        let footer_offset = mcap.len() - mcap::MAGIC.len() - 9 - 20;
+        assert_eq!(mcap[footer_offset], op::FOOTER);
+        let crc_field = footer_offset + 9 + 16;
+        mcap[crc_field..crc_field + 4].copy_from_slice(&[0; 4]);
+    }
+
+    #[test]
+    fn a_reader_error_it_cannot_resume_from_stops_the_scan_without_presence_claims() {
+        let mcap = write_mcap(|opts| opts, None, &[10, 20, 30]);
+        // Cut the file off inside its last chunk.
+        let chunk_offset = first_record_offset(&mcap, op::CHUNK).expect("chunk record");
+        let truncated = &mcap[..chunk_offset + 9 + 24];
+
+        let diagnosis = diagnose_mcap(truncated, false);
+        assert!(
+            diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("Failed to read next token")),
+            "{:?}",
+            diagnosis.errors
+        );
+        assert!(
+            !diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("does not contain a")),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    #[test]
+    fn reports_a_chunk_crc_mismatch_and_keeps_scanning() {
+        let mut mcap = uncompressed_single_chunk_mcap();
+        let chunk_offset = first_record_offset(&mcap, op::CHUNK).expect("chunk record");
+        // ChunkHeader: message_start_time, message_end_time, uncompressed_size (8 each), then
+        // uncompressed_crc.
+        mcap[chunk_offset + 9 + 24] ^= 0xFF;
+        zero_data_section_crc(&mut mcap);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        assert_eq!(diagnosis.errors.len(), 1, "{:?}", diagnosis.errors);
+        let error = &diagnosis.errors[0];
+        assert!(error.contains("has a CRC mismatch"), "{error}");
+        assert!(
+            error.contains("every record inside it parsed, but the CRC does not confirm"),
+            "{error}"
+        );
+        assert!(
+            error.contains("run it only if you accept the payloads as they are"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn a_chunk_crc_mismatch_names_records_it_could_not_read() {
+        let mut mcap = uncompressed_single_chunk_mcap();
+        let chunk_offset = first_record_offset(&mcap, op::CHUNK).expect("chunk record");
+        let schema_offset = chunk_records_offset(&mcap, chunk_offset);
+        corrupt_schema_data_length(&mut mcap, schema_offset);
+        zero_data_section_crc(&mut mcap);
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        let crc_error = diagnosis
+            .errors
+            .iter()
+            .find(|err| err.contains("has a CRC mismatch"))
+            .expect("chunk crc mismatch reported");
+        assert!(
+            crc_error.contains("1 record inside it could not be read"),
+            "{crc_error}"
+        );
+    }
+
+    #[test]
+    fn reports_a_bad_data_section_crc_and_still_checks_the_summary() {
+        let mut mcap = write_mcap(|opts| opts, None, &[10, 20, 30]);
+        let data_end = first_record_offset(&mcap, op::DATA_END).expect("data end record");
+        mcap[data_end + 9] ^= 0xFF;
+
+        let diagnosis = diagnose_mcap(&mcap, false);
+        assert_eq!(diagnosis.errors.len(), 1, "{:?}", diagnosis.errors);
+        assert!(
+            diagnosis.errors[0].contains("Data section CRC failed"),
+            "{:?}",
+            diagnosis.errors
+        );
+        // The scan went on past DataEnd: the summary was read and found consistent, and the
+        // Footer was seen.
+        assert!(
+            !diagnosis
+                .errors
+                .iter()
+                .any(|err| err.contains("does not contain a")),
+            "{:?}",
+            diagnosis.errors
+        );
+    }
+
+    /// Zeroes the data section CRC (zero means "not computed") so a chunk edited by a test is
+    /// reported for its own CRC alone.
+    fn zero_data_section_crc(mcap: &mut [u8]) {
+        let data_end = first_record_offset(mcap, op::DATA_END).expect("data end record");
+        mcap[data_end + 9..data_end + 13].copy_from_slice(&[0; 4]);
+    }
+
+    /// Offset of the first record inside an uncompressed chunk's records field.
+    fn chunk_records_offset(mcap: &[u8], chunk_offset: usize) -> usize {
+        // ChunkHeader: message_start_time, message_end_time, uncompressed_size (8 each),
+        // uncompressed_crc (4), compression string (4 + len), compressed_size (8).
+        let header_offset = chunk_offset + 9;
+        let compression_len = u32::from_le_bytes(
+            mcap[header_offset + 28..header_offset + 32]
+                .try_into()
+                .expect("compression length"),
+        ) as usize;
+        header_offset + 32 + compression_len + 8
+    }
+
+    /// Zeroes the chunk's CRC and the data section CRC (zero means "not computed") so a
+    /// corrupted chunk is examined record by record and the scan reaches the summary.
+    fn zero_chunk_and_data_section_crcs(mcap: &mut [u8], chunk_offset: usize) {
+        let crc_field = chunk_offset + 9 + 24;
+        mcap[crc_field..crc_field + 4].copy_from_slice(&[0; 4]);
+        zero_data_section_crc(mcap);
+    }
+
     fn corrupt_first_schema_data_length(mcap: &mut [u8]) {
         let schema_record_offset =
             first_record_offset(mcap, op::SCHEMA).expect("schema record should exist");
+        corrupt_schema_data_length(mcap, schema_record_offset);
+    }
+
+    /// Sets the data length of the schema record at `schema_record_offset` to u32::MAX so it
+    /// fails to parse.
+    fn corrupt_schema_data_length(mcap: &mut [u8], schema_record_offset: usize) {
         let body_offset = schema_record_offset + 9;
         let body_len = read_record_len(mcap, schema_record_offset) as usize;
         let body = &mut mcap[body_offset..body_offset + body_len];

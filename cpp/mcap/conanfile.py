@@ -7,7 +7,7 @@ from conan.tools.files import copy
 
 class McapConan(ConanFile):
     name = "mcap"
-    version = "2.1.3"
+    version = "2.2.0"
     url = "https://github.com/foxglove/mcap"
     homepage = "https://github.com/foxglove/mcap"
     description = "A C++ implementation of the MCAP file format"

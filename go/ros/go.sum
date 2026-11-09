@@ -5,8 +5,8 @@ github.com/foxglove/go-rosbag v0.0.6 h1:LcWr1LqdS1NxWO4+mbPfo7d1jpL3gybqRmX1abD8
 github.com/foxglove/go-rosbag v0.0.6/go.mod h1:Kz3doYZfPO6OIawx4tFm9MU9COkuzcYaI963psJeLrA=
 github.com/foxglove/mcap/go/mcap v0.4.0 h1:jsDZZ6qmMKa174EE8Tw0hxeMUdgjz8emTlN8+6FEnXE=
 github.com/foxglove/mcap/go/mcap v0.4.0/go.mod h1:3UsmtxZGHWURgxEgQh3t0cGfyPyLoCGsa/gtS/Y6UPM=
-github.com/klauspost/compress v1.16.7 h1:2mk3MPGNzKyxErAw8YaohYh69+pa4sIQSC0fPGCFR9I=
-github.com/klauspost/compress v1.16.7/go.mod h1:ntbaceVETuRiXiv4DpjP66DpAtAGkEQskQzEyD//IeE=
+github.com/klauspost/compress v1.18.7 h1:aUyZsS4kH3QTKurYhAOwAHxllVPnOthb3vPfnF1Ehjw=
+github.com/klauspost/compress v1.18.7/go.mod h1:cwPg85FWrGar70rWktvGQj8/hthj3wpl0PGDogxkrSQ=
 github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORNo=
 github.com/kr/pretty v0.3.0 h1:WgNl7dwNpEZ6jJ9k1snq4pZsg7DOEN8hP9Xw0Tsjwk0=
 github.com/kr/pretty v0.3.0/go.mod h1:640gp4NfQd8pI5XOwp5fnNeVWj67G7CFk/SaSQn7NBk=

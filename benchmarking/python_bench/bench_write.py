@@ -27,7 +27,7 @@ def load_blob(path):
     if len(blob) != BLOB_SIZE:
         print(f"Blob file {path} is not exactly {BLOB_SIZE} bytes", file=sys.stderr)
         sys.exit(1)
-    return memoryview(blob)
+    return blob
 
 
 def peak_rss_kb() -> int:

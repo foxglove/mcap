@@ -79,6 +79,7 @@ static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state)
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -123,6 +124,7 @@ static void BM_McapWriterBufferWriterUnchunked(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -167,6 +169,7 @@ static void BM_McapWriterBufferWriterChunked(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -212,6 +215,7 @@ static void BM_McapWriterBufferWriterChunkedNoCRC(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -257,6 +261,7 @@ static void BM_McapWriterBufferWriterChunkedUnindexed(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -303,6 +308,7 @@ static void BM_McapWriterBufferWriterLZ4(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -349,6 +355,7 @@ static void BM_McapWriterBufferWriterZStd(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -396,6 +403,7 @@ static void BM_McapWriterBufferWriterZStdNoCRC(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -591,6 +599,60 @@ static void BM_McapWriterFileWriterChunkedManyChannels(benchmark::State& state) 
   std::remove(filename.c_str());
 }
 
+static void BM_McapWriterBufferWriterChunkedManyChannels(benchmark::State& state) {
+  // Create a message payload
+  std::array<std::byte, 4 + 13> payload;
+  const uint32_t length = 13;
+  std::memcpy(payload.data(), &length, 4);
+  std::memcpy(payload.data() + 4, "Hello, world!", 13);
+
+  // Create a chunked writer using the ros1 profile, with compression and chunk CRCs disabled
+  mcap::McapWriter writer;
+  auto options = mcap::McapWriterOptions("ros1");
+  options.compression = mcap::Compression::None;
+  options.noChunkCRC = true;
+  options.chunkSize = uint64_t(state.range(0));
+
+  // Open an output memory buffer and write the file header
+  mcap::BufferWriter out{};
+  writer.open(out, options);
+
+  // Register a Schema record
+  mcap::Schema stdMsgsString("std_msgs/String", "ros1msg", StringSchema);
+  writer.addSchema(stdMsgsString);
+
+  uint16_t channelCount = uint16_t(state.range(1));
+
+  mcap::Channel topic("/chatter", "ros1", stdMsgsString.id);
+  std::vector<uint16_t> channelIds;
+  for (uint16_t i = 0; i < channelCount; ++i) {
+    // Register a Channel record
+    writer.addChannel(topic);
+    channelIds.push_back(topic.id);
+  }
+
+  // Create a message
+  mcap::Message msg;
+  msg.channelId = topic.id;
+  msg.sequence = 0;
+  msg.publishTime = 0;
+  msg.logTime = msg.publishTime;
+  msg.data = payload.data();
+  msg.dataSize = payload.size();
+
+  while (state.KeepRunning()) {
+    for (size_t i = 0; i < WriteIterations; i++) {
+      msg.channelId = channelIds[i % channelCount];
+      (void)writer.write(msg);
+      benchmark::ClobberMemory();
+    }
+    out.clear();
+  }
+
+  // Finish writing the file to memory
+  writer.close();
+}
+
 int main(int argc, char* argv[]) {
   benchmark::RegisterBenchmark("BM_CRC32", BM_CRC32)->RangeMultiplier(10)->Range(1, 10000000);
   benchmark::RegisterBenchmark("BM_McapWriterBufferWriterUnchunkedUnindexed",
@@ -683,6 +745,13 @@ int main(int argc, char* argv[]) {
     ->Args({mcap::DefaultChunkSize * 10, 100})
     ->Args({mcap::DefaultChunkSize * 10, 1000})
     ->Args({mcap::DefaultChunkSize * 10, 10000});
+  benchmark::RegisterBenchmark("BM_McapWriterBufferWriterChunkedManyChannels",
+                               BM_McapWriterBufferWriterChunkedManyChannels)
+    ->Args({mcap::DefaultChunkSize, 1})
+    ->Args({mcap::DefaultChunkSize, 10})
+    ->Args({mcap::DefaultChunkSize, 100})
+    ->Args({mcap::DefaultChunkSize, 1000})
+    ->Args({mcap::DefaultChunkSize, 10000});
   benchmark::Initialize(&argc, argv);
   benchmark::RunSpecifiedBenchmarks();
 

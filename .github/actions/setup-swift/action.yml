@@ -12,8 +12,8 @@ runs:
       run: |
         set -e
 
-        checksum="8c11f8bdeee212ed4b541a1ce2708866d4d290fdfe02362b0048b4cc57614341"
-        version="1.0.0"
+        checksum="0b26b568811404374c7d7f07276b6aad4145db5d1893a45f307de6a94ca8d9c3"
+        version="1.2.0"
         archive="swiftly-$version-x86_64.tar.gz"
 
         wget https://download.swift.org/swiftly/linux/$archive
@@ -32,7 +32,13 @@ runs:
 
     - name: install deps
       shell: bash
-      run: sudo apt-get update && sudo apt-get -y install libcurl4-openssl-dev
+      # The package list after libcurl4-openssl-dev is what `swiftly install`
+      # reports as required by the toolchain on Ubuntu 26.04.
+      run: |
+        sudo apt-get update
+        sudo apt-get -y install libcurl4-openssl-dev \
+          binutils binutils-gold unzip zip gnupg2 libgcc-15-dev libpython3-dev \
+          libstdc++-15-dev libxml2-dev libncurses-dev libz3-dev pkg-config
 
     - name: install swift
       shell: bash

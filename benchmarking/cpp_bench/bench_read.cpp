@@ -55,12 +55,10 @@ int main(int argc, char* argv[])
   if (std::strcmp(filter, "topic") == 0) {
     opts.topicFilter = [](std::string_view topic) { return topic == "/imu"; };
   } else if (std::strcmp(filter, "timerange") == 0) {
-    opts.startTime = 3000000000;
-    opts.endTime = 5000000000;
+    opts.startingAt(3000000000).endingBefore(5000000000);
   } else if (std::strcmp(filter, "topic_timerange") == 0) {
     opts.topicFilter = [](std::string_view topic) { return topic == "/lidar"; };
-    opts.startTime = 4000000000;
-    opts.endTime = 6000000000;
+    opts.startingAt(4000000000).endingBefore(6000000000);
   }
 
   long msg_count = 0;

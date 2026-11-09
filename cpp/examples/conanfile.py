@@ -6,7 +6,7 @@ class McapExamplesConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     generators = "CMakeDeps", "CMakeToolchain"
     requires = [
-        "mcap/2.1.3",
+        "mcap/2.2.0",
         "protobuf/3.21.12",
         "nlohmann_json/3.10.5",
         "catch2/2.13.8",

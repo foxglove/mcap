@@ -143,7 +143,7 @@ Report summary statistics on an MCAP file:
 
 ```
 $ mcap info demo.mcap
-library:     mcap-cli/0.3.0 mcap-rust/0.25.0
+library:     mcap-cli/0.4.0 mcap-rust/0.25.1
 profile:     ros1
 messages:    1606
 duration:    7.780758504s
@@ -262,7 +262,7 @@ The `mcap` CLI can read files over **HTTP(S)** and from object stores: **Amazon 
 
 ```
 $ mcap info gs://your-remote-bucket/demo.mcap
-library:     mcap-cli/0.3.0 mcap-rust/0.25.0
+library:     mcap-cli/0.4.0 mcap-rust/0.25.1
 profile:     ros1
 messages:    1606
 duration:    7.780758504s

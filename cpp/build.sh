@@ -12,7 +12,7 @@ conan profile detect 2>/dev/null || true
 
 # `conan editable add` is idempotent, but remove any stale entry first so a moved
 # checkout does not leave the editable pointing at an old path.
-conan editable remove -r "mcap/2.1.3" 2>/dev/null || true
+conan editable remove -r "mcap/2.2.0" 2>/dev/null || true
 conan editable add mcap
 
 conan_install() {

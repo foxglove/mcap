@@ -68,7 +68,6 @@ pub enum InputData {
         #[allow(dead_code)]
         temp_file: NamedTempFile,
     },
-    Buffered(Vec<u8>),
 }
 
 impl std::fmt::Debug for InputData {
@@ -92,7 +91,6 @@ impl InputData {
         match self {
             InputData::Mapped(mmap) => mmap.as_ref(),
             InputData::TempMapped { mmap, .. } => mmap.as_ref(),
-            InputData::Buffered(buf) => buf.as_slice(),
         }
     }
 }
@@ -123,6 +121,11 @@ pub struct MaterializedInput {
 }
 
 impl MaterializedInput {
+    /// The downloaded copy of a remote input, or `None` for a local path.
+    pub(crate) fn into_temp_file(self) -> Option<NamedTempFile> {
+        self.temp_file
+    }
+
     pub fn path(&self) -> &Path {
         if let Some(temp_file) = &self.temp_file {
             temp_file.path()
@@ -153,26 +156,6 @@ impl RemoteMcap {
 
     pub fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         self.reader.read_range(offset, length)
-    }
-}
-
-pub(crate) enum StreamingInput {
-    Local(std::fs::File),
-    Stdin(std::io::Stdin),
-    RemoteMaterialized {
-        file: std::fs::File,
-        #[allow(dead_code)]
-        temp_file: NamedTempFile,
-    },
-}
-
-impl std::io::Read for StreamingInput {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        match self {
-            StreamingInput::Local(file) => file.read(buf),
-            StreamingInput::Stdin(stdin) => stdin.read(buf),
-            StreamingInput::RemoteMaterialized { file, .. } => file.read(buf),
-        }
     }
 }
 
@@ -266,10 +249,6 @@ fn local_paths_have_same_file_id(_input: &Path, _output: &Path) -> Result<bool> 
     Ok(false)
 }
 
-pub fn open_seekable_mcap_source(path: &Path) -> Result<std::fs::File> {
-    std::fs::File::open(path).with_context(|| format!("couldn't open '{}'", path.display()))
-}
-
 pub fn parse_mcap_from_path(path: &Path, options: SourceOptions) -> Result<ParsedMcap> {
     if is_remote_url(path) {
         match open_remote_range_reader(path)? {
@@ -327,70 +306,6 @@ pub fn load_path(path: &Path, options: SourceOptions) -> Result<InputData> {
         return Ok(InputData::TempMapped { temp_file, mmap });
     }
     Ok(InputData::Mapped(map_file(path)?))
-}
-
-pub fn load_input(file: Option<&Path>, options: SourceOptions) -> Result<InputData> {
-    if let Some(path) = file {
-        return load_path(path, options);
-    }
-
-    let stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        bail!("{PLEASE_SUPPLY_FILE}");
-    }
-
-    read_stdin_to_mapped_input(&mut stdin.lock())
-}
-
-/// Spool a non-seekable stdin stream to a temporary file and memory-map it instead of
-/// buffering the whole input in a `Vec`, so piping an arbitrarily large MCAP keeps
-/// process memory bounded (the OS pages a disk-backed mapping on demand).
-///
-/// The temp file lives in `$TMPDIR` (else `/tmp`); if that is a tmpfs — common on modern
-/// Linux — the spool stays in RAM and the paging benefit is lost, so point `$TMPDIR` at
-/// real storage for very large inputs. Mirrors the remote `materialize_input` path.
-fn read_stdin_to_mapped_input(reader: &mut impl std::io::Read) -> Result<InputData> {
-    let mut temp_file = tempfile::Builder::new()
-        .prefix("mcap-cli-stdin-input-")
-        .tempfile()
-        .context("failed to create temporary file for stdin input")?;
-    let bytes_copied = std::io::copy(reader, temp_file.as_file_mut())
-        .context("failed to read input from stdin")?;
-    std::io::Write::flush(temp_file.as_file_mut())
-        .context("failed to flush temporary stdin input file")?;
-    if bytes_copied == 0 {
-        // memmap2 refuses to map a zero-length file, so fall back to an empty buffer.
-        // Callers then get the usual empty-input MCAP parse error.
-        return Ok(InputData::Buffered(Vec::new()));
-    }
-    let mmap = map_file(temp_file.path())?;
-    Ok(InputData::TempMapped { temp_file, mmap })
-}
-
-pub(crate) fn open_streaming_input(
-    file: Option<&Path>,
-    options: SourceOptions,
-) -> Result<StreamingInput> {
-    if let Some(path) = file {
-        if is_remote_url(path) {
-            // Remote clients are async, while recover's reader pipeline is synchronous.
-            // Materializing keeps the recovery path simple and consistently gated by
-            // `--allow-remote-scan` in `materialize_input`.
-            let materialized = materialize_input(path, options)?;
-            let file = open_seekable_mcap_source(materialized.path())?;
-            let temp_file = materialized
-                .temp_file
-                .expect("remote streaming input should have a temp file");
-            return Ok(StreamingInput::RemoteMaterialized { file, temp_file });
-        }
-        return Ok(StreamingInput::Local(open_seekable_mcap_source(path)?));
-    }
-
-    let stdin = std::io::stdin();
-    if stdin.is_terminal() {
-        bail!("{PLEASE_SUPPLY_FILE}");
-    }
-    Ok(StreamingInput::Stdin(stdin))
 }
 
 pub fn materialize_input(path: &Path, options: SourceOptions) -> Result<MaterializedInput> {
@@ -1230,7 +1145,12 @@ impl RemoteRangeReader {
         })
     }
 
-    fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
+    /// Takes the tail prefetched at open time, if still present, as `(start_offset, bytes)`.
+    pub(crate) fn take_tail(&mut self) -> Option<(u64, Vec<u8>)> {
+        self.tail.take().map(|tail| (tail.start, tail.bytes))
+    }
+
+    pub(crate) fn read_range(&self, offset: u64, length: usize) -> Result<Vec<u8>> {
         if length == 0 || offset >= self.size {
             return Ok(Vec::new());
         }
@@ -1241,8 +1161,12 @@ impl RemoteRangeReader {
         self.source.get_range(offset..end)
     }
 
-    fn size(&self) -> u64 {
+    pub(crate) fn size(&self) -> u64 {
         self.size
+    }
+
+    pub(crate) fn display_url(&self) -> &str {
+        &self.source.display_url
     }
 }
 
@@ -1384,7 +1308,7 @@ fn status_from_object_store_message(message: &str) -> Option<String> {
     (!status.is_empty()).then(|| status.to_string())
 }
 
-fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
+pub(crate) fn open_remote_range_reader(path: &Path) -> Result<Option<RemoteRangeReader>> {
     if is_remote_url(path) {
         return RemoteRangeReader::open(path);
     }
@@ -1452,7 +1376,7 @@ fn build_object_store(
     Ok((store, object_path))
 }
 
-fn read_remote_input_to_writer(path: &Path, writer: &mut impl Write) -> Result<()> {
+pub(crate) fn read_remote_input_to_writer(path: &Path, writer: &mut impl Write) -> Result<()> {
     let source = ObjectStoreSource::open_for_download(path)?;
     eprintln!("Warning: reading entire remote file {}", source.display_url);
     source.download_to_writer(writer, REMOTE_DOWNLOAD_CHUNK_BYTES)
@@ -1531,7 +1455,7 @@ pub(crate) fn require_remote_indexed_read_budget(
     );
 }
 
-fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()> {
+pub(crate) fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -> Result<()> {
     if options.allow_remote_scan {
         return Ok(());
     }
@@ -1822,29 +1746,6 @@ mod tests {
 
         super::ensure_distinct_local_input_output(&input, &output)
             .expect("missing input should be left to command open errors");
-    }
-
-    #[test]
-    fn stdin_input_is_spooled_to_temp_file_and_mapped() {
-        let (buffer, _) = summary_mcap_with_channel();
-        let mut reader = std::io::Cursor::new(buffer.clone());
-        let input = super::read_stdin_to_mapped_input(&mut reader).expect("stdin spool");
-        assert!(
-            matches!(input, super::InputData::TempMapped { .. }),
-            "non-empty stdin should be memory-mapped from a temp file, not buffered in RAM"
-        );
-        assert_eq!(input.as_slice(), buffer.as_slice());
-    }
-
-    #[test]
-    fn empty_stdin_input_falls_back_to_empty_buffer() {
-        let mut reader = std::io::Cursor::new(Vec::new());
-        let input = super::read_stdin_to_mapped_input(&mut reader).expect("empty stdin spool");
-        assert!(
-            matches!(input, super::InputData::Buffered(ref buf) if buf.is_empty()),
-            "empty stdin cannot be mmap'd and should fall back to an empty buffer"
-        );
-        assert!(input.as_slice().is_empty());
     }
 
     fn serve_http(body: &'static [u8], supports_ranges: bool) -> String {
@@ -3265,5 +3166,130 @@ mod tests {
             .expect("non-range HTTP input should materialize with scan opt-in");
 
         assert!(parsed.channels.contains_key(&channel_id));
+    }
+
+    /// Summaryless, chunked, uncompressed fixture of `message_count` 1 KiB messages.
+    fn linear_mcap_without_summary(message_count: u32) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .chunk_size(Some(16 * 1024))
+                .compression(None)
+                .emit_summary_records(false)
+                .emit_summary_offsets(false)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer
+                .add_schema("demo_schema", "jsonschema", br#"{"type":"object"}"#)
+                .expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            for sequence in 0..message_count {
+                writer
+                    .write_to_known_channel(
+                        &mcap::records::MessageHeader {
+                            channel_id,
+                            sequence,
+                            log_time: u64::from(sequence),
+                            publish_time: u64::from(sequence),
+                        },
+                        &[0u8; 1024],
+                    )
+                    .expect("write message");
+            }
+            writer.finish().expect("finish writer");
+        }
+        buffer
+    }
+
+    /// Scans every top-level record through `read_into`, the way the sans-io readers do.
+    fn count_remote_messages(source: &mut dyn crate::byte_source::ByteSource) -> usize {
+        let mut reader = mcap::sans_io::LinearReader::new();
+        let mut pos = 0u64;
+        let mut messages = 0usize;
+        while let Some(event) = reader.next_event() {
+            match event.expect("remote linear scan") {
+                mcap::sans_io::LinearReadEvent::ReadRequest(need) => {
+                    let buf = reader.insert(need);
+                    let n = source.read_into(pos, buf).expect("remote read_into");
+                    reader.notify_read(n);
+                    pos += n as u64;
+                }
+                mcap::sans_io::LinearReadEvent::Record { opcode, .. } => {
+                    if opcode == mcap::records::op::MESSAGE {
+                        messages += 1;
+                    }
+                }
+            }
+        }
+        messages
+    }
+
+    #[test]
+    fn opening_a_remote_for_a_scan_without_opt_in_makes_no_request() {
+        let body: &'static [u8] = Box::leak(linear_mcap_without_summary(10).into_boxed_slice());
+        let (url, requests) = serve_http_counting(body, true);
+        let err = crate::byte_source::open_byte_source_for_scan(
+            Path::new(&url),
+            super::SourceOptions::new(false),
+        )
+        .err()
+        .expect("remote scan should need the opt-in");
+        assert!(
+            err.to_string().contains("requires opt-in"),
+            "unexpected error: {err:#}"
+        );
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            0,
+            "refused before any request"
+        );
+    }
+
+    #[test]
+    fn remote_linear_scan_of_a_file_within_the_window_costs_one_request() {
+        // 600 x 1 KiB messages fit in the default window, so the first miss fetches the whole
+        // file and every later read is served from the window.
+        let body: &'static [u8] = Box::leak(linear_mcap_without_summary(600).into_boxed_slice());
+        assert!(body.len() < crate::byte_source::REMOTE_READ_AHEAD_BYTES);
+        let (url, requests) = serve_http_counting(body, true);
+        let mut source =
+            crate::byte_source::open_byte_source(Path::new(&url), super::SourceOptions::new(true))
+                .expect("remote open");
+        let after_open = requests.load(Ordering::SeqCst);
+
+        assert_eq!(count_remote_messages(source.as_mut()), 600);
+        let scan_requests = requests.load(Ordering::SeqCst) - after_open;
+        assert_eq!(
+            scan_requests,
+            1,
+            "expected one window fill for {} bytes",
+            body.len()
+        );
+    }
+
+    #[test]
+    fn remote_linear_scan_refills_window_across_boundaries() {
+        // Shrink the window so the scan refills it several times, including across record
+        // boundaries.
+        let body: &'static [u8] = Box::leak(linear_mcap_without_summary(600).into_boxed_slice());
+        let (url, requests) = serve_http_counting(body, true);
+        let reader = super::open_remote_range_reader(Path::new(&url))
+            .expect("remote open")
+            .expect("range support");
+        let mut source = crate::byte_source::RemoteRangeSource::new(reader);
+        let window = 64 * 1024;
+        source.set_read_ahead_bytes(window);
+        let after_open = requests.load(Ordering::SeqCst);
+
+        assert_eq!(count_remote_messages(&mut source), 600);
+        let scan_requests = requests.load(Ordering::SeqCst) - after_open;
+        let minimum = body.len().div_ceil(window);
+        assert!(
+            scan_requests >= minimum && scan_requests <= minimum + 2,
+            "expected about {minimum} window fills for {} bytes, got {scan_requests}",
+            body.len()
+        );
     }
 }

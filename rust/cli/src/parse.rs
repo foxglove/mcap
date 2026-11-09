@@ -7,7 +7,6 @@ use mcap::records::{self, Record};
 use mcap::sans_io::{LinearReadEvent, LinearReader as SansIoReader, LinearReaderOptions};
 
 const FOOTER_RECORD_LEN: usize = 1 + 8 + 8 + 8 + 4;
-const RECORD_PREFIX_LEN: u64 = 1 + 8;
 pub(crate) const FOOTER_RECORD_AND_END_MAGIC_LEN: usize = FOOTER_RECORD_LEN + mcap::MAGIC.len();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,11 +90,6 @@ fn parse_mcap_from_summary(
         header,
         &mcap[summary_start..footer_start],
     )?))
-}
-
-pub(crate) fn summary_section_has_chunk_indexes(mcap: &[u8]) -> Result<bool> {
-    Ok(parse_mcap_from_summary(mcap, None)?
-        .is_some_and(|summary| !summary.chunk_indexes.is_empty()))
 }
 
 pub(crate) fn parsed_mcap_from_summary_section(
@@ -218,7 +212,8 @@ where
             }
             LinearReadEvent::Record { opcode, data } => {
                 let record_offset = next_record_offset;
-                let record_length = RECORD_PREFIX_LEN + data.len() as u64;
+                let record_length =
+                    crate::byte_source::RECORD_PREFIX_LEN as u64 + data.len() as u64;
                 next_record_offset += record_length;
                 process(
                     mcap::parse_record(opcode, data)?,
@@ -459,7 +454,8 @@ pub(crate) fn parse_metadata_record(bytes: &[u8]) -> Result<mcap::records::Metad
     Ok(metadata)
 }
 
-pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'static>> {
+/// The payload borrows from `bytes`; nothing is copied.
+pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'_>> {
     let mut reader = mcap::read::LinearReader::sans_magic(bytes);
     let attachment = match reader.next().ok_or(mcap::McapError::BadIndex)?? {
         mcap::records::Record::Attachment { header, data, .. } => mcap::Attachment {
@@ -467,7 +463,7 @@ pub(crate) fn parse_attachment_record(bytes: &[u8]) -> Result<mcap::Attachment<'
             create_time: header.create_time,
             name: header.name,
             media_type: header.media_type,
-            data: Cow::Owned(data.into_owned()),
+            data,
         },
         _ => return Err(mcap::McapError::BadIndex.into()),
     };

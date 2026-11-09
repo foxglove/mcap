@@ -6,6 +6,8 @@ meta:
   id: mcap
   title: MCAP
   file-extension: mcap
+  xref:
+    mime: application/vnd.mcap
   license: MIT
   endian: le
 doc: |

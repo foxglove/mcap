@@ -27,8 +27,8 @@ def test_parse_tfmessage():
     # geometry_msgs/TransformStamped[] transforms
     assert reader.sequence_length() == 1
     # std_msgs/Header header
-    assert reader.uint32() == 1490149580  # uint32 sec
-    assert reader.int32() == 117017840  # int32 nanosec
+    assert reader.int32() == 1490149580  # int32 sec
+    assert reader.uint32() == 117017840  # uint32 nanosec
     assert reader.string() == "base_link"  # frame_id
     assert reader.string() == "radar"  # child_frame_id
     # geometry_msgs/Transform transform
@@ -49,8 +49,8 @@ def test_parse_parameter_event():
     reader = CdrReader(data)
 
     # builtin_interfaces/Time stamp
-    assert reader.uint32() == 1628813225  # uint32 sec
-    assert reader.int32() == 32141477  # int32 nanosec
+    assert reader.int32() == 1628813225  # int32 sec
+    assert reader.uint32() == 32141477  # uint32 nanosec
     # string node
     assert reader.string() == "/_ros2cli_378363"
     # Parameter[] new_parameters

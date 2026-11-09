@@ -37,12 +37,12 @@ def main():
     if filter_mode == "topic":
         filter_kwargs["topics"] = ["/imu"]
     elif filter_mode == "timerange":
-        filter_kwargs["start_time"] = 3000000000
-        filter_kwargs["end_time"] = 5000000000
+        filter_kwargs["starting_at"] = 3000000000
+        filter_kwargs["ending_before"] = 5000000000
     elif filter_mode == "topic_timerange":
         filter_kwargs["topics"] = ["/lidar"]
-        filter_kwargs["start_time"] = 4000000000
-        filter_kwargs["end_time"] = 6000000000
+        filter_kwargs["starting_at"] = 4000000000
+        filter_kwargs["ending_before"] = 6000000000
 
     from mcap.reader import make_reader
 
