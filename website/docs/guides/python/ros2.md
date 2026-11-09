@@ -4,7 +4,7 @@ description: Read and write MCAP files with ROS 2 message data in Python.
 
 # Reading and writing ROS 2
 
-To start writing Python code that reads ROS 2 data from MCAP, You will need a supported ROS2 distro installed, along with the `rosbag2` and `rosbag2_storage_mcap` packages. To get set up, make sure you've followed the [ROS2 installation guide](https://docs.ros.org/en/humble/Installation.html), then:
+To start writing Python code that reads ROS 2 data from MCAP, You will need a supported ROS2 distro installed, along with the `rosbag2` and `rosbag2_storage_mcap` packages. To get set up, follow the installation guide for your distro from the [ROS 2 documentation](https://docs.ros.org/), then:
 
 ```bash
 $ sudo apt-get install ros-$ROS_DISTRO-rosbag2 ros-$ROS_DISTRO-rosbag2-storage-mcap
@@ -93,15 +93,23 @@ writer.open(
 )
 ```
 
-Now we can create a topic and add some messages to it:
+Now we can create a topic. Since ROS 2 Jazzy, `TopicMetadata` requires a topic `id`; the storage assigns the real one, so `0` is a placeholder. Humble has no `id` argument. The Jazzy bindings also expose `id` as an attribute on the class, so we can check for it to support both:
 
 ```python
-writer.create_topic(
-    rosbag2_py.TopicMetadata(
-        name="/chatter", type="std_msgs/msg/String", serialization_format="cdr"
-    )
-)
+def topic_metadata(name: str, type: str) -> rosbag2_py.TopicMetadata:
+    kwargs = dict(name=name, type=type, serialization_format="cdr")
+    if hasattr(rosbag2_py.TopicMetadata, "id"):
+        # Jazzy and later require an id; the storage assigns the real one.
+        kwargs["id"] = 0
+    return rosbag2_py.TopicMetadata(**kwargs)
 
+
+writer.create_topic(topic_metadata("/chatter", "std_msgs/msg/String"))
+```
+
+Then we add some messages to it:
+
+```python
 start_time = 0
 for i in range(10):
     msg = String()
