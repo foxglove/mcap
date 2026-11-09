@@ -79,6 +79,7 @@ static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state)
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -123,6 +124,7 @@ static void BM_McapWriterBufferWriterUnchunked(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -167,6 +169,7 @@ static void BM_McapWriterBufferWriterChunked(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -212,6 +215,7 @@ static void BM_McapWriterBufferWriterChunkedNoCRC(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -257,6 +261,7 @@ static void BM_McapWriterBufferWriterChunkedUnindexed(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -303,6 +308,7 @@ static void BM_McapWriterBufferWriterLZ4(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -349,6 +355,7 @@ static void BM_McapWriterBufferWriterZStd(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -396,6 +403,7 @@ static void BM_McapWriterBufferWriterZStdNoCRC(benchmark::State& state) {
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
@@ -638,6 +646,7 @@ static void BM_McapWriterBufferWriterChunkedManyChannels(benchmark::State& state
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
+    out.clear();
   }
 
   // Finish writing the file to memory
