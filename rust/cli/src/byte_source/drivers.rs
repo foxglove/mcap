@@ -12,6 +12,10 @@ use mcap::sans_io::{
 use mcap::McapError;
 
 use super::ByteSource;
+use crate::source::SourceOptions;
+
+/// Serialized footer record length: opcode, u64 body length, and the 20-byte body.
+const FOOTER_RECORD_LEN: u64 = 1 + 8 + 20;
 
 /// Opcode (1) and little-endian body length (8) that start every record.
 pub const RECORD_PREFIX_LEN: usize = 1 + 8;
@@ -72,11 +76,36 @@ pub fn record_length_limit(source: &dyn ByteSource) -> Option<usize> {
     source.size().and_then(|size| usize::try_from(size).ok())
 }
 
+/// Reads the leading [`Header`](mcap::records::Header) record, if present. Stops after the first
+/// record, and takes a leading chunk whole rather than decompressing it.
+pub fn read_header(source: &mut dyn ByteSource) -> Result<Option<mcap::records::Header>> {
+    let mut header = None;
+    try_for_each_linear_record(
+        source,
+        LinearReaderOptions::default().with_emit_chunks(true),
+        |opcode, data| {
+            if let mcap::records::Record::Header(found) = mcap::parse_record(opcode, data)? {
+                header = Some(found);
+            }
+            Ok(ControlFlow::Break(()))
+        },
+    )?;
+    Ok(header)
+}
+
 /// Load the MCAP summary section via [`SummaryReader`].
 ///
-/// Returns `Ok(None)` when the file has no summary section.
-pub fn read_summary(source: &mut dyn ByteSource) -> Result<Option<mcap::Summary>> {
+/// Returns `Ok(None)` when the file has no summary section. On a remote source the section is
+/// capped like any indexed read: over the no-opt-in budget it is refused before being fetched
+/// unless `--allow-remote-scan` was given.
+pub fn read_summary(
+    source: &mut dyn ByteSource,
+    source_options: SourceOptions,
+) -> Result<Option<mcap::Summary>> {
     let size = source.size();
+    if let Some(size) = size.filter(|_| source.is_remote()) {
+        require_remote_summary_budget(source, size, source_options)?;
+    }
     let mut options = SummaryReaderOptions::default();
     if let Some(size) = size {
         options = options.with_file_size(size);
@@ -103,6 +132,34 @@ pub fn read_summary(source: &mut dyn ByteSource) -> Result<Option<mcap::Summary>
     }
 
     Ok(reader.finish())
+}
+
+/// Reads the footer (already in the remote read-ahead window) for the summary length and applies
+/// the remote indexed-read budget before [`SummaryReader`] fetches anything. Malformed footers
+/// are left for the reader to report.
+fn require_remote_summary_budget(
+    source: &mut dyn ByteSource,
+    size: u64,
+    source_options: SourceOptions,
+) -> Result<()> {
+    let magic_len = mcap::MAGIC.len() as u64;
+    let Some(footer_start) = size.checked_sub(FOOTER_RECORD_LEN + magic_len) else {
+        return Ok(());
+    };
+    let footer = source.read_at(footer_start, FOOTER_RECORD_LEN as usize)?;
+    if footer.len() != FOOTER_RECORD_LEN as usize || footer[0] != mcap::records::op::FOOTER {
+        return Ok(());
+    }
+    let summary_start = u64::from_le_bytes(footer[9..17].try_into().expect("8-byte offset"));
+    if summary_start == 0 || summary_start > footer_start {
+        return Ok(());
+    }
+    crate::source::require_remote_indexed_read_budget(
+        source,
+        footer_start - summary_start,
+        source_options,
+        "remote summary section",
+    )
 }
 
 /// Fetch one indexed chunk and insert it into [`IndexedReader`].
