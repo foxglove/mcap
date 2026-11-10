@@ -76,7 +76,7 @@ fn cat_file(
     csv_state: &mut CsvState,
 ) -> Result<bool> {
     let mut input = byte_source::open_byte_source(file, source_options)?;
-    cat_from_source(sink, input.as_mut(), opts, source_options, csv_state)
+    cat_from_source(sink, input.as_mut(), opts, csv_state)
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -166,7 +166,6 @@ fn cat_from_source(
     sink: &mut OutputSink<impl std::io::Write>,
     source: &mut dyn ByteSource,
     opts: &CatOptions,
-    source_options: source::SourceOptions,
     csv_state: &mut CsvState,
 ) -> Result<bool> {
     let mut json_transcoders = JsonTranscoders::default();
@@ -174,22 +173,18 @@ fn cat_from_source(
         csv: csv_state,
         json: &mut json_transcoders,
     };
-    match cat_indexed(sink, source, opts, source_options, &mut out)? {
+    match cat_indexed(sink, source, opts, &mut out)? {
         IndexedCatResult::BrokenPipe => return Ok(true),
         IndexedCatResult::Done => return Ok(false),
         IndexedCatResult::NeedsLinear => {}
     }
-    source::require_remote_scan_for_linear(source, source_options).or_else(|err| {
-        // Preserve the historical remote cat wording when there is no usable chunk index.
-        if source.is_remote() {
-            bail!(
-                "{}: remote file has no chunk index; reading messages requires opt-in; {}",
-                source.display_name(),
-                source::remote_scan_opt_in_suffix()
-            );
-        }
-        Err(err)
-    })?;
+    if !source.scan_allowed() {
+        bail!(
+            "{}: remote file has no chunk index; reading messages requires opt-in; {}",
+            source.display_name(),
+            source::remote_scan_opt_in_suffix()
+        );
+    }
     cat_linear(sink, source, opts, &mut out)
 }
 
@@ -201,13 +196,7 @@ fn cat_mcap(
     csv_state: &mut CsvState,
 ) -> Result<bool> {
     let mut source = byte_source::MemorySource::new(mcap.to_vec());
-    cat_from_source(
-        sink,
-        &mut source,
-        opts,
-        source::SourceOptions::default(),
-        csv_state,
-    )
+    cat_from_source(sink, &mut source, opts, csv_state)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -221,17 +210,16 @@ fn cat_indexed(
     sink: &mut OutputSink<impl std::io::Write>,
     source: &mut dyn ByteSource,
     opts: &CatOptions,
-    source_options: source::SourceOptions,
     out: &mut MessageWriter<'_, '_>,
 ) -> Result<IndexedCatResult> {
-    let (summary, omitted_channels) = match byte_source::read_summary(source, source_options) {
+    let (summary, omitted_channels) = match byte_source::read_summary(source) {
         Ok(Some(summary)) => (summary, BTreeMap::new()),
         Ok(None) => return Ok(IndexedCatResult::NeedsLinear),
         // A spec-valid file may repeat a channel in the summary without repeating its schema,
         // leaving the schema defined only inside a chunk, which the crate reader rejects. For a
         // remote file, the CLI's summary parser omits such channels but names them, so the
         // in-chunk definitions can define them below without fetching the whole file.
-        Err(err) if source.is_remote() && parse::is_unknown_schema_error(&err) => {
+        Err(err) if source.prefers_indexed_reads() && parse::is_unknown_schema_error(&err) => {
             match parse::read_parsed_summary(source)? {
                 Some(parsed) => (parsed.summary, parsed.omitted_channels),
                 None => return Ok(IndexedCatResult::NeedsLinear),
@@ -263,8 +251,7 @@ fn cat_indexed(
         .chunk_indexes
         .iter()
         .any(|chunk| chunk.message_index_offsets.is_empty());
-    if source.is_remote() && has_chunks_without_message_indexes && !source_options.allow_remote_scan
-    {
+    if has_chunks_without_message_indexes && !source.scan_allowed() {
         bail!(
             "{}: remote file has chunk indexes without message indexes; reading messages requires opt-in; {}",
             source.display_name(),
@@ -293,7 +280,7 @@ fn cat_indexed(
 
     let planned_chunks =
         planned_chunk_reads(&summary, opts, &included_topics, needs_in_chunk_definitions);
-    if source.is_remote() && !planned_chunks.is_empty() && !source_options.allow_remote_scan {
+    if !planned_chunks.is_empty() && !source.scan_allowed() {
         // When chunk-local definitions must be collected, every chunk is read up front (a
         // definition can live in a chunk the filter would otherwise skip), so size the warning from
         // the full set rather than the filtered plan to avoid under-quoting the bytes fetched.
@@ -1392,7 +1379,6 @@ mod tests {
     use crate::byte_source::{ByteSource, MemorySource};
     use crate::cli::{CatCommand, CatFormat, TimeFormat};
     use crate::render;
-    use crate::source::SourceOptions;
     use std::io::BufWriter;
 
     fn cat_indexed_bytes(
@@ -1402,7 +1388,7 @@ mod tests {
         out: &mut MessageWriter<'_, '_>,
     ) -> anyhow::Result<IndexedCatResult> {
         let mut source = MemorySource::new(mcap.to_vec());
-        cat_indexed(sink, &mut source, opts, SourceOptions::default(), out)
+        cat_indexed(sink, &mut source, opts, out)
     }
 
     /// Runs `f` with a buffered plain sink and returns flushed stdout bytes.
@@ -2469,8 +2455,8 @@ mod tests {
             self.inner.size()
         }
 
-        fn is_remote(&self) -> bool {
-            false
+        fn indexed_read_budget(&self) -> Option<u64> {
+            None
         }
 
         fn display_name(&self) -> String {

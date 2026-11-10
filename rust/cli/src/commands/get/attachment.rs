@@ -17,14 +17,13 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
         source::ensure_distinct_local_input_output(&args.file, output)?;
     }
     let mut input = byte_source::open_byte_source(&args.file, source_options)?;
-    let indexes = attachment_indexes(input.as_mut(), &args.name, source_options)?;
+    let indexes = attachment_indexes(input.as_mut(), &args.name)?;
     let index = select_attachment_index(&indexes, &args.name, args.offset)?;
     let length = usize::try_from(index.length)
         .context("indexed record is too large to read on this platform")?;
     source::require_remote_indexed_read_budget(
         input.as_ref(),
         index.length,
-        source_options,
         "remote attachment record",
     )?;
     let bytes = input.read_at(index.offset, length)?;
@@ -41,14 +40,12 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
 fn attachment_indexes(
     source: &mut dyn ByteSource,
     name: &str,
-    source_options: source::SourceOptions,
 ) -> Result<Vec<mcap::records::AttachmentIndex>> {
     let header = byte_source::read_header(source)?;
-    let parsed = match parse::try_parsed_mcap_from_summary(source, header.clone(), source_options)?
-    {
+    let parsed = match parse::try_parsed_mcap_from_summary(source, header.clone())? {
         Some(parsed) => parsed,
         None => {
-            source::require_remote_scan_for_linear(source, source_options)?;
+            source::require_remote_scan_for_linear(source)?;
             return Ok(
                 parse::parse_mcap_linear_from_byte_source(source, header)?.attachment_indexes
             );
@@ -62,7 +59,7 @@ fn attachment_indexes(
         || (missing_requested_name && parsed.summary_available && parsed.statistics.is_none())
     {
         parse::warn_index_scan("attachment");
-        source::require_remote_scan_for_linear(source, source_options)?;
+        source::require_remote_scan_for_linear(source)?;
         return parse::collect_attachment_indexes_from_byte_source(source);
     }
     Ok(parsed.attachment_indexes)
@@ -124,7 +121,6 @@ mod tests {
     use crate::byte_source::{ByteSource, MemorySource};
     use crate::cli::GetAttachmentCommand;
     use crate::context::CommandContext;
-    use crate::source::SourceOptions;
     use mcap::records::AttachmentIndex;
 
     fn attachment(name: &str, offset: u64) -> AttachmentIndex {
@@ -191,8 +187,8 @@ mod tests {
             self.inner.size()
         }
 
-        fn is_remote(&self) -> bool {
-            false
+        fn indexed_read_budget(&self) -> Option<u64> {
+            None
         }
 
         fn display_name(&self) -> String {
@@ -288,8 +284,7 @@ mod tests {
         // Complete index with statistics: a missing name is simply absent, and the data section
         // must not be read.
         let mut source = RecordingSource::new(mcap_with_attachment());
-        let indexes =
-            attachment_indexes(&mut source, "missing", SourceOptions::default()).expect("indexes");
+        let indexes = attachment_indexes(&mut source, "missing").expect("indexes");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "a");
         let record_last_byte = indexes[0].offset + indexes[0].length - 1;
@@ -310,8 +305,7 @@ mod tests {
                 .emit_summary_records(false)
                 .emit_summary_offsets(false),
         ));
-        let indexes =
-            attachment_indexes(&mut source, "missing", SourceOptions::default()).expect("indexes");
+        let indexes = attachment_indexes(&mut source, "missing").expect("indexes");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "a");
         let record_last_byte = indexes[0].offset + indexes[0].length - 1;
@@ -345,8 +339,7 @@ mod tests {
             writer.finish().expect("finish");
         }
         let mut source = MemorySource::new(mcap_bytes);
-        let indexes =
-            attachment_indexes(&mut source, "missing", SourceOptions::default()).expect("scan");
+        let indexes = attachment_indexes(&mut source, "missing").expect("scan");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "a");
     }

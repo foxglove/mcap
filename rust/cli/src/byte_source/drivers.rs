@@ -12,7 +12,6 @@ use mcap::sans_io::{
 use mcap::McapError;
 
 use super::ByteSource;
-use crate::source::SourceOptions;
 
 /// Serialized footer record length: opcode, u64 body length, and the 20-byte body.
 const FOOTER_RECORD_LEN: u64 = 1 + 8 + 20;
@@ -98,13 +97,10 @@ pub fn read_header(source: &mut dyn ByteSource) -> Result<Option<mcap::records::
 /// Returns `Ok(None)` when the file has no summary section. On a remote source the section is
 /// capped like any indexed read: over the no-opt-in budget it is refused before being fetched
 /// unless `--allow-remote-scan` was given.
-pub fn read_summary(
-    source: &mut dyn ByteSource,
-    source_options: SourceOptions,
-) -> Result<Option<mcap::Summary>> {
+pub fn read_summary(source: &mut dyn ByteSource) -> Result<Option<mcap::Summary>> {
     let size = source.size();
-    if let Some(size) = size.filter(|_| source.is_remote()) {
-        require_remote_summary_budget(source, size, source_options)?;
+    if let Some(size) = size.filter(|_| source.indexed_read_budget().is_some()) {
+        require_remote_summary_budget(source, size)?;
     }
     let mut options = SummaryReaderOptions::default();
     if let Some(size) = size {
@@ -137,11 +133,7 @@ pub fn read_summary(
 /// Reads the footer (already in the remote read-ahead window) for the summary length and applies
 /// the remote indexed-read budget before [`SummaryReader`] fetches anything. Malformed footers
 /// are left for the reader to report.
-fn require_remote_summary_budget(
-    source: &mut dyn ByteSource,
-    size: u64,
-    source_options: SourceOptions,
-) -> Result<()> {
+fn require_remote_summary_budget(source: &mut dyn ByteSource, size: u64) -> Result<()> {
     let magic_len = mcap::MAGIC.len() as u64;
     let Some(footer_start) = size.checked_sub(FOOTER_RECORD_LEN + magic_len) else {
         return Ok(());
@@ -157,7 +149,6 @@ fn require_remote_summary_budget(
     crate::source::require_remote_indexed_read_budget(
         source,
         footer_start - summary_start,
-        source_options,
         "remote summary section",
     )
 }

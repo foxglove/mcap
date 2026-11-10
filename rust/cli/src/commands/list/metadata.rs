@@ -8,26 +8,24 @@ use crate::{parse, render, source};
 pub fn run(ctx: &CommandContext, args: ListMetadataCommand) -> Result<()> {
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let mut input = byte_source::open_byte_source(&args.file, source_options)?;
-    let records = collect_metadata_records(input.as_mut(), source_options)?;
+    let records = collect_metadata_records(input.as_mut())?;
     render::print_table(&render_metadata_rows(&records)?);
     Ok(())
 }
 
 fn collect_metadata_records(
     source: &mut dyn ByteSource,
-    source_options: source::SourceOptions,
 ) -> Result<Vec<(mcap::records::MetadataIndex, mcap::records::Metadata)>> {
     let header = byte_source::read_header(source)?;
-    let indexes = match parse::try_parsed_mcap_from_summary(source, header.clone(), source_options)?
-    {
+    let indexes = match parse::try_parsed_mcap_from_summary(source, header.clone())? {
         Some(parsed) if parse::metadata_indexes_need_scan(&parsed) => {
             parse::warn_index_scan("metadata");
-            source::require_remote_scan_for_linear(source, source_options)?;
+            source::require_remote_scan_for_linear(source)?;
             parse::collect_metadata_indexes_from_byte_source(source)?
         }
         Some(parsed) => parsed.metadata_indexes,
         None => {
-            source::require_remote_scan_for_linear(source, source_options)?;
+            source::require_remote_scan_for_linear(source)?;
             parse::parse_mcap_linear_from_byte_source(source, header)?.metadata_indexes
         }
     };
@@ -35,12 +33,7 @@ fn collect_metadata_records(
     let total_bytes = indexes
         .iter()
         .fold(0u64, |total, index| total.saturating_add(index.length));
-    source::require_remote_indexed_read_budget(
-        &*source,
-        total_bytes,
-        source_options,
-        "remote metadata records",
-    )?;
+    source::require_remote_indexed_read_budget(&*source, total_bytes, "remote metadata records")?;
 
     let mut records = Vec::new();
     for index in indexes {

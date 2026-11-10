@@ -1342,20 +1342,25 @@ pub(crate) fn remote_scan_opt_in_suffix() -> &'static str {
     "pass --allow-remote-scan to continue"
 }
 
-/// Errors when a remote [`ByteSource`] would fetch more than
-/// [`MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN`] of indexed records without `--allow-remote-scan`.
-/// Local sources are never capped: one record at a time is bounded by the record, and there is
-/// no download to protect.
+/// Errors when an indexed read of `total_bytes` is over the source's
+/// [indexed-read budget](crate::byte_source::ByteSource::indexed_read_budget). A source without
+/// a budget, such as a local file or a remote opened with `--allow-remote-scan`, is never
+/// capped.
 pub(crate) fn require_remote_indexed_read_budget(
     source: &dyn crate::byte_source::ByteSource,
     total_bytes: u64,
-    options: SourceOptions,
     description: &str,
 ) -> Result<()> {
-    if !source.is_remote() {
-        return Ok(());
+    match source.indexed_read_budget() {
+        Some(budget) => require_within_indexed_read_budget(total_bytes, budget, description),
+        None => Ok(()),
     }
-    require_remote_read_budget_bytes(total_bytes, options, description)
+}
+
+/// The most bytes one indexed read may take from a remote source opened with `options`, or
+/// `None` when `--allow-remote-scan` lifts the cap.
+pub(crate) fn remote_indexed_read_budget(options: SourceOptions) -> Option<u64> {
+    (!options.allow_remote_scan).then_some(MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN)
 }
 
 /// The byte-count half of [`require_remote_indexed_read_budget`], for paths that are remote by
@@ -1365,13 +1370,25 @@ fn require_remote_read_budget_bytes(
     options: SourceOptions,
     description: &str,
 ) -> Result<()> {
-    if options.allow_remote_scan || total_bytes <= MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN {
+    match remote_indexed_read_budget(options) {
+        Some(budget) => require_within_indexed_read_budget(total_bytes, budget, description),
+        None => Ok(()),
+    }
+}
+
+/// Refuses an indexed read of `total_bytes` that is over `budget`, naming the opt-in.
+fn require_within_indexed_read_budget(
+    total_bytes: u64,
+    budget: u64,
+    description: &str,
+) -> Result<()> {
+    if total_bytes <= budget {
         return Ok(());
     }
     bail!(
         "{description} would read {} (exceeds {} cap without --allow-remote-scan); {}",
         human_bytes(total_bytes),
-        human_bytes(MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN),
+        human_bytes(budget),
         remote_scan_opt_in_suffix()
     );
 }
@@ -1390,9 +1407,8 @@ pub(crate) fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -
 /// Errors when a remote [`ByteSource`] would need a full linear scan without `--allow-remote-scan`.
 pub(crate) fn require_remote_scan_for_linear(
     source: &dyn crate::byte_source::ByteSource,
-    options: SourceOptions,
 ) -> Result<()> {
-    if source.is_remote() && !options.allow_remote_scan {
+    if !source.scan_allowed() {
         bail!(
             "{}: remote file requires a full scan; {}",
             source.display_name(),
@@ -2720,9 +2736,8 @@ mod tests {
             crate::byte_source::open_byte_source(Path::new(&url), super::SourceOptions::default())
                 .expect("remote open");
         let after_open = requests.load(Ordering::SeqCst);
-        let err =
-            crate::byte_source::read_summary(source.as_mut(), super::SourceOptions::default())
-                .expect_err("oversized remote summary should require scan opt-in");
+        let err = crate::byte_source::read_summary(source.as_mut())
+            .expect_err("oversized remote summary should require scan opt-in");
         let message = format!("{err:#}");
         assert!(message.contains("remote summary section"), "{message}");
         assert!(message.contains("--allow-remote-scan"), "{message}");
@@ -3016,10 +3031,9 @@ mod tests {
         let mut source =
             crate::byte_source::open_byte_source(Path::new(&url), super::SourceOptions::default())
                 .expect("remote open");
-        let summary =
-            crate::byte_source::read_summary(source.as_mut(), super::SourceOptions::default())
-                .expect("remote summary read")
-                .expect("summary should be present");
+        let summary = crate::byte_source::read_summary(source.as_mut())
+            .expect("remote summary read")
+            .expect("summary should be present");
 
         assert!(summary.channels.contains_key(&channel_id));
     }
@@ -3102,10 +3116,9 @@ mod tests {
         let mut source =
             crate::byte_source::open_byte_source(Path::new(&url), super::SourceOptions::default())
                 .expect("remote summary should use range GET, not HEAD");
-        let summary =
-            crate::byte_source::read_summary(source.as_mut(), super::SourceOptions::default())
-                .expect("remote summary read")
-                .expect("summary should be present");
+        let summary = crate::byte_source::read_summary(source.as_mut())
+            .expect("remote summary read")
+            .expect("summary should be present");
 
         assert!(summary.channels.contains_key(&channel_id));
     }
@@ -3268,7 +3281,8 @@ mod tests {
         let reader = super::open_remote_range_reader(Path::new(&url))
             .expect("remote open")
             .expect("range support");
-        let mut source = crate::byte_source::RemoteRangeSource::new(reader);
+        let mut source =
+            crate::byte_source::RemoteRangeSource::new(reader, super::SourceOptions::new(true));
         let window = 64 * 1024;
         source.set_read_ahead_bytes(window);
         let after_open = requests.load(Ordering::SeqCst);
@@ -3283,9 +3297,9 @@ mod tests {
         );
     }
 
-    /// Minimal [`ByteSource`] whose only behavior is reporting whether it is remote.
+    /// Minimal [`ByteSource`] whose only behavior is reporting its indexed-read budget.
     struct FakeSource {
-        remote: bool,
+        indexed_read_budget: Option<u64>,
     }
 
     impl crate::byte_source::ByteSource for FakeSource {
@@ -3293,8 +3307,8 @@ mod tests {
             Some(0)
         }
 
-        fn is_remote(&self) -> bool {
-            self.remote
+        fn indexed_read_budget(&self) -> Option<u64> {
+            self.indexed_read_budget
         }
 
         fn display_name(&self) -> String {
@@ -3311,39 +3325,44 @@ mod tests {
     }
 
     #[test]
-    fn indexed_read_budget_only_caps_remote_sources() {
+    fn indexed_read_budget_only_caps_sources_with_a_budget() {
         use super::{require_remote_indexed_read_budget, MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN};
 
         let over_cap = MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN + 1;
-        let local = FakeSource { remote: false };
-        let remote = FakeSource { remote: true };
-        let no_opt_in = super::SourceOptions::new(false);
-        let opt_in = super::SourceOptions::new(true);
+        let local = FakeSource {
+            indexed_read_budget: None,
+        };
+        let remote = FakeSource {
+            indexed_read_budget: super::remote_indexed_read_budget(super::SourceOptions::new(
+                false,
+            )),
+        };
+        let remote_with_opt_in = FakeSource {
+            indexed_read_budget: super::remote_indexed_read_budget(super::SourceOptions::new(true)),
+        };
 
-        require_remote_indexed_read_budget(&local, over_cap, no_opt_in, "attachment record")
+        require_remote_indexed_read_budget(&local, over_cap, "attachment record")
             .expect("local reads are never capped");
         require_remote_indexed_read_budget(
             &remote,
             MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN,
-            no_opt_in,
             "remote attachment record",
         )
         .expect("remote reads at the cap need no opt-in");
-        let err = require_remote_indexed_read_budget(
-            &remote,
-            over_cap,
-            no_opt_in,
-            "remote attachment record",
-        )
-        .expect_err("remote reads over the cap need opt-in");
+        let err = require_remote_indexed_read_budget(&remote, over_cap, "remote attachment record")
+            .expect_err("remote reads over the cap need opt-in");
         let message = format!("{err:#}");
         assert!(
             message.contains("remote attachment record would read"),
             "{message}"
         );
         assert!(message.contains("--allow-remote-scan"), "{message}");
-        require_remote_indexed_read_budget(&remote, over_cap, opt_in, "remote attachment record")
-            .expect("--allow-remote-scan lifts the cap");
+        require_remote_indexed_read_budget(
+            &remote_with_opt_in,
+            over_cap,
+            "remote attachment record",
+        )
+        .expect("--allow-remote-scan lifts the cap");
     }
 
     #[test]
@@ -3357,10 +3376,9 @@ mod tests {
         let after_open = requests.load(Ordering::SeqCst);
         assert_eq!(after_open, 1, "open should cost exactly the tail prefetch");
 
-        let summary =
-            crate::byte_source::read_summary(source.as_mut(), super::SourceOptions::default())
-                .expect("remote summary read")
-                .expect("summary should be present");
+        let summary = crate::byte_source::read_summary(source.as_mut())
+            .expect("remote summary read")
+            .expect("summary should be present");
         assert!(summary.channels.contains_key(&channel_id));
         assert_eq!(
             requests.load(Ordering::SeqCst),

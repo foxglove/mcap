@@ -40,18 +40,18 @@ pub fn run(ctx: &CommandContext, args: DuCommand) -> Result<()> {
     let mut input = byte_source::open_byte_source(&args.file, source_options)?;
 
     let (usage, used_approximate) = if args.approximate {
-        match collect_usage_approximate(input.as_mut(), source_options)? {
+        match collect_usage_approximate(input.as_mut())? {
             Some(usage) => (usage, true),
             None => {
                 eprintln!(
                     "Warning: summary/chunk indexes unavailable; falling back to exact du scan."
                 );
-                source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
+                source::require_remote_scan_for_linear(input.as_ref())?;
                 (collect_usage_exact(input.as_mut())?, false)
             }
         }
     } else {
-        source::require_remote_scan_for_linear(input.as_ref(), source_options)?;
+        source::require_remote_scan_for_linear(input.as_ref())?;
         (collect_usage_exact(input.as_mut())?, false)
     };
 
@@ -102,23 +102,19 @@ fn collect_usage_exact(source: &mut dyn ByteSource) -> Result<Usage> {
     Ok(usage)
 }
 
-fn collect_usage_approximate(
-    source: &mut dyn ByteSource,
-    source_options: source::SourceOptions,
-) -> Result<Option<Usage>> {
-    collect_usage_approximate_batched(source, source_options, APPROX_INDEX_BATCH_BYTES)
+fn collect_usage_approximate(source: &mut dyn ByteSource) -> Result<Option<Usage>> {
+    collect_usage_approximate_batched(source, APPROX_INDEX_BATCH_BYTES)
 }
 
 fn collect_usage_approximate_batched(
     source: &mut dyn ByteSource,
-    source_options: source::SourceOptions,
     index_batch_bytes: u64,
 ) -> Result<Option<Usage>> {
-    let summary = match byte_source::read_summary(source, source_options) {
+    let summary = match byte_source::read_summary(source) {
         Ok(Some(summary)) => summary,
-        // A remote input without opt-in cannot fall back to the exact scan; surface the summary
-        // error (e.g. the summary-size cap) rather than a misleading scan refusal.
-        Err(err) if source.is_remote() && !source_options.allow_remote_scan => return Err(err),
+        // An input that may not be scanned cannot fall back to the exact scan; surface the
+        // summary error (e.g. the summary-size cap) rather than a misleading scan refusal.
+        Err(err) if !source.scan_allowed() => return Err(err),
         Ok(None) | Err(_) => return Ok(None),
     };
 
@@ -148,7 +144,7 @@ fn collect_usage_approximate_batched(
         total_chunk_on_disk += chunk.chunk_length;
         total_message_indexes_on_disk += chunk.message_index_length;
     }
-    require_remote_message_index_budget(source, &summary.chunk_indexes, source_options)?;
+    require_remote_message_index_budget(source, &summary.chunk_indexes)?;
 
     usage
         .record_kind_size
@@ -259,17 +255,11 @@ fn process_message(
 fn require_remote_message_index_budget(
     source: &dyn ByteSource,
     chunk_indexes: &[records::ChunkIndex],
-    source_options: source::SourceOptions,
 ) -> Result<()> {
     let total_bytes = chunk_indexes.iter().fold(0u64, |total, chunk| {
         total.saturating_add(chunk.message_index_length)
     });
-    source::require_remote_indexed_read_budget(
-        source,
-        total_bytes,
-        source_options,
-        "remote message indexes",
-    )
+    source::require_remote_indexed_read_budget(source, total_bytes, "remote message indexes")
 }
 
 /// Sums per-topic message sizes from chunk message indexes in batches of at most
@@ -787,12 +777,9 @@ mod tests {
         );
 
         let exact = collect_usage_exact(&mut MemorySource::new(mcap.clone())).expect("exact");
-        let approximate = collect_usage_approximate(
-            &mut MemorySource::new(mcap),
-            crate::source::SourceOptions::default(),
-        )
-        .expect("approximate")
-        .expect("summary-backed approximate usage");
+        let approximate = collect_usage_approximate(&mut MemorySource::new(mcap))
+            .expect("approximate")
+            .expect("summary-backed approximate usage");
         assert_eq!(approximate.total_message_size, exact.total_message_size);
         assert_eq!(approximate.topic_message_size, exact.topic_message_size);
     }
@@ -814,12 +801,9 @@ mod tests {
             ],
             &["/left", "/right"],
         );
-        let summary = byte_source::read_summary(
-            &mut MemorySource::new(mcap.clone()),
-            crate::source::SourceOptions::default(),
-        )
-        .expect("summary read")
-        .expect("summary present");
+        let summary = byte_source::read_summary(&mut MemorySource::new(mcap.clone()))
+            .expect("summary read")
+            .expect("summary present");
         assert!(
             summary.chunk_indexes.len() >= 3,
             "fixture should span several chunks, got {}",
@@ -827,20 +811,16 @@ mod tests {
         );
 
         let exact = collect_usage_exact(&mut MemorySource::new(mcap.clone())).expect("exact");
-        let approximate = collect_usage_approximate_batched(
-            &mut MemorySource::new(mcap),
-            crate::source::SourceOptions::default(),
-            1,
-        )
-        .expect("approximate")
-        .expect("summary-backed approximate usage");
+        let approximate = collect_usage_approximate_batched(&mut MemorySource::new(mcap), 1)
+            .expect("approximate")
+            .expect("summary-backed approximate usage");
         assert_eq!(approximate.total_message_size, exact.total_message_size);
         assert_eq!(approximate.topic_message_size, exact.topic_message_size);
     }
 
-    /// Minimal [`ByteSource`] whose only behavior is reporting whether it is remote.
+    /// Minimal [`ByteSource`] whose only behavior is reporting its indexed-read budget.
     struct FakeSource {
-        remote: bool,
+        indexed_read_budget: Option<u64>,
     }
 
     impl ByteSource for FakeSource {
@@ -848,8 +828,8 @@ mod tests {
             Some(0)
         }
 
-        fn is_remote(&self) -> bool {
-            self.remote
+        fn indexed_read_budget(&self) -> Option<u64> {
+            self.indexed_read_budget
         }
 
         fn display_name(&self) -> String {
@@ -866,7 +846,7 @@ mod tests {
     }
 
     #[test]
-    fn remote_message_index_budget_only_caps_remote_sources() {
+    fn message_index_budget_only_caps_sources_with_a_budget() {
         let over_cap = crate::source::MAX_REMOTE_INDEXED_BYTES_WITHOUT_SCAN / 2 + 1;
         let chunk_indexes = (0..2)
             .map(|_| records::ChunkIndex {
@@ -881,28 +861,31 @@ mod tests {
                 uncompressed_size: 0,
             })
             .collect::<Vec<_>>();
-        let no_opt_in = crate::source::SourceOptions::new(false);
-        let opt_in = crate::source::SourceOptions::new(true);
+        let local = FakeSource {
+            indexed_read_budget: None,
+        };
+        let remote = FakeSource {
+            indexed_read_budget: crate::source::remote_indexed_read_budget(
+                crate::source::SourceOptions::new(false),
+            ),
+        };
+        let remote_with_opt_in = FakeSource {
+            indexed_read_budget: crate::source::remote_indexed_read_budget(
+                crate::source::SourceOptions::new(true),
+            ),
+        };
 
-        require_remote_message_index_budget(
-            &FakeSource { remote: false },
-            &chunk_indexes,
-            no_opt_in,
-        )
-        .expect("local message indexes are never capped");
-        let err = require_remote_message_index_budget(
-            &FakeSource { remote: true },
-            &chunk_indexes,
-            no_opt_in,
-        )
-        .expect_err("remote message indexes over the cap need opt-in");
+        require_remote_message_index_budget(&local, &chunk_indexes)
+            .expect("local message indexes are never capped");
+        let err = require_remote_message_index_budget(&remote, &chunk_indexes)
+            .expect_err("remote message indexes over the cap need opt-in");
         let message = format!("{err:#}");
         assert!(
             message.contains("remote message indexes would read"),
             "{message}"
         );
         assert!(message.contains("--allow-remote-scan"), "{message}");
-        require_remote_message_index_budget(&FakeSource { remote: true }, &chunk_indexes, opt_in)
+        require_remote_message_index_budget(&remote_with_opt_in, &chunk_indexes)
             .expect("--allow-remote-scan lifts the cap");
     }
 
@@ -935,22 +918,16 @@ mod tests {
             writer.finish().expect("finish writer");
         }
 
-        let approximate = collect_usage_approximate(
-            &mut MemorySource::new(buffer),
-            crate::source::SourceOptions::default(),
-        )
-        .expect("approximate");
+        let approximate =
+            collect_usage_approximate(&mut MemorySource::new(buffer)).expect("approximate");
         assert!(approximate.is_none());
     }
 
     #[test]
     fn approximate_usage_falls_back_when_no_chunk_indexes() {
         let mcap = write_test_file(false, None, &[(0, 0, 10), (0, 1, 10)], &["/data"]);
-        let approximate = collect_usage_approximate(
-            &mut MemorySource::new(mcap),
-            crate::source::SourceOptions::default(),
-        )
-        .expect("approximate");
+        let approximate =
+            collect_usage_approximate(&mut MemorySource::new(mcap)).expect("approximate");
         assert!(approximate.is_none());
     }
 

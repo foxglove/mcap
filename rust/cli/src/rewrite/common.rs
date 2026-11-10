@@ -9,7 +9,7 @@ use std::path::Path;
 use anyhow::{bail, Context, Result};
 
 use crate::byte_source::{self, ByteSource};
-use crate::source::{self, SourceOptions};
+use crate::source;
 
 /// Output encoding for a rewritten MCAP. Both the single-input and merge pipelines build one of
 /// these and hand it to [`create_writer`] so the writer is configured identically.
@@ -158,11 +158,8 @@ fn summary_section_has_chunk_indexes(source: &mut dyn ByteSource) -> Result<bool
 /// summary, no chunk indexes, or (via [`mcap::McapError::UnknownSchema`]) a summary that does not
 /// claim to be chunk-indexed. Returns an error for a summary that claims chunk indexes but is
 /// missing the channel/schema records an indexed read needs.
-pub(crate) fn read_indexed_summary(
-    source: &mut dyn ByteSource,
-    source_options: SourceOptions,
-) -> Result<Option<mcap::Summary>> {
-    match byte_source::read_summary(source, source_options) {
+pub(crate) fn read_indexed_summary(source: &mut dyn ByteSource) -> Result<Option<mcap::Summary>> {
+    match byte_source::read_summary(source) {
         Ok(Some(summary)) if summary.chunk_indexes.is_empty() => Ok(None),
         Ok(Some(summary)) if summary_supports_indexed_read(&summary) => Ok(Some(summary)),
         Ok(Some(_)) => Err(incomplete_indexed_summary_error()),
@@ -314,11 +311,8 @@ fn message_index_count(prefix: &[u8], offset: u64, size: Option<u64>) -> Option<
 
 /// Errors when a remote source would read message-chunk payloads without `--allow-remote-scan`.
 /// Summary and named-record reads do not need the flag.
-pub(crate) fn require_remote_scan_for_chunks(
-    source: &dyn ByteSource,
-    options: SourceOptions,
-) -> Result<()> {
-    if source.is_remote() && !options.allow_remote_scan {
+pub(crate) fn require_remote_scan_for_chunks(source: &dyn ByteSource) -> Result<()> {
+    if !source.scan_allowed() {
         bail!(
             "{}: reading remote message chunks requires opt-in; {}",
             source.display_name(),

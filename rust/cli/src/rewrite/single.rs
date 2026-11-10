@@ -30,7 +30,7 @@ pub(crate) fn run(args: RewriteOptions, source_options: SourceOptions) -> Result
     };
 
     let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
-    filter_to_writer(input.as_mut(), sink, &opts, disable_seeking, source_options)
+    filter_to_writer(input.as_mut(), sink, &opts, disable_seeking)
 }
 
 fn filter_to_writer<W: Write + Seek>(
@@ -38,11 +38,10 @@ fn filter_to_writer<W: Write + Seek>(
     sink: W,
     opts: &ResolvedOptions,
     disable_seeking: bool,
-    source_options: SourceOptions,
 ) -> Result<()> {
     // Both paths read message data, so a remote input without opt-in is refused before the header
     // read, summary read, or message-index probe issues any request.
-    common::require_remote_scan_for_chunks(input, source_options)?;
+    common::require_remote_scan_for_chunks(input)?;
     let profile = common::read_header(input)?
         .map(|header| header.profile)
         .unwrap_or_default();
@@ -57,7 +56,7 @@ fn filter_to_writer<W: Write + Seek>(
         },
         disable_seeking,
     )?;
-    filter_with_writer(input, &mut writer, opts, source_options)?;
+    filter_with_writer(input, &mut writer, opts)?;
     writer.finish().context("failed to finish mcap writer")?;
     Ok(())
 }
@@ -66,9 +65,8 @@ fn filter_with_writer<W: Write + Seek>(
     input: &mut dyn ByteSource,
     writer: &mut mcap::Writer<W>,
     opts: &ResolvedOptions,
-    source_options: SourceOptions,
 ) -> Result<()> {
-    let summary = common::read_indexed_summary(input, source_options)?;
+    let summary = common::read_indexed_summary(input)?;
     if let Some(summary) = &summary {
         // An index-only read skips messages that live outside the chunk indexes (loose top-level
         // messages, or chunks missing message-index records). Divert to a lossless linear scan only
@@ -501,13 +499,7 @@ mod tests {
     fn filter_bytes(input: &[u8], opts: &ResolvedOptions) -> Result<Vec<u8>> {
         let mut source = MemorySource::new(input.to_vec());
         let mut output = Cursor::new(Vec::new());
-        filter_to_writer(
-            &mut source,
-            &mut output,
-            opts,
-            false,
-            SourceOptions::default(),
-        )?;
+        filter_to_writer(&mut source, &mut output, opts, false)?;
         Ok(output.into_inner())
     }
 
@@ -671,7 +663,6 @@ mod tests {
             &mut Cursor::new(Vec::new()),
             &include_all_options(),
             false,
-            SourceOptions::default(),
         )
         .expect_err("a corrupt chunk must fail the rewrite");
         assert!(
@@ -1963,9 +1954,11 @@ mod tests {
     }
 
     /// Wraps [`MemorySource`] and counts bytes returned from [`ByteSource::read_at`].
-    /// Reports `is_remote() == true` so rewrite remote-scan gating applies.
+    /// Reports the indexed-read budget of a remote source opened with `options`, so rewrite
+    /// remote-scan gating applies.
     struct CountingRemoteSource {
         inner: MemorySource,
+        options: SourceOptions,
         bytes_read: Arc<std::sync::atomic::AtomicUsize>,
     }
 
@@ -1974,8 +1967,8 @@ mod tests {
             self.inner.size()
         }
 
-        fn is_remote(&self) -> bool {
-            true
+        fn indexed_read_budget(&self) -> Option<u64> {
+            crate::source::remote_indexed_read_budget(self.options)
         }
 
         fn display_name(&self) -> String {
@@ -1999,6 +1992,7 @@ mod tests {
         let input = write_filter_test_input(true, false);
         let mut source = CountingRemoteSource {
             inner: MemorySource::new(input),
+            options: SourceOptions::default(),
             bytes_read: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         };
 
@@ -2008,14 +2002,8 @@ mod tests {
         opts.include_attachments = false;
 
         let mut output = Cursor::new(Vec::new());
-        let err = filter_to_writer(
-            &mut source,
-            &mut output,
-            &opts,
-            false,
-            SourceOptions::default(),
-        )
-        .expect_err("indexed remote filter should require --allow-remote-scan");
+        let err = filter_to_writer(&mut source, &mut output, &opts, false)
+            .expect_err("indexed remote filter should require --allow-remote-scan");
         assert!(err.to_string().contains("--allow-remote-scan"));
         assert_eq!(
             source.bytes_read.load(std::sync::atomic::Ordering::SeqCst),
@@ -2033,6 +2021,7 @@ mod tests {
         let bytes_read = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let mut source = CountingRemoteSource {
             inner: MemorySource::new(input),
+            options: SourceOptions::new(true),
             bytes_read: bytes_read.clone(),
         };
 
@@ -2042,14 +2031,8 @@ mod tests {
         opts.include_attachments = false;
 
         let mut output = Cursor::new(Vec::new());
-        filter_to_writer(
-            &mut source,
-            &mut output,
-            &opts,
-            false,
-            SourceOptions::new(true),
-        )
-        .expect("indexed remote filter with --allow-remote-scan should succeed");
+        filter_to_writer(&mut source, &mut output, &opts, false)
+            .expect("indexed remote filter with --allow-remote-scan should succeed");
 
         let read = bytes_read.load(Ordering::SeqCst);
         assert!(

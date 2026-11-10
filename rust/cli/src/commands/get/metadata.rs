@@ -10,8 +10,8 @@ use crate::{parse, source};
 pub fn run(ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
     let source_options = source::SourceOptions::new(ctx.allow_remote_scan());
     let mut input = byte_source::open_byte_source(&args.file, source_options)?;
-    let indexes = metadata_indexes(input.as_mut(), &args.name, source_options)?;
-    let metadata = merged_metadata_for_name(input.as_mut(), &indexes, &args.name, source_options)?;
+    let indexes = metadata_indexes(input.as_mut(), &args.name)?;
+    let metadata = merged_metadata_for_name(input.as_mut(), &indexes, &args.name)?;
     let pretty =
         serde_json::to_string_pretty(&metadata).context("failed to serialize metadata to JSON")?;
     println!("{pretty}");
@@ -21,14 +21,12 @@ pub fn run(ctx: &CommandContext, args: GetMetadataCommand) -> Result<()> {
 fn metadata_indexes(
     source: &mut dyn ByteSource,
     name: &str,
-    source_options: source::SourceOptions,
 ) -> Result<Vec<mcap::records::MetadataIndex>> {
     let header = byte_source::read_header(source)?;
-    let parsed = match parse::try_parsed_mcap_from_summary(source, header.clone(), source_options)?
-    {
+    let parsed = match parse::try_parsed_mcap_from_summary(source, header.clone())? {
         Some(parsed) => parsed,
         None => {
-            source::require_remote_scan_for_linear(source, source_options)?;
+            source::require_remote_scan_for_linear(source)?;
             return Ok(parse::parse_mcap_linear_from_byte_source(source, header)?.metadata_indexes);
         }
     };
@@ -40,7 +38,7 @@ fn metadata_indexes(
         || (missing_requested_name && parsed.summary_available && parsed.statistics.is_none())
     {
         parse::warn_index_scan("metadata");
-        source::require_remote_scan_for_linear(source, source_options)?;
+        source::require_remote_scan_for_linear(source)?;
         return parse::collect_metadata_indexes_from_byte_source(source);
     }
     Ok(parsed.metadata_indexes)
@@ -50,7 +48,6 @@ fn merged_metadata_for_name(
     source: &mut dyn ByteSource,
     indexes: &[mcap::records::MetadataIndex],
     name: &str,
-    source_options: source::SourceOptions,
 ) -> Result<BTreeMap<String, String>> {
     let mut matching_indexes: Vec<&mcap::records::MetadataIndex> =
         indexes.iter().filter(|index| index.name == name).collect();
@@ -62,12 +59,7 @@ fn merged_metadata_for_name(
     let total_bytes = matching_indexes
         .iter()
         .fold(0u64, |total, index| total.saturating_add(index.length));
-    source::require_remote_indexed_read_budget(
-        &*source,
-        total_bytes,
-        source_options,
-        "remote metadata records",
-    )?;
+    source::require_remote_indexed_read_budget(&*source, total_bytes, "remote metadata records")?;
 
     let mut output = BTreeMap::new();
     for index in matching_indexes {
@@ -91,7 +83,6 @@ mod tests {
 
     use super::{merged_metadata_for_name, metadata_indexes};
     use crate::byte_source::{ByteSource, MemorySource};
-    use crate::source::SourceOptions;
 
     fn metadata_index(name: &str, offset: u64, length: u64) -> MetadataIndex {
         MetadataIndex {
@@ -104,13 +95,8 @@ mod tests {
     #[test]
     fn errors_when_metadata_name_missing() {
         let mut source = MemorySource::new(Vec::new());
-        let err = merged_metadata_for_name(
-            &mut source,
-            &[metadata_index("demo", 0, 0)],
-            "other",
-            SourceOptions::default(),
-        )
-        .expect_err("missing metadata should fail");
+        let err = merged_metadata_for_name(&mut source, &[metadata_index("demo", 0, 0)], "other")
+            .expect_err("missing metadata should fail");
         assert_eq!(err.to_string(), "metadata other does not exist");
     }
 
@@ -149,13 +135,9 @@ mod tests {
         };
 
         let mut source = MemorySource::new(mcap_bytes);
-        let latest = merged_metadata_for_name(
-            &mut source,
-            &[second.clone(), first.clone()],
-            "config",
-            SourceOptions::default(),
-        )
-        .expect("metadata should merge");
+        let latest =
+            merged_metadata_for_name(&mut source, &[second.clone(), first.clone()], "config")
+                .expect("metadata should merge");
         assert_eq!(
             latest,
             BTreeMap::from([
@@ -211,8 +193,8 @@ mod tests {
             self.inner.size()
         }
 
-        fn is_remote(&self) -> bool {
-            false
+        fn indexed_read_budget(&self) -> Option<u64> {
+            None
         }
 
         fn display_name(&self) -> String {
@@ -240,8 +222,7 @@ mod tests {
                 .emit_summary_records(true)
                 .emit_summary_offsets(true),
         ));
-        let indexes =
-            metadata_indexes(&mut source, "missing", SourceOptions::default()).expect("indexes");
+        let indexes = metadata_indexes(&mut source, "missing").expect("indexes");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "demo");
         let record_last_byte = indexes[0].offset + indexes[0].length - 1;
@@ -262,8 +243,7 @@ mod tests {
                 .emit_summary_records(false)
                 .emit_summary_offsets(false),
         ));
-        let indexes =
-            metadata_indexes(&mut source, "missing", SourceOptions::default()).expect("indexes");
+        let indexes = metadata_indexes(&mut source, "missing").expect("indexes");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "demo");
         let record_last_byte = indexes[0].offset + indexes[0].length - 1;
@@ -294,8 +274,7 @@ mod tests {
             writer.finish().expect("finish");
         }
         let mut source = MemorySource::new(mcap_bytes);
-        let indexes =
-            metadata_indexes(&mut source, "missing", SourceOptions::default()).expect("scan");
+        let indexes = metadata_indexes(&mut source, "missing").expect("scan");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "demo");
     }
