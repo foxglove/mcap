@@ -17,7 +17,7 @@ Three benchmark scenarios are included:
 
 ```
 benchmarking/
-  cpp_bench/          C++ benchmarks (header-only mcap library)
+  cpp_bench/          C++ benchmarks (mcap CMake project in ../cpp)
   rust_bench/         Rust benchmarks (mcap crate)
   go_bench/           Go benchmarks (mcap module)
   python_bench/       Python benchmarks (mcap package)
@@ -32,14 +32,21 @@ benchmarking/
 ### C++
 
 - **g++** (or another C++17 compiler)
+- **cmake** 3.18 or later
+- **pkg-config**
 - **liblz4-dev** — LZ4 compression library
 - **libzstd-dev** — Zstandard compression library
 
 On Debian/Ubuntu:
 
 ```
-sudo apt install g++ liblz4-dev libzstd-dev
+sudo apt install g++ cmake pkg-config liblz4-dev libzstd-dev
 ```
+
+The benches build against the mcap CMake project in `../cpp` (see
+`cpp_bench/CMakeLists.txt`), which locates lz4 and zstd through their CMake
+package configs or pkg-config. Pass extra configure flags with
+`make cpp_bench CMAKE_ARGS=...`.
 
 ### Rust
 
