@@ -3,6 +3,7 @@ use std::io::Write as _;
 
 use anyhow::{Context, Result};
 
+use crate::byte_source;
 use crate::cli::GetAttachmentCommand;
 use crate::context::CommandContext;
 use crate::{parse, source};
@@ -15,57 +16,21 @@ pub fn run(ctx: &CommandContext, args: GetAttachmentCommand) -> Result<()> {
     if let Some(output) = args.output.as_deref() {
         source::ensure_distinct_local_input_output(&args.file, output)?;
     }
-    if let Some(remote) = source::try_open_remote_mcap(&args.file, source_options)? {
-        let index = select_attachment_index(
-            &remote.summary().attachment_indexes,
-            &args.name,
-            args.offset,
-        )?;
-        let bytes = remote.read_range(
-            index.offset,
-            usize::try_from(index.length)
-                .context("indexed record is too large to read on this platform")?,
-        )?;
-        let attachment = parse::parse_attachment_record(&bytes).with_context(|| {
-            format!(
-                "failed to read attachment {} at offset {}",
-                args.name, index.offset
-            )
-        })?;
-        write_attachment_data(attachment.data.as_ref(), args.output.as_deref())?;
-    } else {
-        let mcap = source::load_path(&args.file, source_options)?;
-        let parsed = parse::parse_mcap(&mcap)?;
-        let indexes = local_attachment_indexes(&mcap, parsed, &args.name)?;
-        let index = select_attachment_index(&indexes, &args.name, args.offset)?;
-        let attachment = mcap::read::attachment(&mcap, index).with_context(|| {
-            format!(
-                "failed to read attachment {} at offset {}",
-                args.name, index.offset
-            )
-        })?;
-        write_attachment_data(attachment.data.as_ref(), args.output.as_deref())?;
-    }
-
+    let mut input = byte_source::open_byte_source(&args.file, source_options)?;
+    let indexes: Vec<mcap::records::AttachmentIndex> =
+        parse::top_level_indexes(input.as_mut(), Some(&args.name))?;
+    let index = select_attachment_index(&indexes, &args.name, args.offset)?;
+    let length = usize::try_from(index.length)
+        .context("indexed record is too large to read on this platform")?;
+    let bytes = input.read_at(index.offset, length)?;
+    let attachment = parse::parse_attachment_record(&bytes).with_context(|| {
+        format!(
+            "failed to read attachment {} at offset {}",
+            args.name, index.offset
+        )
+    })?;
+    write_attachment_data(attachment.data.as_ref(), args.output.as_deref())?;
     Ok(())
-}
-
-fn local_attachment_indexes(
-    mcap: &[u8],
-    parsed: parse::ParsedMcap,
-    name: &str,
-) -> Result<Vec<mcap::records::AttachmentIndex>> {
-    let missing_requested_name = !parsed
-        .attachment_indexes
-        .iter()
-        .any(|index| index.name == name);
-    if parse::attachment_indexes_need_scan(&parsed)
-        || (missing_requested_name && parsed.summary_available && parsed.statistics.is_none())
-    {
-        parse::warn_index_scan("attachment");
-        return parse::collect_attachment_indexes_linear(mcap);
-    }
-    Ok(parsed.attachment_indexes)
 }
 
 fn write_attachment_data(data: &[u8], output: Option<&std::path::Path>) -> Result<()> {
@@ -120,11 +85,10 @@ fn select_attachment_index<'a>(
 mod tests {
     use std::borrow::Cow;
 
-    use super::{local_attachment_indexes, select_attachment_index};
+    use super::select_attachment_index;
     use crate::cli::GetAttachmentCommand;
     use crate::context::CommandContext;
-    use crate::parse;
-    use mcap::records::{AttachmentIndex, Statistics};
+    use mcap::records::AttachmentIndex;
 
     fn attachment(name: &str, offset: u64) -> AttachmentIndex {
         AttachmentIndex {
@@ -228,68 +192,5 @@ mod tests {
         let err = select_attachment_index(&indexes, "a", Some(999))
             .expect_err("single record should enforce provided offset");
         assert_eq!(err.to_string(), "failed to find attachment a at offset 999");
-    }
-
-    #[test]
-    fn missing_name_does_not_scan_when_attachment_indexes_are_complete() {
-        let parsed = parse::ParsedMcap {
-            summary_available: true,
-            statistics: Some(Statistics {
-                attachment_count: 1,
-                ..Default::default()
-            }),
-            attachment_indexes: vec![attachment("a", 10)],
-            ..Default::default()
-        };
-
-        let indexes =
-            local_attachment_indexes(&[], parsed, "missing").expect("complete index is enough");
-        assert_eq!(indexes.len(), 1);
-        assert_eq!(indexes[0].name, "a");
-    }
-
-    #[test]
-    fn missing_name_does_not_rescan_summaryless_input() {
-        let parsed = parse::ParsedMcap {
-            attachment_indexes: vec![attachment("a", 10)],
-            ..Default::default()
-        };
-
-        let indexes =
-            local_attachment_indexes(&[], parsed, "missing").expect("linear parse is complete");
-        assert_eq!(indexes.len(), 1);
-        assert_eq!(indexes[0].name, "a");
-    }
-
-    #[test]
-    fn missing_name_scans_when_attachment_index_completeness_is_unknown() {
-        let mut mcap_bytes = Vec::new();
-        {
-            let mut writer = mcap::WriteOptions::new()
-                .emit_summary_records(false)
-                .emit_summary_offsets(false)
-                .emit_attachment_indexes(false)
-                .create(std::io::Cursor::new(&mut mcap_bytes))
-                .expect("writer");
-            writer
-                .attach(&mcap::Attachment {
-                    log_time: 1,
-                    create_time: 1,
-                    name: "a".to_string(),
-                    media_type: "application/octet-stream".to_string(),
-                    data: Cow::Borrowed(b"payload"),
-                })
-                .expect("attachment");
-            writer.finish().expect("finish");
-        }
-        let parsed = parse::ParsedMcap {
-            summary_available: true,
-            ..Default::default()
-        };
-
-        let indexes =
-            local_attachment_indexes(&mcap_bytes, parsed, "missing").expect("linear scan");
-        assert_eq!(indexes.len(), 1);
-        assert_eq!(indexes[0].name, "a");
     }
 }

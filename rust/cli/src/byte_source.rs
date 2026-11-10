@@ -6,7 +6,8 @@ mod drivers;
 
 pub use drivers::{
     for_each_linear_record, for_each_top_level_record_of, parse_record_bytes, read_footer,
-    read_summary, service_indexed_chunk, try_for_each_linear_record, RECORD_PREFIX_LEN,
+    read_summary, read_summary_section, service_indexed_chunk, try_for_each_linear_record,
+    RECORD_PREFIX_LEN,
 };
 
 use std::fs::File;
@@ -18,15 +19,25 @@ use tempfile::NamedTempFile;
 
 use crate::source::{
     is_remote_url, materialize_input, open_remote_range_reader, redacted_display,
-    remote_scan_opt_in_suffix, require_remote_scan_allowed, RemoteRangeReader, SourceOptions,
-    PLEASE_SUPPLY_FILE,
+    remote_indexed_read_budget, remote_scan_opt_in_suffix, require_remote_scan_allowed,
+    RemoteRangeReader, SourceOptions, PLEASE_SUPPLY_FILE,
 };
 
 /// Byte-oriented input with optional random access.
 pub trait ByteSource {
     /// File size in bytes, or `None` when unknown (streaming inputs without a known length).
     fn size(&self) -> Option<u64>;
+    /// The most bytes one indexed read, such as the summary section, may take from this source,
+    /// or `None` when it is unlimited. Readers check it before fetching.
+    fn indexed_read_budget(&self) -> Option<u64>;
     fn display_name(&self) -> String;
+
+    /// Describes a failure to read the summary section for the user. The default is the error
+    /// as it is. A remote source names the file and what is wrong with it, which can take
+    /// further requests.
+    fn summary_read_error(&self, err: anyhow::Error) -> anyhow::Error {
+        err
+    }
 
     /// Read up to `dest.len()` bytes at `offset` into `dest`, returning the count (0 at EOF).
     /// Sans-io drivers use this to fill `reader.insert(need)` without an extra allocation.
@@ -136,6 +147,10 @@ impl ByteSource for LocalFileSource {
         Some(self.size)
     }
 
+    fn indexed_read_budget(&self) -> Option<u64> {
+        None
+    }
+
     fn display_name(&self) -> String {
         self.path.display().to_string()
     }
@@ -198,16 +213,19 @@ pub struct RemoteRangeSource {
     window: Vec<u8>,
     window_start: u64,
     read_ahead_bytes: usize,
+    /// The indexed-read cap `options` asked for at open; `None` under `--allow-remote-scan`.
+    indexed_read_budget: Option<u64>,
 }
 
 impl RemoteRangeSource {
-    pub(crate) fn new(mut inner: RemoteRangeReader) -> Self {
+    pub(crate) fn new(mut inner: RemoteRangeReader, options: SourceOptions) -> Self {
         let (window_start, window) = inner.take_tail().unwrap_or_default();
         Self {
             inner,
             window,
             window_start,
             read_ahead_bytes: REMOTE_READ_AHEAD_BYTES,
+            indexed_read_budget: remote_indexed_read_budget(options),
         }
     }
 
@@ -250,8 +268,21 @@ impl ByteSource for RemoteRangeSource {
         Some(self.inner.size())
     }
 
+    fn indexed_read_budget(&self) -> Option<u64> {
+        self.indexed_read_budget
+    }
+
     fn display_name(&self) -> String {
         self.inner.display_url().to_string()
+    }
+
+    fn summary_read_error(&self, err: anyhow::Error) -> anyhow::Error {
+        // Callers recover from an unknown schema by its error type, which the description
+        // would replace.
+        if crate::parse::is_unknown_schema_error(&err) {
+            return err;
+        }
+        self.inner.summary_read_error(err)
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -321,6 +352,10 @@ impl<R: Read> ByteSource for SequentialSource<R> {
         None
     }
 
+    fn indexed_read_budget(&self) -> Option<u64> {
+        None
+    }
+
     fn display_name(&self) -> String {
         self.name.clone()
     }
@@ -356,12 +391,23 @@ impl<R: Read> ByteSource for SequentialSource<R> {
 #[cfg(test)]
 pub struct MemorySource {
     data: Vec<u8>,
+    indexed_read_budget: Option<u64>,
 }
 
 #[cfg(test)]
 impl MemorySource {
     pub fn new(data: impl Into<Vec<u8>>) -> Self {
-        Self { data: data.into() }
+        Self {
+            data: data.into(),
+            indexed_read_budget: None,
+        }
+    }
+
+    /// Gives the source an indexed-read budget, as a remote source opened without
+    /// `--allow-remote-scan` has.
+    pub fn with_indexed_read_budget(mut self, budget: u64) -> Self {
+        self.indexed_read_budget = Some(budget);
+        self
     }
 }
 
@@ -369,6 +415,10 @@ impl MemorySource {
 impl ByteSource for MemorySource {
     fn size(&self) -> Option<u64> {
         Some(self.data.len() as u64)
+    }
+
+    fn indexed_read_budget(&self) -> Option<u64> {
+        self.indexed_read_budget
     }
 
     fn display_name(&self) -> String {
@@ -446,7 +496,7 @@ pub fn open_stdin_byte_source() -> Result<Box<dyn ByteSource>> {
 
 fn open_remote_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dyn ByteSource>> {
     match open_remote_range_reader(path)? {
-        Some(reader) => Ok(Box::new(RemoteRangeSource::new(reader))),
+        Some(reader) => Ok(Box::new(RemoteRangeSource::new(reader, options))),
         None if !options.allow_remote_scan => {
             bail!(
                 "failed to read {}\nRemote server does not support range requests; {}",
@@ -487,6 +537,10 @@ impl<F: FnMut(u64, &[u8]) -> Result<()>> InstrumentedSource<F> {
 impl<F: FnMut(u64, &[u8]) -> Result<()>> ByteSource for InstrumentedSource<F> {
     fn size(&self) -> Option<u64> {
         self.inner.size()
+    }
+
+    fn indexed_read_budget(&self) -> Option<u64> {
+        self.inner.indexed_read_budget()
     }
 
     fn display_name(&self) -> String {
