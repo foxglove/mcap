@@ -114,7 +114,6 @@ fn filter_indexed<W: Write + Seek>(
     // preamble. The other orders keep the log-time preamble written up front.
     let fold_seeds_into_groups = matches!(opts.order, MessageOrder::Topic);
     let mut pre_start_buffered = Vec::<BufferedMessage>::new();
-    let mut known_channel_ids = BTreeSet::<u16>::new();
 
     if !opts.last_per_channel_topics.is_empty() && opts.start > 0 {
         let target_topics: BTreeSet<String> = summary
@@ -197,17 +196,13 @@ fn filter_indexed<W: Write + Seek>(
                         data: message.data,
                     });
                 } else {
-                    write_message(
-                        writer,
-                        &mut known_channel_ids,
-                        &mcap::Message {
-                            channel,
-                            sequence: message.sequence,
-                            log_time: message.log_time,
-                            publish_time: message.publish_time,
-                            data: Cow::Borrowed(message.data.as_slice()),
-                        },
-                    )?;
+                    writer.write(&mcap::Message {
+                        channel,
+                        sequence: message.sequence,
+                        log_time: message.log_time,
+                        publish_time: message.publish_time,
+                        data: Cow::Borrowed(message.data.as_slice()),
+                    })?;
                 }
             }
         }
@@ -262,28 +257,19 @@ fn filter_indexed<W: Write + Seek>(
                             data: data.to_vec(),
                         });
                     } else {
-                        write_message(
-                            writer,
-                            &mut known_channel_ids,
-                            &mcap::Message {
-                                channel,
-                                sequence: header.sequence,
-                                log_time: header.log_time,
-                                publish_time: header.publish_time,
-                                data: Cow::Borrowed(data),
-                            },
-                        )?;
+                        writer.write(&mcap::Message {
+                            channel,
+                            sequence: header.sequence,
+                            log_time: header.log_time,
+                            publish_time: header.publish_time,
+                            data: Cow::Borrowed(data),
+                        })?;
                     }
                 }
             }
         }
         if buffer_for_ordering {
-            write_ordered_buffer(
-                writer,
-                &mut known_channel_ids,
-                buffered_messages,
-                opts.order,
-            )?;
+            write_ordered_buffer(writer, buffered_messages, opts.order)?;
         }
     }
 
@@ -318,7 +304,6 @@ struct BufferedMessage {
 /// a single-topic reader fetch one byte range instead of scanning chunks scattered across the file.
 fn write_ordered_buffer<W: Write + Seek>(
     writer: &mut mcap::Writer<W>,
-    known_channel_ids: &mut BTreeSet<u16>,
     mut messages: Vec<BufferedMessage>,
     order: MessageOrder,
 ) -> Result<()> {
@@ -348,42 +333,13 @@ fn write_ordered_buffer<W: Write + Seek>(
             }
             previous_channel_id = Some(message.channel.id);
         }
-        write_message(
-            writer,
-            known_channel_ids,
-            &mcap::Message {
-                channel: message.channel.clone(),
-                sequence: message.sequence,
-                log_time: message.log_time,
-                publish_time: message.publish_time,
-                data: Cow::Borrowed(message.data.as_slice()),
-            },
-        )?;
-    }
-    Ok(())
-}
-
-/// Writes one message, adding its channel and schema to the writer on first use. Later messages
-/// on that channel go through `write_to_known_channel`, which does not check the channel and
-/// schema content again. The input readers reject a redefined channel ID, so an ID in
-/// `known_channel_ids` always refers to the same channel.
-fn write_message<W: Write + Seek>(
-    writer: &mut mcap::Writer<W>,
-    known_channel_ids: &mut BTreeSet<u16>,
-    message: &mcap::Message,
-) -> Result<()> {
-    if known_channel_ids.insert(message.channel.id) {
-        writer.write(message)?;
-    } else {
-        writer.write_to_known_channel(
-            &mcap::records::MessageHeader {
-                channel_id: message.channel.id,
-                sequence: message.sequence,
-                log_time: message.log_time,
-                publish_time: message.publish_time,
-            },
-            &message.data,
-        )?;
+        writer.write(&mcap::Message {
+            channel: message.channel.clone(),
+            sequence: message.sequence,
+            log_time: message.log_time,
+            publish_time: message.publish_time,
+            data: Cow::Borrowed(message.data.as_slice()),
+        })?;
     }
     Ok(())
 }
@@ -415,7 +371,6 @@ fn filter_linear<W: Write + Seek>(
     // Messages buffered for the sorted path. This holds the whole selected message set in memory,
     // so the summaryless ordered path is not memory-bounded.
     let mut buffered_messages = Vec::<BufferedMessage>::new();
-    let mut known_channel_ids = BTreeSet::<u16>::new();
     // Attachments are written after the messages by a pass of their own, which is skipped when
     // this pass, which sees every top-level record, met none.
     let mut saw_attachment = false;
@@ -465,17 +420,13 @@ fn filter_linear<W: Write + Seek>(
                             data: data.into_owned(),
                         });
                     } else {
-                        write_message(
-                            writer,
-                            &mut known_channel_ids,
-                            &mcap::Message {
-                                channel,
-                                sequence: header.sequence,
-                                log_time: header.log_time,
-                                publish_time: header.publish_time,
-                                data: Cow::Borrowed(data.as_ref()),
-                            },
-                        )?;
+                        writer.write(&mcap::Message {
+                            channel,
+                            sequence: header.sequence,
+                            log_time: header.log_time,
+                            publish_time: header.publish_time,
+                            data: Cow::Borrowed(data.as_ref()),
+                        })?;
                     }
                 }
                 // Metadata is handled up front; everything else (indexes, statistics, etc.) is
@@ -489,12 +440,7 @@ fn filter_linear<W: Write + Seek>(
     // Buffered messages are sorted and written before the attachments. The sort is stable, so
     // equal keys keep their insertion (file) order, matching the indexed reader's tie-break.
     if buffer_for_ordering {
-        write_ordered_buffer(
-            writer,
-            &mut known_channel_ids,
-            buffered_messages,
-            opts.order,
-        )?;
+        write_ordered_buffer(writer, buffered_messages, opts.order)?;
     }
 
     // Attachments are written last, after all messages (see module docs), and are kept regardless
