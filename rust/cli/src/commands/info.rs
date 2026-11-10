@@ -321,13 +321,28 @@ struct CompressionStats {
     uncompressed_size: u64,
 }
 
+/// Processing order for events at the same timestamp: ends, then single-timestamp chunks, then
+/// starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ChunkEventKind {
+    End,
+    Instant,
+    Start,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct ChunkEvent {
     time: u64,
-    is_start: bool,
+    kind: ChunkEventKind,
     uncompressed_size: u64,
 }
 
+/// Returns whether any chunks overlap, the max number of chunks a log-time reader holds
+/// decompressed at once, and their total uncompressed size.
+///
+/// Readers break log-time ties by file position, so a chunk ending at `t` is drained before a
+/// chunk starting at `t` is decompressed. Chunks that only share a boundary timestamp therefore
+/// don't overlap.
 fn count_chunk_overlaps(chunks: &[mcap::records::ChunkIndex]) -> (bool, usize, u64) {
     if chunks.len() < 2 {
         if let Some(chunk) = chunks.first() {
@@ -338,40 +353,60 @@ fn count_chunk_overlaps(chunks: &[mcap::records::ChunkIndex]) -> (bool, usize, u
 
     let mut events = Vec::with_capacity(chunks.len() * 2);
     for chunk in chunks {
-        events.push(ChunkEvent {
-            time: chunk.message_start_time,
-            is_start: true,
-            uncompressed_size: chunk.uncompressed_size,
-        });
-        events.push(ChunkEvent {
-            time: chunk.message_end_time,
-            is_start: false,
-            uncompressed_size: chunk.uncompressed_size,
-        });
+        let (start, end, size) = (
+            chunk.message_start_time,
+            chunk.message_end_time,
+            chunk.uncompressed_size,
+        );
+        if start == end {
+            events.push(ChunkEvent {
+                time: start,
+                kind: ChunkEventKind::Instant,
+                uncompressed_size: size,
+            });
+        } else {
+            events.push(ChunkEvent {
+                time: start,
+                kind: ChunkEventKind::Start,
+                uncompressed_size: size,
+            });
+            events.push(ChunkEvent {
+                time: end,
+                kind: ChunkEventKind::End,
+                uncompressed_size: size,
+            });
+        }
     }
 
-    events.sort_by(|a, b| {
-        a.time
-            .cmp(&b.time)
-            .then_with(|| b.is_start.cmp(&a.is_start))
-    });
+    events.sort_by_key(|event| (event.time, event.kind));
 
     let mut active = 0usize;
     let mut max_active = 0usize;
     let mut current_size = 0u64;
     let mut max_size = 0u64;
+    let mut record_peak = |active: usize, size: u64| {
+        if active > max_active || (active == max_active && size > max_size) {
+            max_active = active;
+            max_size = size;
+        }
+    };
 
     for event in events {
-        if event.is_start {
-            active += 1;
-            current_size += event.uncompressed_size;
-            if active > max_active || (active == max_active && current_size > max_size) {
-                max_active = active;
-                max_size = current_size;
+        match event.kind {
+            ChunkEventKind::Start => {
+                active += 1;
+                current_size += event.uncompressed_size;
+                record_peak(active, current_size);
             }
-        } else {
-            active = active.saturating_sub(1);
-            current_size = current_size.saturating_sub(event.uncompressed_size);
+            // Sorted after chunks ending at this timestamp and before chunks starting at it, so
+            // it only counts against chunks that span it.
+            ChunkEventKind::Instant => {
+                record_peak(active + 1, current_size + event.uncompressed_size);
+            }
+            ChunkEventKind::End => {
+                active = active.saturating_sub(1);
+                current_size = current_size.saturating_sub(event.uncompressed_size);
+            }
         }
     }
 
@@ -387,36 +422,43 @@ mod tests {
     use crate::parse::{ParsedMcap, ParsedSchema};
     use mcap::records::{self, AttachmentIndex, ChunkIndex, Header, MetadataIndex, Statistics};
 
+    fn chunk(start: u64, end: u64, uncompressed_size: u64) -> ChunkIndex {
+        ChunkIndex {
+            message_start_time: start,
+            message_end_time: end,
+            chunk_start_offset: 0,
+            chunk_length: 0,
+            message_index_offsets: BTreeMap::new(),
+            message_index_length: 0,
+            compression: "zstd".to_string(),
+            compressed_size: 0,
+            uncompressed_size,
+        }
+    }
+
     #[test]
     fn overlaps_counts_concurrent_chunks() {
-        let chunks = vec![
-            ChunkIndex {
-                message_start_time: 10,
-                message_end_time: 20,
-                chunk_start_offset: 0,
-                chunk_length: 0,
-                message_index_offsets: BTreeMap::new(),
-                message_index_length: 0,
-                compression: "zstd".to_string(),
-                compressed_size: 10,
-                uncompressed_size: 100,
-            },
-            ChunkIndex {
-                message_start_time: 15,
-                message_end_time: 25,
-                chunk_start_offset: 0,
-                chunk_length: 0,
-                message_index_offsets: BTreeMap::new(),
-                message_index_length: 0,
-                compression: "zstd".to_string(),
-                compressed_size: 15,
-                uncompressed_size: 80,
-            },
-        ];
-        let (has_overlaps, max_active, max_size) = count_chunk_overlaps(&chunks);
-        assert!(has_overlaps);
-        assert_eq!(max_active, 2);
-        assert_eq!(max_size, 180);
+        let chunks = [chunk(10, 20, 100), chunk(15, 25, 80)];
+        assert_eq!(count_chunk_overlaps(&chunks), (true, 2, 180));
+    }
+
+    #[test]
+    fn overlaps_ignores_chunks_sharing_a_boundary_timestamp() {
+        let chunks = [chunk(10, 20, 100), chunk(20, 30, 80)];
+        assert_eq!(count_chunk_overlaps(&chunks), (false, 1, 100));
+    }
+
+    #[test]
+    fn overlaps_ignores_single_timestamp_chunk_between_its_neighbors() {
+        // One timestamp's messages split across three chunks.
+        let chunks = [chunk(10, 20, 100), chunk(20, 20, 120), chunk(20, 30, 80)];
+        assert_eq!(count_chunk_overlaps(&chunks), (false, 1, 120));
+    }
+
+    #[test]
+    fn overlaps_counts_single_timestamp_chunk_inside_another() {
+        let chunks = [chunk(10, 30, 100), chunk(20, 20, 50)];
+        assert_eq!(count_chunk_overlaps(&chunks), (true, 2, 150));
     }
 
     #[test]
