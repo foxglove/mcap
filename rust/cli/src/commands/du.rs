@@ -114,7 +114,7 @@ fn collect_usage_approximate_batched(
         Ok(Some(summary)) => summary,
         // An input that may not be scanned cannot fall back to the exact scan; surface the
         // summary error (e.g. the summary-size cap) rather than a misleading scan refusal.
-        Err(err) if !source.scan_allowed() => return Err(err),
+        Err(err) if !crate::source::scan_allowed(source) => return Err(err),
         Ok(None) | Err(_) => return Ok(None),
     };
 

@@ -31,11 +31,6 @@ pub trait ByteSource {
     /// or `None` when it is unlimited. A remote source carries the limit it was opened with, so
     /// a reader can refuse an oversized read before fetching it.
     fn indexed_read_budget(&self) -> Option<u64>;
-    /// Whether a reader may scan the whole source or read its message chunks. A source with an
-    /// indexed-read budget was opened without `--allow-remote-scan`, so it may not.
-    fn scan_allowed(&self) -> bool {
-        self.indexed_read_budget().is_none()
-    }
     /// Whether fetching bytes from this source is slow enough that a reader should work from
     /// the index where it can, even when a scan is allowed.
     fn prefers_indexed_reads(&self) -> bool {

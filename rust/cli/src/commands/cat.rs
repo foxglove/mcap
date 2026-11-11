@@ -178,7 +178,7 @@ fn cat_from_source(
         IndexedCatResult::Done => return Ok(false),
         IndexedCatResult::NeedsLinear => {}
     }
-    if !source.scan_allowed() {
+    if !crate::source::scan_allowed(source) {
         bail!(
             "{}: remote file has no chunk index; reading messages requires opt-in; {}",
             source.display_name(),
@@ -251,7 +251,7 @@ fn cat_indexed(
         .chunk_indexes
         .iter()
         .any(|chunk| chunk.message_index_offsets.is_empty());
-    if has_chunks_without_message_indexes && !source.scan_allowed() {
+    if has_chunks_without_message_indexes && !crate::source::scan_allowed(source) {
         bail!(
             "{}: remote file has chunk indexes without message indexes; reading messages requires opt-in; {}",
             source.display_name(),
@@ -280,7 +280,7 @@ fn cat_indexed(
 
     let planned_chunks =
         planned_chunk_reads(&summary, opts, &included_topics, needs_in_chunk_definitions);
-    if !planned_chunks.is_empty() && !source.scan_allowed() {
+    if !planned_chunks.is_empty() && !crate::source::scan_allowed(source) {
         // When chunk-local definitions must be collected, every chunk is read up front (a
         // definition can live in a chunk the filter would otherwise skip), so size the warning from
         // the full set rather than the filtered plan to avoid under-quoting the bytes fetched.

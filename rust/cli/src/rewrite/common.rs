@@ -312,7 +312,7 @@ fn message_index_count(prefix: &[u8], offset: u64, size: Option<u64>) -> Option<
 /// Errors when a remote source would read message-chunk payloads without `--allow-remote-scan`.
 /// Summary and named-record reads do not need the flag.
 pub(crate) fn require_remote_scan_for_chunks(source: &dyn ByteSource) -> Result<()> {
-    if !source.scan_allowed() {
+    if !crate::source::scan_allowed(source) {
         bail!(
             "{}: reading remote message chunks requires opt-in; {}",
             source.display_name(),

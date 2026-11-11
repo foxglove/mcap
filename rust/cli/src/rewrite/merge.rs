@@ -244,7 +244,7 @@ fn merge_inputs<W: Write + Seek>(
                 Ok(summary) => Ok(summary),
                 // An input that may not be scanned cannot fall back to a linear scan, so surface
                 // the summary error (e.g. the summary-size cap).
-                Err(err) if !source.scan_allowed() => Err(err),
+                Err(err) if !crate::source::scan_allowed(source.as_ref()) => Err(err),
                 // Otherwise summary lookup is best effort; fall back to a linear scan.
                 Err(_) => Ok(None),
             }

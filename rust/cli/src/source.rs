@@ -1404,11 +1404,17 @@ pub(crate) fn require_remote_scan_allowed(path: &Path, options: SourceOptions) -
     );
 }
 
+/// Whether a reader may scan the whole of `source` or read its message chunks. A source with an
+/// indexed-read budget was opened without `--allow-remote-scan`, so it may not.
+pub(crate) fn scan_allowed(source: &dyn crate::byte_source::ByteSource) -> bool {
+    source.indexed_read_budget().is_none()
+}
+
 /// Errors when a remote [`ByteSource`] would need a full linear scan without `--allow-remote-scan`.
 pub(crate) fn require_remote_scan_for_linear(
     source: &dyn crate::byte_source::ByteSource,
 ) -> Result<()> {
-    if !source.scan_allowed() {
+    if !scan_allowed(source) {
         bail!(
             "{}: remote file requires a full scan; {}",
             source.display_name(),
