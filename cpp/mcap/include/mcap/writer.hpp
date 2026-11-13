@@ -24,6 +24,12 @@ struct MCAP_PUBLIC McapWriterOptions {
    */
   bool noChunkCRC = false;
   /**
+   * @brief Number of ZStandard worker threads that compress one chunk. 0
+   * compresses on the calling thread. A chunk splits into one job per worker,
+   * so the compression ratio drops a little as the count grows.
+   */
+  uint32_t zstdWorkers = 0;
+  /**
    * @brief Disable CRC calculations for Attachments.
    */
   bool noAttachmentCRC = false;
@@ -301,7 +307,7 @@ private:
  */
 class MCAP_PUBLIC ZStdWriter final : public IChunkWriter {
 public:
-  ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize);
+  ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize, uint32_t workers = 0);
   ~ZStdWriter() override;
 
   void handleWrite(const std::byte* data, uint64_t size) override;

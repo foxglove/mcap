@@ -265,10 +265,15 @@ int ZStdCompressionLevel(CompressionLevel level) {
 
 // ZStdWriter //////////////////////////////////////////////////////////////////
 
-ZStdWriter::ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize) {
+ZStdWriter::ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize, uint32_t workers) {
   zstdContext_ = ZSTD_createCCtx();
   ZSTD_CCtx_setParameter(zstdContext_, ZSTD_c_compressionLevel,
                          internal::ZStdCompressionLevel(compressionLevel));
+  if (workers > 0) {
+    // A job is at least ZSTDMT_JOBSIZE_MIN (512 KiB); zstd clamps smaller values.
+    ZSTD_CCtx_setParameter(zstdContext_, ZSTD_c_nbWorkers, static_cast<int>(workers));
+    ZSTD_CCtx_setParameter(zstdContext_, ZSTD_c_jobSize, static_cast<int>(chunkSize / workers));
+  }
   uncompressedBuffer_.reserve(chunkSize);
 }
 
@@ -346,7 +351,8 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
 #endif
 #ifndef MCAP_COMPRESSION_NO_ZSTD
     case Compression::Zstd:
-      zstdChunk_ = std::make_unique<ZStdWriter>(options.compressionLevel, chunkSize_);
+      zstdChunk_ =
+        std::make_unique<ZStdWriter>(options.compressionLevel, chunkSize_, options.zstdWorkers);
       break;
 #endif
   }
