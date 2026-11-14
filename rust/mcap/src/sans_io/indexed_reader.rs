@@ -1,7 +1,9 @@
 use binrw::BinRead;
+use crc32fast::hash as crc32;
 
 use crate::{
-    records::{op, ChunkIndex, MessageHeader},
+    read::parse_record,
+    records::{op, ChunkIndex, MessageHeader, Record},
     sans_io::{
         check_len,
         decompressor::{Decompressor, Decompressors},
@@ -19,9 +21,11 @@ struct MessageIndex {
 
 /// Events yielded by the IndexedReader.
 pub enum IndexedReadEvent<'a> {
-    /// The reader needs the content of a chunk record to continue yielding messages.
-    /// Read a slice out of the underlying file with the given offset and length into a buffer,
-    /// and call [`IndexedReader::insert_chunk_record_data`] with the result to get more messages.
+    /// The reader needs a whole chunk record to continue yielding messages: its opcode, record
+    /// length, header, and compressed data, starting at the chunk's `chunk_start_offset` and
+    /// spanning its `chunk_length`. Read a slice out of the underlying file with the given
+    /// offset and length into a buffer, and call [`IndexedReader::insert_chunk_record_data`]
+    /// with the result to get more messages.
     ReadChunkRequest { offset: u64, length: usize },
     /// A message from the file. Use the channel ID in `header` to associate this message with its
     /// channel and schema information in the summary.
@@ -107,6 +111,9 @@ pub struct IndexedReader {
     cur_message_index: usize,
     // What order messages should be yielded
     order: ReadOrder,
+    // Whether to check each chunk's recorded `uncompressed_crc` against its decompressed
+    // contents, failing with `McapError::BadChunkCrc` on a mismatch.
+    validate_chunk_crcs: bool,
     // Criteria for what messages from the MCAP should be yielded
     filter: Filter,
     // Reused across chunks. Starts with the built-in decoders. `Mutex` makes `IndexedReader`
@@ -122,13 +129,11 @@ fn chunk_request(
     index: &ChunkIndex,
     record_length_limit: Option<usize>,
 ) -> Option<McapResult<IndexedReadEvent<'static>>> {
-    let Some(length) = check_len(index.compressed_size, record_length_limit) else {
-        return Some(Err(McapError::ChunkTooLarge(index.compressed_size)));
+    let Some(length) = check_len(index.chunk_length, record_length_limit) else {
+        return Some(Err(McapError::ChunkTooLarge(index.chunk_length)));
     };
     Some(Ok(IndexedReadEvent::ReadChunkRequest {
-        offset: index
-            .compressed_data_offset()
-            .expect("chunk data offset checked in new()"),
+        offset: index.chunk_start_offset,
         length,
     }))
 }
@@ -239,6 +244,7 @@ impl IndexedReader {
             cur_message_index: 0,
             cur_chunk_index: 0,
             order: options.order,
+            validate_chunk_crcs: options.validate_chunk_crcs,
             filter: Filter {
                 bounds,
                 channel_ids,
@@ -332,36 +338,57 @@ impl IndexedReader {
         )
     }
 
-    /// Call to insert new compressed records into this reader. `offset` must be a valid file
-    /// offset to the start of the compressed data in a chunk. `compressed_data` must be a slice
-    /// containing the entire compressed data for that chunk.
+    /// Call to insert new chunk record data into this reader. `offset` must be a valid file
+    /// offset to the start of a chunk record (the chunk's `chunk_start_offset`).
+    /// `chunk_record_data` must be a slice containing the entire chunk record: its opcode,
+    /// record length, chunk header, and compressed data, as requested by
+    /// [`IndexedReadEvent::ReadChunkRequest`]. The header's `compression`, sizes, and
+    /// `uncompressed_crc` describe the data; the chunk index does not carry them.
     /// Chunk contents can be inserted into this reader in a different order than they are requested
     /// from `next_event`. Inserting the same chunk contents twice will result in an error.
     pub fn insert_chunk_record_data(
         &mut self,
         offset: u64,
-        compressed_data: &[u8],
+        chunk_record_data: &[u8],
     ) -> McapResult<()> {
         let chunk_indexes = &self.chunk_indexes[self.cur_chunk_index..];
         // linear search through our chunk indexes to figure out which one it is. In the common case,
         // the first chunk index will be right.
-        let Some((i, chunk_index)) = chunk_indexes.iter().enumerate().find(|(_, chunk_index)| {
-            let chunk_start_offset = chunk_index
-                .compressed_data_offset()
-                .expect("chunk data start offset checked in new()");
-            chunk_start_offset == offset
-        }) else {
+        let Some((i, chunk_index)) = chunk_indexes
+            .iter()
+            .enumerate()
+            .find(|(_, chunk_index)| chunk_index.chunk_start_offset == offset)
+        else {
             return Err(McapError::UnexpectedChunkDataInserted);
         };
-        if compressed_data.len() != chunk_index.compressed_size as usize {
+        if chunk_record_data.len() as u64 != chunk_index.chunk_length {
             return Err(McapError::UnexpectedChunkDataInserted);
         }
-        let uncompressed_size = chunk_index.uncompressed_size as usize;
+        // The chunk header precedes the compressed data it describes; parse it out of the
+        // record like the linear reader does, so we can decompress and integrity-check.
+        let Some(record_body) = chunk_record_data.get(9..) else {
+            return Err(McapError::UnexpectedEof);
+        };
+        if chunk_record_data[0] != op::CHUNK {
+            // The index points at something that is not a chunk record.
+            return Err(McapError::BadIndex);
+        }
+        let (header, compressed_data) = match parse_record(op::CHUNK, record_body)? {
+            Record::Chunk { header, data } => (header, data),
+            _ => unreachable!("parsing a chunk record yields a chunk"),
+        };
+        let compressed_data: &[u8] = compressed_data.as_ref();
+        // The header is the authority on the decompressed size, but it can disagree with a
+        // healthy index in a damaged file, so re-apply the record length limit before the
+        // decompressor allocates on its word.
+        check_len(header.uncompressed_size, self.record_length_limit)
+            .ok_or(McapError::ChunkTooLarge(header.uncompressed_size))?;
+        let uncompressed_size = header.uncompressed_size as usize;
         let slot_idx = find_or_make_chunk_slot(&mut self.chunk_slots, offset);
 
         let decompressors = unpoisoned(&mut self.decompressors);
         let slot = &mut self.chunk_slots[slot_idx];
-        let compression = chunk_index.compression.as_str();
+        let compression = header.compression.as_str();
         if compression.is_empty() {
             if compressed_data.len() != uncompressed_size {
                 return Err(McapError::DecompressionError(format!(
@@ -381,6 +408,14 @@ impl IndexedReader {
                 &mut slot.buf,
                 uncompressed_size,
             )?;
+        }
+        // A zero uncompressed_crc means the writer did not record one; only check otherwise.
+        if self.validate_chunk_crcs && header.uncompressed_crc != 0 {
+            let saved = header.uncompressed_crc;
+            let calculated = crc32(&slot.buf);
+            if saved != calculated {
+                return Err(McapError::BadChunkCrc { saved, calculated });
+            }
         }
         // index the current chunk slot
         // before starting, check if all existing message indexes have been exhausted and clear them
@@ -424,10 +459,9 @@ impl IndexedReader {
         match self.order {
             ReadOrder::File => {
                 let chunk_slot = &self.chunk_slots[message_index.chunk_slot_idx];
-                let data_offset = chunk_index
-                    .compressed_data_offset()
-                    .expect("chunk data start offset checked in new()");
-                data_offset < chunk_slot.data_start
+                // Both the pending chunk index and the loaded chunk slot key on
+                // `chunk_start_offset`, so they are directly comparable.
+                chunk_index.chunk_start_offset < chunk_slot.data_start
             }
             ReadOrder::LogTime => chunk_index.message_start_time < message_index.log_time,
             ReadOrder::ReverseLogTime => chunk_index.message_end_time > message_index.log_time,
@@ -534,7 +568,7 @@ pub enum ReadOrder {
     File,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct IndexedReaderOptions {
     /// If Some, only messages with a log time greater or equal to this value will be yielded.
     ///
@@ -564,6 +598,29 @@ pub struct IndexedReaderOptions {
     /// reader will also return an error on any chunk record where the compressed OR decompressed
     /// length are > `limit`.
     pub record_length_limit: Option<usize>,
+    /// Whether to validate each chunk's recorded `uncompressed_crc` against its decompressed
+    /// contents, failing with [`McapError::BadChunkCrc`] on a mismatch. On by default; a chunk
+    /// whose `uncompressed_crc` is zero did not record a CRC and is not checked. Set this to
+    /// `false` to read damaged or unchecked files without erroring, as the reader did before
+    /// chunk CRC validation was added.
+    pub validate_chunk_crcs: bool,
+}
+
+impl Default for IndexedReaderOptions {
+    #[allow(deprecated)]
+    fn default() -> Self {
+        Self {
+            start: None,
+            end: None,
+            bounds: LogTimeBounds::default(),
+            order: ReadOrder::default(),
+            include_topics: None,
+            record_length_limit: None,
+            // Safer to check integrity than not; mirroring the default recommended for the
+            // linear reader's `validate_chunk_crcs` in #1874.
+            validate_chunk_crcs: true,
+        }
+    }
 }
 
 impl IndexedReaderOptions {
@@ -669,6 +726,13 @@ impl IndexedReaderOptions {
     /// length are > `limit`.
     pub fn with_record_length_limit(mut self, limit: usize) -> Self {
         self.record_length_limit = Some(limit);
+        self
+    }
+
+    /// Configure whether to validate each chunk's recorded `uncompressed_crc` against its
+    /// decompressed contents (default: on). See [`Self::validate_chunk_crcs`].
+    pub fn with_validate_chunk_crcs(mut self, validate_chunk_crcs: bool) -> Self {
+        self.validate_chunk_crcs = validate_chunk_crcs;
         self
     }
 }
@@ -848,14 +912,20 @@ mod tests {
     #[test]
     fn test_uncompressed_chunk_size_mismatch_errors() {
         let mcap = make_mcap(None, &[&[(1, 10)]]);
-        let mut summary = crate::Summary::read(&mcap)
+        let summary = crate::Summary::read(&mcap)
             .expect("summary reading should succeed")
             .expect("there should be a summary");
-        // For an uncompressed chunk the writer sets compressed_size == uncompressed_size.
-        // Make the declared uncompressed size disagree with the chunk data length.
-        for ci in summary.chunk_indexes.iter_mut() {
-            ci.uncompressed_size += 1;
+        // For an uncompressed chunk the writer sets compressed_size == uncompressed_size. Make
+        // the chunk header's declared uncompressed size disagree with the chunk data length.
+        let mut mcap = mcap;
+        for ci in summary.chunk_indexes.iter() {
+            // opcode + record length + message start time + message end time
+            let uncompressed_size_at = ci.chunk_start_offset as usize + 9 + 8 + 8;
+            mcap[uncompressed_size_at] ^= 0xff;
         }
+        let summary = crate::Summary::read(&mcap)
+            .expect("summary reading should succeed")
+            .expect("there should be a summary");
         let mut reader = IndexedReader::new(&summary).expect("reader construction should not fail");
         let mut saw_request = false;
         while let Some(event) = reader.next_event() {
@@ -930,10 +1000,8 @@ mod tests {
                 Some(Err(err)) => panic!("indexed reader failed: {err}"),
                 Some(Ok(IndexedReadEvent::ReadChunkRequest { .. })) => {
                     let chunk_index = &my_chunk_indexes[cur_chunk_index];
-                    let offset = chunk_index
-                        .compressed_data_offset()
-                        .expect("chunk data start offset checked in new()");
-                    let len = chunk_index.compressed_size as usize;
+                    let offset = chunk_index.chunk_start_offset;
+                    let len = chunk_index.chunk_length as usize;
                     let chunk_buf = &mcap[offset as usize..][..len];
                     indexed_reader
                         .insert_chunk_record_data(offset, chunk_buf)
@@ -1249,6 +1317,178 @@ mod tests {
                 "decompression with {compression:?}"
             )
         }
+    }
+
+    /// Drive an IndexedReader over `mcap`, returning the first error from
+    /// `insert_chunk_record_data` if one occurs.
+    fn insert_error(mcap: &[u8], options: IndexedReaderOptions) -> Option<McapError> {
+        let summary = crate::Summary::read(mcap)
+            .expect("summary reading should succeed")
+            .expect("there should be a summary");
+        let mut reader = IndexedReader::new_with_options(&summary, options)
+            .expect("reader construction should not fail");
+        while let Some(event) = reader.next_event() {
+            match event.expect("indexed reader failed") {
+                IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                    let chunk_data = &mcap[offset as usize..][..length];
+                    if let Err(err) = reader.insert_chunk_record_data(offset, chunk_data) {
+                        return Some(err);
+                    }
+                }
+                IndexedReadEvent::Message { .. } => {}
+            }
+        }
+        None
+    }
+
+    /// Offset of the `uncompressed_crc` field within a chunk record, given where the chunk
+    /// record starts. The field follows the message times and uncompressed size, before the
+    /// compression string.
+    fn uncompressed_crc_offset(chunk_start: usize) -> usize {
+        // opcode + record length + message start time + message end time + uncompressed size
+        chunk_start + 9 + 8 + 8 + 8
+    }
+
+    #[test]
+    fn test_corrupt_chunk_content_fails_chunk_crc() {
+        // Corrupt a single byte inside an uncompressed chunk's content: the last byte of the
+        // chunk is the final message's payload, so records still parse and only the CRC catches
+        // the damage.
+        let mut mcap = make_mcap(None, &[&[(0, 1), (0, 2)]]);
+        let summary = crate::Summary::read(&mcap)
+            .expect("summary reading should succeed")
+            .expect("there should be a summary");
+        let chunk_index = &summary.chunk_indexes[0];
+        let content_end = (chunk_index.chunk_start_offset + chunk_index.chunk_length) as usize;
+        mcap[content_end - 1] ^= 0xff;
+
+        assert!(
+            matches!(
+                insert_error(&mcap, IndexedReaderOptions::new()),
+                Some(McapError::BadChunkCrc { .. })
+            ),
+            "a corrupted chunk must fail validation"
+        );
+    }
+
+    #[test]
+    fn test_corrupt_chunk_crc_field_fails() {
+        // Corrupting the recorded CRC itself must also fail, for every compression the reader
+        // supports: a flipped CRC byte cannot be explained by the contents.
+        let compressions = [
+            None,
+            #[cfg(feature = "lz4")]
+            Some(crate::Compression::Lz4),
+            #[cfg(feature = "zstd")]
+            Some(crate::Compression::Zstd),
+        ];
+        for compression in compressions {
+            let mut mcap = make_mcap(compression, &[&[(0, 1), (0, 2)]]);
+            let summary = crate::Summary::read(&mcap)
+                .expect("summary reading should succeed")
+                .expect("there should be a summary");
+            let chunk_index = &summary.chunk_indexes[0];
+            let crc_at = uncompressed_crc_offset(chunk_index.chunk_start_offset as usize);
+            mcap[crc_at] ^= 0xff;
+
+            assert!(
+                matches!(
+                    insert_error(&mcap, IndexedReaderOptions::new()),
+                    Some(McapError::BadChunkCrc { .. })
+                ),
+                "a corrupted chunk CRC must fail validation with {compression:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_zero_chunk_crc_is_not_checked() {
+        // A writer that records no chunk CRC (uncompressed_crc = 0) must still read cleanly.
+        let mut writer = crate::WriteOptions::new()
+            .calculate_chunk_crcs(false)
+            .chunk_size(None)
+            .create(std::io::Cursor::new(Vec::new()))
+            .expect("could not make the writer");
+        for log_time in 1..=3u64 {
+            writer
+                .write(&crate::Message {
+                    channel: std::sync::Arc::new(crate::Channel {
+                        id: 0,
+                        topic: "topic".into(),
+                        schema: None,
+                        message_encoding: "ros1msg".into(),
+                        metadata: BTreeMap::new(),
+                    }),
+                    sequence: log_time as u32,
+                    log_time,
+                    publish_time: log_time,
+                    data: std::borrow::Cow::Owned(vec![1, 2, 3]),
+                })
+                .expect("failed write");
+        }
+        writer.finish().expect("failed on finish");
+        let mcap = writer.into_inner().into_inner();
+
+        let summary = crate::Summary::read(&mcap)
+            .expect("summary reading should succeed")
+            .expect("there should be a summary");
+        assert!(
+            summary.chunk_indexes.iter().all(|ci| {
+                // Find the recorded uncompressed_crc in the file and check it is zero.
+                let crc_at = uncompressed_crc_offset(ci.chunk_start_offset as usize);
+                mcap[crc_at..crc_at + 4] == [0; 4]
+            }),
+            "fixture should have zero (unrecorded) chunk CRCs"
+        );
+
+        let messages = read_mcap_noseek(IndexedReaderOptions::new(), &mcap);
+        assert_eq!(&messages, &[(0, 1), (0, 2), (0, 3)]);
+    }
+
+    #[test]
+    fn test_validate_chunk_crcs_can_be_disabled() {
+        // With validation off, the reader accepts a corrupted chunk, as it did before chunk CRC
+        // validation existed.
+        let mut mcap = make_mcap(None, &[&[(0, 1), (0, 2)]]);
+        let summary = crate::Summary::read(&mcap)
+            .expect("summary reading should succeed")
+            .expect("there should be a summary");
+        let chunk_index = &summary.chunk_indexes[0];
+        let content_end = (chunk_index.chunk_start_offset + chunk_index.chunk_length) as usize;
+        mcap[content_end - 1] ^= 0xff;
+
+        assert!(
+            insert_error(
+                &mcap,
+                IndexedReaderOptions::new().with_validate_chunk_crcs(false)
+            )
+            .is_none(),
+            "validation is off, so the corrupted chunk reads without error"
+        );
+    }
+
+    #[test]
+    fn test_corrupt_chunk_header_size_respects_record_length_limit() {
+        // A damaged chunk header can disagree with a healthy index: its uncompressed_size must
+        // not bypass the record length limit and make the decompressor allocate (or panic on a
+        // capacity overflow) before any validation sees it.
+        let mut mcap = make_mcap(None, &[&[(0, 1), (0, 2)]]);
+        let summary = crate::Summary::read(&mcap)
+            .expect("summary reading should succeed")
+            .expect("there should be a summary");
+        let chunk_index = &summary.chunk_indexes[0];
+        // opcode + record length + message start time + message end time
+        let size_at = chunk_index.chunk_start_offset as usize + 9 + 8 + 8;
+        mcap[size_at..size_at + 8].copy_from_slice(&u64::MAX.to_le_bytes());
+
+        let err = insert_error(
+            &mcap,
+            IndexedReaderOptions::new().with_record_length_limit(1024 * 1024),
+        );
+        assert!(
+            matches!(err, Some(McapError::ChunkTooLarge(size)) if size == u64::MAX),
+            "the corrupt header size must be rejected by the limit, got {err:?}"
+        );
     }
 
     #[test]

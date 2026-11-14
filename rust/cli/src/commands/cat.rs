@@ -403,9 +403,10 @@ fn cat_remote_indexed(
     }
 
     // When channels/schemas are defined only inside chunks, fetch every chunk once up front to
-    // collect their definitions, caching the compressed data so the indexed read below doesn't
-    // re-fetch. Lazy per-chunk collection would miss a definition in a chunk skipped by a topic or
-    // time filter. The remote-scan gate above already required opt-in to reach here.
+    // collect their definitions, caching the whole chunk record (keyed by chunk_start_offset,
+    // which is what ReadChunkRequest asks for) so the indexed read below doesn't re-fetch. Lazy
+    // per-chunk collection would miss a definition in a chunk skipped by a topic or time filter.
+    // The remote-scan gate above already required opt-in to reach here.
     let mut chunk_data_cache: HashMap<u64, Vec<u8>> = HashMap::new();
     if needs_in_chunk_definitions && !planned_chunks.is_empty() {
         let mut definitions = parse::ChunkDefinitions::new(&mut channels);
@@ -418,16 +419,7 @@ fn cat_remote_indexed(
             })?;
             let chunk = remote.read_range(chunk_index.chunk_start_offset, chunk_len)?;
             definitions.collect_from_record_bytes(&chunk)?;
-            let data_offset = chunk_index.compressed_data_offset()?;
-            let compressed_start = usize::try_from(data_offset - chunk_index.chunk_start_offset)
-                .with_context(|| {
-                    format!("chunk data offset out of range for this platform: {data_offset}")
-                })?;
-            let compressed = chunk
-                .get(compressed_start..)
-                .ok_or_else(|| anyhow::anyhow!("chunk data out of bounds at offset {data_offset}"))?
-                .to_vec();
-            chunk_data_cache.insert(data_offset, compressed);
+            chunk_data_cache.insert(chunk_index.chunk_start_offset, chunk);
         }
         if matches!(opts.mode, OutputMode::Csv) {
             out.csv
