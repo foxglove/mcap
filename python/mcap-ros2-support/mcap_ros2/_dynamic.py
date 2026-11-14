@@ -42,7 +42,7 @@ def _writeWstringArray(writer: CdrWriter, value: List[str]):
 FIELD_PARSERS = {
     "bool": CdrReader.boolean,
     "byte": CdrReader.uint8,
-    "char": CdrReader.int8,
+    "char": CdrReader.uint8,
     "float32": CdrReader.float32,
     "float64": CdrReader.float64,
     "int8": CdrReader.int8,
@@ -60,7 +60,7 @@ FIELD_PARSERS = {
 ARRAY_PARSERS = {
     "bool": CdrReader.boolean_array,
     "byte": CdrReader.uint8_array,
-    "char": CdrReader.int8_array,
+    "char": CdrReader.uint8_array,
     "float32": CdrReader.float32_array,
     "float64": CdrReader.float64_array,
     "int8": CdrReader.int8_array,
@@ -78,7 +78,7 @@ ARRAY_PARSERS = {
 FIELD_WRITERS = {
     "bool": CdrWriter.write_boolean,
     "byte": CdrWriter.write_uint8,
-    "char": CdrWriter.write_int8,
+    "char": CdrWriter.write_uint8,
     "float32": CdrWriter.write_float32,
     "float64": CdrWriter.write_float64,
     "int8": CdrWriter.write_int8,
@@ -96,7 +96,7 @@ FIELD_WRITERS = {
 ARRAY_WRITERS = {
     "bool": CdrWriter.write_boolean_array,
     "byte": CdrWriter.write_uint8_array,
-    "char": CdrWriter.write_int8_array,
+    "char": CdrWriter.write_uint8_array,
     "float32": CdrWriter.write_float32_array,
     "float64": CdrWriter.write_float64_array,
     "int8": CdrWriter.write_int8_array,
@@ -469,7 +469,7 @@ def _write_complex_type(
                     byte_array: bytes = (
                         array if isinstance(array, bytes) else array.tobytes()
                     )
-                    if ftype.type != "uint8" and ftype.type != "byte":
+                    if ftype.type not in ("uint8", "byte", "char"):
                         raise ValueError(
                             f'Field "{field.name}" has type "uint8[]" but has type "{ftype.type}[]"'
                         )
