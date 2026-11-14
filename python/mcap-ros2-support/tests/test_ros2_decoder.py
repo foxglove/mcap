@@ -1,6 +1,7 @@
 from mcap_ros2.decoder import DecoderFactory
 
 from mcap.reader import make_reader
+from mcap.records import Schema
 
 from .generate import generate_sample_data
 
@@ -37,3 +38,12 @@ def test_ros2_decoder_msg_eq():
         assert msg1.data == "string message 1"
         assert msg0 == msg0 and msg1 == msg1
         assert msg0 != msg1 and msg1 != msg0
+
+
+def test_ros2_decoder_char_is_unsigned():
+    # std_msgs/msg/Char with data=200, as ROS 2 serializes it
+    schema = Schema(
+        id=1, name="std_msgs/msg/Char", encoding="ros2msg", data=b"char data"
+    )
+    decoder = DecoderFactory().decoder_for("cdr", schema)
+    assert decoder(b"\x00\x01\x00\x00\xc8").data == 200
