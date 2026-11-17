@@ -65,6 +65,63 @@ READER_SUBCLASSES = [SeekingReader, NonSeekingReader]
 AnyReaderSubclass = Union[Type[SeekingReader], Type[NonSeekingReader]]
 
 
+def _topic_filter_mcap(index_types: IndexType = IndexType.ALL) -> bytes:
+    output = BytesIO()
+    writer = Writer(
+        output, compression=CompressionType.NONE, chunk_size=1, index_types=index_types
+    )
+    writer.start()
+    other = writer.register_channel("/other", "raw", 0)
+    selected = writer.register_channel("/selected", "raw", 0)
+    for sequence, channel_id in enumerate((other, selected, selected, other, selected)):
+        writer.add_message(channel_id, sequence, b"data", sequence)
+    writer.finish()
+    return output.getvalue()
+
+
+@pytest.mark.parametrize(
+    "reader_cls,index_types",
+    [
+        (SeekingReader, IndexType.ALL),
+        (SeekingReader, IndexType.NONE),
+        (NonSeekingReader, IndexType.ALL),
+    ],
+)
+@pytest.mark.parametrize("log_time_order", [True, False])
+@pytest.mark.parametrize("generator", [True, False])
+def test_topic_filter_iterator(
+    reader_cls: AnyReaderSubclass,
+    index_types: IndexType,
+    log_time_order: bool,
+    generator: bool,
+):
+    topics = (topic for topic in ["/selected"]) if generator else iter(["/selected"])
+    reader = reader_cls(BytesIO(_topic_filter_mcap(index_types)))
+    messages = list(reader.iter_messages(topics=topics, log_time_order=log_time_order))
+    assert [message.log_time for _, _, message in messages] == [1, 2, 4]
+    assert all(channel.topic == "/selected" for _, channel, _ in messages)
+
+
+@pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
+@pytest.mark.parametrize(
+    "topics,expected",
+    [
+        (["/selected"], [1, 2, 4]),
+        (("/selected",), [1, 2, 4]),
+        ({"/selected"}, [1, 2, 4]),
+        ("/selected", [1, 2, 4]),
+        ([], []),
+        (None, [0, 1, 2, 3, 4]),
+    ],
+)
+def test_topic_filter_collections(
+    reader_cls: AnyReaderSubclass, topics: Any, expected: List[int]
+):
+    reader = reader_cls(BytesIO(_topic_filter_mcap()))
+    messages = reader.iter_messages(topics=topics)
+    assert [message.log_time for _, _, message in messages] == expected
+
+
 @pytest.mark.parametrize("reader_cls", READER_SUBCLASSES)
 def test_all_messages(reader_cls: AnyReaderSubclass):
     """test that we can find all messages correctly with all reader implementations."""

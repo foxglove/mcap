@@ -373,6 +373,8 @@ class SeekingReader(McapReader):
         )
         if isinstance(topics, str):
             topics = [topics]
+        if topics is not None:
+            topics = set(topics)
         summary = self.get_summary()
         if summary is None or len(summary.chunk_indexes) == 0:
             # No chunk indices available, so there is no index to search for messages.
@@ -645,6 +647,8 @@ class NonSeekingReader(McapReader):
         )
         if isinstance(topics, str):
             topics = [topics]
+        if topics is not None:
+            topics = set(topics)
         if not log_time_order:
             yield from self._iter_messages_internal(topics, starting_at, ending_before)
         else:
