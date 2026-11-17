@@ -231,3 +231,48 @@ def test_builtin_time_signed_seconds(builtin: str, sec: int, nanosec: int):
         sec,
         nanosec,
     )
+
+
+@pytest.mark.parametrize("value", [0, 127, 128, 255])
+def test_char_is_unsigned(value: int):
+    # ROS 2 maps `char` to the IDL type uint8
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    schema = ros_writer.register_msgdef("std_msgs/msg/Char", "char data")
+    ros_writer.write_message(
+        topic="/char",
+        schema=schema,
+        message={"data": value},
+        log_time=0,
+        publish_time=0,
+        sequence=0,
+    )
+    ros_writer.finish()
+
+    output.seek(0)
+    (msg,) = read_ros2_messages(output)
+    assert msg.message.data == b"\x00\x01\x00\x00" + bytes([value])
+    assert msg.decoded_message.data == value
+
+
+def test_char_array_is_unsigned():
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    schema = ros_writer.register_msgdef("test_msgs/Chars", "char[] data")
+    for data in ([0, 128, 255], b"\x00\x80\xff"):
+        ros_writer.write_message(
+            topic="/chars",
+            schema=schema,
+            message={"data": data},
+            log_time=0,
+            publish_time=0,
+            sequence=0,
+        )
+    ros_writer.finish()
+
+    output.seek(0)
+    messages = list(read_ros2_messages(output))
+    assert [msg.message.data for msg in messages] == [
+        b"\x00\x01\x00\x00\x03\x00\x00\x00\x00\x80\xff"
+    ] * 2
+    assert [msg.decoded_message.data for msg in messages] == [b"\x00\x80\xff"] * 2
