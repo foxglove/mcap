@@ -57,6 +57,23 @@ def test_reverse_without_chunk_index(use_chunking: bool):
     assert _order(reader, reverse=True, **window) == [(20, 3), (20, 2)]
 
 
+@pytest.mark.parametrize("use_chunking", [False, True])
+def test_reverse_requires_log_time_order_without_chunk_index(use_chunking: bool):
+    reader = SeekingReader(BytesIO(_write(use_chunking=use_chunking)))
+    summary = reader.get_summary()
+    assert summary is not None and not summary.chunk_indexes
+    with pytest.raises(
+        ValueError, match="reverse is only valid with log_time_order=True"
+    ):
+        list(reader.iter_messages(log_time_order=False, reverse=True))
+    # The indexed path raises the same error.
+    indexed = SeekingReader(BytesIO(_write(index_types=IndexType.ALL)))
+    with pytest.raises(
+        ValueError, match="reverse is only valid with log_time_order=True"
+    ):
+        list(indexed.iter_messages(log_time_order=False, reverse=True))
+
+
 @pytest.mark.parametrize("method", METHODS)
 def test_validate_crcs_without_indexes(method: str):
     data = bytearray(_write())

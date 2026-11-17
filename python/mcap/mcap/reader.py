@@ -667,6 +667,8 @@ class NonSeekingReader(McapReader):
         if isinstance(topics, str):
             topics = [topics]
         if not log_time_order:
+            if reverse:
+                raise ValueError("reverse is only valid with log_time_order=True")
             yield from self._iter_messages_internal(topics, starting_at, ending_before)
         else:
             messages = list(
