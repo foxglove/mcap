@@ -19,6 +19,12 @@ static std::string TempFilename() {
   return temp.string();
 }
 
+static void NextMessage(mcap::Message& msg) {
+  msg.sequence++;
+  msg.publishTime += 1'000'000;
+  msg.logTime = msg.publishTime + 50'000;
+}
+
 static void BM_CRC32(benchmark::State& state) {
   size_t size = state.range(0);
   auto data = std::make_unique<uint8_t[]>(size);
@@ -76,6 +82,7 @@ static void BM_McapWriterBufferWriterUnchunkedUnindexed(benchmark::State& state)
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -121,6 +128,7 @@ static void BM_McapWriterBufferWriterUnchunked(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -166,6 +174,7 @@ static void BM_McapWriterBufferWriterChunked(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -212,6 +221,7 @@ static void BM_McapWriterBufferWriterChunkedNoCRC(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -258,6 +268,7 @@ static void BM_McapWriterBufferWriterChunkedUnindexed(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -305,6 +316,7 @@ static void BM_McapWriterBufferWriterLZ4(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -352,6 +364,7 @@ static void BM_McapWriterBufferWriterZStd(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -400,6 +413,7 @@ static void BM_McapWriterBufferWriterZStdNoCRC(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -446,6 +460,7 @@ static void BM_McapWriterStreamWriterUnchunked(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -492,6 +507,7 @@ static void BM_McapWriterStreamWriterChunked(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -537,6 +553,7 @@ static void BM_McapWriterFileWriterChunked(benchmark::State& state) {
 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -589,6 +606,7 @@ static void BM_McapWriterFileWriterChunkedManyChannels(benchmark::State& state) 
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
       msg.channelId = channelIds[i % channelCount];
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
@@ -643,6 +661,7 @@ static void BM_McapWriterBufferWriterChunkedManyChannels(benchmark::State& state
   while (state.KeepRunning()) {
     for (size_t i = 0; i < WriteIterations; i++) {
       msg.channelId = channelIds[i % channelCount];
+      NextMessage(msg);
       (void)writer.write(msg);
       benchmark::ClobberMemory();
     }
