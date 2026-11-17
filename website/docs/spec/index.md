@@ -6,10 +6,10 @@ sidebar_position: 1
 # MCAP Format Specification
 
 [compression_formats]: ./registry.md#compression-formats
-[message_encodings]: ./registry.md#well-known-message-encodings
-[schema_encodings]: ./registry.md#well-known-schema-encodings
-[profiles]: ./registry.md#well-known-profiles
-[feature_explanations]: ./notes.md#feature-explanations
+[message_encodings]: ./registry.md#message-encodings
+[schema_encodings]: ./registry.md#schema-encodings
+[profiles]: ./registry.md#profiles
+[feature_explanations]: ./notes.md
 
 ## Overview
 
