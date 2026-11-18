@@ -33,10 +33,6 @@ pub struct ParsedMcap {
     pub metadata_indexes: Vec<records::MetadataIndex>,
 }
 
-pub fn parse_mcap(mcap: &[u8]) -> Result<ParsedMcap> {
-    parse_mcap_with_scan_fallback(mcap, false)
-}
-
 pub fn parse_mcap_with_scan_fallback(
     mcap: &[u8],
     scan_without_statistics: bool,
@@ -107,6 +103,232 @@ pub(crate) fn parsed_mcap_from_summary_section(
     Ok(out)
 }
 
+/// What a summary section records about attachments and metadata.
+pub(crate) struct SummaryIndexes {
+    statistics: Option<records::Statistics>,
+    chunk_indexes: Vec<records::ChunkIndex>,
+    attachment_indexes: Vec<records::AttachmentIndex>,
+    metadata_indexes: Vec<records::MetadataIndex>,
+}
+
+/// Reads the statistics and the attachment and metadata indexes from the summary section, or
+/// `None` when the file has no summary. Prefers [`SummaryReader`](mcap::sans_io::SummaryReader);
+/// a summary it rejects with [`mcap::McapError::UnknownSchema`] is parsed from its raw records
+/// instead, since none of these records depends on a schema.
+fn read_summary_indexes(
+    source: &mut dyn crate::byte_source::ByteSource,
+) -> Result<Option<SummaryIndexes>> {
+    match crate::byte_source::read_summary(source) {
+        Ok(Some(summary)) => Ok(Some(SummaryIndexes {
+            statistics: summary.stats,
+            chunk_indexes: summary.chunk_indexes,
+            attachment_indexes: summary.attachment_indexes,
+            metadata_indexes: summary.metadata_indexes,
+        })),
+        Ok(None) => Ok(None),
+        Err(err) if is_unknown_schema_error(&err) => {
+            let Some(bytes) = crate::byte_source::read_summary_section(source)? else {
+                return Ok(None);
+            };
+            let parsed = parsed_mcap_from_summary_section(None, &bytes)?;
+            Ok(Some(SummaryIndexes {
+                statistics: parsed.statistics,
+                chunk_indexes: parsed.chunk_indexes,
+                attachment_indexes: parsed.attachment_indexes,
+                metadata_indexes: parsed.metadata_indexes,
+            }))
+        }
+        Err(err) => Err(err),
+    }
+}
+
+/// The index record of a top-level record kind: an attachment or a metadata record.
+pub(crate) trait TopLevelIndex: Sized {
+    /// The record kind, as warnings name it.
+    const KIND: &'static str;
+
+    /// The name of the indexed record.
+    fn name(&self) -> &str;
+
+    /// Takes the indexes of this kind out of `summary`.
+    fn take_from(summary: &mut SummaryIndexes) -> Vec<Self>;
+
+    /// How many records of this kind `statistics` says the file holds.
+    fn count_in(statistics: &records::Statistics) -> u64;
+
+    /// Builds the indexes by scanning `source`, stepping over the chunks in `chunk_indexes`.
+    fn scan(
+        source: &mut dyn crate::byte_source::ByteSource,
+        chunk_indexes: &[records::ChunkIndex],
+    ) -> Result<Vec<Self>>;
+}
+
+impl TopLevelIndex for records::AttachmentIndex {
+    const KIND: &'static str = "attachment";
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn take_from(summary: &mut SummaryIndexes) -> Vec<Self> {
+        std::mem::take(&mut summary.attachment_indexes)
+    }
+
+    fn count_in(statistics: &records::Statistics) -> u64 {
+        u64::from(statistics.attachment_count)
+    }
+
+    fn scan(
+        source: &mut dyn crate::byte_source::ByteSource,
+        chunk_indexes: &[records::ChunkIndex],
+    ) -> Result<Vec<Self>> {
+        collect_attachment_indexes_from_byte_source(source, chunk_indexes)
+    }
+}
+
+impl TopLevelIndex for records::MetadataIndex {
+    const KIND: &'static str = "metadata";
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn take_from(summary: &mut SummaryIndexes) -> Vec<Self> {
+        std::mem::take(&mut summary.metadata_indexes)
+    }
+
+    fn count_in(statistics: &records::Statistics) -> u64 {
+        u64::from(statistics.metadata_count)
+    }
+
+    fn scan(
+        source: &mut dyn crate::byte_source::ByteSource,
+        chunk_indexes: &[records::ChunkIndex],
+    ) -> Result<Vec<Self>> {
+        collect_metadata_indexes_from_byte_source(source, chunk_indexes)
+    }
+}
+
+/// Returns the attachment or metadata indexes of `source`: the summary's when it lists every
+/// record, and otherwise those found by scanning the top-level records. A scan is announced on
+/// stderr with the reason for it. A source with an
+/// [indexed-read budget](crate::byte_source::ByteSource::indexed_read_budget) may not be scanned,
+/// so needing a scan of one is an error that gives the reason.
+///
+/// The statistics record says whether the summary lists every record. Without it, a list that
+/// is empty or lacks `wanted_name` is scanned for, and a source that may not be scanned keeps
+/// the list it has and warns that it may be incomplete.
+pub(crate) fn top_level_indexes<T: TopLevelIndex>(
+    source: &mut dyn crate::byte_source::ByteSource,
+    wanted_name: Option<&str>,
+) -> Result<Vec<T>> {
+    let Some(mut summary) = read_summary_indexes(source)? else {
+        return scan_for_indexes(
+            source,
+            &[],
+            "summary section not available",
+            " Run `mcap doctor` for details.",
+        );
+    };
+    let indexes = T::take_from(&mut summary);
+    let needs_scan = match &summary.statistics {
+        Some(statistics) => T::count_in(statistics) > indexes.len() as u64,
+        None => {
+            let lacks_wanted = match wanted_name {
+                Some(name) => !indexes.iter().any(|index| index.name() == name),
+                None => indexes.is_empty(),
+            };
+            let may_scan = source.indexed_read_budget().is_none();
+            if lacks_wanted && !may_scan {
+                eprintln!(
+                    "Warning: {kind} indexes may be incomplete; pass --allow-remote-scan to scan for {kind} records that have no index.",
+                    kind = T::KIND
+                );
+            }
+            lacks_wanted && may_scan
+        }
+    };
+    if !needs_scan {
+        return Ok(indexes);
+    }
+    let reason = format!("{} indexes incomplete or unavailable", T::KIND);
+    scan_for_indexes(source, &summary.chunk_indexes, &reason, "")
+}
+
+/// Builds the indexes by scanning `source`. `reason` says why the scan is needed: a source
+/// that refuses the scan reports it in the error, and otherwise it is a warning on stderr,
+/// followed by `advice`.
+fn scan_for_indexes<T: TopLevelIndex>(
+    source: &mut dyn crate::byte_source::ByteSource,
+    chunk_indexes: &[records::ChunkIndex],
+    reason: &str,
+    advice: &str,
+) -> Result<Vec<T>> {
+    crate::source::require_remote_scan_for_linear(source, reason)?;
+    eprintln!("Warning: {reason}; full scan may be slow.{advice}");
+    T::scan(source, chunk_indexes)
+}
+
+pub(crate) fn is_unknown_schema_error(err: &anyhow::Error) -> bool {
+    err.chain().any(|cause| {
+        cause
+            .downcast_ref::<mcap::McapError>()
+            .is_some_and(|e| matches!(e, mcap::McapError::UnknownSchema(_, _)))
+    })
+}
+
+fn collect_attachment_indexes_from_byte_source(
+    source: &mut dyn crate::byte_source::ByteSource,
+    chunk_indexes: &[records::ChunkIndex],
+) -> Result<Vec<records::AttachmentIndex>> {
+    let mut indexes = Vec::new();
+    crate::byte_source::for_each_top_level_record_of(
+        source,
+        records::op::ATTACHMENT,
+        chunk_indexes,
+        |offset, body| {
+            if let Record::Attachment { header, data, .. } =
+                mcap::parse_record(records::op::ATTACHMENT, body)?
+            {
+                indexes.push(records::AttachmentIndex {
+                    offset,
+                    length: (crate::byte_source::RECORD_PREFIX_LEN + body.len()) as u64,
+                    log_time: header.log_time,
+                    create_time: header.create_time,
+                    data_size: data.len() as u64,
+                    name: header.name,
+                    media_type: header.media_type,
+                });
+            }
+            Ok(())
+        },
+    )?;
+    Ok(indexes)
+}
+
+fn collect_metadata_indexes_from_byte_source(
+    source: &mut dyn crate::byte_source::ByteSource,
+    chunk_indexes: &[records::ChunkIndex],
+) -> Result<Vec<records::MetadataIndex>> {
+    let mut indexes = Vec::new();
+    crate::byte_source::for_each_top_level_record_of(
+        source,
+        records::op::METADATA,
+        chunk_indexes,
+        |offset, body| {
+            if let Record::Metadata(metadata) = mcap::parse_record(records::op::METADATA, body)? {
+                indexes.push(records::MetadataIndex {
+                    offset,
+                    length: (crate::byte_source::RECORD_PREFIX_LEN + body.len()) as u64,
+                    name: metadata.name,
+                });
+            }
+            Ok(())
+        },
+    )?;
+    Ok(indexes)
+}
+
 fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<ParsedMcap> {
     let mut out = ParsedMcap {
         header,
@@ -127,66 +349,6 @@ fn parse_mcap_linear(mcap: &[u8], header: Option<records::Header>) -> Result<Par
     })?;
 
     Ok(out)
-}
-
-pub(crate) fn collect_attachment_indexes_linear(
-    mcap: &[u8],
-) -> Result<Vec<records::AttachmentIndex>> {
-    let mut indexes = Vec::new();
-    scan_top_level_records(mcap, |record, offset, length| {
-        if let Record::Attachment { header, data, .. } = record {
-            indexes.push(records::AttachmentIndex {
-                offset,
-                length,
-                log_time: header.log_time,
-                create_time: header.create_time,
-                data_size: data.len() as u64,
-                name: header.name,
-                media_type: header.media_type,
-            });
-        }
-        Ok(())
-    })?;
-    Ok(indexes)
-}
-
-pub(crate) fn collect_metadata_indexes_linear(mcap: &[u8]) -> Result<Vec<records::MetadataIndex>> {
-    let mut indexes = Vec::new();
-    scan_top_level_records(mcap, |record, offset, length| {
-        if let Record::Metadata(metadata) = record {
-            indexes.push(records::MetadataIndex {
-                offset,
-                length,
-                name: metadata.name,
-            });
-        }
-        Ok(())
-    })?;
-    Ok(indexes)
-}
-
-pub(crate) fn attachment_indexes_need_scan(parsed: &ParsedMcap) -> bool {
-    if !parsed.summary_available {
-        return false;
-    }
-    match &parsed.statistics {
-        Some(statistics) => statistics.attachment_count as usize > parsed.attachment_indexes.len(),
-        None => parsed.attachment_indexes.is_empty(),
-    }
-}
-
-pub(crate) fn metadata_indexes_need_scan(parsed: &ParsedMcap) -> bool {
-    if !parsed.summary_available {
-        return false;
-    }
-    match &parsed.statistics {
-        Some(statistics) => statistics.metadata_count as usize > parsed.metadata_indexes.len(),
-        None => parsed.metadata_indexes.is_empty(),
-    }
-}
-
-pub(crate) fn warn_index_scan(record_kind: &str) {
-    eprintln!("Warning: {record_kind} indexes incomplete or unavailable; full scan may be slow.");
 }
 
 fn scan_top_level_records<F>(mcap: &[u8], mut process: F) -> Result<()>
@@ -604,11 +766,13 @@ mod tests {
     use std::collections::BTreeMap;
 
     use super::{
-        collect_attachment_indexes_linear, collect_metadata_indexes_linear, parse_mcap,
+        collect_attachment_indexes_from_byte_source, collect_metadata_indexes_from_byte_source,
         parse_mcap_from_summary, parse_mcap_with_scan_fallback, parse_summary_section,
-        ChunkDefinitions,
+        top_level_indexes, ChunkDefinitions, TopLevelIndex,
     };
+    use crate::byte_source::{InstrumentedSource, MemorySource};
     use mcap::records;
+    use mcap::records::{AttachmentIndex, MetadataIndex};
 
     fn record(opcode: u8, body: &[u8]) -> Vec<u8> {
         let mut out = vec![opcode];
@@ -752,6 +916,299 @@ mod tests {
         buffer
     }
 
+    /// One message, one attachment named `demo.bin` and one metadata record named `demo`.
+    fn attachment_and_metadata_mcap(options: mcap::WriteOptions) -> Vec<u8> {
+        let mut buffer = Vec::new();
+        {
+            let mut writer = options
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let schema_id = writer.add_schema("demo", "json", b"{}").expect("schema");
+            let channel_id = writer
+                .add_channel(schema_id, "/demo", "json", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 1,
+                        publish_time: 1,
+                    },
+                    br#"{"k":"v"}"#,
+                )
+                .expect("message");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 10,
+                    create_time: 11,
+                    name: "demo.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: Cow::Borrowed(b"hello"),
+                })
+                .expect("attachment");
+            writer
+                .write_metadata(&records::Metadata {
+                    name: "demo".to_string(),
+                    metadata: BTreeMap::from([("key".to_string(), "value".to_string())]),
+                })
+                .expect("metadata");
+            writer.finish().expect("finish writer");
+        }
+        buffer
+    }
+
+    /// A summary with no statistics record and no attachment or metadata indexes.
+    fn summary_without_statistics_or_indexes() -> mcap::WriteOptions {
+        mcap::WriteOptions::new()
+            .emit_statistics(false)
+            .emit_attachment_indexes(false)
+            .emit_metadata_indexes(false)
+    }
+
+    fn summaryless() -> mcap::WriteOptions {
+        mcap::WriteOptions::new()
+            .emit_summary_records(false)
+            .emit_summary_offsets(false)
+    }
+
+    /// Resolves the indexes of `mcap` and returns them with the byte range of every read made.
+    fn indexes_and_reads<T: TopLevelIndex>(
+        mcap: Vec<u8>,
+        wanted_name: Option<&str>,
+    ) -> (Vec<T>, Vec<(u64, u64)>) {
+        let mut reads = Vec::new();
+        let mut source = InstrumentedSource::new(mcap, |offset, data: &[u8]| {
+            reads.push((offset, offset + data.len() as u64));
+            Ok(())
+        });
+        let indexes = top_level_indexes(&mut source, wanted_name).expect("indexes");
+        drop(source);
+        (indexes, reads)
+    }
+
+    /// Number of reads whose range contains `byte_offset`.
+    fn reads_covering(reads: &[(u64, u64)], byte_offset: u64) -> usize {
+        reads
+            .iter()
+            .filter(|(start, end)| *start <= byte_offset && byte_offset < *end)
+            .count()
+    }
+
+    #[test]
+    fn top_level_indexes_come_from_a_complete_summary_without_other_reads() {
+        // The statistics confirm the summary lists every record, so a missing name is simply
+        // absent. Neither the head of the file nor the indexed records may be read.
+        let mcap = attachment_and_metadata_mcap(mcap::WriteOptions::new());
+
+        let (attachments, reads) =
+            indexes_and_reads::<AttachmentIndex>(mcap.clone(), Some("missing"));
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(attachments[0].name, "demo.bin");
+        assert_eq!(reads_covering(&reads, 0), 0, "{reads:?}");
+        assert_eq!(
+            reads_covering(&reads, attachments[0].offset),
+            0,
+            "{reads:?}"
+        );
+
+        let (metadata, reads) = indexes_and_reads::<MetadataIndex>(mcap, Some("missing"));
+        assert_eq!(metadata.len(), 1);
+        assert_eq!(metadata[0].name, "demo");
+        assert_eq!(reads_covering(&reads, 0), 0, "{reads:?}");
+        assert_eq!(reads_covering(&reads, metadata[0].offset), 0, "{reads:?}");
+    }
+
+    #[test]
+    fn top_level_indexes_scan_a_summaryless_file_once() {
+        let mcap = attachment_and_metadata_mcap(summaryless());
+
+        let (attachments, reads) =
+            indexes_and_reads::<AttachmentIndex>(mcap.clone(), Some("missing"));
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(
+            reads_covering(&reads, attachments[0].offset),
+            1,
+            "{reads:?}"
+        );
+
+        let (metadata, reads) = indexes_and_reads::<MetadataIndex>(mcap, Some("missing"));
+        assert_eq!(metadata.len(), 1);
+        assert_eq!(reads_covering(&reads, metadata[0].offset), 1, "{reads:?}");
+    }
+
+    #[test]
+    fn top_level_indexes_scan_when_a_summary_without_statistics_lacks_what_is_wanted() {
+        // No statistics and an empty list: the records may exist without being indexed.
+        let unindexed = attachment_and_metadata_mcap(summary_without_statistics_or_indexes());
+        let (attachments, _) = indexes_and_reads::<AttachmentIndex>(unindexed.clone(), None);
+        assert_eq!(attachments.len(), 1);
+        let (metadata, _) = indexes_and_reads::<MetadataIndex>(unindexed, None);
+        assert_eq!(metadata.len(), 1);
+
+        // No statistics and a list that has the wanted name: the list is used as it is. A name
+        // it lacks may belong to a record that was not indexed.
+        let indexed =
+            attachment_and_metadata_mcap(mcap::WriteOptions::new().emit_statistics(false));
+        let (attachments, reads) =
+            indexes_and_reads::<AttachmentIndex>(indexed.clone(), Some("demo.bin"));
+        assert_eq!(
+            reads_covering(&reads, attachments[0].offset),
+            0,
+            "{reads:?}"
+        );
+        let (attachments, reads) = indexes_and_reads::<AttachmentIndex>(indexed, Some("missing"));
+        assert_eq!(
+            reads_covering(&reads, attachments[0].offset),
+            1,
+            "{reads:?}"
+        );
+    }
+
+    #[test]
+    fn top_level_indexes_keep_a_list_of_unknown_completeness_when_scans_are_refused() {
+        let mcap = attachment_and_metadata_mcap(summary_without_statistics_or_indexes());
+        let mut source = MemorySource::new(mcap).with_indexed_read_budget(1024 * 1024);
+
+        let attachments: Vec<AttachmentIndex> =
+            top_level_indexes(&mut source, None).expect("list attachments");
+        assert!(attachments.is_empty());
+        let metadata: Vec<MetadataIndex> =
+            top_level_indexes(&mut source, Some("missing")).expect("get metadata");
+        assert!(metadata.is_empty());
+    }
+
+    #[test]
+    fn top_level_index_scan_skips_chunk_bodies() {
+        // One large uncompressed chunk, then an attachment.
+        let payload = vec![0x5a; 512 * 1024];
+        let mut buffer = Vec::new();
+        {
+            let mut writer = summaryless()
+                .compression(None)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let channel_id = writer
+                .add_channel(0, "/demo", "raw", &BTreeMap::new())
+                .expect("channel");
+            writer
+                .write_to_known_channel(
+                    &records::MessageHeader {
+                        channel_id,
+                        sequence: 1,
+                        log_time: 1,
+                        publish_time: 1,
+                    },
+                    &payload,
+                )
+                .expect("message");
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 10,
+                    create_time: 11,
+                    name: "after-chunk.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: Cow::Borrowed(b"hello"),
+                })
+                .expect("attachment");
+            writer.finish().expect("finish writer");
+        }
+
+        let (attachments, reads) = indexes_and_reads::<AttachmentIndex>(buffer.clone(), None);
+        assert_eq!(attachments.len(), 1);
+        let attachment = mcap::read::attachment(&buffer, &attachments[0]).expect("attachment");
+        assert_eq!(attachment.data.as_ref(), b"hello");
+        let bytes_read: u64 = reads.iter().map(|(start, end)| end - start).sum();
+        assert!(
+            bytes_read < payload.len() as u64 / 2,
+            "read {bytes_read} bytes: {reads:?}"
+        );
+    }
+
+    #[test]
+    fn top_level_index_scan_steps_over_chunks_the_summary_lists() {
+        // Many chunks, then an attachment the summary counts but does not index. The scan reads
+        // the header record and the records after the last chunk, and nothing in between.
+        let payload = vec![0x5a; 2048];
+        let mut buffer = Vec::new();
+        {
+            let mut writer = mcap::WriteOptions::new()
+                .compression(None)
+                .chunk_size(Some(4096))
+                .emit_attachment_indexes(false)
+                .create(std::io::Cursor::new(&mut buffer))
+                .expect("writer");
+            let channel_id = writer
+                .add_channel(0, "/demo", "raw", &BTreeMap::new())
+                .expect("channel");
+            for sequence in 0..200 {
+                writer
+                    .write_to_known_channel(
+                        &records::MessageHeader {
+                            channel_id,
+                            sequence,
+                            log_time: u64::from(sequence),
+                            publish_time: u64::from(sequence),
+                        },
+                        &payload,
+                    )
+                    .expect("message");
+            }
+            writer
+                .attach(&mcap::Attachment {
+                    log_time: 10,
+                    create_time: 11,
+                    name: "after-chunks.bin".to_string(),
+                    media_type: "application/octet-stream".to_string(),
+                    data: Cow::Borrowed(b"hello"),
+                })
+                .expect("attachment");
+            writer.finish().expect("finish writer");
+        }
+
+        let (attachments, reads) = indexes_and_reads::<AttachmentIndex>(buffer.clone(), None);
+        assert_eq!(attachments.len(), 1);
+        let attachment = mcap::read::attachment(&buffer, &attachments[0]).expect("attachment");
+        assert_eq!(attachment.data.as_ref(), b"hello");
+
+        // The header record ends well before this offset, and the chunks run up to the
+        // attachment.
+        let chunks_start = 1024;
+        let after_chunks = attachments[0].offset;
+        assert!(after_chunks > 100 * 1024, "fixture too small");
+        let between: Vec<_> = reads
+            .iter()
+            .filter(|(start, _)| (chunks_start..after_chunks).contains(start))
+            .collect();
+        assert!(between.is_empty(), "read inside the chunks: {between:?}");
+    }
+
+    #[test]
+    fn top_level_indexes_refuse_a_scan_of_a_source_with_a_budget() {
+        // The statistics count records the summary does not list, so the list is known to be
+        // incomplete.
+        let incomplete = attachment_and_metadata_mcap(
+            mcap::WriteOptions::new()
+                .emit_attachment_indexes(false)
+                .emit_metadata_indexes(false),
+        );
+        let cases = [
+            (incomplete, "attachment indexes incomplete or unavailable"),
+            (
+                attachment_and_metadata_mcap(summaryless()),
+                "summary section not available",
+            ),
+        ];
+        for (mcap, reason) in cases {
+            let mut source = MemorySource::new(mcap).with_indexed_read_budget(1024 * 1024);
+            let err = top_level_indexes::<AttachmentIndex>(&mut source, None)
+                .expect_err("scan should be refused");
+            let message = err.to_string();
+            assert!(message.contains(reason), "{message}");
+            assert!(message.contains("requires a full scan"), "{message}");
+        }
+    }
+
     #[test]
     fn parse_mcap_collects_channels_and_schemas() {
         let mut buffer = Vec::new();
@@ -778,7 +1235,7 @@ mod tests {
             (schema_id, channel_id)
         };
 
-        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        let parsed = parse_mcap_with_scan_fallback(&buffer, false).expect("parse mcap");
         assert!(parsed.header.is_some());
         assert!(parsed.channels.contains_key(&channel_id));
         assert!(parsed.schemas.contains_key(&schema_id));
@@ -815,7 +1272,8 @@ mod tests {
             channel_id
         };
 
-        let summary_only = parse_mcap(&buffer).expect("parse mcap from summary");
+        let summary_only =
+            parse_mcap_with_scan_fallback(&buffer, false).expect("parse mcap from summary");
         assert!(summary_only.statistics.is_none());
         assert_eq!(summary_only.message_count, None);
 
@@ -880,7 +1338,7 @@ mod tests {
             (schema_id, channel_id)
         };
 
-        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        let parsed = parse_mcap_with_scan_fallback(&buffer, false).expect("parse mcap");
         assert!(parsed.header.is_some());
         assert!(parsed.channels.contains_key(&channel_id));
         assert!(parsed.schemas.contains_key(&schema_id));
@@ -889,7 +1347,7 @@ mod tests {
     #[test]
     fn parse_mcap_linear_collects_unindexed_attachment_and_metadata_offsets() {
         let buffer = write_unindexed_attachment_and_metadata(false);
-        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        let parsed = parse_mcap_with_scan_fallback(&buffer, false).expect("parse mcap");
 
         assert_eq!(parsed.attachment_indexes.len(), 1);
         assert_eq!(parsed.metadata_indexes.len(), 1);
@@ -906,13 +1364,18 @@ mod tests {
     #[test]
     fn collect_linear_indexes_finds_records_when_summary_indexes_are_omitted() {
         let buffer = write_unindexed_attachment_and_metadata(true);
-        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        let parsed = parse_mcap_with_scan_fallback(&buffer, false).expect("parse mcap");
         assert!(parsed.attachment_indexes.is_empty());
         assert!(parsed.metadata_indexes.is_empty());
 
-        let attachment_indexes =
-            collect_attachment_indexes_linear(&buffer).expect("attachment indexes");
-        let metadata_indexes = collect_metadata_indexes_linear(&buffer).expect("metadata indexes");
+        let attachment_indexes = collect_attachment_indexes_from_byte_source(
+            &mut MemorySource::new(buffer.clone()),
+            &[],
+        )
+        .expect("attachment indexes");
+        let metadata_indexes =
+            collect_metadata_indexes_from_byte_source(&mut MemorySource::new(buffer.clone()), &[])
+                .expect("metadata indexes");
         assert_eq!(attachment_indexes.len(), 1);
         assert_eq!(metadata_indexes.len(), 1);
         assert_eq!(attachment_indexes[0].name, "demo.bin");
@@ -958,7 +1421,11 @@ mod tests {
             writer.finish().expect("finish writer");
         }
 
-        let indexes = collect_attachment_indexes_linear(&buffer).expect("attachment indexes");
+        let indexes = collect_attachment_indexes_from_byte_source(
+            &mut MemorySource::new(buffer.clone()),
+            &[],
+        )
+        .expect("attachment indexes");
         assert_eq!(indexes.len(), 1);
         assert_eq!(indexes[0].name, "after-chunk.bin");
         let attachment = mcap::read::attachment(&buffer, &indexes[0]).expect("attachment");
@@ -995,7 +1462,7 @@ mod tests {
             (schema_id, channel_id)
         };
 
-        let parsed = parse_mcap(&buffer).expect("parse mcap");
+        let parsed = parse_mcap_with_scan_fallback(&buffer, false).expect("parse mcap");
         let channel = parsed
             .channels
             .get(&channel_id)

@@ -309,6 +309,43 @@ fn cat_csv_warns_when_existing_topic_has_no_messages() {
 }
 
 #[test]
+fn list_attachments_warns_when_the_summary_is_missing() {
+    let mut bytes = Vec::new();
+    {
+        let mut writer = mcap::WriteOptions::new()
+            .emit_summary_records(false)
+            .emit_summary_offsets(false)
+            .create(std::io::Cursor::new(&mut bytes))
+            .unwrap();
+        writer
+            .attach(&mcap::Attachment {
+                log_time: 1,
+                create_time: 1,
+                name: "demo.bin".to_string(),
+                media_type: "application/octet-stream".to_string(),
+                data: std::borrow::Cow::Borrowed(b"hello"),
+            })
+            .unwrap();
+        writer.finish().unwrap();
+    }
+    let dir = TempDir::new().unwrap();
+    let path = write_temp(&dir, "summaryless.mcap", &bytes);
+
+    let output = mcap(&["list", "attachments", path_str(&path)]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "stderr: {stderr}");
+    assert!(
+        stdout(&output).contains("demo.bin"),
+        "stdout: {}",
+        stdout(&output)
+    );
+    assert!(
+        stderr.contains("Warning: summary section not available"),
+        "stderr: {stderr}"
+    );
+}
+
+#[test]
 fn exit_code_doctor_non_strict_allows_out_of_order_top_level_messages() {
     let dir = TempDir::new().unwrap();
     let path = write_temp(

@@ -1,5 +1,6 @@
 //! Drive mcap sans-io readers against a [`ByteSource`].
 
+use std::collections::HashMap;
 use std::io::SeekFrom;
 use std::ops::ControlFlow;
 
@@ -72,10 +73,40 @@ pub fn record_length_limit(source: &dyn ByteSource) -> Option<usize> {
     source.size().and_then(|size| usize::try_from(size).ok())
 }
 
+/// Reads the raw bytes of the summary section, from the footer's `summary_start` to the footer.
+/// Returns `Ok(None)` when the file has no summary section.
+pub fn read_summary_section(source: &mut dyn ByteSource) -> Result<Option<Vec<u8>>> {
+    let (footer_start, footer) = read_footer(source)?;
+    if footer.summary_start == 0 {
+        return Ok(None);
+    }
+    if footer.summary_start > footer_start {
+        return Err(McapError::UnexpectedEof.into());
+    }
+    let summary_len = usize::try_from(footer_start - footer.summary_start)
+        .context("summary section is too large")?;
+    let summary = source.read_at(footer.summary_start, summary_len)?;
+    if summary.len() != summary_len {
+        return Err(McapError::UnexpectedEof.into());
+    }
+    Ok(Some(summary))
+}
+
 /// Load the MCAP summary section via [`SummaryReader`].
 ///
-/// Returns `Ok(None)` when the file has no summary section.
+/// Returns `Ok(None)` when the file has no summary section. On a source with an
+/// [indexed-read budget](ByteSource::indexed_read_budget) the section is capped like any other
+/// indexed read: over the budget it is refused before any of it is fetched.
+/// A failure is reported as the source describes it: see [`ByteSource::summary_read_error`].
 pub fn read_summary(source: &mut dyn ByteSource) -> Result<Option<mcap::Summary>> {
+    // A refusal over the budget is not a failed read, and already names the source.
+    if source.indexed_read_budget().is_some() {
+        require_summary_within_budget(source)?;
+    }
+    read_summary_as_read(source).map_err(|err| source.summary_read_error(err))
+}
+
+fn read_summary_as_read(source: &mut dyn ByteSource) -> Result<Option<mcap::Summary>> {
     let size = source.size();
     let mut options = SummaryReaderOptions::default();
     if let Some(size) = size {
@@ -103,6 +134,24 @@ pub fn read_summary(source: &mut dyn ByteSource) -> Result<Option<mcap::Summary>
     }
 
     Ok(reader.finish())
+}
+
+/// Refuses a summary section over the source's indexed-read budget before any of it is fetched.
+/// The footer gives its length, and a remote source usually still holds the footer in the tail
+/// it prefetched at open. A footer that cannot be read is left for the reader to report.
+fn require_summary_within_budget(source: &mut dyn ByteSource) -> Result<()> {
+    let Ok((footer_start, footer)) = read_footer(source) else {
+        return Ok(());
+    };
+    if footer.summary_start == 0 || footer.summary_start > footer_start {
+        return Ok(());
+    }
+    crate::source::require_remote_indexed_read_budget(
+        source,
+        footer_start - footer.summary_start,
+        "remote summary section",
+    )
+    .with_context(|| format!("failed to read {}", source.display_name()))
 }
 
 /// Fetch one indexed chunk and insert it into [`IndexedReader`].
@@ -167,25 +216,65 @@ pub fn try_for_each_linear_record(
     Ok(())
 }
 
-/// Visit the body of every top-level record with the given opcode, in file order.
+/// Fills `dest` from `offset` with [`ByteSource::read_into`]. Returns how many bytes were read,
+/// short only at the end of the source.
+fn read_into_full(source: &mut dyn ByteSource, offset: u64, dest: &mut [u8]) -> Result<usize> {
+    let mut filled = 0;
+    while filled < dest.len() {
+        let n = source.read_into(offset + filled as u64, &mut dest[filled..])?;
+        if n == 0 {
+            break;
+        }
+        filled += n;
+    }
+    Ok(filled)
+}
+
+/// Visit every top-level record of the data section with the given opcode, in file order,
+/// passing its offset in the file and its body. The walk ends at the DataEnd record.
 ///
-/// Unlike [`for_each_linear_record`], records of other opcodes are seeked over by their declared
+/// Unlike [`for_each_linear_record`], records of other opcodes are skipped by their declared
 /// length rather than read, so scanning for a record kind that is never inside a chunk (metadata,
-/// attachments) costs one small read per top-level record instead of a read of the whole file.
+/// attachments) does not read the chunks. A chunk listed in `chunk_indexes` (the summary's, or
+/// empty) is stepped over together with its message-index records, without a read.
+///
+/// Record prefixes are read with [`ByteSource::read_into`], so a remote source serves them from
+/// its read-ahead window rather than one request each.
 pub fn for_each_top_level_record_of(
     source: &mut dyn ByteSource,
     wanted: u8,
-    mut visit: impl FnMut(&[u8]) -> Result<()>,
+    chunk_indexes: &[mcap::records::ChunkIndex],
+    mut visit: impl FnMut(u64, &[u8]) -> Result<()>,
 ) -> Result<()> {
-    let magic = source.read_at(0, mcap::MAGIC.len())?;
-    if magic.as_slice() != mcap::MAGIC {
+    let mut magic = [0u8; mcap::MAGIC.len()];
+    let n = read_into_full(source, 0, &mut magic)?;
+    if &magic[..n] != mcap::MAGIC {
         return Err(McapError::BadMagic.into());
     }
+    let size = source.size();
     let limit = record_length_limit(source);
+    // Maps the start of each listed chunk to the end of its message indexes. An entry that
+    // does not move forward or runs past the end of the file is left out, and the walk finds
+    // that chunk by its prefix.
+    let listed_chunks: HashMap<u64, u64> = chunk_indexes
+        .iter()
+        .filter_map(|index| {
+            let end = index
+                .chunk_start_offset
+                .checked_add(index.chunk_length)?
+                .checked_add(index.message_index_length)?;
+            let in_file = size.is_none_or(|size| end <= size);
+            (end > index.chunk_start_offset && in_file).then_some((index.chunk_start_offset, end))
+        })
+        .collect();
     let mut pos = mcap::MAGIC.len() as u64;
     loop {
-        let prefix = source.read_at(pos, RECORD_PREFIX_LEN)?;
-        let Some((opcode, len, _)) = split_record_prefix(&prefix) else {
+        while let Some(&end) = listed_chunks.get(&pos) {
+            pos = end;
+        }
+        let mut prefix = [0u8; RECORD_PREFIX_LEN];
+        let n = read_into_full(source, pos, &mut prefix)?;
+        let Some((opcode, len, _)) = split_record_prefix(&prefix[..n]) else {
             return Err(McapError::UnexpectedEof.into());
         };
         let body_start = pos.saturating_add(RECORD_PREFIX_LEN as u64);
@@ -200,9 +289,9 @@ pub fn for_each_top_level_record_of(
             if body.len() < body_len {
                 return Err(McapError::UnexpectedEof.into());
             }
-            visit(&body)?;
+            visit(pos, &body)?;
         }
-        if opcode == op::FOOTER {
+        if opcode == op::DATA_END || opcode == op::FOOTER {
             return Ok(());
         }
         pos = body_start.saturating_add(len);
