@@ -394,6 +394,7 @@ void McapReader::reset_() {
   dataStart_ = 0;
   dataEnd_ = EndOffset;
   parsedSummary_ = false;
+  hasUnchunkedMessages_ = false;
 }
 
 Status McapReader::readSummary(ReadSummaryMethod method, const ProblemCallback& onProblem) {
@@ -524,6 +525,7 @@ Status McapReader::readSummaryFromScan_(IReadable& reader) {
   attachmentIndexes_.clear();
   metadataIndexes_.clear();
   chunkIndexes_.clear();
+  hasUnchunkedMessages_ = false;
 
   TypedRecordReader typedReader{reader, dataStart_, dataEnd_};
   typedReader.onSchema = [&](SchemaPtr schemaPtr, ByteOffset, std::optional<ByteOffset>) {
@@ -554,7 +556,11 @@ Status McapReader::readSummaryFromScan_(IReadable& reader) {
 
     chunkIndexes_.emplace_back(std::move(chunkIndex));
   };
-  typedReader.onMessage = [&](const Message& message, ByteOffset, std::optional<ByteOffset>) {
+  typedReader.onMessage = [&](const Message& message, ByteOffset,
+                              std::optional<ByteOffset> chunkStartOffset) {
+    if (!chunkStartOffset.has_value()) {
+      hasUnchunkedMessages_ = true;
+    }
     if (message.logTime < statistics.messageStartTime) {
       statistics.messageStartTime = message.logTime;
     }
@@ -1961,12 +1967,14 @@ IndexedMessageReader::IndexedMessageReader(
     }
     chunkIndexes = mcapReader_.chunkIndexes();
   }
-  if (chunkIndexes.size() == 0 ||
-      std::all_of(chunkIndexes.begin(), chunkIndexes.end(), [](const ChunkIndex& ci) {
-        return ci.messageIndexLength == 0;
-      })) {
+  if (chunkIndexes.size() == 0) {
     status_ = Status(StatusCode::NoMessageIndexesAvailable,
-                     "cannot read MCAP in time order with no message indexes");
+                     "cannot read MCAP in time order with no chunk indexes");
+    return;
+  }
+  if (mcapReader_.hasUnchunkedMessages_) {
+    status_ = Status(StatusCode::NoMessageIndexesAvailable,
+                     "cannot read MCAP in time order with messages outside of chunks");
     return;
   }
   for (const auto& [channelId, channel] : mcapReader_.channels()) {
@@ -1974,23 +1982,30 @@ IndexedMessageReader::IndexedMessageReader(
       selectedChannels_.insert(channelId);
     }
   }
+  if (selectedChannels_.empty()) {
+    return;
+  }
   // Initialize the read job queue by finding all of the chunks that need to be read from.
   for (const auto& chunkIndex : mcapReader_.chunkIndexes()) {
     if (!options_.overlapsLogTimes(chunkIndex.messageStartTime, chunkIndex.messageEndTime)) {
       // chunk lies entirely outside the requested time range, skip it.
       continue;
     }
-    for (const auto& channelId : selectedChannels_) {
-      if (chunkIndex.messageIndexOffsets.find(channelId) != chunkIndex.messageIndexOffsets.end()) {
-        internal::DecompressChunkJob job;
-        job.chunkStartOffset = chunkIndex.chunkStartOffset;
-        job.messageIndexEndOffset =
-          chunkIndex.chunkStartOffset + chunkIndex.chunkLength + chunkIndex.messageIndexLength;
-        job.messageStartTime = chunkIndex.messageStartTime;
-        job.messageEndTime = chunkIndex.messageEndTime;
-        queue_.push(std::move(job));
-        break;
-      }
+    // Without message indexes, the channels in a chunk are unknown until it is scanned.
+    const auto& indexedChannels = chunkIndex.messageIndexOffsets;
+    const bool selected =
+      indexedChannels.empty() ||
+      std::any_of(selectedChannels_.begin(), selectedChannels_.end(), [&](ChannelId channelId) {
+        return indexedChannels.find(channelId) != indexedChannels.end();
+      });
+    if (selected) {
+      internal::DecompressChunkJob job;
+      job.chunkStartOffset = chunkIndex.chunkStartOffset;
+      job.messageIndexEndOffset =
+        chunkIndex.chunkStartOffset + chunkIndex.chunkLength + chunkIndex.messageIndexLength;
+      job.messageStartTime = chunkIndex.messageStartTime;
+      job.messageEndTime = chunkIndex.messageEndTime;
+      queue_.push(std::move(job));
     }
   }
 }
@@ -2036,67 +2051,92 @@ void IndexedMessageReader::decompressChunk(const Chunk& chunk,
   }
 }
 
+bool IndexedMessageReader::scanChunkForMessages(size_t chunkReaderIndex,
+                                                ByteOffset chunkStartOffset) {
+  auto& chunkSlot = chunkSlots_[chunkReaderIndex];
+  const std::byte* data = chunkSlot.decompressedChunk.data();
+  const uint64_t size = chunkSlot.decompressedChunk.size();
+  constexpr uint64_t RecordHeaderSize = 1 + 8;
+  // Message fields before the data: channel id, sequence, log time and publish time.
+  constexpr uint64_t MessageFieldsSize = 2 + 4 + 8 + 8;
+  uint64_t offset = 0;
+  while (offset < size) {
+    if (size - offset < RecordHeaderSize) {
+      status_ = Status(StatusCode::InvalidRecord,
+                       internal::StrCat("truncated record header at offset ", offset,
+                                        " in chunk at offset ", chunkStartOffset));
+      return false;
+    }
+    const auto opcode = OpCode(data[offset]);
+    const uint64_t recordSize = internal::ParseUint64(data + offset + 1);
+    const uint64_t recordStart = offset + RecordHeaderSize;
+    if (recordSize > size - recordStart) {
+      status_ =
+        Status(StatusCode::InvalidRecord,
+               internal::StrCat("record at offset ", offset, " with size ", recordSize,
+                                " extends past the end of chunk at offset ", chunkStartOffset));
+      return false;
+    }
+    if (opcode == OpCode::Message) {
+      if (recordSize < MessageFieldsSize) {
+        status_ = Status(StatusCode::InvalidRecord,
+                         internal::StrCat("invalid Message length: ", recordSize));
+        return false;
+      }
+      const ChannelId channelId = internal::ParseUint16(data + recordStart);
+      const Timestamp logTime = internal::ParseUint64(data + recordStart + 2 + 4);
+      if (selectedChannels_.find(channelId) != selectedChannels_.end() &&
+          options_.includesLogTime(logTime)) {
+        internal::ReadMessageJob job;
+        job.chunkReaderIndex = chunkReaderIndex;
+        job.offset.offset = offset;
+        job.offset.chunkOffset = chunkStartOffset;
+        job.timestamp = logTime;
+        queue_.push(std::move(job));
+        chunkSlot.unreadMessages++;
+      }
+    }
+    offset = recordStart + recordSize;
+  }
+  return true;
+}
+
 bool IndexedMessageReader::next() {
   while (queue_.len() != 0) {
     auto nextItem = queue_.pop();
     if (std::holds_alternative<internal::DecompressChunkJob>(nextItem)) {
       const auto& decompressChunkJob = std::get<internal::DecompressChunkJob>(nextItem);
-      // The job here is to decompress the chunk into a slot, then use the message
-      // indices after the chunk to push ReadMessageJobs onto the queue for every message
-      // in that chunk that needs to be read.
+      // The job here is to decompress the chunk into a slot, then scan it to push
+      // ReadMessageJobs onto the queue for every message in that chunk that needs to be read.
 
       // First, find a chunk slot to decompress this chunk into.
       size_t chunkReaderIndex = findFreeChunkSlot();
       auto& chunkSlot = chunkSlots_[chunkReaderIndex];
       chunkSlot.chunkStartOffset = decompressChunkJob.chunkStartOffset;
-      // Point the record reader at the chunk and message indices after it.
+      // Read the chunk record. The message indices after it are not read.
       recordReader_.reset(*mcapReader_.dataSource(), decompressChunkJob.chunkStartOffset,
                           decompressChunkJob.messageIndexEndOffset);
-      for (auto record = recordReader_.next(); record != std::nullopt;
-           record = recordReader_.next()) {
-        switch (record->opcode) {
-          case OpCode::Chunk: {
-            Chunk chunk;
-            status_ = McapReader::ParseChunk(*record, &chunk);
-            if (!status_.ok()) {
-              return false;
-            }
-            decompressChunk(chunk, chunkSlot);
-            if (!status_.ok()) {
-              return false;
-            }
-          } break;
-          case OpCode::MessageIndex: {
-            MessageIndex messageIndex;
-            status_ = McapReader::ParseMessageIndex(*record, &messageIndex);
-            if (!status_.ok()) {
-              return false;
-            }
-            if (selectedChannels_.find(messageIndex.channelId) != selectedChannels_.end()) {
-              for (const auto& [timestamp, byteOffset] : messageIndex.records) {
-                if (options_.includesLogTime(timestamp)) {
-                  internal::ReadMessageJob job;
-                  job.chunkReaderIndex = chunkReaderIndex;
-                  job.offset.offset = byteOffset;
-                  job.offset.chunkOffset = decompressChunkJob.chunkStartOffset;
-                  job.timestamp = timestamp;
-                  queue_.push(std::move(job));
-                  chunkSlot.unreadMessages++;
-                }
-              }
-            }
-          } break;
-          default:
-            status_ = Status(StatusCode::InvalidRecord,
-                             internal::StrCat("expected only chunks and message indices, found ",
-                                              OpCodeString(record->opcode)));
-            return false;
-        }
-      }
-      // The loop above ends both when the range is exhausted and when a record could not be
-      // read, so surface any read error before moving on to the next job.
+      const auto record = recordReader_.next();
       status_ = recordReader_.status();
       if (!status_.ok()) {
+        return false;
+      }
+      if (!record.has_value() || record->opcode != OpCode::Chunk) {
+        status_ =
+          Status(StatusCode::InvalidRecord, internal::StrCat("expected a chunk record at offset ",
+                                                             decompressChunkJob.chunkStartOffset));
+        return false;
+      }
+      Chunk chunk;
+      status_ = McapReader::ParseChunk(*record, &chunk);
+      if (!status_.ok()) {
+        return false;
+      }
+      decompressChunk(chunk, chunkSlot);
+      if (!status_.ok()) {
+        return false;
+      }
+      if (!scanChunkForMessages(chunkReaderIndex, decompressChunkJob.chunkStartOffset)) {
         return false;
       }
     } else if (std::holds_alternative<internal::ReadMessageJob>(nextItem)) {
