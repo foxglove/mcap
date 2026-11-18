@@ -3,7 +3,7 @@
  * order. This is a specialization of lodash's sortedIndexBy().
  */
 export function sortedIndexBy(
-  array: [bigint, bigint][],
+  array: readonly (readonly [bigint, ...unknown[]])[],
   value: bigint,
   iteratee: (value: bigint) => bigint,
 ): number {

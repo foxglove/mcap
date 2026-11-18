@@ -1,8 +1,11 @@
 import McapByteReader from "./McapByteReader.ts";
+import { Opcode } from "./constants.ts";
 import { parseRecord } from "./parse.ts";
 import { sortedIndexBy } from "./sortedIndexBy.ts";
 import { sortedLastIndexBy } from "./sortedLastIndex.ts";
 import type { IReadable, TypedMcapRecords } from "./types.ts";
+
+type MessageOffset = [logTime: bigint, offset: bigint, channelId: number];
 
 type ChunkCursorParams = {
   chunkIndex: TypedMcapRecords["ChunkIndex"];
@@ -35,7 +38,7 @@ export class ChunkCursor {
   #readFullMessageIndexRange: boolean;
 
   // List of message offsets (across all channels) sorted by logTime.
-  #orderedMessageOffsets?: [logTime: bigint, offset: bigint][];
+  #orderedMessageOffsets?: MessageOffset[];
   // Index for the next message offset. Gets incremented for every popMessage() call.
   #nextMessageOffsetIndex = 0;
 
@@ -46,16 +49,6 @@ export class ChunkCursor {
     this.#endingAt = params.endingAt;
     this.#reverse = params.reverse;
     this.#readFullMessageIndexRange = params.readFullMessageIndexRange ?? false;
-
-    if (this.chunkIndex.messageIndexLength === 0n) {
-      // Chunk has no message indexes.
-      // We only allow that if the chunk has no messages and the start and end times are 0.
-      if (this.chunkIndex.messageStartTime !== 0n || this.chunkIndex.messageEndTime !== 0n) {
-        throw new Error(
-          `Encountered a chunk index without message indexes and non-zero start and end times`,
-        );
-      }
-    }
   }
 
   /**
@@ -96,7 +89,7 @@ export class ChunkCursor {
    * Pop a message offset off of the chunk cursor. Message indexes must have been loaded before
    * using this method.
    */
-  popMessage(): [logTime: bigint, offset: bigint] {
+  popMessage(): MessageOffset {
     if (this.#orderedMessageOffsets == undefined) {
       throw new Error("loadMessageIndexes() must be called before popMessage()");
     }
@@ -110,18 +103,85 @@ export class ChunkCursor {
   }
 
   /**
-   * Returns true if message indexes have been loaded, false if `loadMessageIndexes()` needs to be
-   * called.
+   * Returns true if message offsets have been loaded, false if `loadMessageIndexes()` or
+   * `loadMessageIndexesFromChunk()` needs to be called.
    */
   hasMessageIndexes(): boolean {
     return this.#orderedMessageOffsets != undefined;
+  }
+
+  /**
+   * Returns true if the chunk is scanned for its messages: it has no Message Index records, or
+   * every message in it is wanted.
+   */
+  needsChunkScan(): boolean {
+    const { messageIndexOffsets, messageIndexLength } = this.chunkIndex;
+    if (messageIndexLength === 0n || messageIndexOffsets.size === 0) {
+      return true;
+    }
+    if (this.#relevantChannels) {
+      for (const channelId of messageIndexOffsets.keys()) {
+        if (!this.#relevantChannels.has(channelId)) {
+          return false;
+        }
+      }
+    }
+    return (
+      (this.#startingAt == undefined || this.#startingAt <= this.chunkIndex.messageStartTime) &&
+      (this.#endingAt == undefined || this.#endingAt >= this.chunkIndex.messageEndTime)
+    );
+  }
+
+  /**
+   * Finds the chunk's messages by scanning its uncompressed records. This stands in for
+   * `loadMessageIndexes()` when `needsChunkScan()` is true.
+   */
+  loadMessageIndexesFromChunk(chunkView: DataView): void {
+    const messageOffsets: MessageOffset[] = [];
+    const chunkLength = chunkView.byteLength;
+    // Message fields before the data: channel id (2), sequence (4), log time (8), publish time (8).
+    const messageFieldsLength = 2 + 4 + 8 + 8;
+    let offset = 0;
+    while (offset < chunkLength) {
+      const recordStart = offset + 1 + 8;
+      if (recordStart > chunkLength) {
+        throw new Error(
+          `Truncated record header at offset ${offset} in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
+        );
+      }
+      // The length is read in two halves to keep the scan free of BigInts.
+      const recordLength = chunkView.getUint32(offset + 1, true);
+      if (chunkView.getUint32(offset + 5, true) !== 0 || recordLength > chunkLength - recordStart) {
+        const fullLength = chunkView.getBigUint64(offset + 1, true);
+        throw new Error(
+          `Record at offset ${offset} with length ${fullLength} extends beyond chunk bounds (chunk data length ${chunkLength}) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
+        );
+      }
+      const opcode: Opcode = chunkView.getUint8(offset);
+      if (opcode === Opcode.MESSAGE) {
+        if (recordLength < messageFieldsLength) {
+          throw new Error(
+            `Message record at offset ${offset} is too short (${recordLength} bytes) in chunk at offset ${this.chunkIndex.chunkStartOffset}`,
+          );
+        }
+        const channelId = chunkView.getUint16(recordStart, true);
+        if (!this.#relevantChannels || this.#relevantChannels.has(channelId)) {
+          messageOffsets.push([
+            chunkView.getBigUint64(recordStart + 2 + 4, true),
+            BigInt(offset),
+            channelId,
+          ]);
+        }
+      }
+      offset = recordStart + recordLength;
+    }
+    this.#setMessageOffsets(messageOffsets);
   }
 
   async loadMessageIndexes<TReadOptions>(
     readable: IReadable<TReadOptions>,
     readOptions?: TReadOptions,
   ): Promise<void> {
-    const reverse = this.#reverse;
     let messageIndexStartOffset: bigint | undefined;
     let relevantMessageIndexStartOffset: bigint | undefined;
     const readFullRange = this.#readFullMessageIndexRange;
@@ -158,7 +218,7 @@ export class ChunkCursor {
     );
 
     const reader = new McapByteReader(messageIndexesView);
-    const arrayOfMessageOffsets: [logTime: bigint, offset: bigint][][] = [];
+    const messageOffsets: MessageOffset[] = [];
     let record;
     while ((record = parseRecord(reader, true))) {
       if (record.type !== "MessageIndex") {
@@ -171,16 +231,26 @@ export class ChunkCursor {
         continue;
       }
 
-      arrayOfMessageOffsets.push(record.records);
+      for (const [logTime, offset] of record.records) {
+        messageOffsets.push([logTime, offset, record.channelId]);
+      }
     }
 
     if (reader.bytesRemaining() !== 0) {
       throw new Error(`${reader.bytesRemaining()} bytes remaining in message index section`);
     }
 
-    this.#orderedMessageOffsets = arrayOfMessageOffsets
-      .flat()
-      .sort(([logTimeA, offsetA], [logTimeB, offsetB]) => {
+    this.#setMessageOffsets(messageOffsets);
+  }
+
+  /**
+   * Orders the offsets of the chunk's relevant messages for iteration and drops those outside
+   * the requested time range.
+   */
+  #setMessageOffsets(messageOffsets: MessageOffset[]): void {
+    const reverse = this.#reverse;
+    this.#orderedMessageOffsets = messageOffsets.sort(
+      ([logTimeA, offsetA], [logTimeB, offsetB]) => {
         let diff = Number(logTimeA - logTimeB);
 
         // Break ties by message offset in the file
@@ -189,7 +259,8 @@ export class ChunkCursor {
         }
 
         return diff;
-      });
+      },
+    );
 
     if (reverse) {
       // If we used `logTimeB - logTimeA` as the comparator for reverse iteration, messages with

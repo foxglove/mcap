@@ -1771,6 +1771,134 @@ TEST_CASE("Read Order", "[reader][writer]") {
     }
     REQUIRE(count == reverse_order_expected.size());
   }
+  SECTION("reads files with and without message indexes") {
+    const bool noMessageIndex = GENERATE(false, true);
+    struct CountingBuffer : Buffer {
+      uint64_t readCalls = 0;
+      uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override {
+        ++readCalls;
+        return Buffer::read(output, offset, size);
+      }
+    };
+    CountingBuffer buffer;
+
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+    opts.compression = mcap::Compression::None;
+    opts.noMessageIndex = noMessageIndex;
+    opts.chunkSize = 100;
+    writer.open(buffer, opts);
+    mcap::Channel channel1("topic1", "messageEncoding", 0);
+    writer.addChannel(channel1);
+    mcap::Channel channel2("topic2", "messageEncoding", 0);
+    writer.addChannel(channel2);
+
+    // Log times repeat and go backwards within a chunk. Even sequences are on topic1.
+    std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
+    const std::vector<mcap::Timestamp> logTimes = {3, 1, 2, 2, 6, 4, 5, 9, 7, 8, 8, 10};
+    for (uint32_t i = 0; i < logTimes.size(); ++i) {
+      WriteMsg(writer, i % 2 == 0 ? channel1.id : channel2.id, i, logTimes[i], 0, data);
+    }
+    writer.close();
+
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    requireOk(reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan));
+    REQUIRE(reader.chunkIndexes().size() > 1);
+    for (const auto& chunkIndex : reader.chunkIndexes()) {
+      REQUIRE((chunkIndex.messageIndexLength == 0) == noMessageIndex);
+    }
+
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    const auto readSequences = [&](const mcap::ReadMessageOptions& options) {
+      std::vector<uint32_t> sequences;
+      for (const auto& msgView : reader.readMessages(onProblem, options)) {
+        sequences.push_back(msgView.message.sequence);
+      }
+      return sequences;
+    };
+
+    mcap::ReadMessageOptions options;
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::LogTimeOrder;
+    REQUIRE(readSequences(options) == std::vector<uint32_t>{1, 2, 3, 0, 5, 6, 4, 8, 9, 10, 7, 11});
+
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::ReverseLogTimeOrder;
+    REQUIRE(readSequences(options) == std::vector<uint32_t>{11, 7, 10, 9, 8, 4, 6, 5, 0, 3, 2, 1});
+
+    options.readOrder = mcap::ReadMessageOptions::ReadOrder::LogTimeOrder;
+    options.topicFilter = [](std::string_view topic) {
+      return topic == "topic2";
+    };
+    REQUIRE(readSequences(options) == std::vector<uint32_t>{1, 3, 5, 9, 7, 11});
+
+    options.topicFilter = [](std::string_view topic) {
+      return topic == "topic1";
+    };
+    REQUIRE(readSequences(options) == std::vector<uint32_t>{2, 0, 6, 4, 8, 10});
+
+    options.topicFilter = nullptr;
+    options.startingAt(4);
+    options.endingAt(8);
+    REQUIRE(readSequences(options) == std::vector<uint32_t>{5, 6, 4, 8, 9, 10});
+
+    // A filter that selects no channel reads nothing from the file.
+    options.topicFilter = [](std::string_view) {
+      return false;
+    };
+    const uint64_t readCalls = buffer.readCalls;
+    REQUIRE(readSequences(options).empty());
+    REQUIRE(buffer.readCalls == readCalls);
+  }
+
+  SECTION("rejects a file without a summary that has messages outside of chunks") {
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+    opts.compression = mcap::Compression::None;
+    opts.noSummary = true;
+    writer.open(buffer, opts);
+    mcap::Channel channel("topic", "messageEncoding", 0);
+    writer.addChannel(channel);
+    WriteMsg(writer, channel.id, 0, 1, 0, {std::byte(1)});
+    writer.close();
+
+    // Insert a message record between the chunk and the Data End record.
+    std::vector<std::byte> message(1 + 8 + 2 + 4 + 8 + 8);
+    message[0] = std::byte(mcap::OpCode::Message);
+    message[1] = std::byte(message.size() - 9);
+    message[9] = std::byte(channel.id);
+    message[15] = std::byte(2);  // log time
+    const size_t dataEndAndFooterSize = (1 + 8 + 4) + (1 + 8 + 8 + 8 + 4) + sizeof(mcap::Magic);
+    buffer.buffer.insert(buffer.buffer.end() - dataEndAndFooterSize, message.begin(),
+                         message.end());
+
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    std::vector<mcap::Status> problems;
+    const auto onProblem = [&](const mcap::Status& status) {
+      problems.push_back(status);
+    };
+    const auto readLogTimes = [&](mcap::ReadMessageOptions::ReadOrder readOrder) {
+      mcap::ReadMessageOptions options;
+      options.readOrder = readOrder;
+      std::vector<mcap::Timestamp> logTimes;
+      for (const auto& msgView : reader.readMessages(onProblem, options)) {
+        logTimes.push_back(msgView.message.logTime);
+      }
+      return logTimes;
+    };
+
+    REQUIRE(readLogTimes(mcap::ReadMessageOptions::ReadOrder::FileOrder) ==
+            std::vector<mcap::Timestamp>{1, 2});
+    REQUIRE(problems.empty());
+
+    REQUIRE(readLogTimes(mcap::ReadMessageOptions::ReadOrder::LogTimeOrder).empty());
+    REQUIRE(problems.size() == 1);
+    REQUIRE(problems[0].code == mcap::StatusCode::NoMessageIndexesAvailable);
+  }
 }
 
 TEST_CASE("ReadJobQueue order", "[reader]") {
