@@ -21,9 +21,8 @@ struct ReadMessageJob {
 };
 
 /**
- * @brief A job to decompress the chunk starting at `chunkStartOffset`. The message indices
- * starting directly after the chunk record and ending at `messageIndexEndOffset` will be used to
- * find specific messages within the chunk.
+ * @brief A job to decompress the chunk at `chunkStartOffset` and scan it for messages.
+ * `messageIndexEndOffset` orders the job in reverse reads.
  */
 struct DecompressChunkJob {
   Timestamp messageStartTime;

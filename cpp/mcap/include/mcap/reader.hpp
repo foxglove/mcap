@@ -240,6 +240,7 @@ private:
 #endif
 
 struct LinearMessageView;
+struct IndexedMessageReader;
 
 /**
  * @brief Options for reading messages out of an MCAP file.
@@ -644,6 +645,7 @@ public:
 private:
   using ChunkInterval = internal::Interval<ByteOffset, ChunkIndex>;
   friend LinearMessageView;
+  friend IndexedMessageReader;
 
   IReadable* input_ = nullptr;
   std::FILE* file_ = nullptr;
@@ -661,6 +663,8 @@ private:
   ByteOffset dataStart_ = 0;
   ByteOffset dataEnd_ = EndOffset;
   bool parsedSummary_ = false;
+  // Set when a scan for the summary finds a message outside of a chunk.
+  bool hasUnchunkedMessages_ = false;
 
   void reset_();
   // The span of the indexed chunks overlapping `options`' time range, or the whole data
@@ -771,12 +775,13 @@ private:
 };
 
 /**
- * @brief Uses message indices to read messages out of an MCAP in log time order.
- * The underlying MCAP must be chunked, with a summary section and message indexes.
+ * @brief Reads messages out of an MCAP in log time order.
+ * All messages must be in chunks. A summary section, if the file has one, must hold the chunk
+ * indexes; a file with no summary section is scanned to find its chunks. Each chunk is scanned
+ * for its messages, so message indexes are not needed.
  * The required McapWriterOptions are:
  *  - noChunking: false
- *  - noMessageIndex: false
- *  - noSummary: false
+ *  - noChunkIndex: false, unless noSummary is true
  */
 struct MCAP_PUBLIC IndexedMessageReader {
 public:
@@ -807,6 +812,7 @@ private:
   };
   size_t findFreeChunkSlot();
   void decompressChunk(const Chunk& chunk, ChunkSlot& slot);
+  bool scanChunkForMessages(size_t chunkReaderIndex, ByteOffset chunkStartOffset);
   Status status_;
   McapReader& mcapReader_;
   RecordReader recordReader_;

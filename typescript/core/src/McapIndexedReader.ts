@@ -420,6 +420,9 @@ export class McapIndexedReader<TReadOptions = unknown> {
           relevantChannels.add(channel.id);
         }
       }
+      if (relevantChannels.size === 0) {
+        return;
+      }
     }
 
     const chunkCursors = new Heap<ChunkCursor>((a, b) => a.compare(b));
@@ -453,7 +456,18 @@ export class McapIndexedReader<TReadOptions = unknown> {
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
-        await cursor.loadMessageIndexes(this.#messageIndexReadable, readOptions);
+        if (cursor.needsChunkScan()) {
+          const chunkView = await this.#loadChunkData(cursor.chunkIndex, {
+            validateCrcs: validateCrcs ?? true,
+            readOptions,
+          });
+          cursor.loadMessageIndexesFromChunk(chunkView);
+          if (cursor.hasMoreMessages()) {
+            chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
+          }
+        } else {
+          await cursor.loadMessageIndexes(this.#messageIndexReadable, readOptions);
+        }
         if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);
         } else {
@@ -471,7 +485,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
         chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
       }
 
-      const [logTime, offset] = cursor.popMessage();
+      const [logTime, offset, channelId] = cursor.popMessage();
       if (offset >= BigInt(chunkView.byteLength)) {
         throw this.#errorWithLibrary(
           `Message offset beyond chunk bounds (log time ${logTime}, offset ${offset}, chunk data length ${chunkView.byteLength}) in chunk at offset ${cursor.chunkIndex.chunkStartOffset}`,
@@ -492,6 +506,11 @@ export class McapIndexedReader<TReadOptions = unknown> {
       if (record.logTime !== logTime) {
         throw this.#errorWithLibrary(
           `Message log time ${record.logTime} did not match message index entry (${logTime} at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
+        );
+      }
+      if (record.channelId !== channelId) {
+        throw this.#errorWithLibrary(
+          `Message channel ${record.channelId} did not match message index entry (channel ${channelId}, time ${logTime}, offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
         );
       }
       yield record;
