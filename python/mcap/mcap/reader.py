@@ -20,7 +20,8 @@ from typing import (
 from ._message_queue import KeyedMessage, LogTimeOrderQueue
 from .data_stream import ReadDataStream, RecordBuilder
 from .decoder import DecoderFactory
-from .exceptions import DecoderNotFoundError, McapError
+from .exceptions import DecoderNotFoundError, EndOfFile, McapError
+from .opcode import Opcode
 from .records import (
     Attachment,
     AttachmentIndex,
@@ -37,6 +38,8 @@ from .records import (
     Statistics,
 )
 from .stream_reader import (
+    _RECORD_PREFIX,
+    _RECORD_PREFIX_SIZE,
     MAGIC_SIZE,
     StreamReader,
     _get_chunk_data,
@@ -380,9 +383,14 @@ class SeekingReader(McapReader):
             # No chunk indices available, so there is no index to search for messages.
             # use a non-seeking reader to read linearly through the stream.
             self._stream.seek(0, io.SEEK_SET)
-            yield from NonSeekingReader(self._stream).iter_messages(
+            yield from NonSeekingReader(
+                self._stream,
+                validate_crcs=self._validate_crcs,
+                record_size_limit=self._record_size_limit,
+            ).iter_messages(
                 topics,
                 log_time_order=log_time_order,
+                reverse=reverse,
                 starting_at=starting_at,
                 ending_before=ending_before,
             )
@@ -527,13 +535,49 @@ class SeekingReader(McapReader):
         )
         return self._summary
 
+    def _scan_data_section(self, opcode: Opcode) -> Iterator[McapRecord]:
+        """Yields the records with the given opcode from the data section, in file order.
+
+        Reads each record's opcode and length and seeks over the ones it does not want, so
+        chunks are skipped without being read. Only suitable for records that are never inside
+        a chunk, such as attachments and metadata. Stops at the DataEnd or Footer record, and
+        raises EndOfFile if the stream ends before that.
+        """
+        self._stream.seek(0, io.SEEK_SET)
+        read_magic(ReadDataStream(self._stream))
+        offset = MAGIC_SIZE
+        while True:
+            # Seek on every pass: the caller may move the stream between yields.
+            self._stream.seek(offset, io.SEEK_SET)
+            prefix = self._stream.read(_RECORD_PREFIX_SIZE)
+            if len(prefix) < _RECORD_PREFIX_SIZE:
+                raise EndOfFile()
+            found, length = _RECORD_PREFIX.unpack(prefix)
+            if found == Opcode.DATA_END or found == Opcode.FOOTER:
+                return
+            if found == opcode:
+                self._stream.seek(offset, io.SEEK_SET)
+                yield next(
+                    StreamReader(
+                        self._stream,
+                        skip_magic=True,
+                        record_size_limit=self._record_size_limit,
+                    ).records
+                )
+            offset += _RECORD_PREFIX_SIZE + length
+
     def iter_attachments(self) -> Iterator[Attachment]:
         """Iterates through attachment records in the MCAP."""
         summary = self.get_summary()
-        if summary is None:
-            # no index available, use a non-seeking reader to read linearly through the stream.
-            self._stream.seek(0, io.SEEK_SET)
-            yield from NonSeekingReader(self._stream).iter_attachments()
+        if summary is None or (
+            summary.statistics.attachment_count > len(summary.attachment_indexes)
+            if summary.statistics is not None
+            else len(summary.attachment_indexes) == 0
+        ):
+            # no usable index: walk the data section, skipping every record we do not want.
+            for record in self._scan_data_section(Opcode.ATTACHMENT):
+                if isinstance(record, Attachment):
+                    yield record
             return
         for attachment_index in summary.attachment_indexes:
             self._stream.seek(attachment_index.offset)
@@ -552,10 +596,15 @@ class SeekingReader(McapReader):
     def iter_metadata(self) -> Iterator[Metadata]:
         """Iterates through metadata records in the MCAP."""
         summary = self.get_summary()
-        if summary is None:
-            # fall back to a non-seeking reader
-            self._stream.seek(0, io.SEEK_SET)
-            yield from NonSeekingReader(self._stream).iter_metadata()
+        if summary is None or (
+            summary.statistics.metadata_count > len(summary.metadata_indexes)
+            if summary.statistics is not None
+            else len(summary.metadata_indexes) == 0
+        ):
+            # no usable index: walk the data section, skipping every record we do not want.
+            for record in self._scan_data_section(Opcode.METADATA):
+                if isinstance(record, Metadata):
+                    yield record
             return
         for metadata_index in summary.metadata_indexes:
             self._stream.seek(metadata_index.offset)
@@ -650,12 +699,17 @@ class NonSeekingReader(McapReader):
         if topics is not None:
             topics = set(topics)
         if not log_time_order:
+            if reverse:
+                raise ValueError("reverse is only valid with log_time_order=True")
             yield from self._iter_messages_internal(topics, starting_at, ending_before)
         else:
             messages = list(
                 self._iter_messages_internal(topics, starting_at, ending_before)
             )
-            messages.sort(key=lambda tup: tup[2].log_time, reverse=reverse)
+            messages.sort(key=lambda tup: tup[2].log_time)
+            if reverse:
+                # Reverse the stable sort so tied messages mirror the forward order.
+                messages.reverse()
             yield from messages
 
     def _iter_messages_internal(
