@@ -72,7 +72,8 @@ Options:
       --allow-remote-scan
           Allow whole-file scans or downloads of remote inputs.
 
-          Applies to http(s):// and object-store URLs (s3://, s3a://, gs://, az://, abfs://). Small bounded indexed reads work without this flag.
+          Applies to http(s):// and object-store URLs (s3://, s3a://, gs://, az://, abfs://). Small
+          bounded indexed reads work without this flag.
 
       --time-format <TIME_FORMAT>
           How to render timestamps in command output
@@ -289,7 +290,7 @@ metadata:    0
 
 <!-- cspell: enable -->
 
-Indexed reads use the summary index at the end of the file to fetch only the bytes they need, minimizing latency and data transfer. Commands that only need indexed data — such as `info`, `list`, and single-record `get` — work against remote files without any extra flags.
+Indexed reads use the summary index at the end of the file to fetch only the bytes they need, minimizing latency and data transfer. Commands that only need indexed data — `info`, `list`, single-record `get`, and `du --approximate` — work against remote files without extra flags as long as what they fetch (the summary section, the requested records, or the message indexes) stays under 100 MB. Larger indexed reads require `--allow-remote-scan`.
 
 #### Allowing full remote scans
 

@@ -6,7 +6,8 @@ mod drivers;
 
 pub use drivers::{
     for_each_linear_record, for_each_top_level_record_of, parse_record_bytes, read_footer,
-    read_summary, service_indexed_chunk, try_for_each_linear_record, RECORD_PREFIX_LEN,
+    read_header, read_summary, service_indexed_chunk, try_for_each_linear_record,
+    RECORD_PREFIX_LEN,
 };
 
 use std::fs::File;
@@ -18,15 +19,26 @@ use tempfile::NamedTempFile;
 
 use crate::source::{
     is_remote_url, materialize_input, open_remote_range_reader, redacted_display,
-    remote_scan_opt_in_suffix, require_remote_scan_allowed, RemoteRangeReader, SourceOptions,
-    PLEASE_SUPPLY_FILE,
+    remote_indexed_read_budget, remote_scan_opt_in_suffix, require_remote_scan_allowed,
+    RemoteRangeReader, SourceOptions, PLEASE_SUPPLY_FILE,
 };
 
 /// Byte-oriented input with optional random access.
 pub trait ByteSource {
     /// File size in bytes, or `None` when unknown (streaming inputs without a known length).
     fn size(&self) -> Option<u64>;
+    /// The most bytes one indexed read, such as the summary section, may take from this source,
+    /// or `None` when it is unlimited. A remote source carries the limit it was opened with, so
+    /// a reader can refuse an oversized read before fetching it.
+    fn indexed_read_budget(&self) -> Option<u64>;
+    /// Whether fetching bytes from this source is slow enough that a reader should work from
+    /// the index where it can, even when a scan is allowed.
+    fn prefers_indexed_reads(&self) -> bool {
+        false
+    }
     fn display_name(&self) -> String;
+    /// Whether random access is available.
+    fn is_seekable(&self) -> bool;
 
     /// Read up to `dest.len()` bytes at `offset` into `dest`, returning the count (0 at EOF).
     /// Sans-io drivers use this to fill `reader.insert(need)` without an extra allocation.
@@ -136,8 +148,16 @@ impl ByteSource for LocalFileSource {
         Some(self.size)
     }
 
+    fn indexed_read_budget(&self) -> Option<u64> {
+        None
+    }
+
     fn display_name(&self) -> String {
         self.path.display().to_string()
+    }
+
+    fn is_seekable(&self) -> bool {
+        true
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -198,16 +218,19 @@ pub struct RemoteRangeSource {
     window: Vec<u8>,
     window_start: u64,
     read_ahead_bytes: usize,
+    /// The indexed-read cap `options` asked for at open; `None` under `--allow-remote-scan`.
+    indexed_read_budget: Option<u64>,
 }
 
 impl RemoteRangeSource {
-    pub(crate) fn new(mut inner: RemoteRangeReader) -> Self {
+    pub(crate) fn new(mut inner: RemoteRangeReader, options: SourceOptions) -> Self {
         let (window_start, window) = inner.take_tail().unwrap_or_default();
         Self {
             inner,
             window,
             window_start,
             read_ahead_bytes: REMOTE_READ_AHEAD_BYTES,
+            indexed_read_budget: remote_indexed_read_budget(options),
         }
     }
 
@@ -250,8 +273,20 @@ impl ByteSource for RemoteRangeSource {
         Some(self.inner.size())
     }
 
+    fn indexed_read_budget(&self) -> Option<u64> {
+        self.indexed_read_budget
+    }
+
+    fn prefers_indexed_reads(&self) -> bool {
+        true
+    }
+
     fn display_name(&self) -> String {
         self.inner.display_url().to_string()
+    }
+
+    fn is_seekable(&self) -> bool {
+        true
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -321,8 +356,16 @@ impl<R: Read> ByteSource for SequentialSource<R> {
         None
     }
 
+    fn indexed_read_budget(&self) -> Option<u64> {
+        None
+    }
+
     fn display_name(&self) -> String {
         self.name.clone()
+    }
+
+    fn is_seekable(&self) -> bool {
+        false
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -371,8 +414,16 @@ impl ByteSource for MemorySource {
         Some(self.data.len() as u64)
     }
 
+    fn indexed_read_budget(&self) -> Option<u64> {
+        None
+    }
+
     fn display_name(&self) -> String {
         "<memory>".to_string()
+    }
+
+    fn is_seekable(&self) -> bool {
+        true
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -411,20 +462,6 @@ pub fn open_byte_source_for_scan(
     open_byte_source(path, options)
 }
 
-/// Opens `path` for a command that reads the whole input through random access, such as the
-/// rewrite engine. A remote URL is downloaded to a tempfile first, under the `--allow-remote-scan`
-/// opt-in checked from the path before any request goes out, exactly like the whole-file loads
-/// this replaces. Reading such inputs by range instead is separate work.
-pub fn open_materialized_byte_source(
-    path: &Path,
-    options: SourceOptions,
-) -> Result<Box<dyn ByteSource>> {
-    if is_remote_url(path) {
-        return Ok(Box::new(spool_remote_to_local(path, options)?));
-    }
-    Ok(Box::new(LocalFileSource::open_path(path)?))
-}
-
 /// Spools stdin to a tempfile and opens it as a random-access [`ByteSource`], for commands that
 /// may seek. Commands that only scan forward should use [`SequentialSource::stdin`] instead.
 pub fn open_stdin_byte_source() -> Result<Box<dyn ByteSource>> {
@@ -446,7 +483,7 @@ pub fn open_stdin_byte_source() -> Result<Box<dyn ByteSource>> {
 
 fn open_remote_byte_source(path: &Path, options: SourceOptions) -> Result<Box<dyn ByteSource>> {
     match open_remote_range_reader(path)? {
-        Some(reader) => Ok(Box::new(RemoteRangeSource::new(reader))),
+        Some(reader) => Ok(Box::new(RemoteRangeSource::new(reader, options))),
         None if !options.allow_remote_scan => {
             bail!(
                 "failed to read {}\nRemote server does not support range requests; {}",
@@ -489,8 +526,16 @@ impl<F: FnMut(u64, &[u8]) -> Result<()>> ByteSource for InstrumentedSource<F> {
         self.inner.size()
     }
 
+    fn indexed_read_budget(&self) -> Option<u64> {
+        self.inner.indexed_read_budget()
+    }
+
     fn display_name(&self) -> String {
         self.inner.display_name()
+    }
+
+    fn is_seekable(&self) -> bool {
+        self.inner.is_seekable()
     }
 
     fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> Result<usize> {
@@ -775,5 +820,46 @@ mod tests {
             )),
             "{err:#}"
         );
+    }
+
+    #[test]
+    fn local_file_source_matches_memory_summary() {
+        let bytes = write_summary_mcap();
+        let dir = tempfile::TempDir::new().expect("temp dir");
+        let path = dir.path().join("demo.mcap");
+        std::fs::write(&path, &bytes).expect("write fixture");
+
+        let mut local = LocalFileSource::open_path(&path).expect("open local");
+        assert!(local.is_seekable());
+        assert_eq!(local.indexed_read_budget(), None);
+        assert_eq!(local.size(), Some(bytes.len() as u64));
+
+        let summary = read_summary(&mut local)
+            .expect("summary read")
+            .expect("summary should exist");
+        assert!(summary.channels.values().any(|ch| ch.topic == "/demo"));
+    }
+
+    #[test]
+    fn service_indexed_chunk_feeds_messages() {
+        let bytes = write_summary_mcap();
+        let mut source = MemorySource::new(bytes);
+        let summary = read_summary(&mut source)
+            .expect("summary read")
+            .expect("summary should exist");
+        let mut reader = mcap::sans_io::IndexedReader::new(&summary).expect("indexed reader");
+        let mut messages = 0usize;
+        while let Some(event) = reader.next_event() {
+            match event.expect("indexed event") {
+                mcap::sans_io::IndexedReadEvent::ReadChunkRequest { offset, length } => {
+                    service_indexed_chunk(&mut reader, &mut source, offset, length)
+                        .expect("service chunk");
+                }
+                mcap::sans_io::IndexedReadEvent::Message { .. } => {
+                    messages += 1;
+                }
+            }
+        }
+        assert_eq!(messages, 1);
     }
 }
