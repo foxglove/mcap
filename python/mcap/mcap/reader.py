@@ -21,6 +21,7 @@ from ._message_queue import KeyedMessage, LogTimeOrderQueue
 from .data_stream import ReadDataStream, RecordBuilder
 from .decoder import DecoderFactory
 from .exceptions import DecoderNotFoundError, EndOfFile, McapError
+from .opcode import Opcode
 from .records import (
     Attachment,
     AttachmentIndex,
@@ -33,7 +34,6 @@ from .records import (
     Message,
     Metadata,
     MetadataIndex,
-    Opcode,
     Schema,
     Statistics,
 )

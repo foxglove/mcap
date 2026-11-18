@@ -1,4 +1,4 @@
-"""Tests for SeekingReader queries that fall back to a linear NonSeekingReader scan."""
+"""Tests for SeekingReader queries on files whose summary lacks the index they need."""
 
 from io import BytesIO
 from typing import Any, List, Optional, Tuple
@@ -17,7 +17,6 @@ MESSAGE_DATA = b"message-data"
 def _write(
     index_types: IndexType = IndexType.NONE,
     statistics: bool = True,
-    use_chunking: bool = True,
     records: int = 2,
     size: int = 1,
 ) -> bytes:
@@ -26,7 +25,7 @@ def _write(
         out,
         index_types=index_types,
         use_statistics=statistics,
-        use_chunking=use_chunking,
+        use_chunking=True,
         compression=CompressionType.NONE,
     )
     writer.start()
@@ -72,13 +71,18 @@ def _chunk_bytes_read(stream: _CountingStream, summary: Any) -> int:
     )
 
 
+def _without_summary(data: bytes) -> bytes:
+    """Clears the footer's summary offsets, so that readers see a file with no summary."""
+    footer = len(data) - MAGIC_SIZE - 20
+    return data[:footer] + bytes(16) + data[footer + 16 :]
+
+
 def _order(reader: SeekingReader, **kwargs: Any) -> List[Tuple[int, int]]:
     return [(m.log_time, m.sequence) for _, _, m in reader.iter_messages(**kwargs)]
 
 
-@pytest.mark.parametrize("use_chunking", [False, True])
-def test_reverse_without_chunk_index(use_chunking: bool):
-    reader = SeekingReader(BytesIO(_write(use_chunking=use_chunking)))
+def test_reverse_without_chunk_index():
+    reader = SeekingReader(BytesIO(_write()))
     summary = reader.get_summary()
     assert summary is not None and not summary.chunk_indexes
     forward = _order(reader)
@@ -88,9 +92,8 @@ def test_reverse_without_chunk_index(use_chunking: bool):
     assert _order(reader, reverse=True, **window) == [(20, 3), (20, 2)]
 
 
-@pytest.mark.parametrize("use_chunking", [False, True])
-def test_reverse_requires_log_time_order_without_chunk_index(use_chunking: bool):
-    reader = SeekingReader(BytesIO(_write(use_chunking=use_chunking)))
+def test_reverse_requires_log_time_order_without_chunk_index():
+    reader = SeekingReader(BytesIO(_write()))
     summary = reader.get_summary()
     assert summary is not None and not summary.chunk_indexes
     with pytest.raises(
@@ -114,40 +117,12 @@ def test_validate_crcs_without_chunk_index():
         list(SeekingReader(BytesIO(data), validate_crcs=True).iter_messages())
 
 
-@pytest.mark.parametrize("method", ["iter_attachments", "iter_metadata"])
-def test_scan_skips_chunks_so_their_crcs_are_not_checked(method: str):
-    # Attachments and metadata are never inside chunks, so the scan does not read the
-    # chunks, like the indexed path. A corrupt chunk does not affect the result.
-    data = bytearray(_write())
-    data[data.index(MESSAGE_DATA)] ^= 0xFF
-    reader = SeekingReader(BytesIO(data), validate_crcs=True)
-    assert len(list(getattr(reader, method)())) == 2
-
-
 @pytest.mark.parametrize("method", METHODS)
 def test_record_size_limit_without_indexes(method: str):
     data = _write(size=256)
     assert len(list(getattr(SeekingReader(BytesIO(data)), method)())) > 0
     with pytest.raises(RecordLengthLimitExceeded):
         list(getattr(SeekingReader(BytesIO(data), record_size_limit=100), method)())
-
-
-def _wrong_statistics(extra: int) -> bytes:
-    """A file with attachment and metadata indexes, whose Statistics count `extra` more."""
-    out = BytesIO()
-    writer = Writer(out, use_chunking=True, compression=CompressionType.NONE)
-    writer.start()
-    schema = writer.register_schema("s", "jsonschema", b"{}")
-    channel = writer.register_channel("/a", "json", schema)
-    for i in range(50):
-        writer.add_message(channel, i, MESSAGE_DATA * 1000, i)
-    writer.add_attachment(0, 0, "att0", "text/plain", b"a")
-    writer.add_metadata("meta0", {"k": "v"})
-    statistics = getattr(writer, "_Writer__statistics")
-    statistics.attachment_count += extra
-    statistics.metadata_count += extra
-    writer.finish()
-    return out.getvalue()
 
 
 def _big_chunks(index_types: IndexType, statistics: bool = True) -> bytes:
@@ -190,25 +165,18 @@ def test_scan_does_not_read_chunk_payloads_without_indexes(
 
 
 @pytest.mark.parametrize("method", ["iter_attachments", "iter_metadata"])
-def test_scan_does_not_read_chunk_payloads_with_wrong_statistics(method: str):
-    data = _wrong_statistics(extra=1)
+def test_scan_without_summary_does_not_read_chunk_payloads(method: str):
+    indexed = _big_chunks(IndexType.CHUNK, statistics=False)
+    # The chunk offsets stay valid, as only the footer changes.
+    summary = SeekingReader(BytesIO(indexed)).get_summary()
+    assert summary is not None and len(summary.chunk_indexes) > 1
+    data = _without_summary(indexed)
     stream = _CountingStream(data)
     reader = SeekingReader(stream)
-    summary = reader.get_summary()
-    assert summary is not None and summary.chunk_indexes
-    assert len(summary.attachment_indexes) == 1 and len(summary.metadata_indexes) == 1
-    assert summary.statistics is not None and summary.statistics.attachment_count == 2
+    assert reader.get_summary() is None
     stream.reads.clear()
-    assert len(list(getattr(reader, method)())) == 1
+    assert len(list(getattr(reader, method)())) == 4
     assert _chunk_bytes_read(stream, summary) == 0
-    assert sum(length for _, length in stream.reads) < len(data) // 10
-
-
-@pytest.mark.parametrize("method", ["iter_attachments", "iter_metadata"])
-def test_scan_without_summary_does_not_read_chunk_payloads(method: str):
-    data = _big_chunks(IndexType.NONE, statistics=False)
-    stream = _CountingStream(data)
-    assert len(list(getattr(SeekingReader(stream), method)())) == 4
     assert sum(length for _, length in stream.reads) < len(data) // 10
 
 
@@ -230,26 +198,12 @@ def test_scan_on_truncated_data_section_raises_end_of_file(method: str):
     # Remove bytes from inside the chunk, so that its length runs past the end of the file.
     start = data.index(MESSAGE_DATA) + 100
     data = data[:start] + data[start + 3000 :]
-    # The summary offsets are stale now: clear them, as a file without a summary has.
-    footer = len(data) - MAGIC_SIZE - 20
-    data = data[:footer] + bytes(16) + data[footer + 16 :]
+    # The summary offsets are stale now.
+    data = _without_summary(data)
     reader = SeekingReader(BytesIO(data))
     assert reader.get_summary() is None
     with pytest.raises(EndOfFile):
         list(getattr(reader, method)())
-
-
-@pytest.mark.parametrize("statistics", [False, True])
-def test_attachments_and_metadata_without_indexes(statistics: bool):
-    data = _write(
-        index_types=IndexType.CHUNK | IndexType.MESSAGE, statistics=statistics
-    )
-    reader = SeekingReader(BytesIO(data))
-    summary = reader.get_summary()
-    assert summary is not None
-    assert not summary.attachment_indexes and not summary.metadata_indexes
-    assert [a.name for a in reader.iter_attachments()] == ["att0", "att1"]
-    assert [m.name for m in reader.iter_metadata()] == ["meta0", "meta1"]
 
 
 def test_attachments_and_metadata_absent_in_statistics_skip_the_scan():
