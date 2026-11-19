@@ -189,26 +189,26 @@ struct MCAP_PUBLIC ByteSpan {
  * @brief A single Message published to a Channel.
  */
 struct MCAP_PUBLIC Message {
-  ChannelId channelId;
+  ChannelId channelId = 0;
   /**
    * @brief An optional sequence number. If non-zero, sequence numbers should be
    * unique per channel and increasing over time.
    */
-  uint32_t sequence;
+  uint32_t sequence = 0;
   /**
    * @brief Nanosecond timestamp when this message was recorded or received for
    * recording.
    */
-  Timestamp logTime;
+  Timestamp logTime = 0;
   /**
    * @brief Nanosecond timestamp when this message was initially published. If
    * not available, this should be set to `logTime`.
    */
-  Timestamp publishTime;
+  Timestamp publishTime = 0;
   /**
    * @brief Size of the message payload in bytes, pointed to via `data`.
    */
-  uint64_t dataSize;
+  uint64_t dataSize = 0;
   /**
    * @brief A pointer to the message payload. For readers, this pointer is only
    * valid for the lifetime of an onMessage callback or before the message
