@@ -1,0 +1,40 @@
+[package]
+name = "mcap-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.mcap]
+path = "../mcap"
+
+# Use independent workspace for fuzzers
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "message_stream"
+path = "fuzz_targets/message_stream.rs"
+test = false
+doc = false
+bench = false
+
+
+[[bin]]
+name = "summary_read"
+path = "fuzz_targets/summary_read.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "linear_reader"
+path = "fuzz_targets/linear_reader.rs"
+test = false
+doc = false
+bench = false
