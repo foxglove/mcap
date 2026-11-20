@@ -1621,8 +1621,8 @@ TEST_CASE("zstd compression", "[reader][writer]") {
   SECTION("Roundtrip with compression threads") {
     // 2 MiB chunks split into four 512 KiB jobs. 5 MiB of messages make three chunks, the last
     // one about 1 MiB.
-    constexpr size_t messageCount = 1280;
-    constexpr size_t messageSize = 4096;
+    static constexpr size_t messageCount = 1280;
+    static constexpr size_t messageSize = 4096;
     const auto makeData = [](size_t i) {
       std::mt19937 rng{uint32_t(i)};
       std::vector<std::byte> data(messageSize);
