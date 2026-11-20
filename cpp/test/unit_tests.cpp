@@ -1617,6 +1617,63 @@ TEST_CASE("zstd compression", "[reader][writer]") {
 
     reader.close();
   }
+
+  SECTION("Roundtrip with compression threads") {
+    // 2 MiB chunks split into four 512 KiB jobs. 5 MiB of messages make three chunks, the last
+    // one about 1 MiB.
+    static constexpr size_t messageCount = 1280;
+    static constexpr size_t messageSize = 4096;
+    const auto makeData = [](size_t i) {
+      std::mt19937 rng{uint32_t(i)};
+      std::vector<std::byte> data(messageSize);
+      for (auto& b : data) {
+        b = std::byte(rng() % 16);
+      }
+      return data;
+    };
+
+    Buffer buffer;
+
+    mcap::McapWriter writer;
+    mcap::McapWriterOptions opts("test");
+    opts.compression = mcap::Compression::Zstd;
+    opts.chunkSize = 2 * 1024 * 1024;
+    opts.compressionThreads = 4;
+    writer.open(buffer, opts);
+    mcap::Schema schema("schema", "schemaEncoding", "ab");
+    writer.addSchema(schema);
+    mcap::Channel channel("topic", "messageEncoding", schema.id);
+    writer.addChannel(channel);
+
+    for (size_t i = 0; i < messageCount; i++) {
+      WriteMsg(writer, channel.id, uint32_t(i), i, i, makeData(i));
+    }
+
+    writer.close();
+
+    mcap::McapReader reader;
+    requireOk(reader.open(buffer));
+    requireOk(reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan));
+    REQUIRE(reader.chunkIndexes().size() == 3);
+    for (const auto& chunkIndex : reader.chunkIndexes()) {
+      REQUIRE(chunkIndex.compression == "zstd");
+      REQUIRE(chunkIndex.compressedSize < chunkIndex.uncompressedSize);
+    }
+
+    size_t readCount = 0;
+    const auto onProblem = [](const mcap::Status& status) {
+      FAIL("Status " + std::to_string((int)status.code) + ": " + status.message);
+    };
+    for (const auto& msgView : reader.readMessages(onProblem)) {
+      REQUIRE(msgView.message.sequence == readCount);
+      REQUIRE(std::vector(msgView.message.data, msgView.message.data + msgView.message.dataSize) ==
+              makeData(readCount));
+      ++readCount;
+    }
+    REQUIRE(readCount == messageCount);
+
+    reader.close();
+  }
 }
 #endif
 

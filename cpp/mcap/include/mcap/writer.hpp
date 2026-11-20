@@ -24,6 +24,16 @@ struct MCAP_PUBLIC McapWriterOptions {
    */
   bool noChunkCRC = false;
   /**
+   * @brief Number of worker threads that compress each Zstd chunk. 0 (the
+   * default) compresses on the calling thread, and 1 moves compression to one
+   * worker thread without speeding it up. Each chunk is split into one job
+   * per thread, but zstd will not make a job smaller than 512 KiB, so a chunk
+   * uses at most chunkSize / 512 KiB threads. More jobs per chunk lower the
+   * compression ratio slightly. Has no effect if libzstd was built without
+   * multithreading support.
+   */
+  uint32_t compressionThreads = 0;
+  /**
    * @brief Disable CRC calculations for Attachments.
    */
   bool noAttachmentCRC = false;
@@ -301,7 +311,8 @@ private:
  */
 class MCAP_PUBLIC ZStdWriter final : public IChunkWriter {
 public:
-  ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize);
+  ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize,
+             uint32_t compressionThreads = 0);
   ~ZStdWriter() override;
 
   void handleWrite(const std::byte* data, uint64_t size) override;

@@ -424,6 +424,56 @@ static void BM_McapWriterBufferWriterZStdNoCRC(benchmark::State& state) {
   writer.close();
 }
 
+static void BM_McapWriterBufferWriterZStdThreads(benchmark::State& state) {
+  // 1 KiB payloads cut in turn from 32 MiB of random bytes in [0, 64), so messages differ, repeat
+  // only beyond zstd's window, and compress to about 80% of their size, unlike the repeated
+  // "Hello, world!" payload.
+  constexpr size_t PayloadSize = 1024;
+  constexpr size_t MessagesPerIteration = 16384;
+  std::vector<std::byte> payloads(32 * 1024 * 1024);
+  std::mt19937 rng(0);
+  for (auto& b : payloads) {
+    b = std::byte(rng() % 64);
+  }
+
+  mcap::McapWriter writer;
+  auto options = mcap::McapWriterOptions("");
+  options.chunkSize = uint64_t(state.range(0));
+  options.compression = mcap::Compression::Zstd;
+  options.compressionThreads = uint32_t(state.range(1));
+
+  mcap::BufferWriter out{};
+  writer.open(out, options);
+
+  mcap::Channel topic("/data", "", 0);
+  writer.addChannel(topic);
+
+  mcap::Message msg;
+  msg.channelId = topic.id;
+  msg.sequence = 0;
+  msg.publishTime = 0;
+  msg.logTime = msg.publishTime;
+  msg.dataSize = PayloadSize;
+
+  uint64_t writtenBytes = 0;
+  while (state.KeepRunning()) {
+    for (size_t i = 0; i < MessagesPerIteration; i++) {
+      NextMessage(msg);
+      msg.data = payloads.data() + (msg.sequence * PayloadSize) % payloads.size();
+      (void)writer.write(msg);
+      benchmark::ClobberMemory();
+    }
+    writtenBytes += out.size();
+    out.clear();
+  }
+
+  const uint64_t payloadBytes = uint64_t(state.iterations()) * MessagesPerIteration * PayloadSize;
+  state.SetBytesProcessed(int64_t(payloadBytes));
+  state.counters["ratio"] = double(writtenBytes) / double(payloadBytes);
+
+  writer.close();
+}
+
 static void BM_McapWriterStreamWriterUnchunked(benchmark::State& state) {
   // Create a message payload
   std::array<std::byte, 4 + 13> payload;
@@ -732,6 +782,12 @@ int main(int argc, char* argv[]) {
     ->Args({mcap::DefaultChunkSize, 2})
     ->Args({mcap::DefaultChunkSize, 3})
     ->Args({mcap::DefaultChunkSize, 4});
+  benchmark::RegisterBenchmark("BM_McapWriterBufferWriterZStdThreads",
+                               BM_McapWriterBufferWriterZStdThreads)
+    ->ArgsProduct(
+      {{mcap::DefaultChunkSize, 4 * mcap::DefaultChunkSize, 16 * mcap::DefaultChunkSize},
+       {0, 1, 2, 4, 8}})
+    ->UseRealTime();
   benchmark::RegisterBenchmark("BM_McapWriterStreamWriterUnchunked",
                                BM_McapWriterStreamWriterUnchunked);
   benchmark::RegisterBenchmark("BM_McapWriterStreamWriterChunked", BM_McapWriterStreamWriterChunked)
