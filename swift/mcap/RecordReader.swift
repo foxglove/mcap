@@ -40,7 +40,7 @@ class RecordReader {
 
   func nextRecord() throws -> Record? {
     try buffer.withUnsafeBytes { buf in
-      while offset + 9 < buf.count {
+      while offset + 9 <= buf.count {
         let op = buf[offset]
         var recordLength: UInt64 = 0
         withUnsafeMutableBytes(of: &recordLength) { rawLength in
