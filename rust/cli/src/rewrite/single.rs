@@ -20,16 +20,97 @@ pub(crate) fn run(args: RewriteOptions, source_options: SourceOptions) -> Result
     if let (Some(input), Some(output)) = (args.file.as_deref(), opts.output.as_deref()) {
         source::ensure_distinct_local_input_output(input, output)?;
     }
-    // A rewrite reads the whole input through random access, so a remote URL is downloaded first
-    // under the scan opt-in, checked from the path before any request goes out. Stdin is spooled
-    // to a file, since a rewrite may seek back to the summary.
+    if let Some(path) = args.file.as_deref().filter(|p| source::is_remote_url(p)) {
+        if let Some((mut input, summary)) = open_remote_filter(path, &opts, source_options)? {
+            let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
+            return filter_to_writer(&mut input, sink, &opts, disable_seeking, Some(&summary));
+        }
+    }
     let mut input = match args.file.as_deref() {
         Some(path) => byte_source::open_materialized_byte_source(path, source_options)?,
         None => byte_source::open_stdin_byte_source()?,
     };
-
     let (sink, disable_seeking) = common::open_output(opts.output.as_deref())?;
-    filter_to_writer(input.as_mut(), sink, &opts, disable_seeking)
+    filter_to_writer(input.as_mut(), sink, &opts, disable_seeking, None)
+}
+
+fn open_remote_filter(
+    path: &std::path::Path,
+    opts: &ResolvedOptions,
+    options: SourceOptions,
+) -> Result<Option<(byte_source::RemoteRangeSource, mcap::Summary)>> {
+    // Preserve the whole-file opt-in before contacting the server for an unrestricted rewrite.
+    if opts.start == 0
+        && opts.end == u64::MAX
+        && opts.include_topics.is_empty()
+        && opts.exclude_topics.is_empty()
+        || !opts.last_per_channel_topics.is_empty()
+    {
+        return Ok(None);
+    }
+    let Some(remote) = source::try_open_remote_mcap(path, options)? else {
+        return Ok(None);
+    };
+    if !remote.omitted_channels().is_empty() {
+        return Ok(None);
+    }
+    let (reader, summary) = remote.into_parts();
+    let Some(bytes) = remote_filter_bytes(&summary, opts) else {
+        return Ok(None);
+    };
+    // If the query touches nearly the whole object, keep the existing sequential download.
+    if bytes >= reader.size().saturating_sub(reader.size() / 10) {
+        return Ok(None);
+    }
+    source::require_remote_indexed_read_budget(bytes, options, "indexed remote filter")?;
+    let mut input = byte_source::RemoteRangeSource::new(reader);
+    input.set_read_ahead_bytes(0);
+    if !common::summary_indexes_all_messages(&mut input, &summary)? {
+        return Ok(None);
+    }
+    Ok(Some((input, summary)))
+}
+
+// Cost the index completeness check as well as the records the indexed writer will fetch.
+// Missing auxiliary indexes would make the writer scan top-level records.
+fn remote_filter_bytes(summary: &mcap::Summary, opts: &ResolvedOptions) -> Option<u64> {
+    let stats = summary.stats.as_ref()?;
+    if summary.chunk_indexes.is_empty()
+        || !common::summary_supports_indexed_read(summary)
+        || (opts.include_metadata
+            && stats.metadata_count as usize != summary.metadata_indexes.len())
+        || (opts.include_attachments
+            && stats.attachment_count as usize != summary.attachment_indexes.len())
+    {
+        return None;
+    }
+    let mut bytes = 0u64;
+    for chunk in &summary.chunk_indexes {
+        bytes = bytes.checked_add(chunk.message_index_length)?;
+        if (opts.end == u64::MAX || chunk.message_start_time < opts.end)
+            && chunk.message_end_time >= opts.start
+            && (chunk.message_index_offsets.is_empty()
+                || chunk.message_index_offsets.keys().any(|id| {
+                    summary
+                        .channels
+                        .get(id)
+                        .is_some_and(|c| include_topic(&c.topic, opts))
+                }))
+        {
+            bytes = bytes.checked_add(chunk.chunk_length)?;
+        }
+    }
+    if opts.include_metadata {
+        for index in &summary.metadata_indexes {
+            bytes = bytes.checked_add(index.length)?;
+        }
+    }
+    if opts.include_attachments {
+        for index in &summary.attachment_indexes {
+            bytes = bytes.checked_add(index.length)?;
+        }
+    }
+    Some(bytes)
 }
 
 fn filter_to_writer<W: Write + Seek>(
@@ -37,6 +118,7 @@ fn filter_to_writer<W: Write + Seek>(
     sink: W,
     opts: &ResolvedOptions,
     disable_seeking: bool,
+    indexed: Option<&mcap::Summary>,
 ) -> Result<()> {
     let profile = common::read_header(input)?
         .map(|header| header.profile)
@@ -52,7 +134,11 @@ fn filter_to_writer<W: Write + Seek>(
         },
         disable_seeking,
     )?;
-    filter_with_writer(input, &mut writer, opts)?;
+    if let Some(summary) = indexed {
+        filter_indexed(input, summary, &mut writer, opts)?;
+    } else {
+        filter_with_writer(input, &mut writer, opts)?;
+    }
     writer.finish().context("failed to finish mcap writer")?;
     Ok(())
 }
@@ -493,7 +579,7 @@ mod tests {
     fn filter_bytes(input: &[u8], opts: &ResolvedOptions) -> Result<Vec<u8>> {
         let mut source = MemorySource::new(input.to_vec());
         let mut output = Cursor::new(Vec::new());
-        filter_to_writer(&mut source, &mut output, opts, false)?;
+        filter_to_writer(&mut source, &mut output, opts, false, None)?;
         Ok(output.into_inner())
     }
 
@@ -657,6 +743,7 @@ mod tests {
             &mut Cursor::new(Vec::new()),
             &include_all_options(),
             false,
+            None,
         )
         .expect_err("a corrupt chunk must fail the rewrite");
         assert!(
@@ -716,6 +803,38 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    #[test]
+    fn remote_filter_costs_only_selected_chunks_and_required_indexes() {
+        let data = write_filter_test_input(true, false);
+        let summary = mcap::Summary::read(&data).unwrap().unwrap();
+        let narrow = time_windowed_options(10, 11);
+        let all = super::remote_filter_bytes(&summary, &include_all_options()).unwrap();
+        let selected = super::remote_filter_bytes(&summary, &narrow).unwrap();
+        assert!(selected < all);
+        assert!(
+            selected
+                >= summary
+                    .chunk_indexes
+                    .iter()
+                    .map(|c| c.message_index_length)
+                    .sum::<u64>()
+        );
+
+        let mut at_max = summary.clone();
+        for chunk in &mut at_max.chunk_indexes {
+            chunk.message_start_time = u64::MAX;
+            chunk.message_end_time = u64::MAX;
+        }
+        assert_eq!(
+            super::remote_filter_bytes(&at_max, &include_all_options()),
+            Some(all)
+        );
+
+        let mut incomplete = summary;
+        incomplete.stats = None;
+        assert_eq!(super::remote_filter_bytes(&incomplete, &narrow), None);
     }
 
     fn include_all_options() -> ResolvedOptions {
