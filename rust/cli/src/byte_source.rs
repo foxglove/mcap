@@ -211,8 +211,7 @@ impl RemoteRangeSource {
         }
     }
 
-    /// Shrinks the window so tests can exercise refills on small fixtures.
-    #[cfg(test)]
+    /// Set the read-ahead window; use zero for sparse random reads.
     pub(crate) fn set_read_ahead_bytes(&mut self, bytes: usize) {
         self.read_ahead_bytes = bytes;
     }
