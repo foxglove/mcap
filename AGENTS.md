@@ -25,7 +25,7 @@ PR titles should start with a lowercase keyword prefix followed by a colon, usua
 
 ## TypeScript
 
-**Prerequisites:** Node.js ≥ 18.12 with `corepack enable` (activates the Yarn version pinned via `packageManager` in `package.json`). Yarn Classic (1.x) is incompatible — the repo requires Yarn 4.x.
+**Prerequisites:** Node.js ≥ 22.12 (required by Vitest, which runs the tests) with `corepack enable` (activates the Yarn version pinned via `packageManager` in `package.json`). Yarn Classic (1.x) is incompatible — the repo requires Yarn 4.x.
 
 ```
 corepack enable
