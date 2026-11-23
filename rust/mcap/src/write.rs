@@ -3341,6 +3341,32 @@ mod tests {
         );
     }
 
+    #[test]
+    fn unseekable_writer_round_trips_a_small_chunk_after_a_large_one() {
+        // Without seeking, each chunk is built in a reused in-memory buffer. A small chunk
+        // written after a large one must not carry the large chunk's leftover bytes.
+        let mut writer = WriteOptions::new()
+            .disable_seeking(true)
+            .compression(None)
+            .chunk_size(None)
+            .create(NoSeek::new(Cursor::new(Vec::new())))
+            .expect("writer should construct");
+
+        let large = vec![b'x'; 1024];
+        writer.write(&message(&large)).unwrap();
+        writer.flush().unwrap();
+        writer.write(&message(b"small")).unwrap();
+        writer.finish().unwrap();
+        let file = writer.into_inner().into_inner().into_inner();
+
+        let messages = crate::MessageStream::new(&file)
+            .unwrap()
+            .collect::<McapResult<Vec<_>>>()
+            .expect("file written without seeking should read back");
+        let data: Vec<&[u8]> = messages.iter().map(|m| &m.data[..]).collect();
+        assert_eq!(data, [&large[..], b"small"]);
+    }
+
     /// How many bytes a new writer plus `f` write; a budget of that size fails the next write.
     fn bytes_written_by(f: impl FnOnce(&mut Writer<Cursor<Vec<u8>>>)) -> u64 {
         bytes_written_with(WriteOptions::new(), f)
