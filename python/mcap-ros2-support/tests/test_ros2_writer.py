@@ -92,6 +92,38 @@ def test_write_uint8_array_with_py_array():
         assert msg.message.sequence == i
 
 
+def test_write_fixed_size_arrays_does_not_mutate_message():
+    msgdef = (
+        "float64[3] values\n"
+        "Point[2] points\n"
+        "================================================================================\n"
+        "MSG: test_msgs/Point\n"
+        "float64 x"
+    )
+
+    output = BytesIO()
+    ros_writer = Ros2Writer(output=output)
+    schema = ros_writer.register_msgdef("test_msgs/FixedArrays", msgdef)
+    message = {"values": [1.0], "points": [{"x": 2.0}]}
+    ros_writer.write_message(
+        topic="/fixed",
+        schema=schema,
+        message=message,
+        log_time=0,
+        publish_time=0,
+        sequence=0,
+    )
+    ros_writer.finish()
+
+    # Short fixed-size arrays are padded in the output, not in the caller's message.
+    assert message == {"values": [1.0], "points": [{"x": 2.0}]}
+
+    output.seek(0)
+    (msg,) = read_ros2_messages(output)
+    assert list(msg.decoded_message.values) == [1.0, 0.0, 0.0]
+    assert [p.x for p in msg.decoded_message.points] == [2.0, 0.0]
+
+
 def test_decode_nested_array_reuses_message_class():
     nested_msgdef = (
         "Point[] points\n"
