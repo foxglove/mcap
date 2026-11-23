@@ -1,4 +1,5 @@
 import { crc32 } from "@foxglove/crc";
+import { describe, expect, it } from "vitest";
 
 import { ChunkBuilder } from "./ChunkBuilder.ts";
 import { McapIndexedReader } from "./McapIndexedReader.ts";

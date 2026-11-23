@@ -1,3 +1,5 @@
+import { describe, expect, it } from "vitest";
+
 import { ChunkBuilder } from "./ChunkBuilder.ts";
 
 describe("ChunkBuilder", () => {

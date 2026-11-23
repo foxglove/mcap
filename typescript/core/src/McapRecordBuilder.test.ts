@@ -1,3 +1,5 @@
+import { describe, expect, it } from "vitest";
+
 import { BufferBuilder } from "./BufferBuilder.ts";
 import { McapRecordBuilder } from "./McapRecordBuilder.ts";
 

@@ -1,3 +1,5 @@
+import { describe, expect, it } from "vitest";
+
 import { CachedReadable } from "./CachedReadable.ts";
 import type { IReadable } from "./types.ts";
 

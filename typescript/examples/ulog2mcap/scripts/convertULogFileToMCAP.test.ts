@@ -7,6 +7,8 @@ import type { Metadata } from "@mcap/core";
 import { protobufFromBinaryDescriptor } from "@mcap/support";
 import Long from "long";
 import path from "node:path";
+import type { Mocked } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { convertULogFileToMCAP } from "./convertULogFileToMCAP.ts";
 
@@ -22,7 +24,7 @@ function createULogMock({
   subscriptions: { name: string; multiId?: number }[];
   timestamp?: bigint;
   messages?: MockMessage[];
-}): jest.Mocked<ULog> {
+}): Mocked<ULog> {
   const msgIds = new Map<string, number>();
   const definitions = new Map<string, MessageDefinition>();
   messageFields.forEach((fields, name) => {
@@ -36,11 +38,11 @@ function createULogMock({
       ...definitions.get(subscription.name)!,
     });
   });
-  const ulogMock: jest.Mocked<ULog> = {
-    open: jest.fn().mockResolvedValue(undefined),
+  const ulogMock: Mocked<ULog> = {
+    open: vi.fn().mockResolvedValue(undefined),
     header: { timestamp, definitions, version: 1 },
     subscriptions: subscriptionMap,
-    readMessages: jest.fn().mockImplementation(async function* () {
+    readMessages: vi.fn().mockImplementation(async function* () {
       for (const msg of messages) {
         const { topic, multiId, ...messageContent } = msg;
         yield {
@@ -50,7 +52,7 @@ function createULogMock({
         };
       }
     }),
-  } as unknown as jest.Mocked<ULog>;
+  } as unknown as Mocked<ULog>;
   return ulogMock;
 }
 
@@ -89,11 +91,11 @@ describe("Create MCAP files from ULog", () => {
 
     it("should throw an error for missing ULog definitions", async () => {
       const ulogWithoutHeader = {
-        open: jest.fn().mockResolvedValue(undefined),
+        open: vi.fn().mockResolvedValue(undefined),
         header: undefined,
         subscriptions: new Map<number, Subscription>(),
-        readMessages: jest.fn(),
-      } as unknown as jest.Mocked<ULog>;
+        readMessages: vi.fn(),
+      } as unknown as Mocked<ULog>;
 
       const buffer = new TempBuffer();
       await expect(
@@ -284,10 +286,10 @@ describe("Create MCAP files from ULog", () => {
 
     it("should write logs to a separate log channel", async () => {
       const mockULog = {
-        open: jest.fn().mockResolvedValue(undefined),
+        open: vi.fn().mockResolvedValue(undefined),
         header: { timestamp: 0n, definitions: new Map<string, MessageDefinition>(), version: 1 },
         subscriptions: new Map<number, Subscription>(),
-        readMessages: jest.fn().mockImplementation(async function* () {
+        readMessages: vi.fn().mockImplementation(async function* () {
           const msgData = [
             { type: MessageType.Log, logLevel: LogLevel.Debug, message: "one" },
             { type: MessageType.LogTagged, tag: 2, logLevel: LogLevel.Info, message: "two" },
@@ -300,7 +302,7 @@ describe("Create MCAP files from ULog", () => {
             timestamp += 1000n;
           }
         }),
-      } as unknown as jest.Mocked<ULog>;
+      } as unknown as Mocked<ULog>;
 
       const mockOutputFile = new TempBuffer();
       await convertULogFileToMCAP(mockULog, new McapWriter({ writable: mockOutputFile }));

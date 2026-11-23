@@ -23,7 +23,7 @@
     "@mcap/core": "workspace:*",
     "@mcap/nodejs": "workspace:*",
     "@mcap/support": "workspace:*",
-    "@types/node": "20.19.43",
+    "@types/node": "24.13.4",
     "@typescript-eslint/eslint-plugin": "8.67.0",
     "@typescript-eslint/parser": "8.67.0",
     "commander": "11.1.0",

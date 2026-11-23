@@ -15,7 +15,7 @@
     "@foxglove/schemas": "1.8.0",
     "@mcap/core": "workspace:*",
     "@mcap/nodejs": "workspace:*",
-    "@types/node": "20.19.43",
+    "@types/node": "24.13.4",
     "eslint": "9.39.5",
     "flatbuffers": "^23.5.26",
     "prettier": "3.1.0",

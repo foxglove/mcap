@@ -1,3 +1,5 @@
+import { describe, expect, it } from "vitest";
+
 import McapByteReader from "./McapByteReader.ts";
 
 function readerFromBytes(bytes: number[]): McapByteReader {
