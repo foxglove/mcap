@@ -12,13 +12,21 @@ A command line tool for inspecting and manipulating MCAP files.
 
 Download binaries for your platform from [the latest GitHub release](https://github.com/foxglove/mcap/releases?q=cli).
 
-Then, mark it executable:
+Rename the downloaded file to `mcap` (`mcap.exe` on Windows).
+
+On macOS or Linux, mark the binary executable:
 
 ```
 $ chmod +x mcap
 ```
 
-If required, move the binary onto your path.
+On Windows, check that the executable runs from its folder in PowerShell:
+
+```
+> .\mcap.exe --version
+```
+
+To run `mcap` from any directory, put the binary in a directory on your PATH.
 
 ### Homebrew
 
