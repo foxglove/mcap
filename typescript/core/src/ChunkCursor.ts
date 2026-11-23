@@ -140,6 +140,9 @@ export class ChunkCursor {
     const chunkLength = chunkView.byteLength;
     // Message fields before the data: channel id (2), sequence (4), log time (8), publish time (8).
     const messageFieldsLength = 2 + 4 + 8 + 8;
+    // Messages are found in offset order, so they need no sort when their log times never decrease.
+    let inLogTimeOrder = true;
+    let lastLogTime = 0n;
     let offset = 0;
     while (offset < chunkLength) {
       const recordStart = offset + 1 + 8;
@@ -165,12 +168,17 @@ export class ChunkCursor {
         }
         const channelId = chunkView.getUint16(recordStart, true);
         if (!this.#relevantChannels || this.#relevantChannels.has(channelId)) {
-          messageOffsets.push([chunkView.getBigUint64(recordStart + 2 + 4, true), BigInt(offset)]);
+          const logTime = chunkView.getBigUint64(recordStart + 2 + 4, true);
+          if (logTime < lastLogTime) {
+            inLogTimeOrder = false;
+          }
+          lastLogTime = logTime;
+          messageOffsets.push([logTime, BigInt(offset)]);
         }
       }
       offset = recordStart + recordLength;
     }
-    this.#setMessageOffsets(messageOffsets);
+    this.#setMessageOffsets(messageOffsets, { sorted: inLogTimeOrder });
   }
 
   /**
@@ -247,27 +255,26 @@ export class ChunkCursor {
       throw new Error(`${reader.bytesRemaining()} bytes remaining in message index section`);
     }
 
-    this.#setMessageOffsets(messageOffsets);
+    this.#setMessageOffsets(messageOffsets, { sorted: false });
   }
 
   /**
    * Orders the offsets of the chunk's relevant messages for iteration and drops those outside
-   * the requested time range.
+   * the requested time range. `sorted` is true when `messageOffsets` is already ordered by log
+   * time and then by offset.
    */
-  #setMessageOffsets(messageOffsets: MessageOffset[]): void {
+  #setMessageOffsets(messageOffsets: MessageOffset[], { sorted }: { sorted: boolean }): void {
     const reverse = this.#reverse;
-    this.#orderedMessageOffsets = messageOffsets.sort(
-      ([logTimeA, offsetA], [logTimeB, offsetB]) => {
-        let diff = Number(logTimeA - logTimeB);
-
-        // Break ties by message offset in the file
-        if (diff === 0) {
-          diff = Number(offsetA - offsetB);
+    if (!sorted) {
+      messageOffsets.sort(([logTimeA, offsetA], [logTimeB, offsetB]) => {
+        if (logTimeA !== logTimeB) {
+          return logTimeA < logTimeB ? -1 : 1;
         }
-
-        return diff;
-      },
-    );
+        // Break ties by message offset in the file
+        return offsetA < offsetB ? -1 : offsetA > offsetB ? 1 : 0;
+      });
+    }
+    this.#orderedMessageOffsets = messageOffsets;
 
     if (reverse) {
       // If we used `logTimeB - logTimeA` as the comparator for reverse iteration, messages with
