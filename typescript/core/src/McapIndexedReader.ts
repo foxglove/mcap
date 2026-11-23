@@ -456,22 +456,20 @@ export class McapIndexedReader<TReadOptions = unknown> {
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
-        if (cursor.needsChunkScan()) {
-          const chunkView = await this.#loadChunkData(cursor.chunkIndex, {
+        const { chunkIndex } = cursor;
+        await cursor.loadMessageIndexes(this.#messageIndexReadable, readOptions, async () => {
+          const chunkView = await this.#loadChunkData(chunkIndex, {
             validateCrcs: validateCrcs ?? true,
             readOptions,
           });
-          cursor.loadMessageIndexesFromChunk(chunkView);
-          if (cursor.hasMoreMessages()) {
-            chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
-          }
-        } else {
-          await cursor.loadMessageIndexes(this.#messageIndexReadable, readOptions);
-        }
+          chunkViewCache.set(chunkIndex.chunkStartOffset, chunkView);
+          return chunkView;
+        });
         if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);
         } else {
           chunkCursors.pop();
+          chunkViewCache.delete(chunkIndex.chunkStartOffset);
         }
         continue;
       }

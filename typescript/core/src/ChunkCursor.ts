@@ -103,8 +103,8 @@ export class ChunkCursor {
   }
 
   /**
-   * Returns true if message offsets have been loaded, false if `loadMessageIndexes()` or
-   * `loadMessageIndexesFromChunk()` needs to be called.
+   * Returns true if message offsets have been loaded, false if `loadMessageIndexes()` needs to be
+   * called.
    */
   hasMessageIndexes(): boolean {
     return this.#orderedMessageOffsets != undefined;
@@ -114,7 +114,7 @@ export class ChunkCursor {
    * Returns true if the chunk is scanned for its messages: it has no Message Index records, or
    * every message in it is wanted.
    */
-  needsChunkScan(): boolean {
+  #needsChunkScan(): boolean {
     const { messageIndexOffsets, messageIndexLength } = this.chunkIndex;
     if (messageIndexLength === 0n || messageIndexOffsets.size === 0) {
       return true;
@@ -133,10 +133,9 @@ export class ChunkCursor {
   }
 
   /**
-   * Finds the chunk's messages by scanning its uncompressed records. This stands in for
-   * `loadMessageIndexes()` when `needsChunkScan()` is true.
+   * Finds the chunk's messages by scanning its uncompressed records.
    */
-  loadMessageIndexesFromChunk(chunkView: DataView): void {
+  #loadMessageIndexesFromChunk(chunkView: DataView): void {
     const messageOffsets: MessageOffset[] = [];
     const chunkLength = chunkView.byteLength;
     // Message fields before the data: channel id (2), sequence (4), log time (8), publish time (8).
@@ -178,10 +177,22 @@ export class ChunkCursor {
     this.#setMessageOffsets(messageOffsets);
   }
 
+  /**
+   * Loads the offsets of the chunk's relevant messages. They come from the chunk's uncompressed
+   * records, which `loadChunk` returns, when the chunk has no Message Index records or every
+   * message in it is wanted. Otherwise they come from the Message Index records in `readable`,
+   * and `loadChunk` is not called.
+   */
   async loadMessageIndexes<TReadOptions>(
     readable: IReadable<TReadOptions>,
-    readOptions?: TReadOptions,
+    readOptions: TReadOptions | undefined,
+    loadChunk: () => Promise<DataView>,
   ): Promise<void> {
+    if (this.#needsChunkScan()) {
+      this.#loadMessageIndexesFromChunk(await loadChunk());
+      return;
+    }
+
     let messageIndexStartOffset: bigint | undefined;
     let relevantMessageIndexStartOffset: bigint | undefined;
     const readFullRange = this.#readFullMessageIndexRange;
