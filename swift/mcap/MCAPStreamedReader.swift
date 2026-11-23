@@ -62,32 +62,37 @@ public class MCAPStreamedReader {
       readHeaderMagic = true
     }
 
-    while true {
-      if chunkReader == nil {
-        let record = try recordReader.nextRecord()
-        switch record {
-        case let chunk as Chunk:
-          chunkReader = try RecordReader(_decompress(chunk))
-        default:
-          return record
-        }
+    if let record = try nextChunkRecord() {
+      return record
+    }
+    while let record = try recordReader.nextRecord() {
+      guard let chunk = record as? Chunk else {
+        return record
       }
-
-      if let chunkReader = chunkReader {
-        defer {
-          if chunkReader.isDone {
-            self.chunkReader = nil
-          }
-        }
-        if let record = try chunkReader.nextRecord() {
-          return record
-        }
-        if !chunkReader.isDone {
-          throw MCAPReadError.extraneousDataInChunk(length: chunkReader.bytesRemaining)
-        }
-        // The chunk was empty, or its last records were skipped: continue with the next record.
+      chunkReader = try RecordReader(_decompress(chunk))
+      // An empty chunk yields no record: continue with the next record.
+      if let record = try nextChunkRecord() {
+        return record
       }
     }
+    return nil
+  }
+
+  private func nextChunkRecord() throws -> Record? {
+    guard let reader = chunkReader else {
+      return nil
+    }
+    if let record = try reader.nextRecord() {
+      if reader.isDone {
+        chunkReader = nil
+      }
+      return record
+    }
+    guard reader.isDone else {
+      throw MCAPReadError.extraneousDataInChunk(length: reader.bytesRemaining)
+    }
+    chunkReader = nil
+    return nil
   }
 
   private func _decompress(_ chunk: Chunk) throws -> Data {
