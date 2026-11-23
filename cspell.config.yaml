@@ -183,6 +183,7 @@ overrides:
       - pclmul
       - pclmulqdq
       - zstdlib
+      - zstdmt
       # Windows-specific functions and includes
       - ftelli
       - fseeki

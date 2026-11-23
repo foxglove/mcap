@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <system_error>
 #ifndef MCAP_COMPRESSION_NO_LZ4
 #  include <lz4frame.h>
@@ -265,10 +266,21 @@ int ZStdCompressionLevel(CompressionLevel level) {
 
 // ZStdWriter //////////////////////////////////////////////////////////////////
 
-ZStdWriter::ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize) {
+ZStdWriter::ZStdWriter(CompressionLevel compressionLevel, uint64_t chunkSize,
+                       uint32_t compressionThreads) {
   zstdContext_ = ZSTD_createCCtx();
   ZSTD_CCtx_setParameter(zstdContext_, ZSTD_c_compressionLevel,
                          internal::ZStdCompressionLevel(compressionLevel));
+  if (compressionThreads > 0) {
+    constexpr uint64_t maxParam = std::numeric_limits<int>::max();
+    const uint64_t threads = std::min<uint64_t>(compressionThreads, maxParam);
+    ZSTD_CCtx_setParameter(zstdContext_, ZSTD_c_nbWorkers, static_cast<int>(threads));
+    // zstd's default job size is at least 1 MiB, which would compress a default-sized chunk as a
+    // single job on one thread. Split the chunk into one job per thread instead. zstd raises jobs
+    // smaller than ZSTDMT_JOBSIZE_MIN (512 KiB) to that size, and treats 0 as "use the default".
+    const uint64_t jobSize = std::clamp<uint64_t>(chunkSize / threads, 1, maxParam);
+    ZSTD_CCtx_setParameter(zstdContext_, ZSTD_c_jobSize, static_cast<int>(jobSize));
+  }
   uncompressedBuffer_.reserve(chunkSize);
 }
 
@@ -346,7 +358,8 @@ void McapWriter::open(IWritable& writer, const McapWriterOptions& options) {
 #endif
 #ifndef MCAP_COMPRESSION_NO_ZSTD
     case Compression::Zstd:
-      zstdChunk_ = std::make_unique<ZStdWriter>(options.compressionLevel, chunkSize_);
+      zstdChunk_ = std::make_unique<ZStdWriter>(options.compressionLevel, chunkSize_,
+                                                options.compressionThreads);
       break;
 #endif
   }
