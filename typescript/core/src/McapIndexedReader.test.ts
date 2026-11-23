@@ -1606,7 +1606,7 @@ describe("McapIndexedReader", () => {
     },
   );
 
-  it("rejects a message index entry that points at a message on another channel", async () => {
+  it("rejects a message index entry that points at a message on a channel that is not being read", async () => {
     const makeChannel = (id: number, topic: string): TypedMcapRecords["Channel"] => ({
       type: "Channel",
       id,
@@ -1649,7 +1649,7 @@ describe("McapIndexedReader", () => {
 
     const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
     await expect(collect(reader.readMessages({ topics: ["a"] }))).rejects.toThrow(
-      "Message channel 2 did not match message index entry (channel 1",
+      "Message index entry points at a message on channel 2, which is not being read",
     );
   });
 

@@ -483,7 +483,7 @@ export class McapIndexedReader<TReadOptions = unknown> {
         chunkViewCache.set(cursor.chunkIndex.chunkStartOffset, chunkView);
       }
 
-      const [logTime, offset, channelId] = cursor.popMessage();
+      const [logTime, offset] = cursor.popMessage();
       if (offset >= BigInt(chunkView.byteLength)) {
         throw this.#errorWithLibrary(
           `Message offset beyond chunk bounds (log time ${logTime}, offset ${offset}, chunk data length ${chunkView.byteLength}) in chunk at offset ${cursor.chunkIndex.chunkStartOffset}`,
@@ -506,9 +506,9 @@ export class McapIndexedReader<TReadOptions = unknown> {
           `Message log time ${record.logTime} did not match message index entry (${logTime} at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
         );
       }
-      if (record.channelId !== channelId) {
+      if (relevantChannels && !relevantChannels.has(record.channelId)) {
         throw this.#errorWithLibrary(
-          `Message channel ${record.channelId} did not match message index entry (channel ${channelId}, time ${logTime}, offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
+          `Message index entry points at a message on channel ${record.channelId}, which is not being read (time ${logTime}, offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
         );
       }
       yield record;

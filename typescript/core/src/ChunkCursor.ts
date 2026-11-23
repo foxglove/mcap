@@ -5,7 +5,7 @@ import { sortedIndexBy } from "./sortedIndexBy.ts";
 import { sortedLastIndexBy } from "./sortedLastIndex.ts";
 import type { IReadable, TypedMcapRecords } from "./types.ts";
 
-type MessageOffset = [logTime: bigint, offset: bigint, channelId: number];
+type MessageOffset = [logTime: bigint, offset: bigint];
 
 type ChunkCursorParams = {
   chunkIndex: TypedMcapRecords["ChunkIndex"];
@@ -165,11 +165,7 @@ export class ChunkCursor {
         }
         const channelId = chunkView.getUint16(recordStart, true);
         if (!this.#relevantChannels || this.#relevantChannels.has(channelId)) {
-          messageOffsets.push([
-            chunkView.getBigUint64(recordStart + 2 + 4, true),
-            BigInt(offset),
-            channelId,
-          ]);
+          messageOffsets.push([chunkView.getBigUint64(recordStart + 2 + 4, true), BigInt(offset)]);
         }
       }
       offset = recordStart + recordLength;
@@ -242,8 +238,8 @@ export class ChunkCursor {
         continue;
       }
 
-      for (const [logTime, offset] of record.records) {
-        messageOffsets.push([logTime, offset, record.channelId]);
+      for (const entry of record.records) {
+        messageOffsets.push(entry);
       }
     }
 
