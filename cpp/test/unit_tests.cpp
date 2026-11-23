@@ -1771,8 +1771,9 @@ TEST_CASE("Read Order", "[reader][writer]") {
     }
     REQUIRE(count == reverse_order_expected.size());
   }
-  SECTION("reads files with and without message indexes") {
+  SECTION("reads files with and without message indexes and a summary") {
     const bool noMessageIndex = GENERATE(false, true);
+    const bool noSummary = GENERATE(false, true);
     struct CountingBuffer : Buffer {
       uint64_t readCalls = 0;
       uint64_t read(std::byte** output, uint64_t offset, uint64_t size) override {
@@ -1786,6 +1787,7 @@ TEST_CASE("Read Order", "[reader][writer]") {
     mcap::McapWriterOptions opts("test");
     opts.compression = mcap::Compression::None;
     opts.noMessageIndex = noMessageIndex;
+    opts.noSummary = noSummary;
     opts.chunkSize = 100;
     writer.open(buffer, opts);
     mcap::Channel channel1("topic1", "messageEncoding", 0);
@@ -1803,10 +1805,12 @@ TEST_CASE("Read Order", "[reader][writer]") {
 
     mcap::McapReader reader;
     requireOk(reader.open(buffer));
-    requireOk(reader.readSummary(mcap::ReadSummaryMethod::NoFallbackScan));
+    // A file without a summary is scanned for its chunks, which finds no message indexes.
+    requireOk(reader.readSummary(noSummary ? mcap::ReadSummaryMethod::AllowFallbackScan
+                                           : mcap::ReadSummaryMethod::NoFallbackScan));
     REQUIRE(reader.chunkIndexes().size() > 1);
     for (const auto& chunkIndex : reader.chunkIndexes()) {
-      REQUIRE((chunkIndex.messageIndexLength == 0) == noMessageIndex);
+      REQUIRE((chunkIndex.messageIndexLength == 0) == (noMessageIndex || noSummary));
     }
 
     const auto onProblem = [](const mcap::Status& status) {
