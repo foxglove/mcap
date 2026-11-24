@@ -2332,6 +2332,35 @@ mod tests {
     }
 
     #[test]
+    fn emit_summary_records_false_leaves_schemas_and_channels_out_of_the_summary() {
+        let mut writer = WriteOptions::new()
+            .use_chunks(false)
+            .emit_summary_records(false)
+            .create(Cursor::new(Vec::new()))
+            .expect("failed to construct writer");
+        writer
+            .add_schema_with_id(1, "schema", "jsonschema", &[])
+            .expect("failed to add schema");
+        writer
+            .add_channel_with_id(1, 1, "topic", "json", &BTreeMap::new())
+            .expect("failed to add channel");
+        writer.finish().expect("failed to finish writer");
+        let data = writer.into_inner().into_inner();
+
+        let mut in_summary = false;
+        let (mut schemas, mut channels) = (0, 0);
+        for record in LinearReader::new(&data).expect("failed to construct reader") {
+            match record.expect("failed to read record") {
+                Record::DataEnd(_) => in_summary = true,
+                Record::Schema { .. } if in_summary => schemas += 1,
+                Record::Channel(_) if in_summary => channels += 1,
+                _ => {}
+            }
+        }
+        assert_eq!((schemas, channels), (0, 0), "summary records were written");
+    }
+
+    #[test]
     #[should_panic(expected = "Trying to write a record on a finished MCAP")]
     fn panics_if_write_called_after_finish() {
         let file = std::io::Cursor::new(Vec::new());
