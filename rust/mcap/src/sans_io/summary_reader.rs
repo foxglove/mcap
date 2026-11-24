@@ -404,6 +404,41 @@ mod tests {
     }
 
     #[test]
+    fn test_unexpected_seek_while_reading_summary() {
+        // A seek elsewhere mid-summary makes the reader start the summary again. Records read
+        // before the seek must not end up in the summary twice.
+        let mut f = std::fs::File::open("tests/data/compressed.mcap").expect("could not open file");
+        let mut summary_loader = SummaryReader::new();
+        let mut seeks = 0;
+        let mut summary_bytes = 0;
+        while let Some(event) = summary_loader.next_event() {
+            match event.expect("got error instead of event") {
+                SummaryReadEvent::ReadRequest(n) => {
+                    let read = f.read(summary_loader.insert(n)).expect("failed file read");
+                    summary_loader.notify_read(read);
+                    // Seek away once, partway through the chunk indexes.
+                    if seeks == 2 && summary_bytes < 20_000 {
+                        summary_bytes += read;
+                        if summary_bytes >= 20_000 {
+                            let pos = f.seek(SeekFrom::Start(0)).expect("failed file seek");
+                            summary_loader.notify_seeked(pos);
+                        }
+                    }
+                }
+                SummaryReadEvent::SeekRequest(to) => {
+                    let pos = f.seek(to).expect("failed file seek");
+                    summary_loader.notify_seeked(pos);
+                    seeks += 1;
+                }
+            }
+        }
+        let summary = summary_loader
+            .finish()
+            .expect("should have found a summary");
+        assert_eq!(summary.chunk_indexes.len(), 413);
+    }
+
+    #[test]
     fn test_truncated_mcap() {
         let mut buf = Vec::new();
         std::fs::File::open("tests/data/uncompressed.mcap")
