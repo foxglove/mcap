@@ -20,11 +20,12 @@ pub(crate) fn run(args: RewriteOptions, source_options: SourceOptions) -> Result
     if let (Some(input), Some(output)) = (args.file.as_deref(), opts.output.as_deref()) {
         source::ensure_distinct_local_input_output(input, output)?;
     }
-    // A rewrite reads the whole input through random access, so a remote URL is downloaded first
-    // under the scan opt-in, checked from the path before any request goes out. Stdin is spooled
-    // to a file, since a rewrite may seek back to the summary.
+    // A rewrite reads message data, so a remote input always needs the scan opt-in, checked
+    // from the path before opening so no request is sent. With it, a remote input is read by
+    // range rather than downloaded whole. Stdin is spooled to a file first, since a rewrite may
+    // seek back to the summary.
     let mut input = match args.file.as_deref() {
-        Some(path) => byte_source::open_materialized_byte_source(path, source_options)?,
+        Some(path) => byte_source::open_byte_source_for_scan(path, source_options)?,
         None => byte_source::open_stdin_byte_source()?,
     };
 
@@ -38,6 +39,9 @@ fn filter_to_writer<W: Write + Seek>(
     opts: &ResolvedOptions,
     disable_seeking: bool,
 ) -> Result<()> {
+    // Both paths read message data, so a remote input without opt-in is refused before the header
+    // read, summary read, or message-index probe issues any request.
+    common::require_remote_scan_for_chunks(input)?;
     let profile = common::read_header(input)?
         .map(|header| header.profile)
         .unwrap_or_default();
@@ -462,12 +466,14 @@ fn filter_linear<W: Write + Seek>(
 mod tests {
     use std::collections::{BTreeMap, HashMap};
     use std::io::Cursor;
+    use std::sync::Arc;
 
     use regex::Regex;
 
     use super::{common, filter_to_writer, MessageOrder, ResolvedOptions};
-    use crate::byte_source::MemorySource;
+    use crate::byte_source::{ByteSource, MemorySource};
     use crate::cli::CommonRewriteArgs;
+    use crate::source::SourceOptions;
     use anyhow::Result;
 
     /// Builds rewrite options from the shared CLI args, exercising the engine defaults (CRC on,
@@ -1379,7 +1385,7 @@ mod tests {
         };
         // The CLI is the writer of the output, so it stamps its own identity, not the source's.
         let output = run_filter(&input, &opts);
-        let library = crate::parse::read_header(&output)
+        let library = crate::parse::read_header_from_bytes(&output)
             .expect("read header")
             .expect("header present")
             .library;
@@ -1945,5 +1951,101 @@ mod tests {
         assert_eq!(stats.topic_counts["radar_a"], 100);
         assert_eq!(stats.metadata_count, 1);
         assert_eq!(stats.attachment_count, 1);
+    }
+
+    /// Wraps [`MemorySource`] and counts bytes returned from [`ByteSource::read_at`].
+    /// Reports the indexed-read budget of a remote source opened with `options`, so rewrite
+    /// remote-scan gating applies.
+    struct CountingRemoteSource {
+        inner: MemorySource,
+        options: SourceOptions,
+        bytes_read: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl ByteSource for CountingRemoteSource {
+        fn size(&self) -> Option<u64> {
+            self.inner.size()
+        }
+
+        fn indexed_read_budget(&self) -> Option<u64> {
+            crate::source::remote_indexed_read_budget(self.options)
+        }
+
+        fn display_name(&self) -> String {
+            "memory://remote-fixture.mcap".into()
+        }
+
+        fn read_into(&mut self, offset: u64, dest: &mut [u8]) -> anyhow::Result<usize> {
+            let n = self.inner.read_into(offset, dest)?;
+            self.bytes_read
+                .fetch_add(n, std::sync::atomic::Ordering::SeqCst);
+            Ok(n)
+        }
+
+        fn is_seekable(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn remote_indexed_filter_requires_allow_remote_scan() {
+        let input = write_filter_test_input(true, false);
+        let mut source = CountingRemoteSource {
+            inner: MemorySource::new(input),
+            options: SourceOptions::default(),
+            bytes_read: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        };
+
+        let mut opts = include_all_options();
+        opts.include_topics = vec![regex::Regex::new("^camera_a$").expect("regex")];
+        opts.include_metadata = false;
+        opts.include_attachments = false;
+
+        let mut output = Cursor::new(Vec::new());
+        let err = filter_to_writer(&mut source, &mut output, &opts, false)
+            .expect_err("indexed remote filter should require --allow-remote-scan");
+        assert!(err.to_string().contains("--allow-remote-scan"));
+        assert_eq!(
+            source.bytes_read.load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the refusal must come before any range read"
+        );
+    }
+
+    #[test]
+    fn remote_indexed_filter_uses_range_reads_with_scan_flag() {
+        use std::sync::atomic::Ordering;
+
+        let input = write_filter_test_input(true, false);
+        let file_len = input.len();
+        let bytes_read = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut source = CountingRemoteSource {
+            inner: MemorySource::new(input),
+            options: SourceOptions::new(true),
+            bytes_read: bytes_read.clone(),
+        };
+
+        let mut opts = include_all_options();
+        opts.include_topics = vec![regex::Regex::new("^camera_a$").expect("regex")];
+        opts.include_metadata = false;
+        opts.include_attachments = false;
+
+        let mut output = Cursor::new(Vec::new());
+        filter_to_writer(&mut source, &mut output, &opts, false)
+            .expect("indexed remote filter with --allow-remote-scan should succeed");
+
+        let read = bytes_read.load(Ordering::SeqCst);
+        assert!(
+            read < file_len,
+            "indexed topic filter must not read the whole {file_len}-byte object; read {read}"
+        );
+
+        let stats = analyze_output(&output.into_inner());
+        assert_eq!(
+            stats.topic_counts.get("camera_a").copied().unwrap_or(0),
+            100
+        );
+        assert!(!stats.topic_counts.contains_key("camera_b"));
+        assert!(!stats.topic_counts.contains_key("radar_a"));
     }
 }

@@ -165,7 +165,8 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
     }
 
     // A merge reads message data from every input, so remote inputs need the scan opt-in. Refuse
-    // from the paths before opening any source, so no request is sent.
+    // from the paths before opening any source, so no request is sent. With it, remote inputs
+    // are read by range rather than downloaded whole.
     for path in opts.files.iter().filter(|path| source::is_remote_url(path)) {
         source::require_remote_scan_allowed(path, source_options)?;
     }
@@ -173,7 +174,7 @@ pub(crate) fn run(opts: MergeOptions, source_options: SourceOptions) -> Result<(
     let mut sources = Vec::with_capacity(opts.files.len());
     let mut inputs = Vec::with_capacity(opts.files.len());
     for path in &opts.files {
-        let source = byte_source::open_materialized_byte_source(path, source_options)
+        let source = byte_source::open_byte_source(path, source_options)
             .map_err(|err| explain_open_file_limit(err, sources.len(), opts.files.len()))?;
         inputs.push(InputRef {
             name: source::redacted_display(path),
@@ -238,8 +239,17 @@ fn merge_inputs<W: Write + Seek>(
     // Summary lookup is best effort; an input without a readable summary is scanned linearly.
     let summaries = sources
         .iter_mut()
-        .map(|source| byte_source::read_summary(source.as_mut()).unwrap_or(None))
-        .collect::<Vec<_>>();
+        .map(|source| {
+            match byte_source::read_summary(source.as_mut()) {
+                Ok(summary) => Ok(summary),
+                // An input that may not be scanned cannot fall back to a linear scan, so surface
+                // the summary error (e.g. the summary-size cap).
+                Err(err) if !crate::source::scan_allowed(source.as_ref()) => Err(err),
+                // Otherwise summary lookup is best effort; fall back to a linear scan.
+                Err(_) => Ok(None),
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
 
     let has_attachments = merge_messages(
         inputs,
@@ -510,6 +520,7 @@ fn merge_messages<W: Write + Seek>(
                 && common::summary_supports_indexed_read(summary)
                 && common::summary_indexes_all_messages(sources[input_idx].as_mut(), summary)?
             {
+                common::require_remote_scan_for_chunks(sources[input_idx].as_ref())?;
                 streams.push(MergeMessageStream::Indexed(Box::new(
                     IndexedInputMessageReader::new(input_idx, input, summary.clone())?,
                 )));
@@ -1496,7 +1507,7 @@ mod tests {
         .expect("merge");
 
         // The inputs' `test-recorder/0.0` library is overwritten with the CLI's own identity.
-        let library = crate::parse::read_header(&merged)
+        let library = crate::parse::read_header_from_bytes(&merged)
             .expect("read header")
             .expect("header present")
             .library;
