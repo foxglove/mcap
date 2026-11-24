@@ -1260,6 +1260,38 @@ mod tests {
     }
 
     #[test]
+    fn test_channel_filter_without_message_indexes() {
+        // Without message indexes the chunk index cannot say which channels a chunk holds, so a
+        // topic query must still read the chunk.
+        let mut writer = crate::WriteOptions::new()
+            .emit_message_indexes(false)
+            .create(std::io::Cursor::new(Vec::new()))
+            .expect("could not make the writer");
+        let channel = std::sync::Arc::new(crate::Channel {
+            id: 0,
+            topic: "even".into(),
+            schema: None,
+            message_encoding: "ros1msg".into(),
+            metadata: BTreeMap::new(),
+        });
+        for log_time in [1, 2] {
+            writer
+                .write(&crate::Message {
+                    channel: channel.clone(),
+                    sequence: 0,
+                    log_time,
+                    publish_time: log_time,
+                    data: std::borrow::Cow::Owned(vec![1, 2, 3]),
+                })
+                .expect("failed write");
+        }
+        writer.finish().expect("failed on finish");
+        let mcap = writer.into_inner().into_inner();
+        let messages = read_mcap(IndexedReaderOptions::new().include_topics(["even"]), &mcap);
+        assert_eq!(&messages, &[(0, 1), (0, 2)]);
+    }
+
+    #[test]
     fn test_record_length_limit() {
         let mcap = make_mcap(None, &[&[(0, 1), (1, 2)]]);
         let summary = crate::Summary::read(&mcap)
