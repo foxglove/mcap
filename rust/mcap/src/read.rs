@@ -1102,4 +1102,26 @@ mod tests {
             accumulator.schemas.get(&1).expect("schema 1")
         ));
     }
+
+    #[test]
+    fn add_channel_rejects_a_redefinition_with_different_metadata() {
+        let channel = |value: &str| records::Channel {
+            id: 1,
+            schema_id: 0,
+            topic: "/chat".to_string(),
+            message_encoding: "json".to_string(),
+            metadata: std::collections::BTreeMap::from([("key".to_string(), value.to_string())]),
+        };
+        let mut accumulator = ChannelAccumulator::default();
+        accumulator
+            .add_channel(channel("a"))
+            .expect("first definition is recorded");
+        accumulator
+            .add_channel(channel("a"))
+            .expect("a matching redefinition is accepted");
+        assert!(matches!(
+            accumulator.add_channel(channel("b")),
+            Err(McapError::ConflictingChannels(topic)) if topic == "/chat"
+        ));
+    }
 }
