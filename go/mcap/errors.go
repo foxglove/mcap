@@ -52,6 +52,9 @@ type ErrBadMagic struct {
 }
 
 func (e *ErrBadMagic) Error() string {
+	if len(e.actual) == 0 {
+		return fmt.Sprintf("Missing magic at %s of file", e.location)
+	}
 	return fmt.Sprintf("Invalid magic at %s of file, found: %v", e.location, e.actual)
 }
 
@@ -59,6 +62,12 @@ func (e *ErrBadMagic) Is(err error) bool {
 	_, ok := err.(*ErrBadMagic)
 	return ok
 }
+
+// ErrTruncatedFile indicates the input ended at a record boundary without a Footer record.
+var ErrTruncatedFile = fmt.Errorf("MCAP ended before its Footer record: %w", io.ErrUnexpectedEOF)
+
+// ErrBytesAfterMagic indicates the input continued past the trailing magic bytes.
+var ErrBytesAfterMagic = errors.New("unexpected bytes after the trailing magic bytes")
 
 // ErrTruncatedRecord indicates not enough data was available to parse a certain record.
 type ErrTruncatedRecord struct {
