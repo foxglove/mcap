@@ -1000,14 +1000,24 @@ mod tests {
             .add_channel(matching.clone())
             .expect("a matching redefinition is accepted");
 
-        // ...and rejected when it conflicts.
+        // ...and rejected when it conflicts, whether in its topic...
         let conflicting = records::Channel {
             topic: "/renamed".to_string(),
-            ..matching
+            ..matching.clone()
         };
         assert!(matches!(
             accumulator.add_channel(conflicting),
             Err(McapError::ConflictingChannels(topic)) if topic == "/renamed"
+        ));
+
+        // ...or only in its metadata.
+        let conflicting = records::Channel {
+            metadata: BTreeMap::from([("key".to_string(), "changed".to_string())]),
+            ..matching
+        };
+        assert!(matches!(
+            accumulator.add_channel(conflicting),
+            Err(McapError::ConflictingChannels(topic)) if topic == summary_channel.topic
         ));
     }
 
