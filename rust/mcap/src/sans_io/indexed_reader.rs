@@ -810,8 +810,13 @@ mod tests {
     use super::*;
 
     fn make_mcap(compression: Option<crate::Compression>, chunks: &[&[(u16, u64)]]) -> Vec<u8> {
-        let mut writer = crate::WriteOptions::new()
-            .compression(compression)
+        make_mcap_with(crate::WriteOptions::new().compression(compression), chunks)
+    }
+
+    /// Like `make_mcap`, but writes with `options`. Each slice in `chunks` is flushed as its own
+    /// chunk.
+    fn make_mcap_with(options: crate::WriteOptions, chunks: &[&[(u16, u64)]]) -> Vec<u8> {
+        let mut writer = options
             .chunk_size(None)
             .create(std::io::Cursor::new(Vec::new()))
             .expect("could not make the writer");
@@ -1257,6 +1262,16 @@ mod tests {
         let messages =
             read_mcap_noseek(IndexedReaderOptions::new().include_topics(["even"]), &mcap);
         assert_eq!(&messages, &[(0, 1), (2, 3), (0, 5)])
+    }
+
+    #[test]
+    fn test_channel_filter_without_message_indexes() {
+        // Without message indexes the chunk index cannot say which channels a chunk holds, so a
+        // topic query must still read the chunk.
+        let options = crate::WriteOptions::new().emit_message_indexes(false);
+        let mcap = make_mcap_with(options, &[&[(0, 1), (0, 2)]]);
+        let messages = read_mcap(IndexedReaderOptions::new().include_topics(["even"]), &mcap);
+        assert_eq!(&messages, &[(0, 1), (0, 2)]);
     }
 
     #[test]
