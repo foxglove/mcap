@@ -950,7 +950,6 @@ TEST_CASE("Message index records", "[writer]") {
   mcap::Channel channel2("topic", "messageEncoding", schema.id);
   writer.addChannel(channel2);
 
-  mcap::Message msg;
   // Each message meets the chunk size threshold, closing its chunk once written.
   WriteMsg(writer, channel1.id, 0, 100, 100, std::vector<std::byte>(400));
   WriteMsg(writer, channel2.id, 0, 200, 200, std::vector<std::byte>(400));
@@ -1545,7 +1544,6 @@ TEST_CASE("LZ4 compression", "[reader][writer]") {
     mcap::Channel channel("topic", "messageEncoding", schema.id);
     writer.addChannel(channel);
 
-    mcap::Message msg;
     std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
     WriteMsg(writer, channel.id, 0, 2, 1, data);
 
@@ -1590,7 +1588,6 @@ TEST_CASE("zstd compression", "[reader][writer]") {
     mcap::Channel channel("topic", "messageEncoding", schema.id);
     writer.addChannel(channel);
 
-    mcap::Message msg;
     std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
     WriteMsg(writer, channel.id, 0, 2, 1, data);
 
@@ -1684,7 +1681,6 @@ TEST_CASE("Read Order", "[reader][writer]") {
     writer.addChannel(channel);
 
     // Write larger-than-chunk-size messages.
-    mcap::Message msg;
     std::vector<std::byte> data(1024 * 1024);
     std::fill(data.begin(), data.end(), std::byte(0x42));
     WriteMsg(writer, channel.id, 0, 0, 0, data);
@@ -1735,7 +1731,6 @@ TEST_CASE("Read Order", "[reader][writer]") {
     mcap::Channel channel("topic", "messageEncoding", schema.id);
     writer.addChannel(channel);
 
-    mcap::Message msg;
     std::vector<std::byte> data = {std::byte(1), std::byte(2), std::byte(3)};
     WriteMsg(writer, channel.id, 0, 100, 100, data);
     WriteMsg(writer, channel.id, 1, 100, 100, data);
