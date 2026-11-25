@@ -1463,3 +1463,32 @@ fn chunk_reader_checks_an_uncompressed_chunk_crc() {
         "a bad uncompressed chunk CRC must be rejected, got {result:?}"
     );
 }
+
+#[test]
+fn indexed_reader_resets_the_decompressor_after_a_failed_chunk() {
+    // The first chunk declares one byte more than its frame holds, so decoding it fails partway.
+    // The decoder must still be reset, or the next chunk is fed to an already finished frame.
+    let mcap = xor_mcap(&sample_chunks());
+    let mut summary = Summary::read(&mcap)
+        .expect("summary")
+        .expect("file should contain a summary");
+    summary.chunk_indexes[0].uncompressed_size += 1;
+    let mut reader = IndexedReader::new(&summary).expect("reader");
+    reader
+        .add_decompressor(TestDecoder::xor("xor"))
+        .expect("register");
+    let data = |index: &ChunkIndex| {
+        let start = index.compressed_data_offset().expect("offset");
+        (
+            start,
+            &mcap[start as usize..][..index.compressed_size as usize],
+        )
+    };
+
+    let (offset, chunk) = data(&summary.chunk_indexes[0]);
+    assert!(reader.insert_chunk_record_data(offset, chunk).is_err());
+    let (offset, chunk) = data(&summary.chunk_indexes[1]);
+    reader
+        .insert_chunk_record_data(offset, chunk)
+        .expect("the chunk after a failed one should decode");
+}
