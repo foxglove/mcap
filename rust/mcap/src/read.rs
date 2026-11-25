@@ -1000,14 +1000,24 @@ mod tests {
             .add_channel(matching.clone())
             .expect("a matching redefinition is accepted");
 
-        // ...and rejected when it conflicts.
+        // ...and rejected when it conflicts, whether in its topic...
         let conflicting = records::Channel {
             topic: "/renamed".to_string(),
-            ..matching
+            ..matching.clone()
         };
         assert!(matches!(
             accumulator.add_channel(conflicting),
             Err(McapError::ConflictingChannels(topic)) if topic == "/renamed"
+        ));
+
+        // ...or only in its metadata.
+        let conflicting = records::Channel {
+            metadata: BTreeMap::from([("key".to_string(), "changed".to_string())]),
+            ..matching
+        };
+        assert!(matches!(
+            accumulator.add_channel(conflicting),
+            Err(McapError::ConflictingChannels(topic)) if topic == summary_channel.topic
         ));
     }
 
@@ -1100,28 +1110,6 @@ mod tests {
         assert!(Arc::ptr_eq(
             &first,
             accumulator.schemas.get(&1).expect("schema 1")
-        ));
-    }
-
-    #[test]
-    fn add_channel_rejects_a_redefinition_with_different_metadata() {
-        let channel = |value: &str| records::Channel {
-            id: 1,
-            schema_id: 0,
-            topic: "/chat".to_string(),
-            message_encoding: "json".to_string(),
-            metadata: std::collections::BTreeMap::from([("key".to_string(), value.to_string())]),
-        };
-        let mut accumulator = ChannelAccumulator::default();
-        accumulator
-            .add_channel(channel("a"))
-            .expect("first definition is recorded");
-        accumulator
-            .add_channel(channel("a"))
-            .expect("a matching redefinition is accepted");
-        assert!(matches!(
-            accumulator.add_channel(channel("b")),
-            Err(McapError::ConflictingChannels(topic)) if topic == "/chat"
         ));
     }
 }
