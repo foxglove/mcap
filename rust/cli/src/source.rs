@@ -144,6 +144,10 @@ pub struct RemoteMcap {
 }
 
 impl RemoteMcap {
+    pub(crate) fn into_parts(self) -> (RemoteRangeReader, mcap::Summary) {
+        (self.reader, self.summary)
+    }
+
     pub fn summary(&self) -> &mcap::Summary {
         &self.summary
     }

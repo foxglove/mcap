@@ -301,7 +301,9 @@ Indexed reads use the summary index at the end of the file to fetch only the byt
 
 #### Allowing full remote scans
 
-Some operations must read or download the entire remote file: commands that rewrite a file (`filter`, `merge`, `convert`, `recover`) and any command that falls back to a linear scan (for example a remote file with no summary section, a server that does not support range requests, or `cat` reading message payloads). These require the `--allow-remote-scan` flag to opt in to the larger transfer:
+A topic or time filter can read selected chunks directly from an indexed remote file when the summary accounts for the messages and requested metadata and attachments. A broad filter, an incomplete index, or a last-per-channel query uses the whole-file path.
+
+Some operations must read or download the entire remote file: whole-file rewrites (`filter`, `merge`, `convert`, `recover`) and any command that falls back to a linear scan (for example a remote file with no summary section, a server that does not support range requests, or `cat` reading message payloads). These require the `--allow-remote-scan` flag to opt in to the larger transfer:
 
 ```
 mcap filter --allow-remote-scan gs://your-remote-bucket/demo.mcap -o filtered.mcap -y /tf
