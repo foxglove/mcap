@@ -97,7 +97,7 @@ struct [[nodiscard]] Status {
         message = "message read options conflict";
         break;
       case StatusCode::NoMessageIndexesAvailable:
-        message = "file has no message indices";
+        message = "file has no chunk indices";
         break;
       case StatusCode::UnsupportedCompression:
         message = "unsupported compression";

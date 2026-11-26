@@ -385,12 +385,16 @@ describe("McapIndexedReader", () => {
           ...MCAP_MAGIC,
         );
 
+        // A read of all three messages scans the chunk. A read that leaves some out also reads
+        // the chunk's message index.
+        const expectedReadCalls = expected.length === 3 ? 5 : 6;
+
         {
           const readable = makeReadable(new Uint8Array(data));
           const reader = await McapIndexedReader.Initialize({ readable });
           const collected = await collect(reader.readMessages({ startTime, endTime }));
           expect(collected).toEqual(expected);
-          expect(readable.readCalls).toBe(6);
+          expect(readable.readCalls).toBe(expectedReadCalls);
         }
 
         {
@@ -400,7 +404,7 @@ describe("McapIndexedReader", () => {
             reader.readMessages({ startTime, endTime, reverse: true }),
           );
           expect(collected).toEqual(expected.reverse());
-          expect(readable.readCalls).toBe(6);
+          expect(readable.readCalls).toBe(expectedReadCalls);
         }
       },
     );
@@ -857,14 +861,15 @@ describe("McapIndexedReader", () => {
 
       const collected = [];
 
+      // Every message is wanted, so each chunk is scanned: one read as its turn comes.
+      collected.push((await messageIter.next()).value);
+      expect(readable.readCalls).toEqual(5);
       collected.push((await messageIter.next()).value);
       expect(readable.readCalls).toEqual(6);
       collected.push((await messageIter.next()).value);
-      expect(readable.readCalls).toEqual(8);
+      expect(readable.readCalls).toEqual(7);
       collected.push((await messageIter.next()).value);
-      expect(readable.readCalls).toEqual(10);
-      collected.push((await messageIter.next()).value);
-      expect(readable.readCalls).toEqual(10);
+      expect(readable.readCalls).toEqual(7);
 
       expect(collected).toEqual(expected);
     }
@@ -995,10 +1000,11 @@ describe("McapIndexedReader", () => {
 
       const collected = [];
 
+      // Chunk 1 also holds channel A, so its index is read; chunk 2 is scanned.
+      collected.push((await messageIter.next()).value);
+      expect(readable.readCalls).toEqual(6);
       collected.push((await messageIter.next()).value);
       expect(readable.readCalls).toEqual(7);
-      collected.push((await messageIter.next()).value);
-      expect(readable.readCalls).toEqual(8);
 
       expect(collected).toEqual([messageB1, messageB2]);
     }
@@ -1016,7 +1022,7 @@ describe("McapIndexedReader", () => {
       collected.push((await messageIter.next()).value);
       expect(readable.readCalls).toEqual(6);
       collected.push((await messageIter.next()).value);
-      expect(readable.readCalls).toEqual(8);
+      expect(readable.readCalls).toEqual(7);
 
       expect(collected).toEqual([messageB1, messageB2].reverse());
     }
@@ -1146,6 +1152,8 @@ describe("McapIndexedReader", () => {
     const chunk = new ChunkBuilder({ useMessageIndex: true });
     chunk.addChannel(channel);
     chunk.addMessage(message);
+    // A later message that the reads below leave out, so that they use the message index.
+    chunk.addMessage({ ...message, sequence: 2, logTime: 2n });
 
     const builder = new McapRecordBuilder();
     builder.writeMagic();
@@ -1190,11 +1198,11 @@ describe("McapIndexedReader", () => {
     const reader = await McapIndexedReader.Initialize({ readable: recordingReadable });
 
     reads.length = 0;
-    await collect(reader.readMessages());
+    expect(await collect(reader.readMessages({ endingAt: 1n }))).toEqual([message]);
     expect(reads.some(overlapsMessageIndex)).toBe(true);
 
     reads.length = 0;
-    await collect(reader.readMessages());
+    expect(await collect(reader.readMessages({ endingAt: 1n }))).toEqual([message]);
     // Without caching, the message index is re-read on every call.
     expect(reads.some(overlapsMessageIndex)).toBe(true);
   });
@@ -1528,6 +1536,121 @@ describe("McapIndexedReader", () => {
 
     const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
     await expect(collect(reader.readMessages())).resolves.toEqual([message1, message2]);
+  });
+
+  it.each([{ useMessageIndex: true }, { useMessageIndex: false }])(
+    "reads the same messages by message index or by scanning chunks (useMessageIndex=$useMessageIndex)",
+    async ({ useMessageIndex }) => {
+      // Reads that leave messages out locate the rest through message indexes when the file
+      // has them. Every other read scans the chunks.
+      const tempBuffer = new TempBuffer();
+      const writer = new McapWriter({ writable: tempBuffer, useMessageIndex, chunkSize: 100 });
+      await writer.start({ library: "", profile: "" });
+      const channelIds: number[] = [];
+      for (const topic of ["a", "b"]) {
+        channelIds.push(
+          await writer.registerChannel({
+            topic,
+            schemaId: 0,
+            messageEncoding: "",
+            metadata: new Map(),
+          }),
+        );
+      }
+      // Log times repeat and go backwards within a chunk.
+      const logTimes = [3n, 1n, 2n, 2n, 6n, 4n, 5n, 9n, 7n, 8n, 8n, 10n];
+      const messages: TypedMcapRecords["Message"][] = logTimes.map((logTime, idx) => ({
+        type: "Message",
+        channelId: channelIds[idx % 2]!,
+        sequence: idx,
+        logTime,
+        publishTime: 0n,
+        data: new Uint8Array([idx]),
+      }));
+      for (const message of messages) {
+        await writer.addMessage(message);
+      }
+      await writer.end();
+
+      let readCalls = 0;
+      const readable = {
+        size: async () => await tempBuffer.size(),
+        read: async (offset: bigint, length: bigint) => {
+          ++readCalls;
+          return await tempBuffer.read(offset, length);
+        },
+      };
+      const reader = await McapIndexedReader.Initialize({ readable });
+      expect(reader.chunkIndexes.length).toBeGreaterThan(1);
+      expect(
+        reader.chunkIndexes.every((index) => index.messageIndexLength > 0n === useMessageIndex),
+      ).toBe(true);
+
+      // Stable by log time, so equal log times keep their order in the file.
+      const sorted = [...messages].sort((a, b) => Number(a.logTime - b.logTime));
+      expect(await collect(reader.readMessages())).toEqual(sorted);
+      expect(await collect(reader.readMessages({ reverse: true }))).toEqual([...sorted].reverse());
+      for (const [idx, topic] of ["a", "b"].entries()) {
+        expect(await collect(reader.readMessages({ topics: [topic] }))).toEqual(
+          sorted.filter((message) => message.channelId === channelIds[idx]),
+        );
+      }
+      expect(await collect(reader.readMessages({ startingAt: 4n, endingAt: 8n }))).toEqual(
+        sorted.filter((message) => message.logTime >= 4n && message.logTime <= 8n),
+      );
+
+      // A topic filter that matches no channel reads nothing from the file.
+      readCalls = 0;
+      expect(await collect(reader.readMessages({ topics: ["c"] }))).toEqual([]);
+      expect(readCalls).toBe(0);
+    },
+  );
+
+  it("rejects a message index entry that points at a message on a channel that is not being read", async () => {
+    const makeChannel = (id: number, topic: string): TypedMcapRecords["Channel"] => ({
+      type: "Channel",
+      id,
+      schemaId: 0,
+      topic,
+      messageEncoding: "utf12",
+      metadata: new Map(),
+    });
+    const channelA = makeChannel(1, "a");
+    const channelB = makeChannel(2, "b");
+    const makeMessage = (channelId: number): TypedMcapRecords["Message"] => ({
+      type: "Message",
+      channelId,
+      sequence: 0,
+      logTime: 1n,
+      publishTime: 0n,
+      data: new Uint8Array(),
+    });
+
+    const chunk = new ChunkBuilder({ useMessageIndex: true });
+    chunk.addChannel(channelA);
+    chunk.addChannel(channelB);
+    chunk.addMessage(makeMessage(channelA.id));
+    chunk.addMessage(makeMessage(channelB.id));
+    // Point channel A's entry at channel B's message, which has the same log time.
+    const [indexA, indexB] = chunk.indices;
+    indexA!.records[0]![1] = indexB!.records[0]![1];
+
+    const builder = new McapRecordBuilder();
+    builder.writeMagic();
+    builder.writeHeader({ profile: "", library: "" });
+    const chunkIndex = writeChunkWithMessageIndexes(builder, chunk);
+    builder.writeDataEnd({ dataSectionCrc: 0 });
+    const summaryStart = BigInt(builder.length);
+    builder.writeChannel(channelA);
+    builder.writeChannel(channelB);
+    builder.writeChunkIndex(chunkIndex);
+    builder.writeFooter({ summaryStart, summaryOffsetStart: 0n, summaryCrc: 0 });
+    builder.writeMagic();
+
+    const reader = await McapIndexedReader.Initialize({ readable: makeReadable(builder.buffer) });
+    await expect(collect(reader.readMessages({ topics: ["a"] }))).rejects.toThrow(
+      "Message index entry points at a message on channel 2, which is not being read",
+    );
   });
 
   it("passes readOptions to readable.read()", async () => {

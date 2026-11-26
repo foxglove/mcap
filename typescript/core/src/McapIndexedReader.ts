@@ -420,6 +420,9 @@ export class McapIndexedReader<TReadOptions = unknown> {
           relevantChannels.add(channel.id);
         }
       }
+      if (relevantChannels.size === 0) {
+        return;
+      }
     }
 
     const chunkCursors = new Heap<ChunkCursor>((a, b) => a.compare(b));
@@ -453,11 +456,20 @@ export class McapIndexedReader<TReadOptions = unknown> {
     for (let cursor; (cursor = chunkCursors.peek()); ) {
       if (!cursor.hasMessageIndexes()) {
         // If we encounter a chunk whose message indexes have not been loaded yet, load them and re-organize the heap.
-        await cursor.loadMessageIndexes(this.#messageIndexReadable, readOptions);
+        const { chunkIndex } = cursor;
+        await cursor.loadMessageIndexes(this.#messageIndexReadable, readOptions, async () => {
+          const chunkView = await this.#loadChunkData(chunkIndex, {
+            validateCrcs: validateCrcs ?? true,
+            readOptions,
+          });
+          chunkViewCache.set(chunkIndex.chunkStartOffset, chunkView);
+          return chunkView;
+        });
         if (cursor.hasMoreMessages()) {
           chunkCursors.replace(cursor);
         } else {
           chunkCursors.pop();
+          chunkViewCache.delete(chunkIndex.chunkStartOffset);
         }
         continue;
       }
@@ -492,6 +504,11 @@ export class McapIndexedReader<TReadOptions = unknown> {
       if (record.logTime !== logTime) {
         throw this.#errorWithLibrary(
           `Message log time ${record.logTime} did not match message index entry (${logTime} at offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
+        );
+      }
+      if (relevantChannels && !relevantChannels.has(record.channelId)) {
+        throw this.#errorWithLibrary(
+          `Message index entry points at a message on channel ${record.channelId}, which is not being read (time ${logTime}, offset ${offset} in chunk at offset ${cursor.chunkIndex.chunkStartOffset})`,
         );
       }
       yield record;
