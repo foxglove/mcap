@@ -6,7 +6,6 @@ export default defineConfig([
   { linterOptions: { reportUnusedDisableDirectives: "error" } },
   globalIgnores(["dist"]),
   foxglove.configs.base,
-  foxglove.configs.jest,
   {
     languageOptions: {
       globals: { ...globals.es2022 },

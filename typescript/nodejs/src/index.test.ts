@@ -2,6 +2,7 @@ import { McapWriter, McapIndexedReader } from "@mcap/core";
 import { mkdtemp, open, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
+import { describe, expect, it } from "vitest";
 
 import { FileHandleReadable } from "./FileHandleReadable.ts";
 import { FileHandleWritable } from "./FileHandleWritable.ts";

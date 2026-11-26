@@ -1,4 +1,5 @@
 import { crc32 } from "@foxglove/crc";
+import { describe, expect, it, vi } from "vitest";
 
 import McapByteReader from "./McapByteReader.ts";
 import { McapIndexedReader } from "./McapIndexedReader.ts";
@@ -456,7 +457,7 @@ describe("McapWriter", () => {
 
   it("flushes unchunked records as they accumulate and keeps indexes and data section CRC correct", async () => {
     const tempBuffer = new TempBuffer();
-    const writeSpy = jest.spyOn(tempBuffer, "write");
+    const writeSpy = vi.spyOn(tempBuffer, "write");
     const writer = new McapWriter({ writable: tempBuffer, useChunks: false });
     await writer.start();
     const channelId = await writer.registerChannel({

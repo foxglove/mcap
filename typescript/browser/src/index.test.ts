@@ -1,5 +1,6 @@
 import { McapWriter, McapIndexedReader, TempBuffer } from "@mcap/core";
 import { Blob } from "node:buffer";
+import { describe, expect, it } from "vitest";
 
 import { BlobReadable } from "./BlobReadable.ts";
 

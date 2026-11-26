@@ -18,7 +18,7 @@
     "@types/diff": "^5.2.3",
     "@types/js-yaml": "^4.0.9",
     "@types/lodash-es": "4.17.12",
-    "@types/node": "20.19.43",
+    "@types/node": "24.13.4",
     "@typescript-eslint/eslint-plugin": "8.67.0",
     "@typescript-eslint/parser": "8.67.0",
     "colors": "1.4.0",

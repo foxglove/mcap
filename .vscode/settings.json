@@ -13,7 +13,6 @@
 
   "js/ts.tsdk.path": "node_modules/typescript/lib",
   "prettier.prettierPath": "./node_modules/prettier/index.cjs",
-  "jest.jestCommandLine": "yarn typescript:test",
 
   "cSpell.enabled": true,
 

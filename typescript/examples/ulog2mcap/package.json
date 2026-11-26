@@ -8,7 +8,7 @@
     "typecheck": "tsc -b",
     "lint:ci": "tsc -b && eslint .",
     "lint": "tsc -b && eslint --fix .",
-    "typescript:test": "yarn jest --config jest.config.json",
+    "typescript:test": "vitest run",
     "ulog2mcap": "tsc -b && tsx scripts/ulog2mcap.ts"
   },
   "devDependencies": {
@@ -18,18 +18,18 @@
     "@mcap/core": "workspace:*",
     "@mcap/nodejs": "workspace:*",
     "@mcap/support": "workspace:*",
-    "@types/node": "20.19.43",
+    "@types/node": "24.13.4",
     "@typescript-eslint/eslint-plugin": "8.67.0",
     "@typescript-eslint/parser": "8.67.0",
     "commander": "11.1.0",
     "eslint": "9.39.5",
-    "jest": "30.4.2",
     "long": "5.3.2",
     "prettier": "3.1.0",
     "protobufjs": "^7.6.5",
-    "ts-jest": "29.4.12",
     "tsx": "4.23.5",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vite": "8.3.5",
+    "vitest": "5.1.0"
   },
   "dependencies": {
     "@foxglove/schemas": "1.8.0"

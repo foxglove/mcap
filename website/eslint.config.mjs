@@ -7,7 +7,6 @@ export default defineConfig([
   globalIgnores(["dist", "node_modules", "build", ".docusaurus"]),
   foxglove.configs.base,
   foxglove.configs.react,
-  foxglove.configs.jest,
   {
     languageOptions: {
       globals: { ...globals.es2022 },

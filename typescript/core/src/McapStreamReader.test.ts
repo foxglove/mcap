@@ -1,4 +1,5 @@
 import { crc32 } from "@foxglove/crc";
+import { describe, expect, it } from "vitest";
 
 import { McapRecordBuilder } from "./McapRecordBuilder.ts";
 import McapStreamReader from "./McapStreamReader.ts";
