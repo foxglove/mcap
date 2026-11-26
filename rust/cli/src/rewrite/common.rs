@@ -124,31 +124,13 @@ fn incomplete_indexed_summary_error() -> anyhow::Error {
     )
 }
 
-fn is_unknown_schema_error(err: &anyhow::Error) -> bool {
-    err.chain().any(|cause| {
-        cause
-            .downcast_ref::<mcap::McapError>()
-            .is_some_and(|e| matches!(e, mcap::McapError::UnknownSchema(_, _)))
-    })
-}
-
 /// Whether the summary section contains any ChunkIndex records. Used when summary parsing fails
 /// with [`mcap::McapError::UnknownSchema`] to distinguish "not chunk-indexed → linear" from
 /// "chunk-indexed but incomplete → error".
 fn summary_section_has_chunk_indexes(source: &mut dyn ByteSource) -> Result<bool> {
-    let (footer_start, footer) = byte_source::read_footer(source)?;
-    if footer.summary_start == 0 {
+    let Some(summary) = byte_source::read_summary_section(source)? else {
         return Ok(false);
-    }
-    if footer.summary_start > footer_start {
-        return Err(mcap::McapError::UnexpectedEof.into());
-    }
-    let summary_len = usize::try_from(footer_start - footer.summary_start)
-        .context("summary section is too large")?;
-    let summary = source.read_at(footer.summary_start, summary_len)?;
-    if summary.len() != summary_len {
-        return Err(mcap::McapError::UnexpectedEof.into());
-    }
+    };
     let parsed = crate::parse::parsed_mcap_from_summary_section(None, &summary)?;
     Ok(!parsed.chunk_indexes.is_empty())
 }
@@ -163,7 +145,7 @@ pub(crate) fn read_indexed_summary(source: &mut dyn ByteSource) -> Result<Option
         Ok(Some(summary)) if summary_supports_indexed_read(&summary) => Ok(Some(summary)),
         Ok(Some(_)) => Err(incomplete_indexed_summary_error()),
         Ok(None) => Ok(None),
-        Err(err) if is_unknown_schema_error(&err) => {
+        Err(err) if crate::parse::is_unknown_schema_error(&err) => {
             if !summary_section_has_chunk_indexes(source)? {
                 Ok(None)
             } else {
@@ -345,14 +327,20 @@ where
         }
     }
 
-    byte_source::for_each_top_level_record_of(source, mcap::records::op::METADATA, |data| {
-        if let mcap::records::Record::Metadata(metadata) =
-            mcap::parse_record(mcap::records::op::METADATA, data)?
-        {
-            visit(metadata)?;
-        }
-        Ok(())
-    })
+    let chunk_indexes = summary.map_or(&[][..], |summary| &summary.chunk_indexes);
+    byte_source::for_each_top_level_record_of(
+        source,
+        mcap::records::op::METADATA,
+        chunk_indexes,
+        |_, data| {
+            if let mcap::records::Record::Metadata(metadata) =
+                mcap::parse_record(mcap::records::op::METADATA, data)?
+            {
+                visit(metadata)?;
+            }
+            Ok(())
+        },
+    )
 }
 
 /// Visits every attachment in the input, using the same index-or-scan strategy as
@@ -392,20 +380,26 @@ where
         }
     }
 
-    byte_source::for_each_top_level_record_of(source, mcap::records::op::ATTACHMENT, |data| {
-        if let mcap::records::Record::Attachment { header, data, .. } =
-            mcap::parse_record(mcap::records::op::ATTACHMENT, data)?
-        {
-            visit(&mcap::Attachment {
-                log_time: header.log_time,
-                create_time: header.create_time,
-                name: header.name,
-                media_type: header.media_type,
-                data,
-            })?;
-        }
-        Ok(())
-    })
+    let chunk_indexes = summary.map_or(&[][..], |summary| &summary.chunk_indexes);
+    byte_source::for_each_top_level_record_of(
+        source,
+        mcap::records::op::ATTACHMENT,
+        chunk_indexes,
+        |_, data| {
+            if let mcap::records::Record::Attachment { header, data, .. } =
+                mcap::parse_record(mcap::records::op::ATTACHMENT, data)?
+            {
+                visit(&mcap::Attachment {
+                    log_time: header.log_time,
+                    create_time: header.create_time,
+                    name: header.name,
+                    media_type: header.media_type,
+                    data,
+                })?;
+            }
+            Ok(())
+        },
+    )
 }
 
 /// Flips the last byte of the first message inside the file's first chunk, which must be
