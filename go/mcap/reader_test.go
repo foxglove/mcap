@@ -1142,6 +1142,63 @@ func TestExplicitTimeRangeBounds(t *testing.T) {
 	assert.Equal(t, []uint64{3, 4}, logTimes(t, AfterNanos(3), BeforeNanos(5)))
 }
 
+// The deprecated int64 After and Before options must still limit the range: After was
+// rejected with "end cannot come before start" because End defaults to zero, and Before was
+// ignored because the EndNanos default hid it.
+func TestDeprecatedInt64TimeRangeBounds(t *testing.T) {
+	buf := &bytes.Buffer{}
+	w, err := NewWriter(buf, &WriterOptions{
+		Chunked:   true,
+		ChunkSize: 100,
+	})
+	require.NoError(t, err)
+	require.NoError(t, w.WriteHeader(&Header{}))
+	require.NoError(t, w.WriteSchema(&Schema{ID: 1}))
+	require.NoError(t, w.WriteChannel(&Channel{SchemaID: 1, Topic: "/topic"}))
+	for i := uint64(1); i <= 6; i++ {
+		require.NoError(t, w.WriteMessage(&Message{LogTime: i, Data: []byte("hello")}))
+	}
+	require.NoError(t, w.Close())
+
+	messages := func(opts ...ReadOpt) ([]uint64, error) {
+		reader, err := NewReader(bytes.NewReader(buf.Bytes()))
+		require.NoError(t, err)
+		defer reader.Close()
+		it, err := reader.Messages(opts...)
+		if err != nil {
+			return nil, err
+		}
+		var times []uint64
+		for {
+			_, _, msg, err := it.Next(nil)
+			if errors.Is(err, io.EOF) {
+				return times, nil
+			}
+			require.NoError(t, err)
+			times = append(times, msg.LogTime)
+		}
+	}
+
+	//nolint:staticcheck // intentionally exercising deprecated options
+	times, err := messages(After(3))
+	require.NoError(t, err)
+	assert.Equal(t, []uint64{3, 4, 5, 6}, times)
+
+	//nolint:staticcheck // intentionally exercising deprecated options
+	times, err = messages(Before(5))
+	require.NoError(t, err)
+	assert.Equal(t, []uint64{1, 2, 3, 4}, times)
+
+	//nolint:staticcheck // intentionally exercising deprecated options
+	times, err = messages(After(3), Before(5))
+	require.NoError(t, err)
+	assert.Equal(t, []uint64{3, 4}, times)
+
+	//nolint:staticcheck // intentionally exercising deprecated options
+	_, err = messages(After(5), Before(3))
+	require.ErrorContains(t, err, "end cannot come before start")
+}
+
 func TestMaxTimestampBound(t *testing.T) {
 	buf := &bytes.Buffer{}
 	w, err := NewWriter(buf, &WriterOptions{
