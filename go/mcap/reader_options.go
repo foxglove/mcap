@@ -181,10 +181,14 @@ type ReadOpt func(*ReadOptions) error
 // use AfterNanos instead.
 func After(start int64) ReadOpt {
 	return func(ro *ReadOptions) error {
-		if ro.End < start {
-			return fmt.Errorf("end cannot come before start")
-		}
+		// Set the Nanos field directly: Finalize only copies End into EndNanos when EndNanos is
+		// zero, and Messages() starts it at math.MaxUint64. A crossed range is rejected once all
+		// options are applied.
 		ro.Start = start
+		ro.StartNanos = 0
+		if start > 0 {
+			ro.StartNanos = uint64(start)
+		}
 		return nil
 	}
 }
@@ -195,10 +199,10 @@ func After(start int64) ReadOpt {
 // use BeforeNanos instead.
 func Before(end int64) ReadOpt {
 	return func(ro *ReadOptions) error {
-		if end < ro.Start {
-			return fmt.Errorf("end cannot come before start")
-		}
 		ro.End = end
+		if end > 0 {
+			ro.EndNanos = uint64(end)
+		}
 		return nil
 	}
 }
